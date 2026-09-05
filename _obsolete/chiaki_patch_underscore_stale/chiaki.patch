@@ -1,0 +1,86 @@
+diff --git a/gui/CMakeLists.txt b/gui/CMakeLists.txt
+index 7e777e1..878e05c 100755
+--- a/gui/CMakeLists.txt
++++ b/gui/CMakeLists.txt
+@@ -35,6 +35,7 @@ set(SOURCE_FILES
+ 	res/resources.qrc
+ 	include/controllermanager.h
+ 	src/controllermanager.cpp
++	src/injectinput.cpp
+ 	include/psnaccountid.h
+ 	src/psnaccountid.cpp
+ 	include/psntoken.h
+diff --git a/gui/src/controllermanager.cpp b/gui/src/controllermanager.cpp
+index 8bf27f3..97e522f 100644
+--- a/gui/src/controllermanager.cpp
++++ b/gui/src/controllermanager.cpp
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+ 
+ #include <controllermanager.h>
++#include "injectinput.h"
+ 
+ #include <QCoreApplication>
+ #include <QByteArray>
+@@ -142,6 +143,7 @@ ControllerManager::ControllerManager(QObject *parent)
+ 	: QObject(parent), creating_controller_mapping(false),
+ 	joystick_allow_background_events(true), dualsense_intensity(0x00), is_app_active(true)
+ {
++	InjectInputStart();
+ #ifdef CHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER
+ 	SDL_SetMainReady();
+ 	SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
+@@ -772,7 +774,9 @@ QString Controller::GetVIDPIDString()
+ 
+ ChiakiControllerState Controller::GetState()
+ {
+-	return state;
++	ChiakiControllerState s = state;
++	InjectInputApply(&s);
++	return s;
+ }
+ 
+ void Controller::SetDualSenseRumble(uint8_t left, uint8_t right)
+diff --git a/lib/src/ffmpegdecoder.c b/lib/src/ffmpegdecoder.c
+index 8d08894..61fe0d4 100644
+--- a/lib/src/ffmpegdecoder.c
++++ b/lib/src/ffmpegdecoder.c
+@@ -54,6 +54,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+ 	avcodec_register_all();
+ #endif
+ 	enum AVCodecID av_codec = chiaki_codec_av_codec_id(codec);
++	CHIAKI_LOGI(log, "compiled AV_CODEC_ID_HEVC=%d H264=%d (ffmpeg7 expects 173/27)",
++		(int)AV_CODEC_ID_HEVC, (int)AV_CODEC_ID_H264);
+ 	decoder->av_codec = avcodec_find_decoder(av_codec);
+ 	if(!decoder->av_codec)
+ 	{
+@@ -83,7 +85,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+ 			const AVCodecHWConfig *config = avcodec_get_hw_config(decoder->av_codec, i);
+ 			if(!config)
+ 			{
+-				CHIAKI_LOGE(log, "avcodec_get_hw_config failed");
++				CHIAKI_LOGE(log, "avcodec_get_hw_config failed (codec=%s, id=%d) — a wrong codec here means the build used mismatched ffmpeg headers",
++					decoder->av_codec ? decoder->av_codec->name : "?", (int)av_codec);
+ 				goto error_codec_context;
+ 			}
+ 			if(config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX && config->device_type == type)
+@@ -106,9 +109,17 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
+ 	decoder->codec_context->pkt_timebase = decoder->synthetic_time_base;
+ 	decoder->codec_context->time_base = decoder->synthetic_time_base;
+ 
+-	if(avcodec_open2(decoder->codec_context, decoder->av_codec, NULL) < 0)
++	int open_err = avcodec_open2(decoder->codec_context, decoder->av_codec, NULL);
++	if(open_err < 0)
+ 	{
+-		CHIAKI_LOGE(log, "Failed to open codec context");
++		{
++			char errbuf[256] = {0};
++			av_strerror(open_err, errbuf, sizeof(errbuf));
++			CHIAKI_LOGE(log, "Failed to open codec context: %d (%s), codec=%s hw=%s",
++				open_err, errbuf,
++				decoder->av_codec ? decoder->av_codec->name : "?",
++				hw_decoder_name ? hw_decoder_name : "none");
++		}
+ 		goto error_codec_context;
+ 	}
+ 	chiaki_mutex_unlock(&decoder->mutex);

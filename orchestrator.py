@@ -1,0 +1,5361 @@
+"""
+Orchestrator - runs the full turn loop for the Baseball minigame.
+
+Flow per turn:
+  1. Screenshot the screen.
+  2. Ask Claude (vision, via the Anthropic API) to read the current game
+     state as structured JSON.
+  3. Feed that into the decision engine to pick a play.
+  4. Drive the input controller to execute it.
+  5. Detect match end via the scoreboard's "S" column, log the result,
+     and wait for the next match to start.
+
+SCOPE NOTE — what this does and doesn't automate:
+This automates in-match play: reading your hand, choosing cards,
+executing the selection. It does NOT walk your character to the bar
+NPC or pay the $50 to start each match — that needs general world
+navigation (movement, NPC interaction, dialogue), which is a much
+bigger and more fragile problem than reading a card game. After each
+result, the loop waits for you to start the next match yourself (a
+few seconds), then auto-detects the fresh hand and resumes. If you
+want the walk-and-pay step automated too, that's worth tackling
+separately once this core loop is proven reliable over real games.
+
+Requires: pip install pyautogui anthropic pytesseract numpy Pillow
+Requires: PERSONAL_ANTHROPIC_API_KEY set in your environment.
+Optional (audit-only local OCR): a Python 3.11 venv at ./paddle_venv with
+  paddlepaddle + paddleocr — see hand_digit_reader.py.
+"""
+
+import base64
+import difflib
+import io
+import collections
+import hashlib
+import json
+import os
+import re
+import shutil
+import sys
+import threading
+import time
+
+import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
+import pyautogui
+import pytesseract
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
+
+from decision_engine import (
+    PlayerCard, TacticsCard, TacticsType, GameState,
+    best_batting_play, best_pitching_play, choose_bans, should_redraw,
+    # Imported only so the redraw decision can LOG the number it was compared
+    # against. A logged "best power 7" is uninterpretable without the bar it
+    # was measured against, and a bar quoted from memory drifts.
+    REDRAW_POWER_THRESHOLD,
+)
+import input_controller
+from input_controller import (
+    select_and_play, select_and_discard, select_bans_and_start_full, press,
+    focus_chiaki_window,
+)
+
+# `import anthropic` costs 1.84s (measured: 2.09s for `python -c "import
+# anthropic"` against a 0.06s bare interpreter) — 84% of this module's 2.19s
+# import time. Nothing that merely IMPORTS orchestrator needs it: not the 16
+# offline test files, not preflight, not analyze_match_log. They pay it 16
+# times per suite run, and preflight runs the whole suite before every live
+# session.
+#
+# The env lookup stays EAGER and unchanged: a missing PERSONAL_ANTHROPIC_API_KEY
+# must still raise at import, before preflight prints its clean message.
+import env_loader as _env_loader
+_env_loader.load()          # .env if present; the shell still wins
+
+_API_KEY = os.environ["PERSONAL_ANTHROPIC_API_KEY"]
+
+
+class _LazyAnthropic:
+    """Builds the real Anthropic client on first use, not at import.
+
+    Deliberately a module-level OBJECT rather than a function, so existing
+    `client.messages.create(...)` call sites are untouched, and tests that
+    swap in a fake with `orchestrator.client = <stub>` keep working — they
+    rebind the module attribute and this object is never consulted again.
+    """
+
+    _real = None
+
+    def __getattr__(self, name):
+        if _LazyAnthropic._real is None:
+            from anthropic import Anthropic
+            _LazyAnthropic._real = Anthropic(api_key=_API_KEY)
+        return getattr(_LazyAnthropic._real, name)
+
+
+class _BudgetedClient:
+    """The real client, with every paid call counted against a hard cap.
+
+    Wrapping here rather than at each call site means a new `messages.create`
+    added later is covered automatically — there are four today and the fifth
+    would otherwise be free to slip past the budget.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __getattr__(self, name):
+        if name == "messages":
+            return _BudgetedMessages(self._inner.messages)
+        return getattr(self._inner, name)
+
+
+class _BudgetedMessages:
+    def __init__(self, inner):
+        self._inner = inner
+
+    def create(self, *args, **kwargs):
+        import api_budget
+        api_budget.note_call()
+        return self._inner.create(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+client = _BudgetedClient(_LazyAnthropic())
+
+
+def _api_used():
+    try:
+        import api_budget
+        return api_budget.used()
+    except Exception:
+        return "?"
+
+# Sonnet is the default for accuracy reading card stats off a screenshot.
+# If cost or speed becomes a concern over many matches, Haiku is worth
+# trying — swap the model string and see if read accuracy holds up.
+MODEL = "claude-sonnet-5"
+
+# If the screen goes unrecognized (or unreadable) for this many polls in a
+# row, stop the loop rather than spin silently burning API calls. At the
+# ~2s poll interval used below, this is roughly a minute of being stuck.
+# TWO different situations, two different limits — conflating them broke a
+# guarantee the state machine is supposed to give.
+#
+# An UNRECOGNISED SCREEN costs a paid API call per retry and learns nothing: a
+# stall on 2026-08-28 spent fifteen calls staring at the wrong display. Fail
+# fast there; the diagnostics bundle is what makes it fixable, not the attempts.
+#
+# A RAISING play_one_turn is different. It is usually a transient bad read, the
+# retry is free, and abandoning the match loses real money. Lowering the shared
+# limit to 4 broke that: a run with five consecutive bad reads gave up instead
+# of recovering.
+MAX_STUCK_ATTEMPTS = 15
+# Six, not four, and not fifteen. Four exits fastest but leaves a five-entry
+# observation trail, and the state-machine test rightly demands more than that —
+# a bundle nobody can diagnose from is not "logging as much as possible before
+# exiting", it is just exiting. Six gives a seven-entry trail while still
+# spending a third of what the old fifteen did.
+MAX_UNRECOGNIZED_ATTEMPTS = 6
+
+# How many consecutive failed screen reads a pending matchup survives before
+# it is dropped as unscoreable. Measured, not chosen: over the 2026-08-26 run
+# 22 plays were followed by a failed read — 19 by exactly one poll, 3 by two,
+# none by more. Those are the loop re-reading while the next hand deals, well
+# inside the same turn. The old behaviour was an implicit 0 (drop on the very
+# first failure), which cost ~76% of that run's rows. Raising this further
+# starts risking the real hazard: a gap long enough for the opponent to act,
+# which would silently mislabel the outcome rather than omit it.
+MAX_PENDING_READ_FAILURES = 2
+# Screen-independent bound; see polls_without_progress in run(). Generous, since
+# a legitimate match has long stretches (ban scan, animations) with no debit,
+# result or play — it only has to be tighter than "forever".
+MAX_POLLS_WITHOUT_PROGRESS = 120
+# How long the hand region may stay BYTE-IDENTICAL before the run is declared
+# frozen. Time-based, not poll-count-based, and deliberately generous.
+#
+# Measured over all 1,937 logged frames from two real sessions: the longest run
+# of byte-identical consecutive hand crops is ZERO — even menus and idle turn
+# screens differ frame to frame. So this cannot fire on live play.
+#
+# But those frames are ~1s apart while the loop polls ~5x faster, and a count of
+# 12 polls would have been only ~2.4s — short enough that a genuinely paused
+# game (someone hits Options) could trip it and abort a real run. A frozen
+# stream is a slow-burn cost, not an emergency: the harm is an overnight of
+# wasted calls, so waiting 90s to be certain costs nothing and removes the
+# false-positive risk entirely.
+FROZEN_STREAM_SECONDS = 90.0
+
+# Session progress persists here so killing and restarting the script
+# doesn't lose the win/loss count — every match result gets written
+# immediately, and it's read back in on startup. Per-save-file, not
+# global: each player's own win/loss/balance history is tied to their
+# own progress file, so playing on someone else's save (e.g. Taylor's,
+# 2026-08-23) never mixes into your own trophy progress or vice versa.
+PROGRESS_FILE = "progress.json"
+
+
+def load_progress(progress_file: str = PROGRESS_FILE):
+    if os.path.exists(progress_file):
+        try:
+            with open(progress_file) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            # Starting from zero would silently discard the win/loss record and
+            # re-read the balance from the pause menu. Refuse instead — this is
+            # recoverable by hand, and _atomic_write_json() should prevent it.
+            raise RuntimeError(
+                f"{progress_file} is unreadable ({e}). Refusing to start and "
+                "silently reset your progress — inspect or delete it first.")
+        return (data.get("wins", 0), data.get("losses", 0), data.get("draws", 0),
+                data.get("balance"), bool(data.get("match_in_progress", False)),
+                bool(data.get("bans_done_this_match", False)))
+    return 0, 0, 0, None, False, False
+
+
+def _atomic_write_json(path: str, data):
+    """Write JSON via a temp file + rename, so an interrupted write can never
+    leave a truncated file behind. N8/N13: both progress.json and the learned
+    roster are read back at startup, and a half-written one either loses the
+    win/loss record or breaks module import."""
+    tmp = f"{path}.tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        # The real guarantee (a reader never sees a partial file) already holds
+        # without this — os.replace is atomic and simply never runs. But a crash
+        # mid-write otherwise ORPHANS the .tmp, and a stale one sitting next to
+        # progress.json invites someone to wonder which is real.
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def save_progress(wins: int, losses: int, draws: int, balance: int,
+                  progress_file: str = PROGRESS_FILE,
+                  match_in_progress: bool = False,
+                  bans_done_this_match: bool = False):
+    """Persist the record. `match_in_progress` is part of it, deliberately.
+
+    QA2-1: a result is only scored for a match this process paid for, which
+    stops a misread transition overlay fabricating a win. But the flag lived
+    only in memory, so a RESTART lost it — and every stall message in this file
+    ends with "just rerun the script", making restart the designed recovery
+    path. The sequence was: pay $50, crash/stall, rerun, and the result overlay
+    for the match you paid for is refused, dismissed, and gone. A real win,
+    silently discarded, on the exact path the tool tells you to take.
+
+    Persisting it makes "did I pay for the match that is currently on screen"
+    survive the restart, which is the only thing that can answer it correctly.
+    """
+    _atomic_write_json(progress_file,
+                       {"wins": wins, "losses": losses, "draws": draws,
+                        "balance": balance, "match_in_progress": match_in_progress,
+                        "bans_done_this_match": bans_done_this_match})
+
+
+# ponytail: TEMPORARY diagnostic logging, not a permanent feature — rip
+# this whole thing out once it's answered its one question.
+#
+# Real-game play-by-play log — one JSON line per resolved turn, capturing
+# both our own card and (via the reveal-animation read) the opponent's
+# actual card, so a later analysis can control for what the opponent
+# drew instead of only ever seeing our stats next to a confounded
+# outcome. Added 2026-08-23 specifically to investigate whether the
+# fielding/speed secondary stat has a real effect — that's never been
+# confirmed live, and a local simulation has no way to answer it since
+# it would just be simulating our own guess. Discard turns aren't logged
+# (see play_one_turn) since we don't know the replacement card's stats.
+#
+# Cost: one extra vision API call + ~0.5-3s per played turn, permanently,
+# for as long as this stays wired in — a real, ongoing tax against the
+# speed work from earlier this session. It buys nothing once the
+# question is answered.
+#
+# ANALYSED 2026-08-27 at 72 turns: still unanswered, keep logging. Batting
+# alone showed a 44-point gap (p=0.015) that REVERSED on the held-out pitching
+# half, because `secondary` is speed on a batter and fielding on a pitcher, so
+# the comparison flips meaning between phases. Stratified by power, no secondary
+# effect survives. Full working in MATCH_LOG_ANALYSIS.md. Do not strip this yet,
+# and do not weight secondary in card selection on the strength of it.
+#
+# REMOVAL PLAN: once match_log.jsonl has ~150-200 logged turns split
+# roughly evenly across pitching/batting (enough for the secondary-stat
+# question to show a real signal above the noise floor established in
+# simulate.py's identical-strategy control test), analyze it, then strip
+# out: READ_MATCHUP_PROMPT, read_matchup_reveal(), log_matchup(),
+# MATCH_LOG_FILE, the matchup_info return value from play_one_turn()
+# (revert to returning just `played`), and the pending_matchup capture
+# block + its consumption block in run(). Don't leave this "temporarily"
+# wired in past that point — it has no ongoing purpose once answered.
+# BASEBALL_MATCH_LOG lets the test suite redirect this. Tests drive real plays
+# through the reveal path, and without the override they append synthetic rows
+# to the live dataset — 30 of 69 rows on 2026-08-25, indistinguishable from
+# genuine ones except by a field that happened to be new that day. Same class
+# of bug as the diagnostics directory, found the same way: by the data looking
+# wrong, not by anything failing.
+MATCH_LOG_FILE = os.environ.get("BASEBALL_MATCH_LOG") or "match_log.jsonl"
+
+
+# Defence in depth. Redirecting the log (BASEBALL_MATCH_LOG) stops test rows
+# reaching the real file, but only for tests that remember to set it — and 30
+# synthetic rows got in exactly because one didn't. Stamping every row written
+# under a redirect means that even if such a row DOES end up in the real file,
+# it is trivially identifiable and removable:
+#
+#     grep -v '"_synthetic": true' match_log.jsonl > clean.jsonl
+#
+# The two mechanisms fail independently, which is the point: the redirect
+# prevents contamination, the stamp makes it recoverable when prevention fails.
+# Analysis code should filter on `_synthetic` rather than trusting the file.
+#
+# KEYED ON "AM I A TEST", NOT ON "IS THE LOG REDIRECTED". The first version of
+# this stamped only when BASEBALL_MATCH_LOG was set — i.e. exactly when the
+# rows were already going somewhere harmless. In the case that actually
+# matters, a test that FORGETS to redirect, no stamp was applied and the rows
+# landed in the real file invisible. Proven immediately: a mutation removing
+# the redirect wrote two unstamped fixture rows into match_log.jsonl.
+#
+# Detected two ways so neither has to be remembered: run_tests.sh exports
+# BASEBALL_TEST_RUN, and any directly-invoked test_*.py is recognised by its
+# own filename.
+def _running_under_test() -> bool:
+    # QA1-F7: BASEBALL_MATCH_LOG is deliberately NOT a test signal. It only
+    # says "the log lives somewhere else", which a REAL run has every reason to
+    # do (a per-save log, say). Treating it as test context stamped genuine rows
+    # `_synthetic`, and the documented `grep -v '"_synthetic": true'` cleanup
+    # would then delete real match data — the exact loss the stamp exists to
+    # prevent, inverted.
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        return True
+    entry = os.path.basename(sys.argv[0] or "")
+    return entry.startswith("test_") and entry.endswith(".py")
+
+
+_SYNTHETIC_LOG = _running_under_test()
+
+
+def log_matchup(record: dict):
+    # Every row is stamped. Without this the log is one undifferentiated
+    # stream: after the 2026-08-26 run there was no way to tell which rows it
+    # had written, so "29 plays produced how many rows?" could only be bounded
+    # by diffing a count taken before and after. `ts` first, so a row's origin
+    # is visible without parsing the whole line.
+    record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **record}
+    if _SYNTHETIC_LOG:
+        record = dict(record, _synthetic=True,
+                      _source="test-suite", _written=time.strftime("%Y-%m-%dT%H:%M:%S"))
+    with open(MATCH_LOG_FILE, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+READ_STATE_PROMPT = """
+You are reading a screenshot of a turn-based baseball card minigame,
+provided as multiple images in this order:
+
+1. "overview" — the whole screen, at low resolution. Use this alone to
+   determine "screen" and "phase", and to read anything on a
+   "ban_screen", "match_start_prompt", "result", or "other" screen.
+2. "scoreboard" — a sharp close-up of the top-left score/round/discards
+   box. ONLY present/meaningful when screen would be "turn",
+   "discard_prompt", or "result" — ignore it otherwise (e.g. on a
+   ban_screen or match_start_prompt it just shows whatever background
+   happens to be in that fixed screen position, not a real scoreboard).
+3. "hand" — a sharp close-up of the 5-card hand row at the bottom.
+   Same caveat: only meaningful when screen is "turn" or
+   "discard_prompt".
+4. "third_base", 5. "first_base", 6. "second_base" — sharp close-ups of
+   each base position on the diamond. Each shows EITHER a bare round
+   coin medallion (that base is empty — no runner) OR a face-up player
+   card resting at that same spot (that base has a runner). Only
+   meaningful when screen is "turn" or "discard_prompt" or "result".
+
+When screen is "turn", "discard_prompt", or "result": read
+your_score/opp_score/discards_left/hand from the "scoreboard"/"hand"
+crops (they're sharper than the overview), and read "runners" by
+checking the three base crops for which ones show a real card instead
+of a bare coin. For every other screen type, rely on the "overview"
+image alone and leave scoreboard/hand/base-crop content out of it.
+
+Respond with ONLY a JSON object, no other text, in this exact shape:
+
+{
+  "screen": "turn" | "discard_prompt" | "result" | "ban_screen" | "match_start_prompt" | "other",
+  "phase": "batting" | "pitching" | null,
+  "your_score": int | null,
+  "opp_score": int | null,
+  "batters_used": int | null,
+  "discards_left": int | null,
+  "runners": [{"name": str, "power": int, "secondary": int}],
+  "hand": [
+    {"kind": "player", "name": str, "power": int, "secondary": int, "hand_index": int},
+    {"kind": "tactics", "name": str, "type": "swing_boost"|"speed_boost"|"pitch_boost"|"fielding_boost", "bonus": int, "hand_index": int}
+  ],
+  "result_won": bool | null,
+  "collection": [{"kind": "player"|"tactics", "name": str, "power": int, "secondary": int, "row": int, "col": int}]
+}
+
+Rules for filling this in:
+- "screen": "turn" for a normal card-selection turn, "discard_prompt" if
+  Play/Discard options are shown for an already-lifted card, "result" if
+  this is a WINNER/game-over screen, "ban_screen" if this is the
+  "BANNED CARDS x/3" pre-match screen showing a grid of your collection,
+  "match_start_prompt" if this is the seated table screen showing
+  "Baseball Cards - Play ($50)", "other" for anything else (menus,
+  overworld, dialogue, loading, etc).
+- hand_index is the 0-based left-to-right position of that card in the
+  5-card hand at the bottom of the screen.
+- "discards_left" is the count of remaining usable discards, read off the
+  "DISCARDS" dot counter in the top-left scoreboard box (below "ROUND").
+  Count only the dots that still look available/unused (matching the
+  filled/bright style of the ROUND dots still to come); a dot that looks
+  dimmed, hollow, or crossed out has already been spent and should not
+  be counted. Use null if this counter isn't visible on screen.
+- "power" is swing power (batter) or pitch focus (pitcher). "secondary"
+  is speed (batter) or fielding (pitcher) — use 0 if no shield icon is
+  shown on the card.
+- "runners" — check the "third_base", "first_base", and "second_base"
+  crops. Each shows either a bare round coin (base empty — not a
+  runner) or a face-up player card with a readable name/power sitting
+  at that same spot (a real runner who reached base on a previous turn
+  and is still waiting to score). Include one entry per base crop that
+  shows a real card. A card with no readable name/power isn't a valid
+  runner entry — treat that base as empty instead of guessing. This is
+  separate from the always-face-down pitcher-indicator card that sits
+  dead center of the diamond (never a runner, don't include it) and
+  from the hand row at the bottom.
+- Only fill "result_won" when screen == "result": true if the scoreboard's
+  "S" column shows your total higher than the opponent's, false otherwise.
+- Only fill "collection" when screen == "ban_screen": every card visible
+  in the grid, with its 0-based row and column position. Tag each one
+  "kind": "player" if it has a "BATTER" or "PITCHER" label at the top,
+  or "kind": "tactics" if it doesn't (Speed Boost, Power Swing, Pitch
+  Focus, Fielding Play, or anything else without that label) — these
+  can appear scrolled into the same grid. Include both kinds; the
+  caller filters by kind, so getting this tag right matters more than
+  omitting tactics cards yourself. SKIP any card rendered faded/grayed
+  out with no power number shown at all — that means it's locked/not
+  yet owned, not a real card that can be banned. Only include cards
+  where "power" is an actual visible number, never null, in this field.
+  SKIP any card whose name label isn't clearly legible too (mid-scroll
+  transition frames sometimes show art before the name renders) — do
+  NOT invent a placeholder like "Unknown" for it, just leave that card
+  out of the list entirely rather than guessing at its name. This
+  applies to every field in "collection": if any of name/power/secondary
+  isn't clearly legible on a given card, leave that whole card out
+  rather than filling in a best guess (a made-up 0, "Unknown", or
+  similar) — an incomplete list is fine, a fabricated entry isn't.
+  IMPORTANT — a solid black rectangle inside the grid is a card slot
+  that's been intentionally redacted (locked/unowned), NOT empty space:
+  it still occupies its own row and column exactly like a visible card
+  does. When numbering columns for the cards you CAN read, count every
+  black rectangle you pass over as one column, the same as you would a
+  normal card — do not skip over it or renumber the visible cards as if
+  the black rectangle weren't there.
+- Use null (or an empty list, for "runners"/"hand"/"collection") for any
+  field that doesn't apply to the current screen.
+"""
+
+READ_BALANCE_PROMPT = """
+You are looking at a screenshot of the game's pause menu (a book/journal
+graphic with "PAUSE" at the top). Along the right edge of the screen are
+three stacked currency counters, each a number next to an icon, one
+directly above the other. The player's money total is ALWAYS the
+TOPMOST (highest on screen) of these three counters, and its icon is a
+round coin/medallion with an embossed face on it.
+
+Do NOT use the second or third counters below it — the second has a
+round badge/emblem icon (a different currency), and the third has a
+rectangular photo/ticket-shaped icon (a different currency, not round).
+Do NOT use the heart-icon or cheese-icon counters in the bottom-left
+corner of the screen either — those are unrelated resources.
+
+CRITICAL: the large round coin in the BOTTOM-LEFT with a smiling embossed
+face and a ribbon/banner under it is the player's HEALTH, not money. It
+looks like a coin and it is not one. If the three stacked counters along
+the RIGHT EDGE are not visible, this is not the pause menu — answer null
+rather than reading that bottom-left coin.
+
+Report all three right-edge counters so it is clear you found the stack
+and not some other number.
+
+Respond with ONLY a JSON object, no other text:
+
+{"counters": [top_int, middle_int, bottom_int], "money": top_int}
+
+If you cannot see three stacked counters along the right edge, respond
+with {"counters": null, "money": null} instead of guessing.
+"""
+
+
+READ_BAN_ROW_CARDS_PROMPT = """
+You are looking at a screenshot of a baseball card minigame's ban
+screen: a 5-column grid of cards. Some grid cells are solid black —
+these are locked/redacted card slots, not real cards.
+
+List ONLY the legible BATTER/PITCHER cards, in strict reading order:
+left to right within a row, top row before the row below it. Skip every
+solid black cell entirely (don't count it, don't guess at it). Skip any
+card whose name or power isn't clearly legible for any other reason
+too — leave it out rather than guessing. Skip tactics cards (Speed
+Boost, Power Swing, Pitch Focus, Fielding Play, or anything without a
+BATTER/PITCHER label at the top).
+
+Do NOT report row/column position — just the ordered list of what you
+can actually read; the exact position of each card is figured out
+separately, deterministically, without vision. Respond with ONLY a JSON
+object:
+
+{"cards": [{"name": str, "power": int, "secondary": int}, ...]}
+
+"power" is swing power (batter) or pitch focus (pitcher); "secondary" is
+speed (batter) or fielding (pitcher), 0 if no shield icon shown. If
+nothing on screen is legible, respond {"cards": []}.
+"""
+
+# WHAT THIS PROMPT MUST NOT DO IS ASSERT ITS OWN PREMISE.
+#
+# It used to open "You are looking at a screenshot showing the face-up cards
+# revealed mid-resolution of a turn". On a frame where the faceoff had not
+# flipped yet that sentence is false, and a model told the reveal is on screen
+# will find one: it reported the face-up cards that WERE there, which are the
+# base runners standing on the base medallions and the fan of cards in our own
+# hand. Those come back as confident, accurate reads of the wrong cards — on
+# the 2026-09-01 run all 14 names so returned resolved to real roster entries,
+# and the OCR power equalled the roster power in every case that was legible.
+# Nothing downstream can defend against that: the auditor correctly concludes
+# our card is missing and calls a misfire that never happened.
+#
+# So the premise is now a question the model is allowed to answer "no" to, and
+# the two distractors are named explicitly. The output contract is unchanged;
+# only the framing and the exclusions are new.
+READ_MATCHUP_PROMPT = """
+This is a screenshot of a baseball card minigame, taken at a moment when
+the turn's two cards MAY OR MAY NOT have been revealed yet. Your job is to
+report the faceoff — one card ours, one the opponent's — but ONLY if it is
+actually face-up on screen right now.
+
+WHERE THE FACEOFF IS: the two cards face each other VERTICALLY down the
+middle of the diamond, one in the upper half, one in the lower half. EACH
+side can show up to two cards stacked together: a BATTER or PITCHER player
+card, and (only if that player attached one) a separate tactics card like
+"Speed Boost", "Power Swing", "Pitch Focus", or "Fielding Play" layered
+behind/next to it — report BOTH, don't skip the tactics card, since which
+side boosted its power changes the actual outcome.
+
+DO NOT REPORT THESE, they are not the faceoff:
+  * Cards lying ON A BASE — the round medallions to the left and right of
+    the middle, and the one above it. Those are BASE RUNNERS. They are
+    face-up, they have names and power badges, and one of them can sit
+    directly alongside the faceoff's tactics card. They are still runners.
+  * The fan of cards along the BOTTOM EDGE of the screen. That is our hand.
+  * Face-down cards — a dark card back with crossed bats. If the middle of
+    the diamond holds face-down cards, the reveal has NOT happened yet.
+
+If the faceoff is face-down, or the middle is empty, respond {"cards": []}.
+Answering "nothing is revealed yet" is a CORRECT and useful answer; guessing
+from whatever else is face-up on the table is not. Respond with ONLY a JSON
+object:
+
+{"cards": [
+  {"kind": "player", "name": str, "power": int, "secondary": int},
+  {"kind": "tactics", "name": str, "bonus": int, "paired_with": str}
+]}
+
+For a "player" entry: "power" is swing power (batter) or pitch focus
+(pitcher); "secondary" is speed (batter) or fielding (pitcher), 0 if no
+shield icon shown.
+
+For a "tactics" entry: "bonus" is the number shown on that tactics
+card. "paired_with" is the exact "name" of whichever player card it's
+visually stacked/layered with — this is how the caller tells which
+side a tactics card belongs to, so get this pairing right rather than
+guessing which player it modifies.
+
+Include only cards actually visible face-up right now — if just one
+side's reveal is visible (the other hasn't happened yet, or already
+resolved past it), include just that side's card(s); if none, respond
+{"cards": []} instead of guessing.
+"""
+
+
+def extract_json(text: str) -> dict:
+    """
+    Pull the JSON object out of a model response. A plain prefix/suffix
+    strip (the old `.removeprefix("```json")...` approach) breaks the
+    moment the model adds any conversational filler before the code
+    fence — flagged in review, 2026-08-23. Regex-searching for the
+    outermost {...} is tolerant of that regardless of what surrounds it.
+    """
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match is None:
+        raise json.JSONDecodeError("no JSON object found in response", text, 0)
+    return json.loads(match.group(0))
+
+
+SCREENSHOT_MEDIA_TYPE = "image/jpeg"
+SCREENSHOT_MAX_WIDTH = 2000  # downscale target
+
+
+# A FRACTION of image width, not pixels. 60px was ~3% of the 2000-wide capture
+# it was tuned on, but the tile silently coarsens or fines as the capture size
+# changes — at 1400 wide the same 60px is 4.3%, masking in noticeably bigger
+# blocks. The ban-grid boxes just below were converted from pixels to fractions
+# for this same reason after a review flagged it; this one was missed.
+MASK_TILE_FRAC = 0.030
+# TWO CONSUMERS, TWO MEASUREMENTS — do not merge these again.
+#
+# `MASK_CONTRAST_THRESHOLD` is used by mask_low_contrast_regions(), which takes
+# PIL TILE MEANS over any frame. `BAN_LOCKED_CONTRAST_THRESHOLD` is used by
+# detect_ban_grid_locked(), which takes a WHOLE-CELL mean of _local_contrast()
+# on a ban frame. They measure different quantities on different inputs and
+# only ever coincidentally shared a number.
+#
+# They were briefly unified at 124.0 while recalibrating the lock detector, and
+# it silently regressed the masker: base crops on gameplay frames went from
+# ~65-80% blacked out to ~95%. Exactly the failure mode this file already warns
+# about for BAN_GRID_ROW_Y_FRAC vs BAN_CARD_ROW_TOP_FRAC — two independently
+# measured constants that must not be "simplified" into one.
+MASK_CONTRAST_THRESHOLD = 100.0
+
+# Whole-cell contrast below this reads as a LOCKED (faded) ban-grid card.
+#
+# 124.0 is correct, but the reasoning first written here was not, and the
+# correction matters more than the value. A wider study (411 ban frames, 3,610
+# cells, each given an independent scroll position by reading the scrollbar
+# thumb) found:
+#
+#   * The value is right, and worth MORE than first measured: 18 settled cells
+#     false-unlock at 100.0 (not 6). Zero false readings in either direction at
+#     124.0.
+#   * There is NO "empty gap [106.5, 142.5]". 142 cells (3.5%) sit inside it.
+#     It looks empty only if you restrict to player-card cells on settled
+#     frames — which is what the first sample did. The distribution has a
+#     sparse VALLEY, not a void, and a threshold placed by "midpoint of the
+#     empty gap" was right by luck as much as by method.
+#   * The dominant lifter is the BANNING PHASE banner (+50 on one measured
+#     cell), not the ban cursor (+26). The banner sets the lower bound.
+#   * What lives in the "gap" is mostly (6,3), a POWER SWING **tactics** card,
+#     at 120.8-141.3 across 63 frames.
+#
+# Anything moving this constant should re-derive it from the full 411-frame set,
+# not from settled player cells alone.
+BAN_LOCKED_CONTRAST_THRESHOLD = 124.0
+# Re-measured 2026-08-26 over ALL 95 cached ban frames (950 cells). The
+# distribution is cleanly bimodal and the old 100.0 sat BELOW the real gap:
+#     locked cluster   ... 106.5
+#     <-- empty, 35.9 wide -->
+#     unlocked cluster 142.5 ...
+# 6 cells fell between 100.0 and 142.5 — every one a LOCKED card whose contrast
+# was lifted by the ban cursor's highlight sitting on it (+20-26 measured on one
+# physical card, Zachary Lee at (2,0), as the cursor moved on and off). Those
+# read as UNLOCKED, making a card the player does not own a ban candidate.
+#
+# That matters more now than it used to: with TRUST_ROSTER_ONLY the lock
+# detector is the ONLY live vision component left on the ban path, so a
+# false-unlocked cell is not caught by anything downstream.
+#
+# 124.0 is the gap midpoint, so cursor-lifted locked cards (max 106.5) and
+# genuine unlocked cards (min 142.5) both sit ~18 clear of it.  # normal cards measured ~170-187, faded ones ~52-56 — wide margin
+MASK_KERNEL = 41  # roughly card-art scale at SCREENSHOT_MAX_WIDTH
+
+
+def mask_low_contrast_regions(img):
+    """
+    Black out any region of the image with low local contrast, before it
+    ever reaches the vision model.
+
+    Root-cause fix for a real, costly failure class (2026-08-23, live on
+    a less-complete collection): locked/not-yet-owned ban-screen cards
+    render faded, with no legible name or stats. Rather than reliably
+    reporting that as unreadable, the model sometimes "filled in" a
+    guess instead — a blank name, the literal word "Unknown", or a fake
+    power=0 — each of which needed its own reactive patch downstream in
+    read_full_ban_collection(). Masking the ambiguous pixels out locally,
+    in code, removes the whole failure class at the source instead of
+    pattern-matching whatever specific guess the model happens to make
+    next. Those downstream filters stay on as cheap defense-in-depth,
+    but this is the actual fix.
+
+    Local contrast = local max brightness minus local min brightness
+    within a MASK_KERNEL-sized neighborhood (PIL Max/MinFilter), then
+    averaged over MASK_TILE_FRAC-sized tiles. Verified live against a real ban
+    screen: legible cards measured ~170-187, faded/locked cards ~52-56 —
+    MASK_CONTRAST_THRESHOLD=100 sits with a wide margin between both.
+    """
+    gray = img.convert("L")
+    # _local_contrast() is the SEPARABLE form of exactly this Max/Min pair —
+    # same border handling, same answer. PIL's naive filters cost 13.73s per
+    # 2000x1292 frame at MASK_KERNEL=41; the separable version costs 47ms.
+    # Verified byte-identical — both the contrast array AND the final masked
+    # image — on 17 real frames (7 ban-screen fixtures, 5 scan frames, 5
+    # sampled gameplay frames). 290x.
+    #
+    # detect_ban_grid_locked() already made this switch; this call site was
+    # simply missed. It is dead while TRUST_ROSTER_ONLY is on, which is why
+    # nobody noticed — but it is a 13.7s landmine in the vision fallback, and
+    # it was 40% of the offline test suite's runtime.
+    contrast_arr = _local_contrast(np.asarray(gray), MASK_KERNEL).astype(np.uint8)
+
+    result = img.convert("RGB").copy()
+    draw = ImageDraw.Draw(result)
+    w, h = img.size
+    # NOT named `tile` — that name is already taken by the pixel array below,
+    # and shadowing it made the box arithmetic operate on an ndarray.
+    tile_px = max(8, int(w * MASK_TILE_FRAC))
+    for y in range(0, h, tile_px):
+        for x in range(0, w, tile_px):
+            box = (x, y, min(x + tile_px, w), min(y + tile_px, h))
+            tile = contrast_arr[box[1]:box[3], box[0]:box[2]]
+            if tile.size and tile.mean() < MASK_CONTRAST_THRESHOLD:
+                draw.rectangle(box, fill=(0, 0, 0))
+    return result
+
+
+# Ban-screen grid, calibrated live 2026-08-23 against the actual
+# SCREENSHOT_MAX_WIDTH=2000 downscaled capture (see PENDING_LIVE_VALIDATION.md
+# for the sampled contrast values that validated these boxes: every one
+# of 10 cells across 2 rows landed either 51-64 [locked] or 160-180
+# [normal], a huge margin either side of MASK_CONTRAST_THRESHOLD). Only
+# 2 rows — a 3rd, partial row is visible but its card boundaries are cut
+# off, too unreliable to measure confidently.
+#
+# Expressed as FRACTIONS of image width (not absolute pixels) — flagged
+# in Gemini review, 2026-08-23: hardcoded pixel boxes silently misalign
+# if the Chiaki-ng window is resized or display scaling changes. Row
+# boundaries are also fractions of WIDTH rather than height on purpose:
+# every screenshot this whole session has shown horizontal letterboxing
+# (black bars top/bottom), so content position scales with width even
+# when the letterbox thickness (and therefore height) varies. Verified
+# these fractions reproduce the original pixel calibration exactly at
+# 2000px width (290/2000=0.145, 270/2000=0.135, etc.) before adopting.
+# Margin around the derived ban-grid bbox before it is sent to vision. Small
+# but non-zero: a card's glow/selection highlight extends slightly past its box.
+BAN_CROP_MARGIN = 0.015
+
+BAN_GRID_COL_X_FRAC = [(0.145 + i * 0.135, 0.145 + i * 0.135 + 0.130) for i in range(5)]
+BAN_GRID_ROW_Y_FRAC = [(0.195, 0.385), (0.395, 0.585)]
+
+
+def _local_contrast(gray_arr, k):
+    """max-minus-min over a k x k window. Separable, so O(n*k) not O(n*k^2).
+
+    PIL's MaxFilter/MinFilter are the naive implementation, and at
+    MASK_KERNEL=41 on a ban frame the pair cost **6.27 s** — measured, and run
+    once per scroll iteration, so roughly 36 s of blind non-polling CPU per ban
+    screen. A max over a square window is separable (max along rows, then along
+    columns), which is the same answer for a fraction of the work: **22 ms**,
+    291x faster, verified byte-for-byte equal on the sampled cells across 6 real
+    ban frames.
+
+    Border handling is deliberately the same as PIL's (0 for max, 255 for min)
+    so the arrays match at the edges too — though the caller crops with a margin
+    wider than the kernel radius, so no sampled cell ever sees the border.
+    """
+    pad = k // 2
+    hi = np.pad(gray_arr, pad, mode="constant", constant_values=0)
+    lo = np.pad(gray_arr, pad, mode="constant", constant_values=255)
+    mx = sliding_window_view(hi, k, axis=1).max(-1)
+    mx = sliding_window_view(mx, k, axis=0).max(-1)
+    mn = sliding_window_view(lo, k, axis=1).min(-1)
+    mn = sliding_window_view(mn, k, axis=0).min(-1)
+    return mx.astype(np.int16) - mn.astype(np.int16)
+
+
+LOCK_CONFIRM_TRIES = 4
+
+# Attempts to read the BANNED CARDS counter before giving up. Bounded by the
+# ban screen's remaining life: measured 4.20s / 5.69s / 5.85s across the three
+# ban episodes of 2026-08-26 at the point the check runs, against ~0.26s per
+# read. Five leaves a wide margin. A single read failed 1 of 3 matches on a
+# counter that was legible the whole time.
+BAN_COUNTER_READ_TRIES = 5
+
+# Run the local-vs-vision read comparison on every Nth turn, not every turn.
+# The hand half of it costs 25.57s (measured) against 0.33s for the base crops,
+# because hand_digit_reader reloads the PaddleOCR models per call. It is a
+# diagnostic that drives no decision, and drift between the two readers shows
+# up just as clearly in a sample. 1 = every turn (the old behaviour).
+LOCAL_CHECK_EVERY = 4
+
+
+def _settled_lock_grid(tries: int = LOCK_CONFIRM_TRIES):
+    """Capture until two CONSECUTIVE lock reads agree; return (img, grid).
+
+    A locked cell is detected by low contrast, so a cell that is merely DIM
+    reads as locked — and the ban screen fades in. Measured over the
+    2026-08-26 run: one ban screen's first two frames reported 6/10 and 4/10
+    cells locked where the settled truth was 3/10, marking four cards the
+    player OWNS as locked. Those cards are then absent from the candidate set
+    and can never be banned, silently and with no error.
+
+    Same prove-it-twice discipline as _learn_roster_entry(): one reading of a
+    transient is a guess. Falls through after `tries` and returns the latest
+    read rather than blocking — a still-animating grid is caught downstream by
+    the scrollbar cross-check, and a ban screen that never settles must not
+    wedge the run.
+    """
+    img = capture_screenshot_image()
+    grid = detect_ban_grid_locked(img)
+    for _ in range(tries):
+        img2 = capture_screenshot_image()
+        grid2 = detect_ban_grid_locked(img2)
+        if grid2 == grid:
+            return img2, grid2
+        img, grid = img2, grid2
+    print("  [ban] lock grid still changing after "
+          f"{tries} reads — using the latest.")
+    record_observation(event="lock_grid_unsettled", tries=tries)
+    return img, grid
+
+
+def detect_ban_grid_locked(img) -> list:
+    """
+    Returns a 2D list [row][col] of bool (2 rows x 5 cols) — True if
+    that grid cell is a locked/faded card, False if it's legible.
+    Computed entirely in code against the calibrated fractional boxes
+    above, NOT inferred by the vision model.
+
+    Root-cause fix for a real bug (2026-08-23): asking the model to
+    track grid position around masked-out cards is unreliable — it
+    silently shifted the remaining visible cards left to fill the gap
+    instead of preserving their true columns, live-verified twice (once
+    on the original approach, again after a prompt-only attempt to fix
+    it). This function means the model never has to reason about
+    position at all: we already know exactly which grid cells are
+    populated before we even ask it to read anything, and just zip its
+    ordered "what I can read" list onto our own known positions.
+    """
+    w, h = img.size
+    col_x = [(int(w * x0), int(w * x1)) for x0, x1 in BAN_GRID_COL_X_FRAC]
+    row_y = [(int(w * y0), int(w * y1)) for y0, y1 in BAN_GRID_ROW_Y_FRAC]
+
+    # Run the Max/Min filters over the GRID REGION ONLY, not the whole frame.
+    # Two MaxFilter(41) passes over 2000x1292 cost ~13.8s per call, and this is
+    # called once per scan iteration — roughly half the ban screen's measured
+    # 149s. Only cells inside the grid are ever sampled, so the rest is wasted.
+    #
+    # EXACT, not approximate. A MaxFilter's output at a pixel depends only on
+    # its MASK_KERNEL-radius neighbourhood, so cropping with a margin wider than
+    # that radius leaves every sampled pixel bit-identical. Verified on 12 real
+    # ban frames: 12/12 grids identical, 2.2x faster.
+    #
+    # Downscaling instead was tried and REJECTED: 1000px matched on one frame
+    # but 0/12 across the set, and 1400px 8/12. MASK_KERNEL is calibrated to
+    # this resolution (see its "card-art scale at SCREENSHOT_MAX_WIDTH" note);
+    # scaling the image without recalibrating the threshold changes which cards
+    # read as locked, i.e. which cards get banned.
+    margin = MASK_KERNEL // 2 + 2
+    gx0 = max(0, min(x for x, _ in col_x) - margin)
+    gx1 = min(w, max(x for _, x in col_x) + margin)
+    gy0 = max(0, min(y for y, _ in row_y) - margin)
+    gy1 = min(h, max(y for _, y in row_y) + margin)
+
+    gray = img.convert("L").crop((gx0, gy0, gx1, gy1))
+    contrast_arr = _local_contrast(np.asarray(gray), MASK_KERNEL)
+
+    grid = []
+    for y0, y1 in row_y:
+        row = []
+        for x0, x1 in col_x:
+            cell = contrast_arr[y0 - gy0:y1 - gy0, x0 - gx0:x1 - gx0]
+            mean_contrast = cell.mean() if cell.size else 0
+            row.append(mean_contrast < BAN_LOCKED_CONTRAST_THRESHOLD)
+        grid.append(row)
+    return grid
+
+
+# BAN_GRID_ROW_Y_FRAC's boxes are deliberately short — sized just for
+# detect_ban_grid_locked()'s contrast sampling, not the whole card. The
+# full card (needed to reach the name banner) extends further down from
+# each row's same top edge. Measured live 2026-08-24 against a real
+# scrollable-grid capture (not the different "BANNED CARDS" summary
+# screen, which has different proportions).
+BAN_GRID_CARD_HEIGHT_FRAC = 0.40
+BAN_CARD_NAME_STRIP_FRAC = (0.70, 1.0)
+
+# N6 FIX: card-crop row tops, as fractions of HEIGHT, derived from the real
+# measured row pitch (~366 px at 1292 px tall = 0.283).
+#
+# These are deliberately SEPARATE from BAN_GRID_ROW_Y_FRAC. That constant is
+# consumed by detect_ban_grid_locked() as fractions of WIDTH, and reusing it
+# here meant one constant carried two incompatible meanings — which gave an
+# effective row pitch of 259 px against a true 366 px, so row 1's name banner
+# drifted ~107 px down and sat flush against the bottom of its strip. Row 1
+# had ZERO downward tolerance: a 10 px frame shift (0.8% of height) took it
+# from 6/6 to 0/6, and inside the failure band it returned WRONG names rather
+# than None — which is exactly what feeds the N1 mis-ban path.
+BAN_CARD_ROW_TOP_FRAC = [0.195, 0.195 + 0.283]  # widened 2026-08-24: tightly-tuned
+# (0.82, 0.96) worked on one frame but missed the name banner entirely on
+# another real capture — small frame-to-frame vertical drift pushed it
+# out of the narrow window. ocr_ban_card_name()'s per-line "pick the
+# longest" selection already discards extra junk lines this wider crop
+# picks up, so widening costs nothing and buys real margin.
+
+
+def get_ban_grid_card_crop(img, rel_row: int, col: int):
+    """Full single-card crop (through the name banner) for grid position
+    (rel_row, col) within img — rel_row is 0/1 within the two visible
+    rows, same convention as detect_ban_grid_locked()'s return grid."""
+    w, h = img.size
+    x0, x1 = BAN_GRID_COL_X_FRAC[col]
+    y0 = BAN_CARD_ROW_TOP_FRAC[rel_row]
+    y1 = y0 + BAN_GRID_CARD_HEIGHT_FRAC
+    # Uses BAN_CARD_ROW_TOP_FRAC (height fractions, true ~366 px row pitch) —
+    # deliberately NOT BAN_GRID_ROW_Y_FRAC, which detect_ban_grid_locked()
+    # reads as WIDTH fractions. The two are measured independently and must
+    # stay that way; see the N6 note on BAN_CARD_ROW_TOP_FRAC. Do not "unify"
+    # them: a height-aligned box straddles the lock-detection contrast
+    # threshold (measured 85-139, vs a clean 50-80 locked / 150-179 unlocked
+    # under the width reading), and a width-aligned card crop fails OCR
+    # outright. Changing either requires re-running test_ocr_ban_card.py AND
+    # re-verifying lock detection against known frames.
+    return img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+
+
+def ocr_ban_card_name(card_img):
+    """
+    Local OCR (no vision call) of a full ban-grid card's name banner,
+    resolved against the known roster via the same fuzzy match already
+    proven for runner names. Returns the roster's PlayerCard (trusted
+    power/secondary) or None if the OCR'd text doesn't confidently
+    resolve to any known card — never guesses.
+
+    Deliberately doesn't attempt the power/secondary badges directly:
+    live testing 2026-08-24 found the power circle's digit font
+    genuinely unreadable by tesseract regardless of crop precision or
+    polarity (tested exhaustively, both light-on-dark and dark-on-light,
+    7 thresholds x 5 psm modes, zero correct reads) — a font-recognition
+    limitation, not a framing problem. The name banner uses a normal
+    printed font and reads reliably; resolving via the roster sidesteps
+    the unreadable badge entirely for any card already catalogued.
+    """
+    w, h = card_img.size
+    y0, y1 = BAN_CARD_NAME_STRIP_FRAC
+    strip = card_img.crop((0, int(h * y0), w, int(h * y1))).convert("L")
+    strip = strip.resize((strip.width * 4, strip.height * 4))
+    strip = ImageOps.invert(strip).point(lambda p: 255 if p > 190 else 0)
+    text = pytesseract.image_to_string(strip, config="--psm 6").strip()
+    candidates = [" ".join(re.findall(r"[A-Za-z]{2,}", line)) for line in text.splitlines()]
+    cleaned = max(candidates, key=len, default="")
+
+    # N1: resolve STRICTLY. This function can only ever return a card already in
+    # the roster, so a genuinely new card (row 6 cols 3-4 were never catalogued)
+    # would otherwise be force-matched onto the nearest known name — measured:
+    # 15 of 17 plausible unknown names resolved to a WRONG roster card
+    # ('Frank Coker' -> 'Brian Coker'). That wrong card then fills roster_hits,
+    # suppressing the vision read that would have corrected it, and can put a
+    # duplicate into the grid. Refusing here simply falls through to vision,
+    # which is the correct behaviour for an uncatalogued position.
+    # min_margin: found missing 2026-09-03. match_roster_name()'s whole-string
+    # pass documents that it force-matches a short or garbled read onto one of
+    # a near-identical family ("Brown" -> Mickey Brown of two, "Jody Gain" ->
+    # Joe Jody Gain of four) and says callers that cannot afford a coin flip
+    # must pass min_margin. THIS caller is the one that cannot afford it — its
+    # answer bans a physical card — and it was the only one not passing it.
+    # Measured on the original code: 'MAPA JODY GAIN' resolved to Papa Jody
+    # Gain and 'XAMA JODY GAIN' to Mama Jody Gain, both at margin 0.000, so a
+    # single misread letter in the first word decided which of four real cards
+    # got banned. The value is the same 0.10 the second pass uses, and the same
+    # one ROSTER_CONFIDENT_MARGIN was measured at.
+    hit = match_roster_name(cleaned, cutoff=0.85, allow_surname_fallback=False,
+                            min_margin=BAN_OCR_KEY_MARGIN)
+    if hit is not None:
+        return hit
+
+    # SECOND pass, reached only after the first has refused, so it is strictly
+    # additive: every card that resolved before still resolves the same way and
+    # only abstentions can change. It compares on ocr_match_key() instead of
+    # the raw text, which stops this font's measured separator damage (fused
+    # words, dropped hyphens and nickname quotes — 50 of the 64 aligned reads)
+    # from counting as character error, and it adds the runner-up margin the
+    # whole-string path never had.
+    #
+    # Measured over 110 real ban-grid cells: 59 -> 63 resolved, 0 wrong either
+    # way, abstention 46.4% -> 42.7%. All four recoveries are cards the frame
+    # genuinely shows ('JOSHUADIAZ ss', 'SOSHUADIAZ ss', 'JOEJOOYGAIN',
+    # 'oanige THE RAT TA TRAN CRUZ'). The remaining abstentions are 39 cells
+    # with no legible banner at all (locked cards, and the one the PLAY prompt
+    # covers) plus 8 reads too fragmentary to identify — 'OHNNY' fits three
+    # different Johnnys, 'BLAZE' two.
+    #
+    # Ordering note: on that corpus the second pass turned out to DOMINATE the
+    # first — 59 cells resolved by both with zero disagreements, 4 by the key
+    # alone, 0 by the direct matcher alone. So the order is not what makes this
+    # correct; it is what makes the change strictly additive, which is a much
+    # smaller claim than "the new matcher is equivalent to the old one on every
+    # input". The direct pass also compares the RAW text, spaces and
+    # punctuation included, which is genuinely different evidence. Keep both.
+    return match_roster_name_ocr(cleaned)
+
+
+def _read_ban_rows_separately(masked_img, expected_positions):
+    """Re-read the grid ONE ROW AT A TIME; returns cards or None.
+
+    Only called after a combined read disagrees with the lock detector. Costs
+    more tokens than the combined read (measured: 167+168 vs 268), which is
+    exactly why it is not the default — but it isolates the failure, so a row
+    that reads cleanly is kept even when the other does not.
+
+    Returns None if the per-row totals still do not add up, leaving the
+    caller's existing skip-the-batch path to handle it.
+    """
+    want_by_row = collections.Counter(r for r, _ in expected_positions)
+    out = []
+    for rel_row in sorted(want_by_row):
+        try:
+            raw = read_ban_row_cards(masked_img, only_row=rel_row)
+        except Exception as e:
+            print(f"  [ban] per-row read failed on row {rel_row}: {e}")
+            return None
+        good = [
+            c for c in raw
+            if c.get("name") and norm_name(c["name"]) not in PLACEHOLDER_CARD_NAMES
+            and c["name"] not in KNOWN_TACTICS_NAMES
+            and isinstance(c.get("power"), int) and c["power"] > 0
+            and isinstance(c.get("secondary"), int)
+        ]
+        if len(good) != want_by_row[rel_row]:
+            print(f"  [ban] row {rel_row}: expected {want_by_row[rel_row]}, "
+                  f"got {len(good)} — this row is not usable")
+            return None
+        out.extend(good)
+    print(f"  [ban] per-row retry recovered all {len(out)} cards")
+    return out
+
+
+def read_ban_row_cards(masked_img, only_row: int = None) -> list:
+    """
+    Ask the model for an ordered (reading-order) list of the legible
+    cards visible in `masked_img` (a mask_low_contrast_regions()-ed
+    frame) — no position reported, see READ_BAN_ROW_CARDS_PROMPT. Paired
+    with detect_ban_grid_locked(), run by the caller against the SAME
+    underlying capture, to assign real positions in code. Takes the
+    image directly (rather than capturing its own) so both functions
+    share one screenshot instead of risking two different moments.
+    """
+    # Send only the card grid, not the whole screen. Measured 2026-08-25 on a
+    # real ban frame: full masked frame ~386 image tokens, grid-only ~211 — a
+    # 45% cut, on the one call the ban screen makes repeatedly.
+    #
+    # The box is DERIVED from the same geometry constants the crops and lock
+    # detection use, never hand-typed. A hand-picked x1=0.78 clipped column 4
+    # (which ends at 0.815) and would have silently hidden a fifth of every row
+    # from the model — the kind of error that reads as "the model missed a
+    # card" rather than as a cropping bug.
+    x0 = min(a for a, _ in BAN_GRID_COL_X_FRAC) - BAN_CROP_MARGIN
+    x1 = max(b for _, b in BAN_GRID_COL_X_FRAC) + BAN_CROP_MARGIN
+    if only_row is None:
+        y0 = min(BAN_CARD_ROW_TOP_FRAC) - BAN_CROP_MARGIN
+        y1 = max(BAN_CARD_ROW_TOP_FRAC) + BAN_GRID_CARD_HEIGHT_FRAC + BAN_CROP_MARGIN
+    else:
+        # Single row — used only by the per-row retry path.
+        y0 = BAN_CARD_ROW_TOP_FRAC[only_row] - BAN_CROP_MARGIN
+        y1 = BAN_CARD_ROW_TOP_FRAC[only_row] + BAN_GRID_CARD_HEIGHT_FRAC + BAN_CROP_MARGIN
+    w, h = masked_img.size
+    grid_only = masked_img.crop((max(0, int(w * x0)), max(0, int(h * y0)),
+                                 min(w, int(w * x1)), min(h, int(h * y1))))
+    buf = io.BytesIO()
+    grid_only.convert("RGB").save(buf, format="JPEG", quality=85)
+    img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=1200,
+        thinking={"type": "disabled"},
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}},
+                {"type": "text", "text": READ_BAN_ROW_CARDS_PROMPT},
+            ],
+        }],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    return extract_json(text).get("cards", [])
+
+
+def capture_screenshot_image():
+    """
+    Bring Chiaki-ng to the front and grab+downscale the current screen as
+    a raw PIL Image (no masking, no encoding) — the shared first step
+    behind capture_screenshot_b64() and read_full_ban_collection(), which
+    both need the same captured frame (one to encode for the API, one to
+    run detect_ban_grid_locked() against locally) without paying for two
+    separate screenshots of what could be two different moments.
+
+    Without the explicit focus call, a screenshot taken while some other
+    window (e.g. the Claude app, if you're actively chatting mid-run)
+    happens to be in front captures the WRONG window entirely — read as
+    an "other"/unrecognized screen, wasting a full API call plus a retry
+    backoff for nothing. Confirmed live 2026-08-23 as a real contributor
+    to the loop feeling like it "waits for a long time before doing
+    anything." The 0.15s settle delay matches the same focus-race fix
+    already applied to press() in input_controller.py.
+    """
+    # Capture the GAME WINDOW, not the whole desktop. pyautogui.screenshot()
+    # returns the main display, which is the laptop screen here — so with the
+    # game on an external monitor this was sending pictures of the editor to the
+    # vision model, which duly reported "other" and stalled the run.
+    import game_capture
+    img = game_capture.grab()
+    if img is None:
+        focus_chiaki_window()
+        time.sleep(0.15)
+        img = pyautogui.screenshot().convert("RGB")
+    if img.width > SCREENSHOT_MAX_WIDTH:
+        ratio = SCREENSHOT_MAX_WIDTH / img.width
+        img = img.resize((SCREENSHOT_MAX_WIDTH, int(img.height * ratio)))
+    return img
+
+
+# ponytail: TEMPORARY diagnostic logging, not a permanent feature — same
+# category as MATCH_LOG_FILE above, rip out once it's answered its
+# questions. Two live, currently-unresolved things this session couldn't
+# settle from static test photos alone: (1) whether the hand-card fan
+# layout's edge-slot position/scale jitter (found comparing two manual,
+# never-settled screenshots — see LOCAL_VISION_EXPERIMENTS.md) is a
+# real problem in the pipeline's own settled captures, and (2) general
+# ground truth for tuning crop regions / OCR / matching against real,
+# consistently-captured frames instead of found and manual photos.
+#
+# Runs on a genuine ~1s wall-clock cadence in its own daemon thread,
+# specifically NOT reusing capture_screenshot_image()'s focus_chiaki_window()
+# call — forcing window focus every single second would yank focus away
+# from whatever the user is doing (e.g. reading this chat) the moment
+# they alt-tab away mid-run, which is a worse cost than an occasional
+# logged frame of the wrong window. This is pure side-channel logging: it
+# never feeds into any read/decision, so a wrong-window frame here just
+# means that one frame isn't useful, not that anything breaks. Frames are
+# downscaled the same way capture_screenshot_image() does, so what's
+# logged matches what the real pipeline would have seen.
+#
+# REMOVAL PLAN: once the jitter question is answered and crop/OCR/match
+# tuning has enough real reference frames, delete SCREENSHOT_LOG_DIR,
+# start_screenshot_logger(), _screenshot_logger_loop(), the `threading`
+# import if nothing else needs it, and the log_screenshots parameter
+# (and its start_screenshot_logger() call) in run().
+# Overridable because the project can live on a NAS, and this writes at
+# SCREENSHOT_LOG_INTERVAL (10Hz) inside a timing-sensitive loop — point it
+# at a local disk there: BASEBALL_LOG_DIR=/tmp/bb_log python3 run_testing.py
+SCREENSHOT_LOG_DIR = os.environ.get("BASEBALL_LOG_DIR", "screenshot_log")
+# Each run writes into its own SCREENSHOT_LOG_DIR/<start-time>/ subfolder.
+# Flat-into-one-directory meant every session's frames piled into the same
+# 1811-file heap with only the filename timestamp to separate them, so "which
+# frames came from the run that stalled" was a manual sort every time.
+#
+# Existing loose *.jpg at the top level are LEFT WHERE THEY ARE on purpose:
+# test_ocr_ban_card.py and test_gameplay_regions.py reference specific frames
+# by path, and the settle/reveal thresholds were all measured against that
+# corpus. Moving it would invalidate the calibration record and break tests for
+# a tidiness gain. New runs are foldered; the old flat corpus stays flat.
+#
+# Set by start_screenshot_logger() at run start.
+_screenshot_run_dir = SCREENSHOT_LOG_DIR
+# I9: at 10Hz this writes ~2 MB/s (~8 GB/hour) — an overnight run would fill
+# the volume, and the logger swallows exceptions so ENOSPC would be invisible.
+# Cap the directory and prune oldest-first.
+SCREENSHOT_LOG_MAX_FILES = 20000
+# How many past run_* folders to keep. At 0.1s a run writes ~4.6 GB, and nothing
+# used to remove them. Never applies to the loose *.jpg calibration corpus.
+SCREENSHOT_KEEP_RUNS = 3        # ~30 min at 10Hz
+SCREENSHOT_LOG_PRUNE_EVERY = 200        # check every N frames, not every frame
+SCREENSHOT_LOG_INTERVAL = 0.1  # seconds (10Hz) — bumped up three times
+# tonight (1s -> 2s -> 0.5s -> 0.2s -> 0.1s interval): the slower cadences
+# missed several short-lived screens entirely (draw/defeat result
+# overlays, a "ROUND N" transition), never caught in the log, only
+# inferred after the fact. Faster capture trades more disk usage for a
+# much better chance of actually landing on those moments. At
+# ~200KB/frame this is ~2MB/s (~120MB/min) — watch disk usage closely,
+# this is getting fast enough to matter over anything but a short session.
+
+
+def _prune_screenshot_log():
+    """Keep THIS RUN's screenshot folder under its file cap, oldest-first.
+
+    Scoped to the current run's folder, never the whole corpus — pruning across
+    runs could delete the reference frames the thresholds were calibrated on.
+    """
+    try:
+        files = sorted(f for f in os.listdir(_screenshot_run_dir) if f.endswith(".jpg"))
+        excess = len(files) - SCREENSHOT_LOG_MAX_FILES
+        for f in files[:max(0, excess)]:
+            try:
+                os.remove(os.path.join(_screenshot_run_dir, f))
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def _screenshot_logger_loop(stop_event: threading.Event):
+    os.makedirs(_screenshot_run_dir, exist_ok=True)
+    frames = 0
+    failures = 0
+    while not stop_event.is_set():
+        start = time.time()
+        try:
+            # THE GAME WINDOW, not the desktop. This loop deliberately does not
+            # focus the window (focusing every second would yank the user out of
+            # whatever they are doing), which meant pyautogui.screenshot() was
+            # capturing the primary display — the laptop screen. On a two-monitor
+            # setup with the game on the external, that is a 1Hz recording of the
+            # user's own work, saved to disk, and useless as diagnostics besides.
+            # record_demo.py already carries this same warning.
+            import game_capture
+            img = game_capture.grab() or pyautogui.screenshot()
+            if img.width > SCREENSHOT_MAX_WIDTH:
+                ratio = SCREENSHOT_MAX_WIDTH / img.width
+                img = img.resize((SCREENSHOT_MAX_WIDTH, int(img.height * ratio)))
+            ts = time.strftime("%Y%m%d_%H%M%S", time.localtime(start)) + f"_{int(start * 1000) % 1000:03d}"
+            img.convert("RGB").save(os.path.join(_screenshot_run_dir, f"{ts}.jpg"), format="JPEG", quality=80)
+            frames += 1
+            failures = 0
+            if frames % SCREENSHOT_LOG_PRUNE_EVERY == 0:
+                _prune_screenshot_log()
+        except Exception as e:
+            # Best-effort logging must never take down the real loop — but a
+            # persistent failure (e.g. ENOSPC) must not be silent either.
+            # N4: throttle on a FAILURE counter. The previous version keyed on
+            # `frames`, which only advances on success, so a persistent failure
+            # was either permanently silent or spammed at full rate.
+            failures += 1
+            if failures == 1 or failures % 100 == 0:
+                print(f"[screenshot-logger] write failed x{failures} ({e})")
+        elapsed = time.time() - start
+        stop_event.wait(max(0.0, SCREENSHOT_LOG_INTERVAL - elapsed))
+
+
+def _prune_old_run_folders(keep: int = SCREENSHOT_KEEP_RUNS):
+    """Delete all but the `keep` most recent run_* folders.
+
+    At 0.1s the logger writes ~4.6 GB per run and nothing ever removed old run
+    folders, so disk use grew without bound across sessions.
+
+    ONLY touches directories matching `run_YYYYmmdd_HHMMSS`. The loose *.jpg at
+    the top of SCREENSHOT_LOG_DIR are the CALIBRATION CORPUS — every settle,
+    reveal and lock threshold in this file was measured against them, and
+    test_ocr_ban_card / test_gameplay_regions / test_ban_scan reference specific
+    frames by name. Deleting those would silently invalidate the calibration
+    record and turn several tests into no-ops, so this cannot reach them.
+    """
+    try:
+        runs = sorted(d for d in os.listdir(SCREENSHOT_LOG_DIR)
+                      if re.fullmatch(r"run_\d{8}_\d{6}", d)
+                      and os.path.isdir(os.path.join(SCREENSHOT_LOG_DIR, d)))
+        for stale in runs[:max(0, len(runs) - keep)]:
+            path = os.path.join(SCREENSHOT_LOG_DIR, stale)
+            n = len([f for f in os.listdir(path) if f.endswith(".jpg")])
+            shutil.rmtree(path, ignore_errors=True)
+            print(f"  [screenshots] pruned old run folder {stale}/ ({n} frames)")
+    except Exception as e:                                   # pragma: no cover
+        print(f"  [screenshots] could not prune old run folders: {e}")
+
+
+def start_screenshot_logger() -> threading.Event:
+    """Starts the background screenshot logger (SCREENSHOT_LOG_INTERVAL); returns the Event
+    that stops it (set it, or just let the daemon thread die with the
+    process — either is fine for a diagnostic session)."""
+    global _screenshot_run_dir
+    # One folder per run, named by start time, so "which frames came from the
+    # run that stalled" stops being a manual sort through a shared heap.
+    _screenshot_run_dir = os.path.join(SCREENSHOT_LOG_DIR,
+                                       time.strftime("run_%Y%m%d_%H%M%S"))
+    os.makedirs(_screenshot_run_dir, exist_ok=True)
+    _prune_old_run_folders()
+    stop_event = threading.Event()
+    thread = threading.Thread(target=_screenshot_logger_loop, args=(stop_event,), daemon=True)
+    thread.start()
+    print(f"Screenshot logger running — saving to {_screenshot_run_dir}/ "
+          f"every {SCREENSHOT_LOG_INTERVAL}s.")
+    return stop_event
+
+
+def capture_screenshot_b64(mask_low_contrast: bool = False) -> str:
+    """
+    capture_screenshot_image(), optionally masked, encoded as base64 JPEG.
+
+    A full-resolution PNG of a busy screen (e.g. the ban grid, dense card
+    art) can exceed the API's 10MB image limit — hit live on 2026-08-23.
+    Downscaling + JPEG keeps this comfortably under that regardless of
+    screen content, and text/numbers stay plenty legible at this width.
+
+    mask_low_contrast=True runs mask_low_contrast_regions() before
+    encoding — opt-in, not the default, since it's calibrated for the
+    ban screen specifically and hasn't been checked against every other
+    screen type (a legitimately low-contrast but still-relevant region
+    elsewhere could get blacked out unintentionally).
+    """
+    img = capture_screenshot_image()
+    if mask_low_contrast:
+        img = mask_low_contrast_regions(img)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+# Fractional (x0, y0, x1, y1) crops of the in-match "turn" screen,
+# calibrated live 2026-08-24 against real screenshots at multiple
+# resolutions/aspect ratios (both the pipeline's own ~1999x1292 capture
+# and manually-taken ~3360x2120 screenshots) — see PENDING_LIVE_VALIDATION.md
+# item #10-12 for what's still unconfirmed. Coordinates are fractions of
+# (width, height), same reasoning as BAN_GRID_COL_X_FRAC: this game
+# letterboxes horizontally, so content position scales with width even
+# when letterbox thickness (and therefore height) varies.
+#
+# first_base/second_base/third_base are centered on the diamond's coin
+# markers, not on wherever a card happened to be sitting in one photo —
+# a real bug caught live: the original third_base box was centered on
+# the ALWAYS-face-down pitcher-indicator card next to it instead of the
+# actual base coin, silently misreading an empty base as a phantom
+# runner. When a base is empty, only the bare coin is visible in its
+# box; when occupied, the runner's card sits at that same position.
+GAMEPLAY_REGIONS_FRAC = {
+    "scoreboard": (0.018, 0.175, 0.205, 0.405),
+    # y0 lowered from 0.770 to 0.716 (~70px more headroom at 1292px tall)
+    # on 2026-08-24. Hovering ENLARGES the selected card in place and
+    # pushes its power badge above the old crop's top edge — found in all
+    # four independent labelling passes (78 of 151 usable frames had a
+    # raised card; 52 had a badge clipped). Measured effect on local OCR
+    # against ground truth: hands parsed exactly right 6/13 -> 9/13,
+    # false negatives 13 -> 3. See LOCAL_VISION_EXPERIMENTS.md §21.
+    "hand": (0.250, 0.716, 0.760, 1.000),
+    "third_base": (0.3225, 0.320, 0.4375, 0.530),
+    "first_base": (0.550, 0.320, 0.665, 0.530),
+    "second_base": (0.430, 0.080, 0.580, 0.320),
+}
+
+# The coarse full-frame overview only needs to be legible enough to tell
+# screens apart (turn vs. ban_screen vs. match_start_prompt vs. ...) and
+# to read the WINNER/LOSER banner text — none of which needs the fine
+# detail SCREENSHOT_MAX_WIDTH keeps for the targeted crops above. Kept
+# separate and smaller specifically to cut vision-token cost.
+OVERVIEW_MAX_WIDTH = 900
+
+
+def crop_gameplay_regions(img) -> list:
+    """Returns [(label, PIL.Image), ...] for every region in
+    GAMEPLAY_REGIONS_FRAC, cropped from img at img's own resolution."""
+    w, h = img.size
+    return [
+        (label, img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))))
+        for label, (x0, y0, x1, y1) in GAMEPLAY_REGIONS_FRAC.items()
+    ]
+
+
+def ocr_scoreboard(scoreboard_img) -> dict:
+    """
+    Local OCR (tesseract, no vision API call) of the scoreboard crop's
+    two score rows. Returns {"your": [round1, round2, total],
+    "opponent": [round1, round2, total]} — either value is None if that
+    row couldn't be parsed (e.g. "ROUND"/"DISCARDS" dot rows, which this
+    deliberately ignores since dot-counting isn't an OCR problem).
+    Verified 2026-08-24 against 3 real screenshots (different save
+    states), exact match on all 6 numbers every time.
+
+    First step of moving off the vision API for the highest-value,
+    easiest-to-verify field (clean printed digits) — not yet wired into
+    read_game_state()/GameState. Proven locally first, integrate once
+    it's been checked against more real screens, per the same
+    prove-it-before-you-trust-it approach as detect_ban_grid_locked().
+
+    Tesseract reads this font's "0" as the letter "O" about half the
+    time — cheaper to treat O/o/Q as 0 when parsing than to fight the
+    OCR engine for a cleaner read.
+    """
+    text = pytesseract.image_to_string(scoreboard_img, config="--psm 6")
+    result = {"your": None, "opponent": None}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.upper().startswith(("ROUND", "DISCARDS")):
+            continue
+        nums = [t for t in line.split() if re.fullmatch(r"[0-9OoQ]", t)]
+        if len(nums) < 3:
+            continue
+        nums = [int(n.upper().replace("O", "0").replace("Q", "0")) for n in nums[-3:]]
+        if line.upper().startswith("OPPONENT"):
+            result["opponent"] = nums
+        elif result["your"] is None:
+            result["your"] = nums
+    return result
+
+
+def _encode_jpeg_b64(img) -> str:
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def capture_state_images_b64(mask_low_contrast: bool = False) -> list:
+    """
+    One screenshot, split into a cheap low-res overview (for screen-type
+    classification, which needs to see the whole layout but not fine
+    detail) plus sharp crops of just the fields that need precise
+    reading when screen == "turn"/"discard_prompt"/"result". Replacing
+    a single ~2000px-wide full-frame image with this combination cuts
+    roughly 55-60% of the image tokens read_game_state() pays per call
+    (measured 2026-08-24: ~3444 tokens full-frame vs. ~1400 combined),
+    without losing the ability to recognize non-turn screens (ban_screen,
+    match_start_prompt, etc.), which the crops alone can't do since
+    they're calibrated only for the turn screen's layout.
+
+    Returns [(label, b64_jpeg_str), ...] — "overview" first, then one
+    entry per GAMEPLAY_REGIONS_FRAC key.
+    """
+    img = capture_screenshot_image()
+    if mask_low_contrast:
+        img = mask_low_contrast_regions(img)
+
+    overview = img
+    if overview.width > OVERVIEW_MAX_WIDTH:
+        ratio = OVERVIEW_MAX_WIDTH / overview.width
+        overview = overview.resize((OVERVIEW_MAX_WIDTH, int(overview.height * ratio)))
+
+    global _last_gameplay_crops
+    crops = crop_gameplay_regions(img)
+    _last_gameplay_crops = dict(crops)  # stashed for log_local_read_comparison()'s ponytail:
+                                        # diagnostic use — same frame, no second screenshot
+
+    images = [("overview", _encode_jpeg_b64(overview))]
+    images += [(label, _encode_jpeg_b64(crop)) for label, crop in crops]
+    return images
+
+
+_last_gameplay_crops = {}
+
+
+# ponytail: TEMPORARY diagnostic, not wired into any decision — logs what
+# the local OCR/hand-matcher tools would have said, next to what vision
+# actually said, so the two can be eyeballed against each other over a
+# real live session before either is trusted to replace vision for real.
+# Never raises into the real loop (best-effort try/except at the call
+# site in run()). REMOVAL PLAN: once local-vs-vision agreement has been
+# checked over enough real turns, either wire the local read in for real
+# (replacing the relevant vision call) or delete this function, its
+# _last_gameplay_crops plumbing above, and the compare_local_reads
+# parameter/call in run().
+def _describe_vision_card(v):
+    if v and v.get("kind") == "player":
+        return f"power={v.get('power')} sec={v.get('secondary')}"
+    if v:
+        return f"tactics {v.get('name')!r} bonus={v.get('bonus')}"
+    return "None"
+
+
+def log_local_read_comparison(state_json: dict):
+    if state_json.get("screen") not in ("turn", "discard_prompt"):
+        return
+    crops = _last_gameplay_crops
+    if not crops:
+        return
+
+    if "scoreboard" in crops:
+        local_score = ocr_scoreboard(crops["scoreboard"])
+        print(f"  [local-check] scoreboard OCR: {local_score}  "
+              f"vs vision: your={state_json.get('your_score')} opp={state_json.get('opp_score')}")
+
+    for base in ("third_base", "first_base", "second_base"):
+        if base in crops:
+            card = ocr_runner_card(crops[base])
+            label = f"{card.name} (pwr={card.power} sec={card.secondary})" if card else "empty"
+            print(f"  [local-check] {base}: {label}")
+    print(f"  [local-check] vision runners: {state_json.get('runners')}")
+
+    if "hand" in crops:
+        # Cross-read the hand with the local PaddleOCR pipeline and print it
+        # next to what vision reported. This is the ONLY mechanism that can
+        # surface the local reader's silent failures: its dominant residual
+        # error is a missed shield, which reads as secondary=0 and is
+        # indistinguishable from a card that genuinely has none (29% do), so
+        # no local validity gate can catch it (LOCAL_VISION_EXPERIMENTS.md §22).
+        # Costs no extra API call — vision already receives this same crop
+        # every turn for screen classification.
+        import tempfile
+        from hand_digit_reader import read_hand_digits, group_into_cards
+        vision_hand = {c.get("hand_index"): c for c in (state_json.get("hand") or [])}
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                tmp_path = tf.name
+                crops["hand"].save(tmp_path)
+            local_cards = group_into_cards(read_hand_digits(tmp_path))
+        except Exception as e:
+            print(f"  [local-check] hand: local reader failed ({e})")
+            local_cards = []
+        finally:
+            # I1: unlink in `finally`. read_hand_digits() can raise
+            # (missing venv, worker crash, timeout) and a leaked ~PNG per
+            # turn adds up fast over a long session.
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        # I5: the local reader's known failure modes are a missed digit or a
+        # decoy from the card artwork — either SHIFTS every later column by
+        # one. Zipping local_cards[i] against hand_index i would then print
+        # four spurious DISAGREEs for one real error, making the discrepancy
+        # rate (this function's whole purpose) useless. Only compare
+        # slot-by-slot when the counts line up; otherwise report the count
+        # mismatch itself as the finding.
+        if len(local_cards) != 5:
+            print(f"  [local-check] hand: local found {len(local_cards)} cards, expected 5 "
+                  f"— skipping per-slot comparison (counts must match to align)")
+            for i in range(5):
+                v = vision_hand.get(i)
+                print(f"  [local-check]   vision hand[{i}]: {_describe_vision_card(v)}")
+        else:
+            # ONLY PRINT WHAT DISAGREES. An agreeing slot carries no information
+            # — the whole point of this audit is to catch drift between the two
+            # readers — and printing all five every sampled turn made
+            # [local-check] 639 of 1237 lines in one run, 52% of the log.
+            #
+            # That is not a tidiness complaint. Every finding in the 2026-09-01
+            # diagnostics audit had to be dug out from underneath these lines,
+            # and two silently dropped match_log rows were only found by
+            # reconstructing the run by hand. A log that buries its own signal
+            # is a log that does not get read.
+            disagreements = []
+            for i in range(5):
+                v = vision_hand.get(i)
+                c = local_cards[i]
+                flag = "" if c.get("valid", True) else "  [INVALID]"
+                if v and v.get("kind") == "player":
+                    same = (c["power"] == v.get("power") and c["secondary"] == v.get("secondary"))
+                else:
+                    same = True          # nothing comparable in this slot
+                if not same or flag:
+                    disagreements.append(
+                        f"  [local-check] hand[{i}]: local power={c['power']} "
+                        f"sec={c['secondary']}{flag}  vs vision: "
+                        f"{_describe_vision_card(v)}"
+                        f"{'' if same else '  <<< DISAGREE'}")
+            if disagreements:
+                for line in disagreements:
+                    print(line)
+            else:
+                print(f"  [local-check] hand: all 5 slots agree with vision")
+
+
+# Fractional (x0, y0, x1, y1) crop of the full screenshot used for
+# animation-stability polling — the scoreboard + card-matchup area only.
+# Deliberately excludes the edges of the screen, where this game has
+# ambient background animation (flickering lights, sparkle particles)
+# even on an otherwise-settled turn, which would otherwise stop a naive
+# full-frame diff from ever reading as "stable".
+ANIMATION_ROI_FRACTION = (0.0, 0.15, 0.75, 0.65)
+DIFF_THRESHOLD = 6.0  # average per-pixel grayscale delta below this counts as "unchanged"
+
+# --- Region-aware settling -------------------------------------------------
+#
+# ROOT-CAUSE FIX (2026-08-25). ANIMATION_ROI_FRACTION spans y 0.15-0.65. The
+# hand — the region every turn decision is actually read from — spans
+# y 0.716-1.0. They do not overlap AT ALL, so the settle detector never
+# observed the hand: it could declare "settled" while cards were still flying
+# into it. Measured on real 10Hz capture, the hand region peaks at 56.2 mean
+# per-pixel delta during a deal while the old ROI peaks at only 14.7 — so the
+# old ROI is comfortably "stable" (< 6.0) at a moment the hand plainly is not.
+#
+# That is the mechanism behind the empty-hand and "power 0" reads seen live,
+# each of which pushed should_redraw() into a defensive discard — i.e. it
+# degraded actual play, not just logging.
+#
+# Named sets so each caller waits on what IT is about to read, rather than one
+# global compromise region.
+# Measured over 122 real animation events (SETTLE_TIMING_ANALYSIS.md).
+#
+# COUNTERINTUITIVE, AND THE DATA IS STRONG: a turn read gates on `hand` ALONE.
+# My first version waited on every region a turn read consumes (hand +
+# scoreboard + three bases) on the reasoning that you should wait for anything
+# you are about to read. Measured, that is worse:
+#
+#   gate                          continuation   latency p50   p90
+#   hand alone (< 8.0)                  1.6%        2.01 s    6.01 s
+#   hand AND legacy_roi                 3.3%        ~2.2 s   17.97 s
+#   legacy_roi alone (the old code)    12.3%        2.24 s   14.07 s
+#
+# Waiting on more regions means waiting longer, which pushes the "settled"
+# declaration into the window where the NEXT animation has already begun — so
+# the combined gate is both slower AND less safe. CIs for 12.3% vs 1.6% do not
+# overlap at n=122.
+#
+# `scoreboard` is deliberately absent: its peak motion during real animation
+# (p50 6.59) barely exceeds its own idle noise (p90 6.81), so it cannot
+# discriminate and only adds latency.
+# Named per SCREEN TYPE, so every call site declares what it is waiting on and
+# settle_stats_summary() reports truncation separately for each.
+#
+# Why this matters: SETTLE_TIMING_ANALYSIS measured, over 122 real animation
+# events, that gating on `hand` ALONE beats the combined gate on both axes —
+# continuation 1.6% vs 3.3%, p90 latency 6.01s vs 17.97s. `default` IS the
+# combined gate, and it was on 14 of 15 call sites while the measured-best set
+# was on exactly one. A p90 of 17.97s against max_wait=8.0 means those calls
+# frequently truncate and read un-settled.
+#
+# The non-turn sets deliberately still alias to the combined gate TODAY. That
+# is not an endorsement — it keeps behaviour identical while making the stats
+# per-screen-type, so the next live session says which of these should move to
+# `hand`-alone (or to their own region) instead of guessing from a ~1 Hz proxy
+# log that cannot resolve the production poll rate. Change them from
+# settle_stats_summary() output, not from this comment.
+SETTLE_REGION_SETS = {
+    # Measured best for reading the hand. Do not add regions: waiting longer
+    # runs into the NEXT animation.
+    "turn": ("hand",),
+
+    # Aliases pending measurement — identical regions, distinct labels.
+    "result": ("legacy_roi", "hand"),
+    "ban": ("legacy_roi", "hand"),
+    "menu": ("legacy_roi", "hand"),
+    "match_start": ("legacy_roi", "hand"),
+
+    # Backwards-compatible default for callers that have not opted in.
+    "default": ("legacy_roi", "hand"),
+}
+
+# Per-region thresholds, each set between that region's idle p95 and p99.
+# A single shared DIFF_THRESHOLD was wrong: at 6.0, 17.4% of genuinely idle
+# `hand` pairs and 20.2% of idle `scoreboard` pairs read as "moving", while
+# only 1.4% of idle `legacy_roi` pairs do. 6.0 is well calibrated for
+# legacy_roi specifically — it was only wrong as a shared constant.
+SETTLE_THRESHOLDS = {
+    "legacy_roi": 6.0,
+    "hand": 8.0,
+    "scoreboard": 8.0,
+    "center": 6.5,
+    "third_base": 6.5,
+    "first_base": 6.5,
+    "second_base": 6.5,
+}
+
+# Regions not already in GAMEPLAY_REGIONS_FRAC.
+_EXTRA_SETTLE_REGIONS = {
+    "legacy_roi": ANIMATION_ROI_FRACTION,
+}
+
+
+def _settle_region_box(name):
+    if name in _EXTRA_SETTLE_REGIONS:
+        return _EXTRA_SETTLE_REGIONS[name]
+    return GAMEPLAY_REGIONS_FRAC[name]
+
+
+# --- Fast capture backend ---------------------------------------------------
+#
+# pyautogui.screenshot() costs ~376 ms on this machine (measured: 3456x2234
+# source, 376 ms capture + 78 ms resize + 16 ms encode = ~470 ms). That caps
+# EVERYTHING at ~2.1 Hz and had two consequences that were not obvious:
+#
+#  1. The screenshot logger never achieved its configured rate. Settings of
+#     0.2s (5 Hz) and 0.1s (10 Hz) both produced the same ~0.5 s floor — the
+#     minimum inter-frame gap anywhere in 1,811 logged frames is 0.466 s.
+#  2. More importantly, wait_for_screen_to_settle(poll_interval=0.3) actually
+#     cycles at ~0.77 s (0.3 s sleep + 0.47 s capture), so "2 stable polls"
+#     was ~1.5 s of real time rather than the intended ~0.6 s. Every settle
+#     latency figure was inflated by this and the gate could not react finely.
+#
+# mss grabs the same full screen in ~32 ms (12x faster). Used for the settle
+# poll loop only — the vision-read path still goes through
+# capture_screenshot_image(), which needs the focus handling and downscale.
+# Width the settle thresholds were measured at (the logged frames). Any
+# capture backend must be normalised to this before its deltas are compared
+# against SETTLE_THRESHOLDS.
+SETTLE_CALIBRATION_WIDTH = 2000
+
+try:
+    import mss as _mss
+    _MSS = _mss.mss()
+except Exception:                                   # pragma: no cover
+    _MSS = None
+
+# Every crop in this file is FRACTIONAL, so it only lands on the right pixels
+# if monitors[1] is the display the game is on. mss caches the monitor list for
+# the process lifetime and monitors[1] is just "the first one" — on this
+# machine that is the built-in (1728x1117, aspect 1.55), but an attached
+# ultrawide sits at monitors[2] (3440x1440, aspect 2.39). If the main display
+# ever changes, every region silently reads the wrong pixels and nothing
+# raises. Aspect is the cheap tell; warn rather than crash, since a genuinely
+# different-but-valid display should not stop a run.
+_CALIBRATED_ASPECT = 1728 / 1117
+if _MSS is not None:                                # pragma: no cover
+    try:
+        _m = _MSS.monitors[1]
+        _a = _m["width"] / _m["height"]
+        if abs(_a - _CALIBRATED_ASPECT) > 0.15:
+            print(f"WARNING: capture display is {_m['width']}x{_m['height']} "
+                  f"(aspect {_a:.2f}), calibrated for {_CALIBRATED_ASPECT:.2f}. "
+                  "Fractional crops will target the wrong pixels — check which "
+                  "display the game is on.")
+    except Exception:
+        pass
+
+
+# Some of what needs announcing sits in the settle poll loop, which runs at
+# roughly 7 Hz. A print per call would bury the log it exists to inform — so
+# these fire ONCE PER PROCESS, keyed on the message itself. One line saying
+# "everything after this is reading the wrong pixels" is a diagnosis; ten
+# thousand of them are a wall nobody reads.
+_WARNED_ONCE = set()
+
+
+def _warn_once(msg: str) -> bool:
+    """Print `msg` the first time this process sees it, then never again.
+
+    Returns True if it printed. For warnings on HOT paths only — anything
+    per-turn or rarer should just print every time, because the second
+    occurrence of a per-turn problem is itself information.
+    """
+    if msg in _WARNED_ONCE:
+        return False
+    _WARNED_ONCE.add(msg)
+    print(msg)
+    return True
+
+
+def _fast_grab():
+    """The GAME's pixels, as a PIL Image.
+
+    Was: whatever mss calls monitors[1]. That is "the first display", which on
+    this machine is the built-in laptop screen — so with the game on an external
+    monitor every fractional crop in this file was reading the laptop desktop.
+    The stall diagnostic caught it red-handed: the captured "game screen" was a
+    screenshot of the editor.
+
+    compass.fast_capture() locates the game window from OS geometry and returns
+    its content, which is the thing every region here is meant to be a fraction
+    of. Falls back to the old behaviour if that is unavailable, so a broken
+    window lookup degrades rather than crashing the loop.
+    """
+    import game_capture
+    img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)
+    if img is not None:
+        return img
+    # THE FALLBACK IS THE BUG THIS DOCSTRING DESCRIBES, REINTRODUCED. It is
+    # correct as a degradation — a broken window lookup should not kill the run
+    # — but it must never be SILENT, because from here on every fractional crop
+    # in this file is measuring a different picture than the one it was
+    # calibrated against, and each of them fails in a way that points somewhere
+    # else entirely.
+    _warn_once(
+        "WARNING: game_capture.grab() returned nothing — FALLING BACK to a "
+        "full-screen grab, so every fractional crop in orchestrator.py is now "
+        "reading the DESKTOP, not the game window: the settle thresholds, the "
+        "frozen-frame digest, _dealer_prompt_on_screen and screen_at_stall.png "
+        "are all measuring the wrong pixels. Downstream this looks like a "
+        "screen that never settles, a dealer prompt that is never there, and a "
+        "stall screenshot of the editor — none of which are what is wrong. "
+        "The game window could not be located. (Warned once per process.)")
+    if _MSS is None:
+        return pyautogui.screenshot()
+    mon = _MSS.monitors[1]
+    raw = _MSS.grab(mon)
+    img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+    # NORMALISE THE SCALE. mss returns logical points (1728x1117 here) while
+    # pyautogui returns physical Retina pixels (3456x2234), and the logged
+    # frames the SETTLE_THRESHOLDS were calibrated against were 2000px wide.
+    # Mean-absolute-delta is scale-sensitive — downscaling averages noise
+    # differently — so feeding a different resolution silently shifts every
+    # threshold. Resize to the calibration width so the numbers stay valid.
+    if img.width != SETTLE_CALIBRATION_WIDTH:
+        ratio = SETTLE_CALIBRATION_WIDTH / img.width
+        img = img.resize((SETTLE_CALIBRATION_WIDTH, int(img.height * ratio)))
+    return img
+
+
+def _grab_settle_regions(region_names):
+    """One screenshot -> {name: grayscale crop} for every named region.
+
+    Deliberately ONE capture per poll: grabbing each region separately would
+    sample different moments and could report a region as stable using two
+    frames taken either side of the very animation being waited on.
+    """
+    img = _fast_grab()
+    w, h = img.size
+    out = {}
+    for name in region_names:
+        x0, y0, x1, y1 = _settle_region_box(name)
+        out[name] = img.crop((int(w * x0), int(h * y0),
+                              int(w * x1), int(h * y1))).convert("L")
+    return out
+
+
+def _mean_abs_delta(a, b):
+    diff = ImageChops.difference(a, b)
+    hist = diff.histogram()
+    return sum(i * c for i, c in enumerate(hist)) / (a.width * a.height)
+
+
+def _grab_animation_roi():
+    """Legacy single-ROI grab, kept for anything still calling it directly."""
+    return _grab_settle_regions(("legacy_roi",))["legacy_roi"]
+
+
+def wait_for_screen_to_settle(max_wait: float = 8.0, poll_interval: float = 0.15,
+                              stable_polls_required: int = 2,
+                              regions: str = "default") -> float:
+    """
+    Poll until EVERY region in the named set has stopped changing, so the
+    frame a caller is about to read is settled in the parts it actually reads.
+    Returns seconds waited.
+
+    `regions` picks a set from SETTLE_REGION_SETS ("turn", "reveal",
+    "default"). Waiting on all of them together matters: a card can be still
+    settling into the hand while the diamond is already quiet, and reading
+    then is exactly the failure this exists to prevent.
+
+    stable_polls_required stays at 2. Raising it to 3 was tried and measured:
+    it buys ZERO reduction in bad reads on the recommended gate (1.6% either
+    way) while costing ~1.1s of median latency. Do not raise it.
+
+    poll_interval is 0.15s, which is now actually achievable. It used to be
+    0.3s nominal but each poll ALSO paid ~470ms to capture, so the real cycle
+    was ~0.77s and "2 stable polls" meant ~1.5s rather than the intended
+    ~0.6s. With the mss backend a poll costs ~47ms, so the cycle is ~0.2s and
+    the gate both reacts faster and resolves motion it previously stepped
+    straight over.
+
+    max_wait is a safety cap. On timeout this returns normally rather than
+    raising: the caller still gets a frame, the read may fail, and the
+    existing retry path handles it. That is deliberate — blocking forever on
+    a genuinely animated screen would be worse.
+    """
+    names = SETTLE_REGION_SETS.get(regions, SETTLE_REGION_SETS["default"])
+    start = time.time()
+    prev = _grab_settle_regions(names)
+    stable_count = 0
+
+    while time.time() - start < max_wait:
+        time.sleep(poll_interval)
+        current = _grab_settle_regions(names)
+        # Each region judged against ITS OWN threshold — idle noise differs by
+        # ~3x between regions, so one shared value either blocks on idle hand
+        # noise or ignores real legacy_roi motion.
+        settled = all(_mean_abs_delta(prev[n], current[n])
+                      < SETTLE_THRESHOLDS.get(n, DIFF_THRESHOLD) for n in names)
+        prev = current
+
+        if settled:
+            stable_count += 1
+            if stable_count >= stable_polls_required:
+                return _record_settle(regions, time.time() - start, False)
+        else:
+            stable_count = 0
+
+    print(f"  [settle] {regions!r} regions still moving after {max_wait}s — "
+          "reading anyway (retry path will catch a bad read).")
+    return _record_settle(regions, time.time() - start, True)
+
+
+# INSTRUMENTATION ONLY — records how long settling actually took, changes no
+# behaviour. Every latency and truncation number the thresholds were chosen
+# from came from a frame log captured at ~1-1.9 Hz, whose finest resolution is
+# 0.53s. Production polls at 0.15s, so that log CANNOT resolve what it was used
+# to estimate: measuring across a ~1s gap captures more motion per diff and
+# makes "2 stable polls" mean ~2s of quiet instead of ~0.3s, both of which
+# inflate apparent settle time. The percentiles are therefore upper bounds of
+# unknown tightness. This collects the real distribution at the real poll rate
+# so max_wait can be set from measurement instead of from a conservative proxy.
+_SETTLE_STATS = {}
+
+
+def _record_settle(regions, elapsed, truncated):
+    s = _SETTLE_STATS.setdefault(regions, {"n": 0, "truncated": 0, "times": []})
+    s["n"] += 1
+    s["truncated"] += int(truncated)
+    s["times"].append(elapsed)
+    return elapsed
+
+
+# --- Self-diagnosing exit --------------------------------------------------
+# When the loop gives up it should say everything it knew, not just "stuck".
+# Every stall so far has been diagnosed by hand from screenshots plus guesswork
+# about what the code was seeing; this makes the run answer that itself.
+#
+# Rolling buffer rather than a full log: the interesting window is the last
+# handful of polls before the stall, and an unbounded list on a long session is
+# a memory leak for data nobody reads.
+_OBSERVATIONS = collections.deque(maxlen=40)
+
+
+def record_observation(**kw):
+    kw["t"] = time.strftime("%H:%M:%S")
+    _OBSERVATIONS.append(kw)
+
+
+def dump_diagnostics(reason: str, extra: dict = None) -> str:
+    """Write everything the loop knew to diagnostics/<timestamp>/ and return it.
+
+    Deliberately best-effort and exception-swallowing: this runs on the way out
+    of a session that has ALREADY failed, so a fault here must not replace the
+    original problem with a stack trace about diagnostics.
+    """
+    try:
+        # BASEBALL_DIAGNOSTICS_DIR lets the test suite write somewhere
+        # disposable. Tests exercise every stall path, so without this they
+        # dump real bundles into the live diagnostics directory — which is
+        # watched during a session, and 20 synthetic stalls would bury a
+        # genuine one.
+        root = os.environ.get("BASEBALL_DIAGNOSTICS_DIR") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "diagnostics")
+        d = os.path.join(root, time.strftime("%Y%m%d_%H%M%S_") + str(time.time() % 1)[2:6])
+        os.makedirs(d, exist_ok=True)
+        bundle = {
+            "reason": reason,
+            "when": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "observations": list(_OBSERVATIONS),
+            "settle_stats": {k: {"n": v["n"], "truncated": v["truncated"],
+                                 "p50": sorted(v["times"])[len(v["times"]) // 2],
+                                 "max": max(v["times"])}
+                             for k, v in _SETTLE_STATS.items() if v["times"]},
+        }
+        # What the run COST, recorded with the failure. A stall that spent
+        # forty paid API calls and one that spent four look identical in the
+        # log otherwise, and the difference is the whole reason to fail fast.
+        try:
+            import api_budget
+            bundle["api_calls_used"] = api_budget.used()
+            bundle["api_budget"] = api_budget.budget()
+            bundle["api_cost_approx"] = round(
+                api_budget.used() * api_budget.APPROX_COST_PER_CALL, 3)
+        except Exception:
+            pass
+        bundle.update(extra or {})
+        _atomic_write_json(os.path.join(d, "bundle.json"), bundle)
+        # The screen as it actually looked when we gave up — the single most
+        # useful artefact, and the one that is gone forever if not saved now.
+        try:
+            _fast_grab().save(os.path.join(d, "screen_at_stall.png"))
+        except Exception as e:
+            # PRINTED, not stashed on `bundle`. The bundle was already written
+            # to disk two lines above, so assigning a key to it here reached
+            # nobody — the error was recorded into an object that is then
+            # thrown away. A missing screen_at_stall.png with no explanation
+            # reads as "nobody thought to save one", which is the opposite of
+            # what happened.
+            print(f"  [diagnostics] NO screen_at_stall.png — the capture "
+                  f"itself failed: {e!r}. This bundle is missing the artefact "
+                  f"that usually settles the argument; the absence is a "
+                  f"capture failure, not an oversight.")
+        print(f"\n  [diagnostics] wrote {d}")
+        print(f"  [diagnostics] reason: {reason}")
+        print(f"  [diagnostics] {len(_OBSERVATIONS)} recent observations captured.")
+        try:
+            import api_budget
+            print(f"  [diagnostics] API: {api_budget.used()} calls "
+                  f"(~${api_budget.used() * api_budget.APPROX_COST_PER_CALL:.2f}) "
+                  f"of {api_budget.budget()} allowed")
+        except Exception:
+            pass
+        # Several frames either side of the stall, not just the final one: the
+        # cause is usually visible BEFORE the screen everyone stares at.
+        try:
+            import game_capture
+            for _i in range(3):
+                _im = game_capture.grab()
+                if _im is not None:
+                    _im.save(os.path.join(d, f"after_stall_{_i}.png"))
+                time.sleep(0.6)
+        except Exception:
+            pass
+        return d
+    except Exception as e:                              # pragma: no cover
+        print(f"  [diagnostics] could not write bundle: {e}")
+        return ""
+
+
+# --- Input-prompt detection (AUDIT ONLY, drives nothing yet) ---------------
+# The game shows "PLAY" bottom-left and "DISCARD" bottom-right, each with a
+# button glyph, when it is accepting input. That is a SEMANTIC readiness signal
+# — the game itself saying "I want a decision now" — which is strictly better
+# information than the statistical "pixels stopped changing" the settle gate
+# uses, IF it holds up.
+#
+# Measured on the 2026-08-24 log, bright-pixel fraction (>200) in the PLAY box:
+#     prompt visible : ~0.051  (n=67 gameplay frames)
+#     prompt absent  : ~0.000  (n=90)
+# Cleanly bimodal, so the DETECTOR is reliable. 0.02 sits in the gap.
+#
+# WHAT IS NOT ESTABLISHED, and why this drives nothing yet: whether "prompt
+# visible" actually implies "safe to read". The frame log samples at ~1Hz, and
+# at that spacing 93% of prompt-visible and 61% of prompt-absent frames both
+# read as moving against a threshold calibrated for 0.15s gaps — the data
+# cannot resolve the question it is being asked. So this is logged alongside
+# the motion gate for one live session and compared at the real poll rate
+# before it is trusted with anything.
+#
+# NOTE the fixed box is valid for GAMEPLAY TURNS ONLY. On the ban screen the
+# same "PLAY" prompt is attached to the moving cursor, so a fixed crop there
+# reads card art instead — verified by eye, do not reuse this for ban screens.
+INPUT_PROMPT_REGION = (0.10, 0.815, 0.25, 0.875)
+INPUT_PROMPT_BRIGHT = 200
+INPUT_PROMPT_THRESHOLD = 0.02
+
+
+def input_prompt_visible(img=None) -> bool:
+    """True if the gameplay PLAY prompt is on screen. Local, ~50ms."""
+    img = img if img is not None else _fast_grab()
+    w, h = img.size
+    x0, y0, x1, y1 = INPUT_PROMPT_REGION
+    crop = img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))).convert("L")
+    return float((np.asarray(crop, dtype=float) > INPUT_PROMPT_BRIGHT).mean()) \
+        >= INPUT_PROMPT_THRESHOLD
+
+
+def _safe_prompt_check():
+    """input_prompt_visible() that can never break the loop it instruments."""
+    try:
+        return input_prompt_visible()
+    except Exception:
+        return None
+
+
+def screen_is_moving(regions: str = "default", settle_pause: float = 0.12) -> bool:
+    """True if the screen is animating right now. ~0.2s, no API call.
+
+    This is the "no action needed" check. The loop used to spend a vision call
+    on EVERY poll including ones that landed mid-animation, which wasted the
+    call twice over: the read itself was unreliable (cards still sliding into
+    the hand), and an unrecognised result burned a MAX_STUCK_ATTEMPTS slot for
+    what was really just an animation in progress.
+
+    Doing nothing is a legitimate action. Because this is local and cheap, the
+    loop can check far more often than it could when every check cost an API
+    round-trip — which is also what makes it likely to CATCH the informative
+    frame rather than step over it.
+
+    Note this is the frame-differencing signal, deliberately NOT the local
+    reader self-validation from LOCAL_VS_API.md §4c. That one answers "is this a
+    settled turn?" and cannot tell a mid-animation frame from a result or ban
+    screen that genuinely needs acting on — using it here would skip real work.
+    Motion is the right question for "should I wait?".
+    """
+    names = SETTLE_REGION_SETS.get(regions, SETTLE_REGION_SETS["default"])
+    prev = _grab_settle_regions(names)
+    time.sleep(settle_pause)
+    current = _grab_settle_regions(names)
+    return any(_mean_abs_delta(prev[n], current[n])
+               >= SETTLE_THRESHOLDS.get(n, DIFF_THRESHOLD) for n in names)
+
+
+# How long the loop may keep saying "no action needed" before it forces a read
+# anyway. Without a bound, any permanently-animated screen (an attract loop, a
+# looping victory flourish, a blinking prompt) would stall the run silently —
+# the failure mode this whole gate exists to avoid, arriving by another route.
+#
+# The bound costs NOTHING in the normal case: a real animation stops, the gate
+# notices within ~0.2s, and this value is never reached. It is paid only on a
+# screen that never stops moving, and it is paid once per action there. So it
+# wants to sit just above the longest genuine animation and no higher.
+# Measured settle latency was p90 6.0s / max 10.0s — on a frame log whose ~1Hz
+# capture OVERSTATES duration (see settle_stats_summary), so the true max is
+# below that. 15s clears it with headroom while capping the worst case at 15s
+# rather than 20s. Falling through is safe, not dangerous: the read still goes
+# through validate_game_state() and the normal retry path.
+# Tune from settle_stats_summary() after a real session.
+MAX_CONTINUOUS_MOTION_WAIT = 15.0
+
+
+def settle_stats_summary() -> str:
+    if not _SETTLE_STATS:
+        return "  [settle] no settle calls recorded."
+    out = ["  [settle] observed latency at the real 0.15s poll rate:"]
+    for name, s in sorted(_SETTLE_STATS.items()):
+        t = sorted(s["times"])
+        pct = lambda p: t[min(int(len(t) * p), len(t) - 1)]
+        out.append(
+            f"    {name:8s} n={s['n']:4d}  p50={pct(0.50):5.2f}s  "
+            f"p90={pct(0.90):5.2f}s  max={t[-1]:5.2f}s  "
+            f"truncated={s['truncated']}/{s['n']} "
+            f"({100.0 * s['truncated'] / s['n']:.0f}%)")
+    return "\n".join(out)
+
+
+# --- Reveal detection ------------------------------------------------------
+#
+# The matchup reveal needs a DIFFERENT trigger from settling, and getting this
+# wrong is easy. Traced against real 10Hz capture of one play:
+#
+#   t+0.0s  cards fly out of the hand      (hand motion spikes to 56)
+#   t+0.5s  cards land at centre           <-- READABLE FROM HERE
+#   ...     resolution animation plays: the ball flies, runners advance or are
+#           held. The centre keeps moving for ~9s, oscillating 3->50 with
+#           repeated dips below any sane "stable" threshold.
+#   t+6.0s  cards clear                    <-- NO LONGER READABLE
+#   t+9.0s  centre finally settles         <-- TOO LATE, cards are gone
+#
+# So "wait for the centre to settle" reads AFTER the cards have disappeared,
+# and a short max_wait just times out mid-animation. Both are wrong.
+#
+# Instead detect PRESENCE: cards are high-contrast structured objects on a
+# plain wooden diamond, so the fraction of strong-gradient pixels roughly
+# triples when they are there. Measured over the sequence above:
+#     cards present : 0.0775 - 0.1476
+#     no cards      : 0.0220 - 0.0624
+#
+# THE THRESHOLD IS SCALE-SENSITIVE AND MUST SUIT BOTH CAPTURE PATHS. Those
+# numbers come from logged frames, which are native 3456 DOWNSCALED to 2000.
+# `_fast_grab()` on the mss path captures 1728 logical points and UPSCALES to
+# 2000 — interpolation invents no high-frequency detail, so every gradient
+# count lands lower. Re-measured over 500 real frames (55 present, 415 absent):
+#     native path : absent max 0.0615 | present min 0.0779
+#     mss path    : absent max 0.0591 | present min 0.0692
+# The original 0.070 sits ABOVE the mss present-min — on that path the weakest
+# real reveal never fires, and the failure is silent (see wait_for_reveal_cards).
+# Because _fast_grab still falls back to pyautogui, the threshold has to sit in
+# the INTERSECTION of both gaps, [0.0615, 0.0692]; 0.065 is its midpoint and
+# maximises the worst-case margin (0.0035) across the two.
+# Deliberately a numpy gradient rather than cv2.Canny (which separates a little
+# better) to avoid adding an OpenCV dependency to the main loop.
+#
+# RIGHT EDGE 0.62 -> 0.58, 2026-09-01. THE REGION WAS THE BUG, NOT THE THRESHOLD.
+#
+# GAMEPLAY_REGIONS_FRAC["first_base"] starts at x=0.550, so the old 0.62 reached
+# 0.07 of screen width INTO first base. This game draws base runners as face-up
+# cards on the base medallions, so whenever a runner was on first, its card's
+# edges were counted as "cards at centre" — and a runner sits there for the
+# whole turn, including the entire card-selection phase before anything is
+# revealed. wait_for_reveal_cards() therefore returned True on its first poll
+# with nothing revealed, and read_matchup_reveal() spent its vision call on the
+# pre-flip screen. That is the whole of the "intended card absent from reveal"
+# misfire: the reader could not see our face-down card, so it reported the
+# face-up cards it COULD see — the runners. Measured on the 2026-09-01 run, the
+# reveal that flagged our played 8 as a misfire returned ('Johnny Drawers', 7),
+# and the selection frame for that exact turn has Johnny Drawers, power 7,
+# secondary 1, sitting on first base.
+#
+# Measured over 877 frames captured at 0.5 Hz during that run, labelling the
+# face-down pre-flip state by template-matching the card back (NCC >= 0.55,
+# 227 frames, spot-checked by eye at 40/40 correct):
+#
+#                                   x1=0.62 (old)   x1=0.58 (new)
+#   face-down frames over threshold      21/227           0/227
+#   max edge fraction, face-down         0.0842          0.0622
+#   genuine reveals detected                112             126
+#
+# It REMOVES false triggers and FINDS MORE real reveals at the same time,
+# because trimming the empty wooden strip on the right raises the fraction on
+# frames that do have a card (the weakest confirmed reveal goes 0.0654 ->
+# 0.0737). 14 of the 17 newly-firing frames are genuine reveals the old region
+# missed; the other 3 are the end-of-match LOSER screen, which this function is
+# never called on.
+#
+# THE THRESHOLD IS DELIBERATELY UNCHANGED at 0.065 — preflight.py and
+# test_settle_regions.py both pin it to the value that ran live, and it was
+# never the wrong number. At the live 2000px capture width the classes now
+# separate with real margin either side of it: face-down 0.0482-0.0566,
+# genuine reveals 0.0729-0.1545. Note that this statistic is scale-sensitive
+# (every count rises as the capture shrinks), so re-measure at 2000px, which
+# is what both capture paths deliver; at 1400px the separation is gone.
+REVEAL_CENTER_REGION = (0.42, 0.28, 0.58, 0.58)
+REVEAL_EDGE_THRESHOLD = 0.065
+# How long to wait for the faceoff to flip. Set from the measured turn period,
+# not from a guess. See wait_for_reveal_cards() for the full measurement.
+#
+# 20s missed 82% of turn periods and lost 84% of turns. 45s took that to 23%.
+# Re-measured at 1Hz over 1001 frames (17 minutes of live play), which is finer
+# than the 2s sampling 45 came from:
+#
+#     turn period   p50 32s   p75 59s   p90 83s   max 95s
+#     cap 45s covers 64%   cap 75s covers 84%   cap 90s covers 96%
+#
+# 75 buys the 45->75 band for nothing on any turn that works: this returns the
+# instant the reveal is seen, and a reveal stays up 6s (p50), far longer than
+# the 0.25s poll. Only a turn with no reveal coming pays the extra, and those
+# were already paying 45s to fail. Not pushed to 90: the last 12 points of
+# coverage cost every failing turn another 15s, and a turn period that long is
+# more likely a stall than a slow deal.
+REVEAL_MAX_WAIT = 75.0
+_REVEAL_GRADIENT_CUTOFF = 28.0
+
+
+def center_card_edge_fraction(img) -> float:
+    """The presence statistic, over any PIL image.
+
+    Split out from the polling loop for the same reason as hand_deal_seen():
+    so it can be replayed against saved frames. The region that ships here
+    was chosen by replaying exactly this function over 877 logged frames —
+    an invariant test_reveal_trigger.py now pins to real fixtures.
+    """
+    w, h = img.size
+    x0, y0, x1, y1 = REVEAL_CENTER_REGION
+    crop = img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))).convert("L")
+    a = np.asarray(crop, dtype=float)
+    gy, gx = np.gradient(a)
+    return float((np.hypot(gx, gy) > _REVEAL_GRADIENT_CUTOFF).mean())
+
+
+def _center_card_edge_fraction() -> float:
+    return center_card_edge_fraction(_fast_grab())
+
+
+def wait_for_reveal_cards(max_wait: float = REVEAL_MAX_WAIT, poll_interval: float = 0.25) -> bool:
+    """
+    Block until the revealed cards are actually visible at the diamond centre.
+    Returns True if they appeared, False on timeout.
+
+    Rising-edge trigger, NOT a settle: see REVEAL_CENTER_REGION above for why
+    settling is the wrong signal here. Returning False is not an error — the
+    caller's matchup logging is diagnostic and simply skips that turn.
+
+    MAX_WAIT WAS 6 SECONDS, AND THAT LOGGED NOTHING. A full live match on
+    2026-08-28 played 51 cards and recorded ZERO turns — "reveal cards never
+    appeared" on every single one, leaving match_log.jsonl exactly where it
+    started at 72 rows.
+    
+    The threshold was never the problem. Measured over 2445 frames of that
+    match, the centre-edge fraction sits at 0.0435 with no cards and peaks at
+    0.1456 with them, so the 0.065 trigger separates them cleanly and fires on
+    45 frames. The reveal simply happens LATER than six seconds after the play —
+    the post-play notes twenty lines below record the game taking ~17s to finish
+    dealing. The window closed before the cards arrived.
+
+    AND 20 SECONDS WAS STILL TOO SHORT. The 2026-09-01 run played 215 cards and
+    lost 180 of them to this timeout — 84% of every turn, an hour of pure
+    waiting, and the reason match_log.jsonl grew by 2 rows across a whole run.
+
+    Measured over 877 frames sampled at 2s through that run:
+
+        reveal visible in            129/877 frames (14.7%)
+        distinct reveal events       40
+        each stays up for            8-12 seconds
+        turn period (reveal->reveal) p50 33s, p75 52s
+        turn periods exceeding 20s   82%
+
+    82% of turn periods longer than the window against an 84% failure rate is
+    the whole explanation. The cards are on screen for ten seconds at a time —
+    a 0.25s poll cannot miss them — they simply arrive after the window shut.
+
+    RAISING THE CAP IS ALMOST FREE, which is why it is the fix: this returns
+    the moment the reveal is seen, so a turn that works is not slowed at all.
+    Only a turn with no reveal coming pays the longer wait, and those were
+    already paying 20s to fail.
+    """
+    # ON TIMEOUT, SAY WHAT WAS ACTUALLY SEEN. Three separate theories about
+    # this failure were argued from captured frames and all three were wrong —
+    # the region was fine, reveals do occur, and the commit press is last so the
+    # wait is not late. Each was reasoning ABOUT the detector instead of asking
+    # it. The peak it observed distinguishes the remaining possibilities at a
+    # glance: far below threshold means it genuinely saw no cards, just below
+    # means the threshold or scale is wrong, and at/above means it saw them and
+    # something else lost the turn.
+    start = time.time()
+    peak = 0.0
+    polls = 0
+    while time.time() - start < max_wait:
+        seen = _center_card_edge_fraction()
+        polls += 1
+        peak = max(peak, seen)
+        if seen >= REVEAL_EDGE_THRESHOLD:
+            return True
+        time.sleep(poll_interval)
+    print(f"  [reveal] no cards after {max_wait:.0f}s over {polls} polls — "
+          f"peak edge {peak:.4f} vs threshold {REVEAL_EDGE_THRESHOLD} "
+          f"({100.0 * peak / REVEAL_EDGE_THRESHOLD:.0f}% of the bar)")
+    return False
+
+
+# --- Post-play readiness ---------------------------------------------------
+#
+# THE LOOP READS ~15 SECONDS TOO EARLY AFTER EVERY PLAY. Measured over all 88
+# plays in the two logged runs of 2026-08-26:
+#
+#   current gate first says "still" (2 polls) : p50  2.8 s after the play
+#   LAST hand motion (replacement card dealt) : p50 16.9 s after the play
+#   LAST motion of any watched region         : p50 17.6 s after the play
+#
+# 88 of 88 plays. The mechanism is that "settled" and "ready" are different
+# questions and only one of them is being asked. Right after a play the hand is
+# quiet because NOTHING HAS HAPPENED YET — the played card has left, the
+# resolution animation is at the centre of the screen, and the replacement card
+# will not arrive for another ~15 s. wait_for_screen_to_settle(regions="turn")
+# watches the hand alone (correctly — see SETTLE_REGION_SETS) and so returns
+# almost immediately on a hand that is quiet for the wrong reason.
+#
+# Nor does the motion gate at the top of the loop catch it: over the same
+# frames, 46.8% of consecutive frame-pairs inside the 9 s resolution animation
+# have BOTH watched regions under threshold, i.e. screen_is_moving() would
+# answer False. Every one of the 89 plays had at least one such frame. (Those
+# pairs are 0.57 s apart, the logger's real cadence; the live gate samples
+# 0.12 s apart and therefore sees LESS motion per diff, so the true rate is
+# higher than 46.8%, not lower.)
+#
+# The cost is one wasted vision call plus the 2 s retry sleep, per play. That
+# matches the failure the run loop already documents from the other side: "22
+# plays were followed by a failed read — 19 by exactly one poll".
+#
+# So wait for the EVENT, not for quiet: the replacement card landing in the
+# hand is a large, unambiguous, purely local signal (peak delta ~56 against an
+# 8.0 threshold), and once it has landed the ordinary settle gate means what it
+# says. Falling through on timeout is deliberate and matches
+# wait_for_screen_to_settle: the caller still gets a frame and the existing
+# retry path handles a bad one.
+POST_PLAY_DEAL_MAX_WAIT = 25.0
+# DEFAULT OFF. The DIAGNOSIS behind this is solid (88/88 plays read ~15 s
+# early, 46.8% false-still during the animation), but replaying this particular
+# gate over the logged frames only closes about half the gap — median earliness
+# 11.3 s -> 5.5 s, plays released >1 s early 79/87 -> 66/87 — and 2 of 87 plays
+# hit the timeout. That is not enough to change the shipped default on. Turn it
+# on for one live session with BASEBALL_DEAL_WAIT=1 and read the failed-read
+# count and settle_stats_summary() afterwards; tune from those, not from the
+# 0.57 s frame log, which cannot resolve the 0.15 s poll rate.
+POST_PLAY_WAIT_FOR_DEAL = bool(os.environ.get("BASEBALL_DEAL_WAIT"))
+
+
+def hand_deal_seen(deltas, threshold=None):
+    """Pure decision function over a stream of hand-region deltas: True once a
+    deal-sized motion has been observed. Split out from the polling loop so it
+    can be replayed against logged frames — see the replay validation."""
+    th = SETTLE_THRESHOLDS["hand"] if threshold is None else threshold
+    return any(d >= th for d in deltas)
+
+
+def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
+                       poll_interval: float = 0.15) -> bool:
+    """Block until the replacement card has visibly landed in the hand.
+
+    Returns True if the deal was seen, False on timeout. Rising-edge trigger on
+    the hand region, then hand off to the normal settle gate. Local only: one
+    _grab_settle_regions(("hand",)) per poll, ~40 ms.
+    """
+    start = time.time()
+    prev = _grab_settle_regions(("hand",))["hand"]
+    while time.time() - start < max_wait:
+        time.sleep(poll_interval)
+        cur = _grab_settle_regions(("hand",))["hand"]
+        if _mean_abs_delta(prev, cur) >= SETTLE_THRESHOLDS["hand"]:
+            return True
+        prev = cur
+    print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
+          "reading anyway (the retry path will catch a bad read).")
+    return False
+
+
+VALID_SCREENS = {"turn", "discard_prompt", "result", "ban_screen", "match_start_prompt", "other"}
+
+
+# Possible on-card values. Powers 4-9 and shield 0-3 are what the roster and
+# hand_digit_reader both observe; the range check exists to reject hallucinated
+# values (0, -5, 999, True) before they reach a decision, not to be precise.
+#
+# MIN was 1, which was too loose to be useful: 1-3 is the TACTICS BONUS digit
+# range, and both readers pick those up as a player power. Live 2026-08-26, a
+# hand read as a single `power=1` card sailed through this check, and the
+# engine spent one of the match's 2-3 discards on a hand the user could see
+# was strong. The same misread class produced 2 of that run's 5 misfires.
+#
+# 4 is the roster minimum over all 33 catalogued cards — asserted against the
+# roster in test_validate_game_state.py rather than trusted as a literal,
+# since the roster is self-extending. Rejecting the state makes the loop
+# RE-READ, which is the correct response to a misread and is now cheap: a
+# pending matchup survives a brief read failure (MAX_PENDING_READ_FAILURES).
+# MAX was 15, which is not a real bound — the strongest card in the game is a
+# 9. On 2026-08-26 vision reported `Playing Spike-B (power 10)`; frame
+# 20260826_173511_095.jpg shows the hand at that moment held PITCHER cards of
+# 9/6/6/7/4 and no card named "Spike-B" exists anywhere in the roster. The
+# model invented both the name and the power, the engine played on it, and the
+# misfire detector then fired on a card that was never in the hand.
+#
+# 9 is the roster maximum, asserted against the roster in
+# test_validate_game_state.py so it tracks a self-extending catalogue rather
+# than a typed-in literal. A power above it is a hallucination, and rejecting
+# the state makes the loop re-read — which is cheap now that a pending matchup
+# survives a brief read failure.
+CARD_POWER_MIN, CARD_POWER_MAX = 4, 9
+# OBSERVED, not assumed: the on-screen DISCARDS indicator has exactly TWO
+# dots, white when available and dark when spent (frames 20260826_173511_095
+# and _174500 of run_20260826_172200 show both states). The comment here used
+# to say "game allows 2-3" and the bound was 5.
+#
+# That looseness had a cost. Vision repeatedly reported "3 discard(s) left" —
+# impossible — and the loop acted on it: it issued a discard the game could
+# not honour, the hand did not change, so it decided to discard again. 33
+# discards were attempted across 4 matches on 2026-08-26 where at most 8 were
+# possible, and the counter was seen going UP (1 -> 2 -> 3) between turns.
+# Rejecting the state instead forces a re-read, which breaks the loop.
+MAX_DISCARDS_PER_MATCH = 2
+
+# A match is 5 rounds, so a "result" screen this early is a transition overlay
+# misread, not a finish. Measured 2026-08-31: one card played, "Draw logged",
+# $50 gone and a fabricated draw in the record. Set below the shortest
+# plausible real match rather than at it — the check only has to separate "the
+# match just started" from "the match ended".
+MIN_PLAYS_FOR_RESULT = 4
+# How many separate polls must agree before an early 0-0 result is believed.
+# A transition overlay does not survive a re-read; a real 0-0 finish does.
+RESULT_CONFIRM_READS = 3
+CARD_SECONDARY_MAX = 9
+
+
+# The generic type banners vision returns when a card shows no name. A hand
+# card has no name printed on it (see the note in the reveal matcher), so these
+# ARE the normal reading, not a failure.
+_PHASE_FOR_BANNER = {"batter": "batting", "pitcher": "pitching"}
+
+
+def repair_phase_from_hand(state: dict) -> None:
+    """Correct a phase that contradicts an unambiguous hand.
+
+    play_one_turn() branches on `phase` alone, and the engines behind it sort
+    the hand purely by power — `best_batting_play()` never checks that what it
+    picked is a BATTER. So a misread phase does not merely apply the wrong
+    strategy, it can play a card that is wrong for the turn.
+
+    Measured across 2026-09-01's logs, 12 of ~255 decisions (5%) contradicted
+    themselves this way:
+
+        9 x  Decision: Playing Pitcher (power N)        <- batting engine, pitcher card
+        3 x  Decision: Playing Batter (pitch focus N)   <- pitching engine, batter card
+
+    THE HAND IS THE MORE DIRECT EVIDENCE. `phase` is a single inferred field;
+    the hand is five cards whose type banners are printed on them. When every
+    named player card in hand agrees and `phase` disagrees, the hand wins.
+
+    Deliberately conservative — it abstains unless the hand is unanimous AND
+    every player card carries a generic banner. A real player name ("Rube
+    Sharp") says nothing about whose turn it is, and a mixed hand is not
+    evidence of anything. Both leave `phase` untouched.
+    """
+    phase = state.get("phase")
+    if phase not in ("batting", "pitching"):
+        return                      # validate_game_state rejects this separately
+    banners = set()
+    for card in state.get("hand") or []:
+        if card.get("kind") != "player":
+            continue
+        want = _PHASE_FOR_BANNER.get(str(card.get("name") or "").strip().lower())
+        if want is None:
+            # ABSTENTION, ANNOUNCED. This used to write nothing, and a silent
+            # abstention is indistinguishable from a check that agreed — so a
+            # run where the repair never got a chance to fire looked exactly
+            # like one where phase was right all along. That matters here
+            # because this guard exists for 12 of ~255 decisions that played
+            # the wrong card type at $50 a match.
+            print(f"  [repair] phase NOT CHECKED against the hand: card "
+                  f"{str(card.get('name') or '')!r} is a real player name or "
+                  f"was unreadable, so the hand carries no phase evidence. "
+                  f"{phase!r} stands UNVERIFIED — not confirmed.")
+            return                  # a real name, or unreadable: no signal here
+        banners.add(want)
+    if len(banners) != 1:
+        print(f"  [repair] phase NOT CHECKED against the hand: banners are "
+              f"{sorted(banners) if banners else 'empty (no player cards)'} — "
+              f"a mixed or empty hand proves nothing. {phase!r} stands "
+              f"UNVERIFIED — not confirmed.")
+        return                      # empty or mixed hand proves nothing
+    hand_says = banners.pop()
+    if hand_says != phase:
+        print(f"  [repair] phase read as {phase!r} but every player card in "
+              f"hand is a {'batter' if hand_says == 'batting' else 'pitcher'} "
+              f"— trusting the hand, playing the {hand_says} turn")
+        state["phase"] = hand_says
+    else:
+        # The agreement case, logged for the same reason: this is the check
+        # RUNNING AND PASSING, which is a different fact from the check never
+        # having had evidence to run on. Only these two lines together let a
+        # log answer "did vision improve, or did the repair stop firing?".
+        print(f"  [repair] phase {phase!r} CONFIRMED by an unanimous "
+              f"{'batter' if hand_says == 'batting' else 'pitcher'} hand.")
+
+
+def repair_misread_cards(state: dict) -> None:
+    """Re-label a tactics card that vision returned as a player card.
+
+    Measured live 2026-08-31: "Fielding Play" came back as
+    {"kind": "player", "power": 1} every poll of one hand. validate_game_state
+    then rejected it (power 1 is outside the 4-9 player range) and the caller
+    retried the WHOLE read — a fresh API call each time, up to 15, for a card
+    whose name already says what it is.
+
+    The name is the authority: only the four TACTICS_NAME_TO_KIND names can
+    appear here, and no player shares one. `power` carries the number printed
+    on the card, which for a tactics card is its bonus.
+    """
+    for card in state.get("hand") or []:
+        if card.get("kind") != "player":
+            continue
+        kind = TACTICS_NAME_TO_KIND.get(str(card.get("name") or "").strip().lower())
+        if kind is None:
+            continue
+        bonus = card.pop("power", 0)
+        card.update(kind="tactics", type=kind,
+                    bonus=bonus if isinstance(bonus, int) and not isinstance(bonus, bool)
+                    and bonus >= 0 else 0)
+        card.pop("secondary", None)
+        print(f"  [repair] {card.get('name')!r} read as a player card — "
+              f"re-labelled tactics/{kind} (bonus {card['bonus']})")
+
+
+def validate_game_state(state: dict) -> None:
+    """
+    Raise ValueError on a vision read that would otherwise crash deeper in
+    the pipeline (hand_to_cards, play_one_turn) with a confusing
+    IndexError/KeyError/TypeError. Callers already retry on any exception
+    from read_game_state(), so this just turns a silent hallucination into
+    a clear, retryable error instead of a stack trace pointing at the
+    wrong function.
+    """
+    if state.get("screen") not in VALID_SCREENS:
+        raise ValueError(f"unrecognized screen value: {state.get('screen')!r}")
+
+    # A result screen must carry something to score. `{"screen": "result"}` with
+    # nothing else passed, and run() does `"win" if state.get("result_won") else
+    # "loss"` — so an empty payload was recorded as a LOSS in progress.json.
+    if state.get("screen") == "result":
+        has_scores = (isinstance(state.get("your_score"), int)
+                      and isinstance(state.get("opp_score"), int))
+        if not has_scores and state.get("result_won") is None:
+            raise ValueError(
+                "result screen carries neither scores nor result_won — there is "
+                "nothing to score it from, and defaulting would record a loss")
+
+    # I7: READ_STATE_PROMPT permits "phase": null, but play_one_turn() branches
+    # `if phase == "batting" ... else: best_pitching_play(...)` — so a null or
+    # missing phase silently plays the PITCHING strategy on a batting turn,
+    # with no warning, on a real match. run() also indexes state_json["phase"]
+    # outside its try/except, where a missing key crashes the loop outright.
+    # Turn both into a retryable ValueError.
+    if state.get("screen") in ("turn", "discard_prompt"):
+        if state.get("phase") not in ("batting", "pitching"):
+            raise ValueError(f"turn screen with unusable phase: {state.get('phase')!r}")
+
+    hand = state.get("hand") or []
+    seen_indices = set()
+    for card in hand:
+        idx = card.get("hand_index")
+        if not isinstance(idx, int) or not (0 <= idx < 5):
+            raise ValueError(f"hand card has invalid hand_index: {card!r}")
+        if idx in seen_indices:
+            raise ValueError(f"duplicate hand_index {idx} in hand: {hand!r}")
+        seen_indices.add(idx)
+
+        kind = card.get("kind")
+        if kind == "player":
+            power = card.get("power")
+            # `isinstance(True, int)` is True in Python, so a bare isinstance
+            # check accepts `"power": true` and plays the card with power=1.
+            if not isinstance(power, int) or isinstance(power, bool):
+                raise ValueError(f"player card missing/invalid power: {card!r}")
+            # RANGE, not just type. Measured fallout of having no range check:
+            #   power 0   -> should_redraw() fires and BURNS A DISCARD. This is
+            #               exactly the "power 0 best card" defensive discard
+            #               that SETTLE_REGION_SETS' comment blames on an
+            #               unsettled frame — the validator never stopped it.
+            #   power -5  -> played.
+            #   power 999 -> played.
+            # The ban path already filters `c["power"] > 0` and
+            # hand_digit_reader defines MIN_POWER/MAX_POWER; this brings the
+            # per-turn path in line with both.
+            if not (CARD_POWER_MIN <= power <= CARD_POWER_MAX):
+                raise ValueError(
+                    f"player card power {power} outside the possible range "
+                    f"{CARD_POWER_MIN}-{CARD_POWER_MAX}: {card!r}")
+            secondary = card.get("secondary")
+            if secondary is not None and (not isinstance(secondary, int)
+                                          or isinstance(secondary, bool)
+                                          or not (0 <= secondary <= CARD_SECONDARY_MAX)):
+                raise ValueError(f"player card has invalid secondary: {card!r}")
+            if card.get("name") is not None and not isinstance(card.get("name"), str):
+                raise ValueError(f"player card name is not a string: {card!r}")
+        elif kind == "tactics":
+            if card.get("type") not in {t.value for t in TacticsType}:
+                raise ValueError(f"tactics card has invalid type: {card!r}")
+            # A null/str bonus reached best_batting_play and was PLAYED,
+            # printing "attaching swing boost (+None)" and logging null — and
+            # with two boosts of the same kind it crashed instead, so the
+            # behaviour depended on hand composition.
+            bonus = card.get("bonus")
+            if not isinstance(bonus, int) or isinstance(bonus, bool) or bonus < 0:
+                raise ValueError(f"tactics card has invalid bonus: {card!r}")
+        else:
+            raise ValueError(f"hand card has invalid kind: {card!r}")
+
+    for c in state.get("collection") or []:
+        if not isinstance(c.get("row"), int) or not isinstance(c.get("col"), int):
+            raise ValueError(f"collection card missing row/col: {c!r}")
+
+    # Turn-completeness LAST, deliberately. These are the fields play_one_turn()
+    # indexes unconditionally, and a state missing them used to pass here and
+    # die deeper with `KeyError: 'runners'` or `IndexError: list index out of
+    # range` — precisely the confusing-crash class this function exists to
+    # convert into a retryable ValueError.
+    #
+    # Ordered after the per-card checks so a malformed CARD still reports as a
+    # malformed card. Checking completeness first would have made every existing
+    # bad-hand case raise "missing runners" instead, quietly turning those
+    # assertions into tests of this block rather than of the card validation.
+    if state.get("screen") == "turn":
+        for key in ("runners", "your_score", "opp_score"):
+            if key not in state:
+                raise ValueError(f"turn screen missing required field {key!r}")
+            # PRESENT is not the same as USABLE. `"your_score": null` and
+            # `"opp_score": "seven"` both passed a presence-only check and were
+            # logged straight into match_log.jsonl, and the score feeds
+            # GameState.target_score.
+            val = state[key]
+            if key.endswith("_score") and (not isinstance(val, int)
+                                           or isinstance(val, bool) or val < 0):
+                raise ValueError(f"turn screen has unusable {key}: {val!r}")
+        if not isinstance(state["runners"], list):
+            raise ValueError(f"runners is not a list: {state['runners']!r}")
+        # Three bases. Five runners was accepted and flipped best_pitching_play
+        # into its runners-on branch on a fabricated board.
+        if len(state["runners"]) > 3:
+            raise ValueError(
+                f"{len(state['runners'])} runners on a 3-base diamond: "
+                f"{state['runners']!r}")
+        # The game allows 2-3 discards a match; 99 was accepted and DISCARDED.
+        dl = state.get("discards_left")
+        if dl is not None:
+            # A non-int is a different failure from a miscount — that one is a
+            # confused read of the whole scoreboard, so keep rejecting it.
+            if not isinstance(dl, int) or isinstance(dl, bool):
+                raise ValueError(f"discards_left is not an int: {dl!r}")
+            if not (0 <= dl <= MAX_DISCARDS_PER_MATCH):
+                # CLAMP, do not reject. Measured live 2026-08-31: vision read
+                # 4 off the SAME frame 11 polls running, and the retry loop
+                # paid for an API call every time. Retrying cannot fix a stable
+                # misread — same frame, same prompt, same wrong answer — and 15
+                # of them aborts a match that cost $50.
+                #
+                # Clamped to ZERO, not to the cap. An unreadable count must
+                # never authorise a discard: a hallucinated count is exactly
+                # what drove the 2026-08-26 loop — 33 discard attempts across 4
+                # matches where at most 8 were possible, the counter observed
+                # INCREASING between turns (see test_validate_game_state.py).
+                # Rejecting the read and clamping to 0 both prevent that; only
+                # clamping also avoids paying for the retry.
+                #
+                # Safe because discards_left feeds nothing but should_redraw().
+                # The cost is one turn played instead of redrawn; the cost of
+                # raising is the whole turn plus an API call per retry.
+                print(f"  [repair] discards_left {dl} outside "
+                      f"0-{MAX_DISCARDS_PER_MATCH} — treating as 0 (no discard)")
+                state["discards_left"] = 0
+        # A hand with no PLAYER card is not exotic — it is what a mid-deal or
+        # partially-legible frame produces, i.e. the same failure the settle
+        # gate exists to prevent, arriving by a different route.
+        if not any(c.get("kind") == "player" for c in hand):
+            raise ValueError(
+                f"turn screen with no player card in hand (likely a mid-deal or "
+                f"partial read): {hand!r}")
+
+
+def read_game_state(mask_low_contrast: bool = False) -> dict:
+    """Ask Claude to read the current screenshot into structured state.
+    mask_low_contrast is passed straight through to capture_state_images_b64().
+
+    Sends the overview + labeled region crops from capture_state_images_b64()
+    rather than one full-frame image — each image is preceded by a text
+    label so the model knows which crop is which. See READ_STATE_PROMPT
+    and capture_state_images_b64() for why (cuts image tokens ~55-60%
+    without losing the ability to recognize non-turn screens)."""
+    # Per-image inline reminders for the three base crops — added
+    # 2026-08-24 after live testing found vision repeatedly reporting an
+    # empty "runners" list while local OCR confidently found a real,
+    # roster-matching runner (confirmed 3x in one session: Papa Jody
+    # Gain, Zachary Lee, Claude Ewer, all with correct stats). The
+    # runners instruction previously lived only as one passive bullet in
+    # a long rules list at the very end of the prompt, disconnected from
+    # the three actual images it applies to — this puts the question
+    # directly next to each image's pixels instead of relying on the
+    # model recalling a distant instruction by the time it gets there.
+    BASE_CROP_HINT = "{label} — look carefully: is this a bare round coin (empty, no runner) or a face-up player card with a readable name/power (a real runner)? Don't default to empty without checking."
+    content = []
+    for label, img_b64 in capture_state_images_b64(mask_low_contrast=mask_low_contrast):
+        label_text = BASE_CROP_HINT.format(label=label) if label in ("third_base", "first_base", "second_base") else label
+        content.append({"type": "text", "text": f"[{label_text}]"})
+        content.append({"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}})
+    content.append({"type": "text", "text": READ_STATE_PROMPT})
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=1500,  # thinking is disabled below, so no need for the extra
+                          # headroom that used to absorb 1500+ tokens of internal
+                          # thinking before the JSON answer — verified live 2026-08-23
+        thinking={"type": "disabled"},  # removes the variable thinking-token latency/cost
+                                        # (and the truncation bug it caused) with no accuracy loss
+        messages=[{"role": "user", "content": content}],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    state = extract_json(text)
+    repair_misread_cards(state)
+    repair_phase_from_hand(state)
+    validate_game_state(state)
+    return state
+
+
+def read_matchup_reveal() -> list:
+    """
+    Read whichever face-up reveal cards (yours vs the opponent's) are
+    currently visible mid-turn-resolution — each side up to 2 entries
+    (a player card, plus a tactics card if one was attached). Returns a
+    list of dicts, either {"kind": "player", "name", "power",
+    "secondary"} or {"kind": "tactics", "name", "bonus", "paired_with"}
+    (0-4 entries total). The caller matches kind=="player" and
+    name != our own to find the opponent's card, then finds any
+    kind=="tactics" entry paired_with that name for their tactics bonus.
+
+    Used for match_log.jsonl: capturing the opponent's actual card (and
+    whether they boosted its power) lets later analysis control for it,
+    instead of only ever seeing our own card's stats next to a final
+    outcome that's confounded by whatever the opponent actually played —
+    a boosted opponent power would otherwise look like an unexplained
+    outcome and risk being misattributed to the fielding/speed effect
+    this logging exists to investigate (caught by the user, 2026-08-24,
+    reviewing the fix that first excluded tactics cards entirely).
+    """
+    img_b64 = capture_screenshot_b64()
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=500,
+        thinking={"type": "disabled"},
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}},
+                {"type": "text", "text": READ_MATCHUP_PROMPT},
+            ],
+        }],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    return extract_json(text).get("cards", [])
+
+
+# Static catalogue of (absolute_row, col) -> PlayerCard, compiled from
+# this session's clean 33-card scan of a fully-unlocked collection
+# (2026-08-23). The ban-screen grid layout is fixed game-wide — every
+# player sees the same card in the same position, only the lock state
+# differs per save. Confirmed by cross-checking against Taylere's
+# partial collection: the same names landed in the same (row, col) she
+# had unlocked. read_full_ban_collection() checks this FIRST for every
+# unlocked position and only falls back to a vision call
+# (read_ban_row_cards()) for positions missing from this table (row 6,
+# cols 3-4, never captured in any scan this session — cut off by
+# either a transient mismatch or the tactics-section boundary before a
+# clean read landed on them). Row 5's "Noah 'The Rat Baron' Kelly"
+# (col 2) and row 6 col 2 "Thomas Thomas" only appeared in one of two
+# scans this session and are included as best-effort; if a future
+# vision fallback ever disagrees with an entry here, trust the vision
+# read over this table for that run.
+KNOWN_BAN_ROSTER = {
+    (0, 0): PlayerCard("Johnny Drawers", 7, 1),
+    (0, 1): PlayerCard("Mama Jody Gain", 5, 1),
+    (0, 2): PlayerCard('Harold "Fisto" Blunt', 9, 3),  # corrected 2026-08-24: live capture showed secondary=3, table had 1
+    (0, 3): PlayerCard("Jenny Jody Gain", 6, 0),
+    (0, 4): PlayerCard("Donny Mekesz", 5, 3),
+    (1, 0): PlayerCard("Claude Ewer", 7, 0),
+    (1, 1): PlayerCard("William Lee-Gains", 4, 0),
+    (1, 2): PlayerCard('Brandon "Binger" Ortiz', 5, 2),
+    (1, 3): PlayerCard("Joshua Diaz", 4, 0),
+    (1, 4): PlayerCard("Justin Young", 6, 0),
+    (2, 0): PlayerCard("Zachary Lee", 6, 2),
+    (2, 1): PlayerCard('Johnny "Blaze" Sweets', 4, 3),
+    (2, 2): PlayerCard("Johnny C-Train Goudenberg", 7, 0),
+    (2, 3): PlayerCard("Charlie Pepper", 8, 0),
+    (2, 4): PlayerCard("Josef Bunz-Konicky", 9, 2),
+    (3, 0): PlayerCard("Rube Sharp", 8, 1),
+    (3, 1): PlayerCard('Austin "Cur" Bunz', 8, 1),
+    (3, 2): PlayerCard('Jacob "Cheesehead" McQueen', 9, 1),
+    (3, 3): PlayerCard("William Brown", 4, 3),
+    (3, 4): PlayerCard("Jeremiah Curd", 7, 0),
+    (4, 0): PlayerCard("Marian Bunz-Twarog", 4, 1),
+    (4, 1): PlayerCard("Jedediah Wetters", 4, 2),
+    (4, 2): PlayerCard("Brian Coker", 8, 1),
+    (4, 3): PlayerCard("Timmeh Rattycum", 4, 3),
+    (4, 4): PlayerCard("Joe Jody Gain", 6, 0),
+    (5, 0): PlayerCard("Papa Jody Gain", 5, 0),
+    (5, 1): PlayerCard('Daniel "The Rat-Ta-Train" Cruz', 4, 3),
+    (5, 2): PlayerCard('Noah "The Rat Baron" Kelly', 6, 2),
+    (5, 3): PlayerCard("Joel Blunt", 9, 0),
+    (5, 4): PlayerCard("Bartholomew Creasley", 5, 1),
+    (6, 0): PlayerCard("Jake Saucepan Black", 5, 3),
+    (6, 1): PlayerCard("Mickey Brown", 5, 0),
+    (6, 2): PlayerCard("Thomas Thomas", 5, 3),
+}
+
+# Self-extending: any position the vision fallback reads that isn't in the
+# hardcoded table above gets appended here and persisted to disk, so later
+# runs (any save) never need vision for that position again. The roster is
+# game-wide fixed data, not per-save, so unlike _cached_ban_collection this
+# is safe — and useful — to keep across runs.
+LEARNED_BAN_ROSTER_FILE = "known_ban_roster_learned.json"
+
+
+def _load_learned_roster():
+    # N8: this runs at MODULE SCOPE, so a truncated/corrupt file would make
+    # `import orchestrator` fail for every script including the test suite.
+    # A malformed cache should degrade to "no learned entries", not brick the
+    # project. Paired with the atomic write below, which is what prevents
+    # truncation in the first place.
+    if not os.path.exists(LEARNED_BAN_ROSTER_FILE):
+        return
+    try:
+        with open(LEARNED_BAN_ROSTER_FILE) as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARNING: ignoring unreadable {LEARNED_BAN_ROSTER_FILE} ({e}) — "
+              "continuing with the built-in roster only.")
+        return
+    # Valid JSON of the WRONG SHAPE (a list, a dict of strings, a missing key)
+    # would raise here — outside the try above, at module scope, breaking
+    # `import orchestrator` for every script including the tests. Validate each
+    # entry and skip anything malformed rather than letting one bad row brick
+    # the project.
+    if not isinstance(raw, dict):
+        print(f"WARNING: {LEARNED_BAN_ROSTER_FILE} is not an object — ignoring it.")
+        return
+    for key, v in raw.items():
+        try:
+            row, col = map(int, key.split(","))
+            # N26: `name` must be validated as a STRING, not just present.
+            # PlayerCard accepts any object, and the breakage surfaces later at
+            # ROSTER_BY_NAME's `norm_name(c.name)` — at module scope, so a null or
+            # numeric name bricks `import orchestrator` for every script
+            # including the tests. Exactly the failure class this guard exists
+            # to prevent (verified: name=null and name=123 both broke import).
+            if not isinstance(v.get("name"), str) or not v["name"].strip():
+                raise ValueError(f"name must be a non-empty string, got {v.get('name')!r}")
+            card = PlayerCard(v["name"], int(v["power"]), int(v["secondary"]))
+        except (ValueError, TypeError, KeyError, AttributeError):
+            print(f"WARNING: skipping malformed learned-roster entry {key!r}.")
+            continue
+        KNOWN_BAN_ROSTER[(row, col)] = card
+
+
+# I3: a learned entry becomes permanent ground truth — once written, that
+# position short-circuits and vision NEVER re-reads it, on any save, ever.
+# The only gate on the vision path was a count match, and on the OCR path a
+# loose fuzzy match (cutoff 0.5), either of which can resolve to the wrong
+# card and carry the wrong power/secondary. Require two INDEPENDENT agreeing
+# reads before persisting. Pending (seen-once) entries live in memory only.
+_pending_roster = {}
+
+
+def _learn_roster_entry(pos, card, source="unknown"):
+    prev = _pending_roster.get(pos)
+    if prev is None or (prev[0].name, prev[0].power, prev[0].secondary) != (card.name, card.power, card.secondary):
+        # First sighting, or it disagrees with the last one — hold, don't persist.
+        _pending_roster[pos] = (card, source)
+        if prev is not None:
+            print(f"  Roster read at {pos} disagreed with the previous one "
+                  f"({prev[0].name!r} vs {card.name!r}) — not learning either.")
+        return False
+
+    KNOWN_BAN_ROSTER[pos] = card
+    ROSTER_BY_NAME[norm_name(card.name)] = card   # M7: keep name lookup in sync
+    raw = {}
+    if os.path.exists(LEARNED_BAN_ROSTER_FILE):
+        # Tolerate a corrupt cache here too. _load_learned_roster() already
+        # warns-and-continues at import, but this bare read would then hard-fail
+        # every ban scan — the file would warn once and break the run forever.
+        try:
+            with open(LEARNED_BAN_ROSTER_FILE) as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            raw = {}
+    raw[f"{pos[0]},{pos[1]}"] = {"name": card.name, "power": card.power,
+                                 "secondary": card.secondary, "source": source}
+    _atomic_write_json(LEARNED_BAN_ROSTER_FILE, raw)
+    return True
+
+
+def norm_name(s) -> str:
+    """Canonical form of a card name, FOR COMPARISON ONLY.
+
+    The vision model is not stable about capitalisation — it returned
+    "Pitcher" one turn and "PITCHER" the next, and an exact `!=` then logged
+    our own card as the opponent's (match_log row 18). Every name comparison
+    in this file goes through here so that class of bug is fixed once rather
+    than at each call site.
+
+    Deliberately NOT applied to stored names. Uppercasing the roster itself
+    would fix the same bug, but it burns the display form ('Harold "Fisto"
+    Blunt' in every log and print), makes new match_log rows incomparable with
+    the mixed-case history already on disk, and still needs a normaliser
+    wherever vision text arrives — so it loses data without removing the
+    helper. Store what the game shows; compare canonically.
+    """
+    return (s or "").strip().casefold()
+
+
+# Name -> PlayerCard, built from KNOWN_BAN_ROSTER for OCR fuzzy-matching
+# (see ocr_runner_card() below). Dict keys dedupe automatically; rebuilt
+# whenever a new roster entry is learned so newly-seen names are
+# immediately matchable without a script restart.
+ROSTER_BY_NAME = {norm_name(c.name): c for c in KNOWN_BAN_ROSTER.values()}
+
+# Load persisted entries AFTER ROSTER_BY_NAME exists, then refresh it so
+# learned names are immediately fuzzy-matchable (M7).
+_load_learned_roster()
+ROSTER_BY_NAME.update({norm_name(c.name): c for c in KNOWN_BAN_ROSTER.values()})
+
+
+# The game labels a card by its TYPE wherever its identity is not being
+# shown — cards in hand, and the face-down card in a reveal. Those banner
+# words are not names and must never resolve to a roster entry.
+#
+# "batter" scores 0.615 against the surname "wetters", above the surname
+# fallback's threshold, so it force-matched Jedediah Wetters on 12 occurrences
+# of the 2026-08-26 run — fabricating a specific card, with a specific power,
+# for a card whose identity was never read at all. Callers could not defend
+# themselves: the fallback's cutoff was hardcoded, so even cutoff=0.999
+# returned Jedediah Wetters. Fixed here rather than at the call sites because
+# every caller routes through this function, and two of the three already
+# carry scar tissue from the same over-permissive matching.
+CARD_TYPE_BANNERS = {"batter", "pitcher", "fielder", "runner", "catcher"}
+
+
+def match_roster_name(raw_text: str, cutoff: float = 0.5,
+                      allow_surname_fallback: bool = True,
+                      min_margin: float = 0.0):
+    """
+    Fuzzy-match a (possibly OCR-garbled) name against the known roster.
+    Tries the whole string first; if that fails, falls back to matching
+    just the last word (surname) — OCR noise on this game's ribbon-
+    banner card names tends to hit the first word harder (the banner's
+    pointed/notched left edge overlaps it), so "NUGC SHARP" still
+    resolves to "Rube Sharp" via the surname fallback even though the
+    whole-string match misses it. Returns the matching PlayerCard (with
+    trusted power/secondary from the roster, not from OCR) or None.
+    """
+    text = norm_name(raw_text)
+    if not text:
+        return None
+    if text in CARD_TYPE_BANNERS:
+        return None
+    whole = difflib.get_close_matches(text, list(ROSTER_BY_NAME.keys()), n=2, cutoff=cutoff)
+    if whole:
+        # The surname fallback below refuses ambiguous matches (N7), but this
+        # whole-string pass never did — and it runs FIRST, so it silently
+        # pre-empted that guard. Measured: "Brown" -> Mickey Brown (2 Browns in
+        # the roster), "Jody Gain" -> Joe Jody Gain (4), "Charlie" -> Zachary
+        # Lee. A short or garbled read scores just high enough against one
+        # full name to win outright, and the caller receives a confident,
+        # specific, wrong card. Callers that cannot afford that pass
+        # min_margin and get a refusal instead of a coin-flip.
+        if min_margin and len(whole) > 1:
+            _top = [difflib.SequenceMatcher(None, text, w).ratio() for w in whole[:2]]
+            if _top[0] - _top[1] < min_margin:
+                return None
+        return ROSTER_BY_NAME[whole[0]]
+    if not allow_surname_fallback:
+        return None
+
+    # N7: build surname -> [names]. A dict keyed by surname silently collapsed
+    # collisions (4 "* Gain" cards -> one, 2 "* Brown" -> one), so a garbled
+    # first word could resolve to a same-surname card that isn't the right one.
+    # If a surname is ambiguous we cannot tell them apart from the surname
+    # alone, so refuse rather than guess.
+    last_word = text.split()[-1]
+    by_surname = {}
+    for name in ROSTER_BY_NAME:
+        by_surname.setdefault(name.split()[-1], []).append(name)
+    # max(): a caller asking for high precision must be able to get it. This
+    # threshold was a bare 0.6, so `cutoff` governed only the whole-string
+    # pass and a caller passing 0.999 still received surname guesses.
+    match = difflib.get_close_matches(last_word, list(by_surname.keys()), n=1,
+                                      cutoff=max(0.6, cutoff))
+    if match:
+        names = by_surname[match[0]]
+        if len(names) == 1:
+            return ROSTER_BY_NAME[names[0]]
+    return None
+
+
+# --- The confusions tesseract ACTUALLY makes on the ban-card name banner ---
+#
+# MEASURED 2026-09-03, not assumed: 64 genuine reads aligned against their true
+# roster names across 11 real ban-grid frames (test_fixtures/20260824_2005*,
+# test_fixtures/ban_scan/, test_fixtures/ban_counter/, and one screenshot_log
+# frame). Tally, most frequent first:
+#
+#   word space dropped, words fused    35 of 88   JUSTINYOUNG, RUBESHARP,
+#                                                 MAMAJODYGAIN, JOSHUADIAZ
+#   '-' dropped                         8 of 8    BUNZ KONICKY, C TRAIN
+#   '"' round a nickname dropped        7 of 7    BRANDON BINGER ORTIZ
+#   leading letters dropped            10         OHNNY, NNY MEKESZ, SHUA DIAZ
+#   interior letter dropped             5         JOHNNY C TRAIN (the lone C)
+#   d -> o                              3         ORAWERS, JOEJOOYGAIN
+#   j -> s                              3         SOSHUADIAZ, SOSEF
+#   letter hallucinated                 5         's' x4 (the ribbon's tail
+#                                                 reads as "ss"), 'g' x1
+#   trailing letter dropped             0
+#
+# The textbook OCR confusions were observed ZERO times on this font and are
+# deliberately NOT in the table: no rn->m, no l->1, no O->0, no S->5. Adding
+# them would only widen the matcher against errors this pipeline does not make.
+#
+# 50 of those 76 individual errors are SEPARATOR damage, not letters, which is
+# why the letters-only projection below carries most of the work: measured on
+# the corpus, the projection alone recovers 3 previously-abstained cards and
+# the substitution table recovers 1 more ('SOSHUADIAZ ss'). Reported as such —
+# the confusion table is worth one card, not four.
+OCR_CONFUSION_CLASSES = (("d", "o"), ("j", "s"))
+_OCR_CANON = {ch: cls[0] for cls in OCR_CONFUSION_CLASSES for ch in cls}
+
+
+def ocr_match_key(name) -> str:
+    """Compare-only projection of a name for ban-banner OCR.
+
+    Letters only (so a fused "JUSTINYOUNG", a dropped hyphen and a dropped
+    nickname quote all collapse onto the true name), lowercased, with the two
+    MEASURED confusable pairs folded onto one representative each.
+
+    Comparison only, exactly like norm_name(): nothing is ever stored in this
+    form. It is lossy on purpose.
+    """
+    return "".join(_OCR_CANON.get(ch, ch)
+                   for ch in re.sub(r"[^a-z]", "", (name or "").lower()))
+
+
+# Both gates are MEASURED against the corpus above, and both are needed.
+#
+#   cutoff  the lowest ACCEPTED true read scores 0.889 ('SHUA DIAZ' ->
+#           'Joshua Diaz'); the highest-scoring string that MUST be refused is
+#           the ambiguous partial 'Jody Gain' at 0.842, with 'Frank Coker'
+#           (a plausible name that is not in the roster) at 0.800. 0.85 sits
+#           in that gap and is the same strictness the direct matcher already
+#           uses — this pass must never be the loose one.
+#   margin  the runner-up gate match_roster_name()'s whole-string path never
+#           had. The four "* Jody Gain" cards and the two "* Brown" cards are
+#           1.000/0.833 apart from each other, so a partial read lands on a
+#           coin-flip without it. Every accepted true read on the corpus beats
+#           its runner-up by >= 0.167; every refused negative by <= 0.042.
+BAN_OCR_KEY_CUTOFF = 0.85
+BAN_OCR_KEY_MARGIN = 0.10
+# Under 4 letters there is nothing to identify a card by: the corpus's junk
+# reads ('me', 'be', 'jy', 'we', 'nog') are all shorter than this, and the
+# shortest roster key is 9 ('joelblunt').
+BAN_OCR_MIN_KEY_LEN = 4
+
+
+def match_roster_name_ocr(raw_text, cutoff: float = BAN_OCR_KEY_CUTOFF,
+                          margin: float = BAN_OCR_KEY_MARGIN):
+    """Confusion-aware roster match for a ban-card name banner, or None.
+
+    Same contract as match_roster_name() in strict mode — returns a roster
+    PlayerCard (trusted power/secondary) or refuses — but compares on
+    ocr_match_key() so the separator damage above stops counting as character
+    error, and REQUIRES a margin over the runner-up so a partial read of one
+    of the roster's four near-identical "* Jody Gain" cards abstains instead
+    of guessing.
+
+    Never widens: it is only ever reached after the direct matcher has already
+    refused, so it can add resolutions but cannot change one.
+
+    No CARD_TYPE_BANNERS check here, deliberately. One was written and then
+    REMOVED on 2026-09-03 because mutation testing could not tell it from
+    nothing: the five banners score 0.471-0.533 against their nearest roster
+    key, far under the 0.85 cutoff, so deleting the guard changed no outcome
+    on any probe. A guard indistinguishable from its own absence is the
+    project's most expensive bug shape, so the property is asserted where it
+    is actually enforced instead — tests/test_ban_ocr_confusion.py pins those
+    scores, and fires if a future roster entry ever lifts one toward the
+    cutoff. match_roster_name(), which runs first, keeps its own check.
+    """
+    key = ocr_match_key(raw_text)
+    if len(key) < BAN_OCR_MIN_KEY_LEN:
+        return None
+    scored = sorted(
+        ((difflib.SequenceMatcher(None, key, ocr_match_key(n)).ratio(), n)
+         for n in ROSTER_BY_NAME), reverse=True)
+    if not scored or scored[0][0] < cutoff:
+        return None
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < margin:
+        return None
+    return ROSTER_BY_NAME[scored[0][1]]
+
+
+# Settings for a roster lookup whose answer will be ACTED ON rather than
+# merely displayed. Measured against the live garbled reads: these keep
+# 'Brandon "Binge"' (0.811, margin 0.349) and 'Pure Sharp' (0.800, 0.419)
+# while refusing 'Brown' (2 Browns), 'Jody Gain' (4 Gains), 'Charlie' and
+# 'Johnny \'Train\' Schweitert' (margin 0.025). The initial-form reads
+# 'P. J. Gain'/'M.J. Gain' also fall below this bar — they resolve correctly
+# at the loose default, but not distinguishably, so here they abstain.
+ROSTER_CONFIDENT_CUTOFF = 0.75
+ROSTER_CONFIDENT_MARGIN = 0.10
+
+# No player card in the game has a power below this. The hand digit reader
+# treats 1-3 as a TACTICS bonus, so a vision misread of our own card's power
+# into that range would otherwise match nothing in any reveal and produce a
+# guaranteed false misfire on every such turn. Derived, not typed: the roster
+# is self-extending and a hardcoded 4 would rot silently.
+MIN_PLAYER_POWER = min(c.power for c in KNOWN_BAN_ROSTER.values())
+
+
+def exclude_runners(cards, runners, floor=2):
+    """Drop revealed cards that are actually BASE RUNNERS, not the faceoff.
+
+    This game draws runners as face-up cards on the diamond, and the reveal
+    read scoops them up alongside the two cards actually in play. Confirmed
+    live on 2026-08-26 at 0, 1 and 2 runners, across first, second and third:
+
+        runners [Johnny Drawers, Donny Mekesy]
+        reveal  ['Donny Mekesz', 'William Lee Gains', 'Johnny Drawers', 'Rube Sharp']
+
+    The rule held without exception — revealed players == 2 faceoff cards plus
+    one per runner — and the runner names come back matching the base crops.
+    Uncorrected this was the single largest source of lost rows: every one of
+    the 15 "no OPPONENT card identified" drops in a 30-play run, i.e. half of
+    all turns played, and it bites hardest exactly when the bot is doing well
+    enough to have runners on.
+
+    Refuses to strip below `floor` cards. A faceoff always has two, so if name
+    collisions would leave fewer, the filter is doing more harm than good and
+    the caller is better off deciding on the raw list.
+
+    floor=1 is for the one caller that has ALREADY identified our own card by
+    power and is stripping runners out of the remainder — there, one card left
+    is the answer, not a sign of over-stripping. Everyone else wants the
+    default: measured 2026-08-31, four of five "no OPPONENT card identified"
+    drops were this filter refusing to strip 2 runners out of 3 revealed cards
+    and handing back all three, which then failed the two-card power path.
+    """
+    if not runners or not cards:
+        return cards
+
+    def identity(name):
+        # The two readers spell the same card differently — the runner crop
+        # gave "Donny Mekesy" for the reveal's "Donny Mekesz". Resolve both to
+        # a roster identity so one letter of OCR noise does not defeat the
+        # filter; fall back to the raw normalised name for cards the roster
+        # does not cover (there are known gaps, e.g. Cur Van).
+        hit = match_roster_name(name or "", cutoff=ROSTER_CONFIDENT_CUTOFF,
+                                min_margin=ROSTER_CONFIDENT_MARGIN)
+        return norm_name(hit.name) if hit else norm_name(name)
+
+    on_base = {identity(r.get("name")) for r in runners if r.get("name")}
+    on_base.discard("")
+    if not on_base:
+        return cards
+    kept = [c for c in cards if identity(c.get("name")) not in on_base]
+    return kept if len(kept) >= floor else cards
+
+
+def pick_opponent_card(reveal_cards, ours_name, our_power=None, bonus=0, runners=None):
+    """The opponent's player card from a reveal, or None if undecidable.
+
+    Selecting by name alone dropped the ENTIRE turn whenever the name was
+    unreadable, and it often is: the reveal's "PLAY BALL!" banner sits across
+    the opponent card's name band from ~0.5s to ~2s after onset, and 14 of the
+    28 reveal captures in the 2026-08-26 run landed inside that window. The
+    banner leaves the type banner and the power perfectly legible while
+    covering the name — which is why 15 of 44 logged rows carry a bare
+    "Pitcher"/"Batter" as the opponent, the vision model falling back to the
+    type banner it CAN still see.
+
+    So when names cannot separate the two cards, separate them by POWER: with
+    two player cards revealed and only one matching what we played, the other
+    is theirs regardless of what its name reads. Abstains when both or neither
+    match — a wrong opponent writes a WRONG row, which is worse for this
+    dataset than no row at all.
+    """
+    players = [c for c in reveal_cards if c.get("kind") == "player"]
+    if not players:
+        return None
+
+    ours = norm_name(ours_name)
+    if ours:
+        others = [c for c in players if norm_name(c.get("name")) != ours]
+        if len(others) == 1:
+            return others[0]
+
+    if our_power is not None and len(players) == 2:
+        acceptable = {our_power, our_power + (bonus or 0)}
+        mine = [c for c in players if revealed_powers(c) & acceptable]
+        if len(mine) == 1:
+            return next(c for c in players if c is not mine[0])
+
+    # THREE OR MORE CARDS: identify ours by power, then strip runners from what
+    # is left. Reached only when both paths above abstained, so this can turn a
+    # dropped turn into a logged one but can never change an answer they gave.
+    #
+    # Why it is needed: exclude_runners() at the call site refuses to strip
+    # below two, so 3 revealed cards with 2 runners on base come back untouched
+    # and the two-card path never runs. That was 4 of the 5 "no OPPONENT card
+    # identified" drops on 2026-08-31.
+    #
+    # Still abstains unless the answer is UNIQUE at both steps — exactly one
+    # card carrying our power, and exactly one survivor after the runners are
+    # removed. A wrong opponent writes a wrong row, which is worse than no row.
+    if our_power is not None and runners and len(players) > 2:
+        acceptable = {our_power, our_power + (bonus or 0)}
+        mine = [c for c in players if revealed_powers(c) & acceptable]
+        if len(mine) == 1:
+            rest = [c for c in players if c is not mine[0]]
+            rest = exclude_runners(rest, runners, floor=1)
+            if len(rest) == 1:
+                return rest[0]
+    return None
+
+
+def revealed_powers(card) -> set:
+    """Every power a revealed card could plausibly have.
+
+    BOTH available readings are kept, because both are demonstrably wrong in
+    opposite directions and adjudicating between them is not this check's job:
+
+      * the reveal's OCR read Brian Coker as power 5; the roster says 8;
+      * it read Josef Bunz-Konicky as power 0 — no card in this game has
+        power 0, so that is a failed read — while the roster says 9.
+
+    The caller only ever asks "could the card we played be in here?", so a
+    union is the right shape: it keeps the detector from crying misfire
+    merely because its two sources disagree. An empty set means nothing is
+    known about this card, which the caller must treat as ignorance rather
+    than as evidence of a mismatch.
+    """
+    out = set()
+    p = card.get("power")
+    # A power below MIN_PLAYER_POWER is a MISREAD, not a card — 1-3 is the
+    # tactics BONUS digit range, and the reveal reader picks those up as power.
+    # Live 2026-08-26: revealed [('Pitcher', 3), ('Jedediah Wetters', 4)] and
+    # [('Pitcher', 7), ('Batter', 1)] each produced a confident false misfire,
+    # because a bogus value counts as "known" and suppresses the per-card
+    # abstention below. Treat it exactly like the unread 0 it resembles.
+    if p and p >= MIN_PLAYER_POWER:
+        out.add(p)
+    # Confident settings, not the permissive default. At cutoff=0.5 a garbled
+    # read resolves to the WRONG card (11 of 132 systematic garbles did), and
+    # when our own power is also unread that wrong power becomes the only
+    # evidence — turning this roster lookup from a false-positive FIX into a
+    # false-positive SOURCE. Abstaining costs nothing here; guessing costs a
+    # suppressed row and an input backoff.
+    hit = match_roster_name(card.get("name") or "",
+                            cutoff=ROSTER_CONFIDENT_CUTOFF,
+                            min_margin=ROSTER_CONFIDENT_MARGIN)
+    if hit:
+        out.add(hit.power)
+    return out
+
+
+def reveal_is_complete(reveal_cards, runners) -> bool:
+    """Did the reveal read return EVERY player card that was on the diamond?
+
+    The count is not a guess. exclude_runners() measured it live on 2026-08-26
+    and the rule held without exception:
+
+        face-up player cards == 2 faceoff cards + one per runner on base
+
+    Re-confirmed 2026-09-01 by replaying center_card_edge_fraction() over the
+    461 logged frames of the live match and opening all 11 frames it triggers
+    on: 2 player cards in the 8 reveals with the bases empty, 3 in the 3 with a
+    runner on. 11 of 11, no exceptions.
+
+    So a read that comes back SHORT of that has dropped a card, and the caller
+    cannot know it was not ours. our_card_in_reveal() would otherwise treat the
+    survivors' powers as positive evidence of a mismatch and call a misfire out
+    of an incomplete list — which is how three of the eight misfires on the
+    2026-09-01 run were manufactured, e.g.
+
+        vision runners: [{'name': 'Jake Saucepan Black', 'power': 5, ...}]
+        revealed [('Jake Baucepan Black', 5), ('Joel Blunt', 9)]
+
+    Two cards back where three were on screen: the runner and one faceoff card.
+    exclude_runners() then refuses to strip the runner (it will not go below
+    two, see its docstring), so the runner's power counts AGAINST us and the
+    turn is discarded with a confident "your card is absent".
+
+    This does NOT gate pick_opponent_card — that one already abstains on its
+    own when it cannot separate the cards, and it is the misfire warning, not
+    the opponent read, that costs a real run: a false misfire also fires
+    input_controller.report_misfire(), which drove ACTION_DELAY 0.25s -> 0.75s
+    on this run before the backoff gave up and reset itself.
+
+    Fails OPEN when the runner count is unknown or wrong: state_json's runner
+    read is itself flaky, and an undercount just leaves today's behaviour.
+    """
+    seen = sum(1 for c in reveal_cards if c.get("kind") == "player")
+    return seen >= 2 + len(runners or [])
+
+
+def our_card_in_reveal(our_power, bonus, players) -> bool:
+    """Could one of the revealed cards be the card we just played?
+
+    Returns True when the answer is yes OR undecidable. The caller turns a
+    False into a suspected misfire that suppresses the turn's log row and
+    slows the input layer down, so nothing short of positive evidence of a
+    MISMATCH may return False.
+
+    Both earlier versions failed live by being one-sided:
+      * name-based (2026-08-25) compared a hand card's name — which does not
+        exist, hand cards carry no name — against the reveal: 2 of 2 turns
+        flagged, zero rows logged;
+      * power-based (2026-08-26) abstained when OUR power was unknown but not
+        when the REVEALED powers were, so a reveal reading
+        [('Brandon "Binge"', 0), ('Josef Bunz-Konicky', 0)] produced a
+        confident misfire against our played 9 — when Bunz-Konicky IS a 9.
+    Each time the adaptive backoff then slowed the whole run in response to
+    the detector's own false alarms. Hence: abstain on either side's
+    ignorance, and accept either reading of a revealed power.
+    """
+    if our_power is None or our_power < MIN_PLAYER_POWER:
+        # `is None` alone was still one-sided: a power of 1-3 is not a card,
+        # it is a misread (most likely a tactics bonus digit picked up as
+        # power). No revealed card can ever carry it, so every such turn was
+        # a guaranteed false misfire — the v2 asymmetry mirrored onto our
+        # own side of the comparison.
+        return True
+    acceptable = {our_power, our_power + (bonus or 0)}
+    per_card = [revealed_powers(c) for c in players]
+    # An unreadable card could BE the one we played, so its presence makes the
+    # question undecidable — pooling every power into one set hid that. It let
+    # a reveal of [our card: unreadable, opponent: Mickey Brown 5] conclude
+    # "our 4 is absent" on the strength of evidence about the OPPONENT's card
+    # alone. Judge ignorance per card, not in aggregate.
+    if any(not s for s in per_card):
+        return True
+    known = set().union(*per_card) if per_card else set()
+    return not known or bool(known & acceptable)
+
+
+# Fraction of a base-crop's own height where the name ribbon banner
+# sits, measured live 2026-08-24 against real occupied-base crops
+# (below the character art, above the smaller team-name subtitle).
+CARD_NAME_STRIP_FRAC = (0.72, 0.90)
+
+
+def ocr_runner_card(base_crop_img):
+    """
+    Read a base-position crop (from GAMEPLAY_REGIONS_FRAC) locally: OCR
+    just the name-banner strip, fuzzy-match it against the known
+    roster, and return the roster's PlayerCard (trusted power/secondary)
+    — or None if the base is empty (bare coin, no card) or the name
+    didn't match anything confidently.
+
+    No vision API call. The banner is light text on a dark ribbon with
+    notched/pointed ends, which tesseract reads poorly at native
+    contrast — inverting + thresholding + upscaling first (tuned
+    2026-08-24 against real screenshots) gets a legible-enough read for
+    match_roster_name()'s fuzzy match to close the gap on what's left.
+    """
+    w, h = base_crop_img.size
+    y0, y1 = CARD_NAME_STRIP_FRAC
+    strip = base_crop_img.crop((0, int(h * y0), w, int(h * y1))).convert("L")
+    strip = strip.resize((strip.width * 4, strip.height * 4))
+    strip = ImageOps.invert(strip).point(lambda p: 255 if p > 190 else 0)
+    text = pytesseract.image_to_string(strip, config="--psm 6").strip()
+
+    # The ribbon banner's pointed/notched tail ends often OCR as a
+    # second (sometimes first) line of junk — stray punctuation-like
+    # glyphs — around the actual name, and which line has the real
+    # text shifts slightly by card since the crop's fixed
+    # CARD_NAME_STRIP_FRAC doesn't line up identically for every card's
+    # exact vertical position. Rather than assume a fixed line, extract
+    # letters-only words from EVERY line and keep whichever line has
+    # the most of them — junk lines are consistently short (1-3 letter
+    # noise), the real name line has multiple longer words.
+    candidates = [" ".join(re.findall(r"[A-Za-z]{2,}", line)) for line in text.splitlines()]
+    cleaned = max(candidates, key=len, default="")
+    # V6: tightened from the loose defaults, but NOT to the ban path's 0.85.
+    #
+    # It used `match_roster_name(cleaned)` — the same over-permissive setting
+    # (N1) that was fixed on the ban screen. Measured against 15 plausible names
+    # absent from the roster, the loose setting force-matched 12 of them to a
+    # real but WRONG card ('Frank Coker' -> 'Brian Coker', 'Nancy Drew' ->
+    # 'Johnny Drawers'), silently attaching that card's power/secondary.
+    #
+    # The ban path's 0.85 is too strict HERE, because runner-name crops are far
+    # more garbled than ban-grid ones: the real read for Rube Sharp is
+    # 'NUGC SHARP', which no cutoff above 0.72 accepts. Measured sweep, 5 real
+    # garbled reads vs 15 uncatalogued names:
+    #     cutoff 0.50 : 5/5 genuine kept, 12/15 unknowns force-matched
+    #     cutoff 0.70 : 5/5 genuine kept,  4/15 unknowns force-matched  <- knee
+    #     cutoff 0.85 : 3/5 genuine kept,  1/15 unknowns force-matched
+    #
+    # 0.70 keeps every genuine read while cutting force-matches by two thirds.
+    # The looser bar than the ban path is deliberate and the cost asymmetry
+    # justifies it: a wrong BAN sends wrong physical input into a paid match,
+    # whereas this reader is audit-only (its sole caller is
+    # log_local_read_comparison; GameState.runners comes from the vision read at
+    # play_one_turn). A wrong match here poisons an audit row, which is worth
+    # avoiding but is not worth losing every real read for.
+    return match_roster_name(cleaned, cutoff=0.70, allow_surname_fallback=False)
+
+
+# Defensive safety net in case the prompt's BATTER/PITCHER-only rule
+# still lets a tactics card through — filter out any known tactics card
+# name before it reaches choose_bans().
+KNOWN_TACTICS_NAMES = {"Speed Boost", "Power Swing", "Pitch Focus", "Fielding Play"}
+
+# The four tactics cards map onto TacticsType. The vision prompt returns a
+# tactics card's NAME but not its type, so the kind has to be recovered here —
+# and it matters, because only SWING_BOOST/PITCH_BOOST add power
+# (power_bonus(), simulate.py), so a bonus without a kind cannot be turned into
+# effective power at all.
+# The only tactics kinds that change the power a reveal will show. Kept as a
+# named set beside the mapping so it cannot drift from simulate.power_bonus(),
+# which is the authority on the rule.
+POWER_TACTIC_KINDS = {TacticsType.SWING_BOOST.value, TacticsType.PITCH_BOOST.value}
+
+TACTICS_NAME_TO_KIND = {
+    "power swing": TacticsType.SWING_BOOST.value,
+    "speed boost": TacticsType.SPEED_BOOST.value,
+    "pitch focus": TacticsType.PITCH_BOOST.value,
+    "fielding play": TacticsType.FIELDING_BOOST.value,
+}
+
+
+# The "BANNED CARDS n/3" header. Validated over all 411 cached ban frames:
+# 94% read rate (386/411), zero misreads.
+# The "n/3" of "BANNED CARDS n/3", as fractions of the frame. TWO boxes,
+# tried in order, because the capture geometry CHANGED:
+#
+#   window capture  1920x1080  the game window — what capture sends today
+#   full display    2000x1292  the whole screen, game letterboxed inside it
+#
+# The same fractions cannot hit the text in both. Only the full-display box
+# existed, so on 2026-09-01 this returned None for every live frame — "could
+# not read the BANNED CARDS counter — bans NOT verified" — while its test
+# stayed green, because every fixture it owned was an old full-display capture.
+# That blindness is what let a match start with 1 of 3 bans placed and nothing
+# notice. Keep both: the historical fixtures are still the only frames showing
+# counts 1, 2 and 3.
+BAN_COUNTER_BOXES = ((0.605, 0.145, 0.685, 0.205),    # window capture
+                     (0.595, 0.220, 0.690, 0.295))    # full display (legacy)
+BAN_COUNTER_BOX_FRAC = BAN_COUNTER_BOXES[1]           # legacy name, still read
+
+
+def _dealer_prompt_on_screen() -> bool:
+    """True only if the REAL "Baseball Cards [] Play ($50)" prompt is visible.
+
+    This is the evidence that a start_match press belongs: the dealer prompt is
+    drawn in the world, never over a match, so seeing it proves no match is
+    running and the match_start_prompt classification was not a misread of a
+    ROUND transition overlay.
+
+    IT MUST NOT BE A HUD TEST. The obvious version — "is the world HUD up?" —
+    was written first using compass.find_bar()/read_bearing() and is WRONG:
+    measured 2026-09-01, find_bar returns non-None on EVERY frame including ban
+    and gameplay screens, and read_bearing returned 177.4 on a gameplay turn.
+    Either would have reported "in the world" mid-match and fired start_match
+    into it, which is real untracked in-game spend (QA1-F1).
+
+    at_table() demands contrast AND prompt ink AND stroke-shape correlation
+    together. Measured on the same frames: False on three gameplay turns and on
+    a ban screen (whose ink alone reaches 0.0286), True on both dealer-table
+    frames. Any failure answers False, the conservative direction — it only
+    ever withholds a retry.
+    """
+    try:
+        import table_prompt as _tp
+        return bool(_tp.at_table(_fast_grab()))
+    except Exception:
+        return False
+
+
+def read_ban_counter(img):
+    """How many cards the ban screen says are banned, or None if unreadable.
+
+    NEVER guesses. An unreadable counter returns None, which callers must treat
+    as "not verified" — never as "the number I expected".
+
+    This exists because nothing read the counter, and that blindness hid a live
+    failure: OCRing every cached ban frame shows three of five real ban
+    sequences finishing at **2/3**, with the match starting anyway two seconds
+    later (scoreboard up, ROUND 1, 0-0). Three paid matches were played with a
+    ban set the engine did not choose, and two comments in this codebase
+    asserted the opposite — that the game "refuses to start" under three bans,
+    and that the M11 path "ran successfully through every ban screen" of that
+    session. Both were wrong, and unfalsifiable without this read.
+    """
+    w, h = img.size
+    for x0, y0, x1, y1 in BAN_COUNTER_BOXES:
+        c = img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))).convert("L")
+        c = c.resize((c.width * 4, c.height * 4), Image.LANCZOS)
+        for thr in (110, 130, 150):
+            b = c.point(lambda p, t=thr: 0 if p < t else 255)
+            text = pytesseract.image_to_string(
+                b, config="--psm 7 -c tessedit_char_whitelist=0123456789/").strip()
+            m = re.search(r"([0-3])\s*/\s*3", text)
+            if m:
+                return int(m.group(1))
+    return None
+
+
+def _tactics_kind_from_name(name):
+    """TacticsType value for a tactics card name, or None if unrecognised.
+
+    Abstains rather than guessing: an unknown name means the row is excluded
+    from the effective-power analysis, which is correct — inventing a kind would
+    silently fabricate the power figure the whole match log exists to measure.
+    """
+    return TACTICS_NAME_TO_KIND.get(norm_name(name)) if name else None
+
+# Defensive backstop for a mid-scroll-transition card whose name label
+# hadn't rendered yet — the model sometimes invents a placeholder like
+# "Unknown" instead of following the prompt's "skip it" instruction.
+# Caught live on a less-complete collection, 2026-08-23 (a blank-string
+# name was already handled by the `c.get("name")` truthiness check;
+# this catches the non-empty-but-fake-name variant of the same failure).
+PLACEHOLDER_CARD_NAMES = {"unknown", "n/a", "none", "?"}
+
+# Session-scoped cache: reused across ban screens within one script run,
+# so only the FIRST match pays the full ~15-call scan cost. Deliberately
+# in-memory only, never written to disk — this collection belongs to
+# whichever save file is currently playing (it grows as you unlock cards
+# through missions), so persisting it risks serving stale or wrong-player
+# data on a future run or a different person's save. Clears itself the
+# moment the script restarts.
+_cached_ban_collection = None
+
+
+# --- Independent confirmation of where the ban viewport actually is -------
+# `top_row = presses_so_far - 1` is otherwise the ONLY thing that knows the
+# scroll position: it counts keystrokes SENT, not scrolling that happened. One
+# dropped move_down and every subsequent row is mislabelled — replayed against
+# real frames, the scan then catalogues a LOCKED card the player does not own
+# and choose_bans selects it. That is the cardinal failure of this screen and
+# nothing cross-checked it.
+#
+# The scrollbar thumb answers the question directly. Validated over every
+# cached ban frame: 361/361 settled frames correct, 0 wrong, and all 50 moving
+# frames correctly refused (a thumb between levels means the grid is still
+# animating). ~1.7 ms on a decoded image.
+# y0 was 0.294, where the box's top row grazes the darkness threshold and the
+# reader refuses a frame it can actually read. Measured over the 172 ban-screen
+# frames of the 2026-08-26 run: 51 refusals (29.7%) at 0.294 against 30 (17.4%)
+# from 0.298 onward — 21 frames, 12% of the screen's life, refused for nothing.
+# Every one of those refusals makes the scan skip a batch and re-read.
+#
+# The move is strictly safe, not a re-tune: across those frames it changed ZERO
+# reads (0 frames where both boxes returned a level and the levels differed)
+# and lost no values. The remaining 30 refusals are genuine mid-animation
+# frames, which is what the refusal is for. Stable anywhere in 0.298-0.310, so
+# 0.300 sits mid-plateau rather than on an edge.
+# RE-MEASURED 2026-08-28 for the game-window capture (1920x1080).
+#
+# The previous box sampled x 0.830-0.850, which lands 50px LEFT of the scrollbar
+# in this capture and found nothing but page background — every read returned
+# "scrollbar unreadable", the scan skipped every batch, and the ban screen never
+# completed. The track is a thin dark line at x~0.858; the THUMB is wider, so
+# sampling just right of the track isolates the thumb from the track.
+BAN_SCROLLBAR_BOX_FRAC = (0.8585, 0.260, 0.8650, 0.970)
+BAN_SCROLLBAR_DARK = 110
+
+# Thumb-top as a FRACTION of frame height, not absolute pixels. The old list was
+# in pixels of a differently-cropped capture, so every level was wrong here while
+# looking perfectly reasonable.
+#
+# Measured over 479 frames of a real ban screen. The structure matches the
+# original exactly — a larger first step, even middle steps, and a short final
+# clamp (steps 0.088, 0.078, 0.077, 0.075, 0.075, 0.074, 0.046 against the old
+# 96, 84, 83, 83, 82, 83, 50 px). Same UI, different crop. Level 7 is the bottom
+# clamp; do not "regularise" this list.
+BAN_SCROLL_LEVEL_FRAC = [0.3241, 0.4120, 0.4898, 0.5667, 0.6417,
+                         0.7167, 0.7907, 0.8375]
+BAN_SCROLL_TOLERANCE_FRAC = 0.006
+
+
+def read_ban_scroll_level(img):
+    """(level, thumb_top) for the ban grid's viewport.
+
+    Returns level=None when the thumb sits between levels, which means the grid
+    is mid-animation — that is a refusal, not a failure, and the caller should
+    treat it as "don't know" rather than re-deriving from the press count.
+    """
+    w, h = img.size
+    x0, y0, x1, y1 = BAN_SCROLLBAR_BOX_FRAC
+    band = np.asarray(img.convert("L").crop(
+        (int(w * x0), int(h * y0), int(w * x1), int(h * y1))), dtype=np.float32)
+    dark = np.nonzero(band.mean(axis=1) < BAN_SCROLLBAR_DARK)[0]
+    if not len(dark):
+        return None, None
+    top = int(h * y0) + int(dark[0])
+    frac = top / float(h)
+    for lvl, want in enumerate(BAN_SCROLL_LEVEL_FRAC):
+        if abs(frac - want) <= BAN_SCROLL_TOLERANCE_FRAC:
+            return lvl, top
+    return None, top
+
+
+def _max_roster_row() -> int:
+    """Highest absolute row the roster knows about. Recomputed, not cached:
+    the roster is self-extending, so a value frozen at import would stop the
+    tactics-boundary check from moving as new rows are learned."""
+    return max((r for r, _ in KNOWN_BAN_ROSTER), default=0)
+
+
+# TRUST THE ROSTER. When True the ban scan is 100% local: positions resolve
+# from KNOWN_BAN_ROSTER by (row, col) and nothing else runs — no name OCR, no
+# vision call, no mismatch/retry.
+#
+# WHAT THIS GIVES UP, stated plainly: the ability to DISCOVER a card the roster
+# has never seen. That machinery exists so a game update adding cards would be
+# picked up automatically. The owner is renting the game and does not need that
+# (2026-08-25), and the roster already covers 100% of visible unlocked
+# positions measured across 23 real ban frames.
+#
+# The two catalogue gaps, (6,3) and (6,4), are simply skipped as ban
+# candidates. choose_bans() picks the best 3 from what it sees, so missing two
+# of ~33 cards cannot produce a wrong ban — only, at worst, a slightly
+# less-optimal one.
+#
+# Set False to restore vision-backed discovery.
+TRUST_ROSTER_ONLY = True
+
+
+def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
+                             trust_roster: bool = None):
+    """
+    Scroll through the ban screen's full collection, reading it via
+    vision, so choose_bans() can see the whole thing instead of just the
+    first ~15 cards. Returns a list of (absolute_row, col, PlayerCard)
+    for select_bans_and_start_full(). Leaves the cursor back at (0, 0)
+    when done.
+
+    Positions are determined entirely in code (detect_ban_grid_locked()
+    against the calibrated BAN_GRID_COL_X/ROW_Y boxes), not by asking the
+    vision model to report row/col — root-cause fix for a real bug
+    (2026-08-23): the model silently shifted visible cards left to fill
+    gaps left by masked-out locked cards instead of preserving their
+    true columns, confirmed live twice (once on the original approach,
+    again after a prompt-only fix attempt). The model's only job now is
+    read_ban_row_cards(): return the legible cards it sees in reading
+    order, which gets zipped onto the code-derived list of unlocked
+    positions. If the count it returns doesn't match the expected
+    unlocked-cell count, the whole batch is discarded rather than risk
+    assigning any card to the wrong grid position — a wrong position
+    (navigating to and toggling the wrong physical card) is worse than a
+    temporarily incomplete collection.
+
+    Confirmed live (2026-08-23): the first move_down just moves the
+    cursor within the still-fully-visible page (no scroll); every
+    move_down after that scrolls the viewport by exactly 1 row. So after
+    N total presses, the row at the top of the screen is max(0, N - 1).
+    Reading every 2 presses keeps each read mostly-fresh (1 row of
+    overlap, deduped by absolute (row, col) now that position is known
+    for certain) without a read on every single row.
+
+    Stops once both visible rows are fully locked (assumed to mean the
+    bottom of the owned-card section). max_presses is a hard safety
+    bound in case that assumption is wrong, or the scroll wanders into
+    the tactics-card section beyond (which reads as a mismatch every
+    time, since read_ban_row_cards() is told to skip tactics cards but
+    detect_ban_grid_locked() doesn't know the difference — safe, just
+    wasteful, bounded by max_presses).
+    """
+    global _cached_ban_collection
+    if trust_roster is None:
+        trust_roster = TRUST_ROSTER_ONLY
+    if use_cache and _cached_ban_collection is not None:
+        return _cached_ban_collection
+
+    seen_positions = set()
+    full_collection = []
+    presses_so_far = 0
+    consecutive_mismatches = 0
+
+    try:
+        while presses_so_far <= max_presses:
+            if presses_so_far == 0:
+                # The ban screen fades in, and a dim cell reads as LOCKED.
+                # Only the first batch is exposed to it — every later one
+                # follows a keypress and is covered by the scrollbar check.
+                img, locked_grid = _settled_lock_grid()
+            else:
+                img = capture_screenshot_image()
+                locked_grid = detect_ban_grid_locked(img)
+            top_row = max(0, presses_so_far - 1)
+            expected_positions = [
+                (r, c) for r in range(len(locked_grid)) for c in range(len(locked_grid[r]))
+                if not locked_grid[r][c]
+            ]
+
+            # B2: cross-check the viewport against the SCROLLBAR before
+            # trusting top_row. top_row counts keystrokes SENT, not scrolling
+            # that happened — one dropped move_down mislabels every row from
+            # there on, and the scan then catalogues a locked card the player
+            # does not own, which choose_bans will happily select.
+            #
+            # A refusal (level=None, thumb mid-travel) means the grid is still
+            # animating: skip this batch rather than reading it, since the rows
+            # on screen are not the rows top_row claims.
+            try:
+                _lvl, _thumb = read_ban_scroll_level(img)
+            except Exception:
+                _lvl, _thumb = None, None
+            if _lvl is None:
+                print(f"  [ban] scrollbar unreadable or mid-scroll "
+                      f"(thumb={_thumb}) — skipping this batch rather than "
+                      "trusting the press count.")
+                if presses_so_far >= max_presses:
+                    break
+                for _ in range(2):
+                    press("move_down")
+                presses_so_far += 2
+                wait_for_screen_to_settle(max_wait=6.0, regions="ban")
+                continue
+            if _lvl != top_row:
+                print(f"  [ban] SCROLL DESYNC: press count says row {top_row}, "
+                      f"the scrollbar says {_lvl}. Trusting the scrollbar — the "
+                      "press count cannot see a dropped keystroke, and a wrong "
+                      "row bans a card the player does not own.")
+                record_observation(event="ban_scroll_desync",
+                                   press_count_row=top_row, scrollbar_row=_lvl)
+                top_row = _lvl
+
+            new_count = 0
+            if expected_positions:
+                absolute_positions = [(top_row + r, c) for r, c in expected_positions]
+                roster_hits = {pos: KNOWN_BAN_ROSTER[pos] for pos in absolute_positions if pos in KNOWN_BAN_ROSTER}
+
+                # For any position not yet in the roster by (row, col), try
+                # local name-OCR + roster-by-name resolution before ever
+                # touching vision. Verified live 2026-08-24: the name
+                # banner OCRs reliably (unlike the power/secondary badge
+                # digits, which tesseract and EasyOCR both proved unreliable
+                # on regardless of crop precision) and match_roster_name()
+                # already handles the noisy/garbled text this produces.
+                # Whatever resolves here also gets learned by position, so
+                # future scans of this exact cell skip straight to the
+                # roster_hits short-circuit below with no OCR at all.
+                for (rel_row, col), pos in zip(expected_positions, absolute_positions):
+                    if trust_roster:
+                        # Position lookup is the whole answer here; a position
+                        # the roster doesn't know is simply not a ban candidate.
+                        continue
+                    if pos not in roster_hits:
+                        card_crop = get_ban_grid_card_crop(img, rel_row, col)
+                        local_card = ocr_ban_card_name(card_crop)
+                        if local_card:
+                            roster_hits[pos] = local_card
+                            if pos not in KNOWN_BAN_ROSTER:
+                                if _learn_roster_entry(pos, local_card, source="local_ocr"):
+                                    print(f"Learned ban-roster entry at {pos} via local OCR "
+                                          f"(2nd agreeing read): {local_card.name}")
+
+            # EARLY TACTICS-BOUNDARY STOP — detected locally, before any vision
+            # call. Measured on the 2026-08-25 run: the ban screen took 149 of
+            # the run's 175 seconds, sitting idle in 20-40s blocks. That was the
+            # scan grinding through the TACTICS section, which the roster does
+            # not cover, so every batch fell through to vision, mismatched
+            # (read_ban_row_cards correctly filters tactics out), and was
+            # RETRIED — two vision calls per wasted step, plus ten fruitless
+            # tesseract reads.
+            #
+            # The tell is free and already computed: tactics cards have no
+            # player-name banner, so ocr_ban_card_name returns None for every
+            # position (verified against real tactics frames — all ten
+            # positions OCR to empty). Combined with being past the roster's
+            # known extent, that is conclusive enough to stop here rather than
+            # spend four vision calls discovering it.
+            #
+            # One batch of slack past the roster is deliberately allowed so the
+            # self-extending roster can still discover a genuinely new row; it
+            # is only the SECOND unrecognised batch that stops the scan.
+            if (expected_positions and not roster_hits
+                    and top_row > _max_roster_row() + 1):
+                print(f"No player names readable at rows {top_row}+ and past the "
+                      f"known roster — tactics section, stopping the scan "
+                      f"(saved ~2 vision calls).")
+                break
+
+            if trust_roster and expected_positions:
+                # Take whatever the roster covers and move on. No vision, no
+                # retry, no mismatch bookkeeping — the cases those existed for
+                # (an uncatalogued card, a garbled read) both resolve to "not a
+                # ban candidate" here, which is a safe answer rather than an
+                # error.
+                missing = [p for p in absolute_positions if p not in roster_hits]
+                if missing:
+                    print(f"  [ban] {len(missing)} position(s) not in the roster "
+                          f"{missing[:4]}{'...' if len(missing) > 4 else ''} — "
+                          "skipping as ban candidates (trust_roster).")
+                if not roster_hits:
+                    print(f"No roster coverage at rows {top_row}+ — end of the "
+                          "catalogued collection, stopping the scan.")
+                    break
+                for pos in absolute_positions:
+                    if pos in roster_hits and pos not in seen_positions:
+                        seen_positions.add(pos)
+                        full_collection.append((pos[0], pos[1], roster_hits[pos]))
+                        new_count += 1
+                consecutive_mismatches = 0
+
+            elif expected_positions and len(roster_hits) == len(expected_positions):
+                # Every unlocked position in view is already catalogued in
+                # KNOWN_BAN_ROSTER — skip the vision call entirely. The card
+                # roster is fixed game-wide (only lock state differs between
+                # players' saves, confirmed by cross-checking Taylere's
+                # partial collection against this catalogue), so once a
+                # position's card is known once, it's known for every save.
+                consecutive_mismatches = 0
+                for pos in absolute_positions:
+                    if pos not in seen_positions:
+                        seen_positions.add(pos)
+                        full_collection.append((pos[0], pos[1], roster_hits[pos]))
+                        new_count += 1
+            elif expected_positions:
+                # Two attempts against the SAME captured frame (nothing on
+                # screen has changed, so no need to recapture) before giving
+                # up on this batch — most mismatches turn out to be a
+                # transient bad read rather than a real, persistent
+                # disagreement, so a retry meaningfully cuts how often a
+                # genuine player-card row gets silently dropped.
+                masked_img = mask_low_contrast_regions(img)
+                cards = None
+                for attempt in range(2):
+                    raw_cards = read_ban_row_cards(masked_img)
+                    attempt_cards = [
+                        c for c in raw_cards
+                        if c.get("name") and norm_name(c["name"]) not in PLACEHOLDER_CARD_NAMES
+                        and c["name"] not in KNOWN_TACTICS_NAMES
+                        and isinstance(c.get("power"), int) and c["power"] > 0
+                        # I8: the prompt permits nulls, and line below indexes
+                        # c["secondary"] directly — an omitted key would
+                        # KeyError mid-scan and abort the whole collection read.
+                        and isinstance(c.get("secondary"), int)
+                    ]
+                    if len(attempt_cards) == len(expected_positions):
+                        cards = attempt_cards
+                        break
+                    elif attempt == 0:
+                        print(f"Ban-screen read mismatch (attempt 1/2): expected {len(expected_positions)} "
+                              f"legible cards, got {len(attempt_cards)} — retrying per-row before giving up.")
+                        # SPLIT THE RETRY BY ROW instead of repeating the same
+                        # whole-grid call. Measured 2026-08-25: per-row crops
+                        # cost ~25% MORE tokens than one combined crop (167+168
+                        # vs 268 — JPEG overhead per image), so per-row is the
+                        # wrong default. But a combined read that mismatches
+                        # drops BOTH rows, and at the tactics boundary row 0 is
+                        # usually real player cards while row 1 is not. That is
+                        # how a 33-card roster produced "Read 19 cards": whole
+                        # batches discarded for one bad row.
+                        #
+                        # So: cheap combined read first, and only when it
+                        # disagrees does the extra per-row cost buy something —
+                        # salvaging the good row instead of losing it.
+                        per_row = _read_ban_rows_separately(masked_img, expected_positions)
+                        if per_row is not None:
+                            cards = per_row
+                            break
+
+                if cards is not None:
+                    consecutive_mismatches = 0
+                    for (rel_row, col), c in zip(expected_positions, cards):
+                        pos = (top_row + rel_row, col)
+                        card = PlayerCard(c["name"], c["power"], c["secondary"])
+                        if pos not in KNOWN_BAN_ROSTER:
+                            if _learn_roster_entry(pos, card, source="vision"):
+                                print(f"Learned ban-roster entry at {pos} "
+                                      f"(2nd agreeing read): {card.name}")
+                        if pos not in seen_positions:
+                            seen_positions.add(pos)
+                            full_collection.append((pos[0], col, card))
+                            new_count += 1
+                else:
+                    consecutive_mismatches += 1
+                    print(f"Ban-screen read mismatch persisted after retry — skipping this batch "
+                          f"({consecutive_mismatches}/2 before giving up on this section).")
+
+            if new_count == 0 and not expected_positions and presses_so_far > 0:
+                break  # both visible rows fully locked — reached the bottom
+            if consecutive_mismatches >= 2:
+                # Two batches in a row where the contrast-based lock detector
+                # and the model's own filtering disagree on count — almost
+                # certainly means we've scrolled past the owned player cards
+                # into the tactics-card section (which reads as high-contrast
+                # "unlocked" to detect_ban_grid_locked() but gets correctly
+                # filtered out by read_ban_row_cards()'s prompt). Stop here
+                # instead of grinding all the way to max_presses.
+                print("Two consecutive ban-screen mismatches — likely past the "
+                      "owned cards into the tactics section. Stopping the scan.")
+                break
+            if presses_so_far >= max_presses:
+                break
+            for _ in range(2):
+                press("move_down")
+            presses_so_far += 2
+            wait_for_screen_to_settle(max_wait=6.0)
+    finally:
+        # Always unwind back to (0, 0), even on a failed read mid-scroll —
+        # leaving the cursor scrolled would corrupt any retry's assumption
+        # that it starts at the top.
+        for _ in range(presses_so_far):
+            press("move_up")
+
+    # QA1-F6: never cache a result that cannot be right. A mid-animation first
+    # frame reads every cell as locked, the scan exits immediately with [], and
+    # caching that serves the empty list to every later call in the process —
+    # including the caller's own retry loop, which then "retries" 15 times with
+    # zero captures and dies as ban_screen_stuck AFTER the $50 was debited. A
+    # single bad frame cost the match fee and ended the session.
+    #
+    # Three bans are needed, so anything under three cards is not a usable
+    # collection regardless of why it came back short.
+    if use_cache and len(full_collection) >= 3:
+        _cached_ban_collection = full_collection
+    elif len(full_collection) < 3:
+        print(f"Ban scan returned only {len(full_collection)} card(s) — not "
+              "caching it; the next attempt will re-capture rather than be "
+              "served a bad read.")
+    return full_collection
+
+
+def read_balance_from_pause_menu() -> int:
+    """
+    Open the pause menu, read the money total off it via vision, then
+    close the menu again.
+
+    Assumption not yet confirmed — watch this closely on the first run:
+    Options opens the pause menu with money visible, and pressing Options
+    again is what closes it back out (rather than a different button,
+    like Circle, being needed to back out of a submenu).
+    """
+    # VERIFY THE MENU IS ACTUALLY OPEN BEFORE SPENDING A VISION CALL ON IT.
+    # toggle_pause is a TOGGLE, and it does not always land first time. When it
+    # did not, this captured the WORLD instead — where the only number on screen
+    # is the health coin in the bottom-left. Vision duly returned 100, the run
+    # recorded it as the wallet, and reported the bankroll as collapsing from
+    # $246 to $100. The health coin is a round coin with an embossed face, which
+    # is also how the prompt describes MONEY, so nothing downstream could catch
+    # it. The user has had to correct this reading three times.
+    import pause_menu as _pm
+    for _attempt in range(1, 4):
+        press("toggle_pause")
+        wait_for_screen_to_settle(max_wait=8.0)   # let the menu animate in
+        if _pm.is_pause_screen(_fast_grab()):
+            # WHICH ATTEMPT LANDED IS THE SIGNAL. A silent retry loop reports
+            # a clean read whether the toggle worked first time or third, so
+            # a toggle that is degrading toward never landing is invisible
+            # right up until the run dies on the RuntimeError below.
+            print(f"  [balance] pause menu confirmed open on attempt "
+                  f"{_attempt} of 3")
+            break
+        print(f"  [balance] attempt {_attempt} of 3: toggle_pause did NOT "
+              f"leave a pause menu on screen — retrying. Do not read this as "
+              f"a slow menu; toggle_pause is a TOGGLE and may have closed one, "
+              f"and reading money off a WORLD frame is how the health coin got "
+              f"reported as the wallet ($246 -> $100).")
+    else:
+        raise RuntimeError(
+            "the pause menu would not open, so there is nowhere to read the "
+            "money from — refusing to read a number off the world, where the "
+            "only counter is the HEALTH coin and any answer would be wrong")
+
+    img_b64 = capture_screenshot_b64()
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=500,  # thinking disabled below — no more thinking-token headroom needed
+        thinking={"type": "disabled"},
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}},
+                {"type": "text", "text": READ_BALANCE_PROMPT},
+            ],
+        }],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text").strip()
+    result = extract_json(text)
+
+    press("toggle_pause")
+    wait_for_screen_to_settle(max_wait=6.0)  # let the menu animate closed
+    # THE CLOSE IS A TOGGLE TOO, and nothing checked it. The open is verified
+    # three times over; the close was fire-and-forget. If it drops, the game
+    # stays PAUSED and every press after this lands in a menu instead of the
+    # world — which surfaces minutes later as "no input is reaching the game",
+    # a diagnosis that has already been raised twice at a healthy stream with
+    # working input. This only warns: re-pressing a toggle that DID land would
+    # reopen the menu, which is the trap that costs more than it fixes.
+    try:
+        if _pm.is_pause_screen(_fast_grab()):
+            print("  WARNING: [balance] the closing toggle_pause did NOT land "
+                  "— THE PAUSE MENU IS STILL OPEN. The balance above is good, "
+                  "but everything after this is pressing buttons into a menu. "
+                  "Expect the symptom to look like dead input or a frozen "
+                  "stream; it is neither.")
+    except Exception as _e:
+        print(f"  [balance] could not verify the pause menu closed ({_e!r}) — "
+              f"so 'the menu is closed' is an ASSUMPTION from here on, not an "
+              f"observation.")
+
+    # The stack is the proof it read the right thing. A lone number could have
+    # come from anywhere on screen — which is exactly how the health coin got
+    # reported as the wallet.
+    counters = result.get("counters")
+    money = result.get("money")
+    if isinstance(counters, list) and len(counters) == 3 and counters[0] is not None:
+        money = counters[0]
+    elif money is not None:
+        raise RuntimeError(
+            f"vision returned money={money!r} without the three right-edge "
+            f"counters (got {counters!r}) — it did not find the currency stack, "
+            f"so the number came from somewhere else on screen. The health coin "
+            f"reads 100 and has been mistaken for the wallet before.")
+    if money is None:
+        raise RuntimeError(
+            "Couldn't find a money total on the pause menu screen — "
+            "check that Options actually opens a menu showing it, and "
+            "adjust toggle_pause or READ_BALANCE_PROMPT if not."
+        )
+    return money
+
+
+def hand_to_cards(hand: list):
+    """Split the raw hand JSON into indexed (player, tactics) card lists,
+    keeping each card's hand_index for input targeting."""
+    players, tactics = [], []
+    for c in hand:
+        if c["kind"] == "player":
+            players.append((c["hand_index"], PlayerCard(c["name"], c["power"], c["secondary"])))
+        else:
+            tactics.append((c["hand_index"], TacticsCard(c["name"], TacticsType(c["type"]), c["bonus"])))
+    return players, tactics
+
+
+def play_one_turn(state_json: dict, batters_used: int):
+    """
+    Execute one turn. `batters_used` is the caller-tracked count of
+    batters/pitchers already played this half (0-4), passed in rather
+    than trusted from state_json["batters_used"] — the on-screen
+    indicator for that is unreliable to read via vision (it comes back
+    null almost every time), which silently broke the "last batter of
+    the half, be aggressive" heuristic since `None == 4` is always False.
+
+    Returns (played, matchup_info):
+      - played: True if a normal play was made, False if the redraw
+        (discard) branch was taken instead.
+
+        N27: `played=False` means "took the discard branch" — it does NOT
+        mean "no turn was consumed". An earlier version of this docstring
+        claimed a redraw "doesn't use up a turn"; that contradicts
+        input_controller.select_and_discard(), which ends in
+        confirm_play() and whose own comment records that being confirmed
+        live. So `turns_this_half` undercounts on redraw turns. That is
+        inert today because no decision function reads batters_used, but
+        it would be a live bug if that heuristic is ever re-enabled —
+        see HEURISTICS.md §5.
+      - matchup_info: dict describing what we played, for match_log.jsonl
+        (None on a discard — we don't know the replacement card's stats
+        without an extra vision read, so those turns aren't logged).
+    """
+    players, tactics = hand_to_cards(state_json["hand"])
+    runners = [PlayerCard(r["name"], r["power"], r["secondary"]) for r in state_json["runners"]]
+
+    # Default to 0 (not 2) when the discard counter can't be read, so a
+    # misread never causes more discards than the game actually allows.
+    discards_left = state_json.get("discards_left")
+    if discards_left is None:
+        # The out-of-range clamp two functions away announces itself; this one
+        # did not, and it has the same consequence: should_redraw() can never
+        # fire, so a weak hand is played instead of improved, for $50, and the
+        # log shows only that no discard happened — indistinguishable from a
+        # hand that did not need one.
+        print("  [repair] discards_left unreadable — treating as 0, so no "
+              "discard is possible this turn.")
+        discards_left = 0
+
+    state = GameState(
+        half=state_json["phase"],
+        batters_used=batters_used,
+        your_score=state_json["your_score"],
+        opp_score=state_json["opp_score"],
+        target_score=state_json["your_score"] if state_json["phase"] == "pitching" else None,
+        runners=runners,
+        redraws_left=discards_left,
+    )
+
+    player_only = [p for _, p in players]
+    tactics_only = [t for _, t in tactics]
+
+    if state_json["phase"] == "batting":
+        decision = best_batting_play(player_only, tactics_only, state)
+    else:
+        decision = best_pitching_play(player_only, tactics_only, state)
+
+    if should_redraw(player_only, state):
+        # Discard the WEAKEST card, not the one we would have played.
+        #
+        # This used to discard `decision.player_card` — the engine's own BEST
+        # card. That was harmless while the threshold was 4: the rule only
+        # fired when every card was <= 4, and the weakest card in the pool is
+        # a 4, so the replacement always became the new best regardless of
+        # which card was thrown. Measured over 200k qualifying hands: a 100%
+        # tie at threshold 4.
+        #
+        # At the new threshold of 6 it is no longer harmless — discarding the
+        # worst CHANGES the outcome in 17.0% of qualifying hands (5.9% of all
+        # hands dealt) and is worse in none. The two rules pick a different
+        # card 53.9% of the time, but usually to no effect — the fresh draw
+        # becomes the best either way — so 54% counts disagreements, not wins.
+        # Measured over 200k hands. Keeping
+        # the old best as a floor makes the new best max(old_best, draw)
+        # instead of max(second_best, draw).
+        _weakest = min(players, key=lambda ip: ip[1].power)
+        player_idx = _weakest[0]
+        print(f"Decision: best card is weak (power {decision.player_card.power}) and "
+              f"{state.redraws_left} discard(s) left — discarding the weakest "
+              f"(power {_weakest[1].power}) instead of playing")
+        select_and_discard(player_idx)
+        return False, None
+    else:
+        # THE FALSE BRANCH, LOGGED. The true branch has always announced
+        # itself and its numbers; this one wrote nothing, so "no discard this
+        # turn" covered two different decisions — the hand was strong enough,
+        # or there were no discards left to spend — and the VALUE that decided
+        # it was never recorded at all. CLAUDE.md §10.4: a threshold has to sit
+        # between two MEASURED populations, and this one's populations do not
+        # exist on disk because nothing ever wrote the max power down. Every
+        # such turn happens inside a $50 match, so the samples are expensive.
+        _best = max((p.power for p in player_only), default=None)
+        _why = ("NO DISCARDS LEFT — this hand was not kept on merit"
+                if state.redraws_left <= 0 else "hand is strong enough")
+        print(f"  [redraw] keeping the hand: best power {_best} vs threshold "
+              f"{REDRAW_POWER_THRESHOLD}, {state.redraws_left} discard(s) "
+              f"left — {_why}")
+
+    print(f"Decision: {decision.reasoning}")
+
+    player_idx = next(i for i, p in players if p is decision.player_card)
+    tactics_idx = None
+    if decision.tactics_card:
+        tactics_idx = next(i for i, t in tactics if t is decision.tactics_card)
+
+    select_and_play(player_idx, tactics_idx)
+
+    matchup_info = {
+        "phase": state_json["phase"],
+        "our_card_name": decision.player_card.name,
+        "our_power": decision.player_card.power,
+        "our_secondary": decision.player_card.secondary,
+        "our_tactics_bonus": decision.tactics_card.bonus if decision.tactics_card else 0,
+        # The TYPE, not just the bonus. power_bonus() (simulate.py:97) only
+        # counts SWING_BOOST/PITCH_BOOST toward power — a speed or fielding
+        # tactic has a nonzero bonus that adds NO power. Logging the bonus
+        # alone left effective power uncomputable on 20 of 39 logged rows,
+        # which is most of the signal this log exists to measure.
+        "our_tactics_kind": decision.tactics_card.kind.value if decision.tactics_card else None,
+        "runners_before": len(runners),
+        "score_before": state_json["your_score"] if state_json["phase"] == "batting" else state_json["opp_score"],
+    }
+    return True, matchup_info
+
+
+def run(target_wins: int, starting_balance: int = None, progress_file: str = PROGRESS_FILE,
+        max_spend: int = None, log_screenshots: bool = False, compare_local_reads: bool = False):
+    """
+    Play matches until target_wins wins are logged (across all runs), or
+    money runs out.
+
+    compare_local_reads=True prints local OCR/hand-matcher results next
+    to vision's on every turn (see log_local_read_comparison()) — never
+    affects any real decision, diagnostic only, off by default. Pulls
+    in the PaddleOCR reader (hand_digit_reader.py), which runs in its own venv.
+
+    log_screenshots=True starts the background screenshot logger (10Hz)
+    (see its own comment block above run()) — diagnostic only, off by
+    default, doesn't affect play.
+
+    On the very first run (no progress_file yet), the starting balance is
+    read automatically from the pause menu unless starting_balance is
+    explicitly passed in, in which case that value is used instead and
+    the pause-menu read is skipped. After that first run, the persisted
+    balance is always authoritative. If you top up your in-game funds
+    manually outside the script, edit the "balance" value in
+    progress_file to match, since the script has no way to see that on
+    its own.
+
+    progress_file lets different save files (yours vs. someone else's,
+    e.g. Taylere's, 2026-08-23) track wins/losses/balance independently
+    instead of mixing into the same trophy progress — pass a different
+    path per person/save.
+
+    max_spend caps how much this run will spend on matches this session
+    (e.g. Taylere's real balance is $496, but she only wants $250 of it
+    used) — independent of the real in-game balance, which keeps getting
+    tracked accurately either way.
+    """
+    if compare_local_reads:
+        # C4: verify the PaddleOCR venv ONCE, loudly, at startup. Otherwise a
+        # stale/missing interpreter surfaces as a swallowed per-turn exception
+        # that reads like an OCR failure rather than a setup problem.
+        from hand_digit_reader import check_paddle_venv
+        check_paddle_venv()
+
+    screenshot_stop = None
+
+    (wins, losses, draws, balance, match_in_progress,
+     bans_done_this_match) = load_progress(progress_file)
+    if balance is None:
+        if starting_balance is not None:
+            balance = starting_balance
+        else:
+            print("No saved balance yet — opening the pause menu to read your current money...")
+            balance = read_balance_from_pause_menu()
+            print(f"Read ${balance} from the pause menu.")
+        save_progress(wins, losses, draws, balance, progress_file,
+                      match_in_progress=match_in_progress,
+                      bans_done_this_match=bans_done_this_match)
+
+    spent = 0
+    stuck_count = 0
+    turns_this_half = 0
+    last_phase = None
+    pending_matchup = None  # set right after a logged play; consumed once the outcome is visible
+    pending_read_failures = 0  # consecutive failed reads while a matchup waits
+    _local_check_turn = 0      # drives LOCAL_CHECK_EVERY sampling
+    # Which screen we last took an irreversible action on (scored a result,
+    # debited a match fee, toggled bans). Cleared as soon as a DIFFERENT screen
+    # is observed, i.e. the action visibly took effect. Guards C1/C2/C3 — see
+    # those branches. Without it, one screen that fails to dismiss gets acted
+    # on once per poll forever.
+    acted_screen = None
+    # "No action needed" bookkeeping: when the current run of motion began (None
+    # when the screen is still), and how many polls it has absorbed.
+    motion_wait_started = None
+    motion_skips = 0
+    # Turns where the card we played was not the card we chose. This is the
+    # ONLY signal that input is being dropped — everything else about a
+    # misfire looks like a normal turn.
+    misfires = 0
+    plays = 0
+    # Plays since the CURRENT match was paid for. `plays` counts the whole
+    # session, so it cannot tell a result screen at the start of match 4
+    # from one at the end of match 3. See MIN_PLAYS_FOR_RESULT.
+    plays_this_match = 0
+    unconfirmed_result_reads = 0
+    # C5: True from the moment a match fee is debited until a result is scored.
+    # Guards the one double-debit path acted_screen cannot see — see the C5
+    # block in the match_start_prompt branch.
+    # match_in_progress comes from load_progress() above — see QA2-1 there.
+    if match_in_progress:
+        print("NOTE: a paid match was in progress when this save was last "
+              "written. Its result screen will still be scored.")
+    # QA1-F3: a bound that no single screen can reset.
+    #
+    # stuck_count counts CONSECUTIVE repeats of one screen, and every branch
+    # zeroes it on success. Two screens that each clear the other's guard
+    # therefore spin forever: measured 3000 screens and 1500 ban re-toggles for
+    # match_start_prompt <-> ban_screen, with no stall and no diagnostics. That
+    # pair is a likely confusion, not exotic — the ban screen carries the same
+    # on-screen "PLAY" prompt as the match-start prompt.
+    #
+    # Before C5 the alternation was bounded by money (each prompt debited until
+    # the cap stopped it). Removing the debit removed the bound, turning a money
+    # bug into a silent hang. So count polls since anything actually ADVANCED
+    # the session — a debit, a scored result, or a played card — and stop on
+    # that regardless of which screens are cycling.
+    polls_without_progress = 0
+    # OVERNIGHT_AUDIT #1: the guard nothing else provides — SCREEN CONTENT
+    # UNCHANGED. Every other bound catches "the screen keeps changing in a way
+    # that isn't progress"; none catches "the screen never changes at all".
+    #
+    # On a frozen stream (Chiaki stalled, PS5 asleep) the frame is maximally
+    # STILL, so screen_is_moving() says False, read_game_state() returns the
+    # same valid turn payload forever, and play_one_turn() returns played=True
+    # forever — because select_and_play() is just keystrokes, which return
+    # normally whether or not anything is listening. Both liveness counters
+    # reset on that "play", so the loop is unbounded. Measured: 500 phantom
+    # turns, ~1,500 API calls and ~15,000 keystrokes over a night, ending with
+    # the summary "input timing looks safe".
+    last_frame_digest = None
+    last_frame_change_at = None
+    # QA1-F3: bans happen ONCE per match. The C3 guard only blocks CONSECUTIVE
+    # ban screens, so a ban_screen <-> anything alternation re-submits every
+    # time — measured 400 submissions, each toggling 3 cards on and off. Tie it
+    # to the match lifecycle instead of to screen adjacency.
+    # bans_done_this_match comes from load_progress() above, alongside
+    # match_in_progress. Persisting one without the other was its own bug: a
+    # crash AFTER the bans were placed left match_in_progress True but
+    # bans_done_this_match False, so the rerun re-entered the ban branch and
+    # TOGGLED THE SAME THREE CARDS BACK OFF — stranding a match already paid
+    # for, with its bans undone.
+    # None means "stopped cleanly" (target reached, out of money, spend cap).
+    # Any string is a stall worth dumping a diagnostic bundle for.
+    stop_reason = None
+    # Fresh buffers per run. Both are module-level so the helpers can stay
+    # simple, which means a second run() in the same process would otherwise
+    # dump the PREVIOUS run's trail and latency stats alongside its own.
+    _OBSERVATIONS.clear()
+    _SETTLE_STATS.clear()
+    print(f"Resuming with {wins} wins / {losses} losses / {draws} draws logged, ${balance} on hand. "
+          f"Target: {target_wins} wins total.")
+
+    # N5: the screenshot logger runs on a daemon thread and the loop can
+    # exit through many paths (break, exception, target reached). Stop it in
+    # a finally so it cannot outlive the run — the previous version only
+    # set the event on the two normal exits.
+    try:
+        if log_screenshots:
+            # Started INSIDE the try so the finally always reaches it. I9: the
+            # handle is kept (it used to be discarded, leaving no way to stop
+            # the logger mid-run).
+            screenshot_stop = start_screenshot_logger()
+
+        while wins < target_wins:
+            # NO ACTION NEEDED: if something is animating, the right move is to
+            # do nothing and look again. Costs ~0.2s locally instead of a vision
+            # call on a frame that was never going to read cleanly.
+            #
+            # Safety shape matters here: this gate can only ever cause the loop
+            # to SKIP, never to act. A false "moving" costs one 0.2s poll; a
+            # false "still" just falls through to the same read + validate path
+            # as before, so it is no worse than the previous behaviour.
+            # QA1-F9: guarded like every other per-iteration call. _fast_grab()
+            # calls _MSS.grab(), whose real failure modes on this machine are
+            # display reconfiguration, revoked screen-recording permission, and
+            # an mss handle invalidated over a long session. Unguarded, one
+            # raise killed the run mid-match with stop_reason None, so no
+            # diagnostics bundle was written either. A motion check that cannot
+            # answer should fall through to the normal read, not end the session.
+            try:
+                _moving = screen_is_moving()
+            except Exception as e:
+                print(f"  [motion] check failed ({e}) — reading anyway.")
+                _moving = False
+            if _moving:
+                now = time.time()
+                if motion_wait_started is None:
+                    motion_wait_started = now
+                waited = now - motion_wait_started
+                if waited < MAX_CONTINUOUS_MOTION_WAIT:
+                    motion_skips += 1
+                    continue
+                # Bounded: something is animating permanently. Read anyway and
+                # let the normal stuck path handle it, rather than stalling.
+                print(f"  [motion] still animating after {waited:.0f}s — reading anyway.")
+                motion_wait_started = None
+            else:
+                motion_wait_started = None
+
+            try:
+                state_json = read_game_state()
+            except Exception as e:
+                stuck_count += 1
+                record_observation(screen="<read failed>", error=str(e)[:200],
+                                   stuck=stuck_count, motion_skips=motion_skips)
+                print(f"Couldn't read the screen ({e}), retrying... ({stuck_count}/{MAX_STUCK_ATTEMPTS})")
+                # A pending matchup can't be reliably scored against whatever
+                # state shows up after a retry — it may span more than one
+                # turn by then. Drop it rather than silently mislabeling a
+                # row in match_log.jsonl (caught in QA, 2026-08-23).
+                #
+                # That reasoning is right but the bound was zero, and zero was
+                # far too tight. Measured over the 2026-08-26 run: 22 plays
+                # were followed by a failed read, 19 of them by exactly ONE
+                # failed poll and none by more than two — the loop re-reading
+                # while the next hand deals, the same turn throughout. This
+                # single line discarded 22 of 29 plays, roughly 76% of the
+                # run's intended rows, to prevent a mislabel that needs a gap
+                # long enough for the opponent to act. So: survive a brief
+                # stumble, still drop on a real one.
+                pending_read_failures += 1
+                if pending_read_failures > MAX_PENDING_READ_FAILURES:
+                    if pending_matchup is not None:
+                        # Say which row died. This was the only drop path in the
+                        # whole turn loop with no voice at all: a reconstruction
+                        # of one full run found 22 plays reaching pending_matchup
+                        # and 20 rows written, and the 2 that vanished left not
+                        # one character of output to find them by.
+                        print(f"  [reveal] {pending_read_failures} consecutive "
+                              f"unreadable screens — dropping the pending row "
+                              f"for our_power "
+                              f"{pending_matchup.get('our_power')}.")
+                    pending_matchup = None
+                if stuck_count >= MAX_STUCK_ATTEMPTS:
+                    print("Stuck too long on unreadable screens — stopping. Check the game manually.")
+                    stop_reason = "unreadable_screens"
+                    break
+                time.sleep(2)
+                continue
+
+            pending_read_failures = 0   # the read succeeded; the streak ends
+
+            # SAMPLED, not every turn. Measured 2026-08-26: the hand half of
+            # this comparison costs 25.57s per turn (vs 0.33s for all three
+            # base crops) because hand_digit_reader spawns a fresh Python and
+            # reloads the PaddleOCR models on every call. That was roughly a
+            # third of an 80s turn, spent entirely on a diagnostic that drives
+            # no decision. Sampling keeps the audit signal — the point is to
+            # catch systematic drift between the local and vision readers, and
+            # that shows up just as well in every Nth turn — at 1/N the cost.
+            # The real fix is a persistent worker; this is the cheap version.
+            if compare_local_reads:
+                _local_check_turn += 1
+            # (n-1) % N, not n % N: the latter is never 1 when N == 1, so
+            # setting LOCAL_CHECK_EVERY = 1 to get EVERY turn silently
+            # disabled the comparison entirely (QA, 2026-08-26).
+            if compare_local_reads and (_local_check_turn - 1) % LOCAL_CHECK_EVERY == 0:
+                try:
+                    log_local_read_comparison(state_json)
+                except Exception as e:
+                    print(f"  [local-check] comparison failed ({e}) — skipping, real loop unaffected.")
+
+            if pending_matchup is not None:
+                # Matchup logging is diagnostic-only (see the removal-plan
+                # comment on MATCH_LOG_FILE) — a failure here (e.g. a disk
+                # error on log_matchup's write) must never crash the real
+                # automated loop over real match money (caught in QA, 2026-08-23).
+                try:
+                    score_field = "your_score" if pending_matchup["phase"] == "batting" else "opp_score"
+                    new_score = state_json.get(score_field)
+                    new_runners = state_json.get("runners") or []
+                    if new_score is not None:
+                        if new_score > pending_matchup["score_before"]:
+                            outcome = "home_run"
+                        elif len(new_runners) > pending_matchup["runners_before"]:
+                            outcome = "hit"
+                        else:
+                            outcome = "out"
+                        log_matchup({**pending_matchup, "outcome": outcome})
+                    else:
+                        # No `else` here until 2026-09-01. A follow-up read that
+                        # comes back without a score cannot have its outcome
+                        # derived, so the row was dropped and the pending state
+                        # cleared in silence — the turn simply never appeared.
+                        print(f"  [reveal] outcome unscorable: {score_field} "
+                              f"missing from the follow-up read; dropping the "
+                              f"pending row for our_power "
+                              f"{pending_matchup.get('our_power')}.")
+                except Exception as e:
+                    print(f"Matchup logging failed ({e}) — skipping this row, continuing the real loop.")
+                pending_matchup = None
+
+            # Frame-identity check. Cheap: one already-captured region, hashed.
+            try:
+                _crop = _grab_settle_regions(("hand",))["hand"]
+                _digest = hashlib.blake2b(_crop.tobytes(), digest_size=16).digest()
+                _now = time.time()
+                if _digest != last_frame_digest:
+                    last_frame_digest = _digest
+                    last_frame_change_at = _now
+                elif last_frame_change_at is None:
+                    last_frame_change_at = _now
+                _frozen_for = _now - (last_frame_change_at or _now)
+            except Exception:
+                last_frame_change_at = None
+                _frozen_for = 0.0
+            if _frozen_for >= FROZEN_STREAM_SECONDS:
+                # A static screen has TWO very different causes, and stopping is
+                # only right for one of them:
+                #   * the stream is dead (Chiaki stalled, PS5 asleep) — every
+                #     "turn" the loop plays is a phantom, and it must stop;
+                #   * the game is legitimately PAUSED — the stream is alive,
+                #     someone hit Options, and stopping the run would be a
+                #     false alarm that throws away a paid match.
+                #
+                # Pixels cannot tell those apart: both are byte-identical. The
+                # screen's CONTENT can. This costs one vision call, at most once
+                # per FROZEN_STREAM_SECONDS, which is affordable precisely
+                # because it is the moment we are about to abandon the run.
+                _paused = False
+                try:
+                    _probe = read_game_state()
+                    _scr = _probe.get("screen")
+                    # A pause/menu overlay is exactly what "other" catches, and
+                    # a still frame on it is expected rather than alarming.
+                    _paused = _scr == "other"
+                    print(f"  [frozen] {_frozen_for:.0f}s of identical frames; "
+                          f"probe says screen={_scr!r}.")
+                except Exception as e:
+                    print(f"  [frozen] {_frozen_for:.0f}s of identical frames "
+                          f"and the probe itself failed ({e}) — treating as a "
+                          "dead stream.")
+                if _paused:
+                    # Alive, just not playing. Reset the clock and keep waiting;
+                    # the no-progress bound still backstops a genuine stall.
+                    last_frame_change_at = time.time()
+                    print("  [frozen] looks like a paused/menu screen, not a "
+                          "dead stream — waiting rather than stopping.")
+                    wait_for_screen_to_settle(max_wait=8.0)
+                    continue
+                print(f"The screen has been byte-identical for "
+                      f"{_frozen_for:.0f}s and does not look paused — the "
+                      "stream is frozen (Chiaki stalled, PS5 asleep, or the "
+                      "window is gone). Stopping rather than playing phantom "
+                      "turns into it.")
+                stop_reason = "frozen_stream"
+                break
+
+            polls_without_progress += 1
+            if polls_without_progress > MAX_POLLS_WITHOUT_PROGRESS:
+                print(f"No progress in {polls_without_progress} polls (no debit, "
+                      f"no scored result, no card played) — stopping. The loop "
+                      "is cycling between screens without advancing.")
+                stop_reason = "no_progress"
+                break
+
+            screen = state_json.get("screen")
+
+            # A different RECOGNIZED screen means the previous action visibly
+            # landed — clear the guard.
+            #
+            # N2: "other" is the catch-all for anything unrecognized, including a
+            # single misread or transition frame. Treating it as a real transition
+            # let `result -> other -> result` double-score and
+            # `match_start_prompt -> other -> prompt` double-debit $50 — exactly
+            # the defect C1/C2 were meant to close. A misread must not re-arm the
+            # guard, so "other" leaves it untouched.
+            # Feed the rolling buffer the loop dumps on a stall. Cheap, and it
+            # is the difference between "stuck on an unrecognized screen" and
+            # knowing WHICH screens, in what order, with what hand and score.
+            record_observation(
+                # Audit signal: does the game's own "I want input" prompt agree
+                # with what the vision model called this screen? One session of
+                # this decides whether it can replace the motion gate.
+                prompt=_safe_prompt_check(),
+                screen=screen, phase=state_json.get("phase"),
+                your_score=state_json.get("your_score"),
+                opp_score=state_json.get("opp_score"),
+                hand_size=len(state_json.get("hand") or []),
+                runners=len(state_json.get("runners") or []),
+                discards_left=state_json.get("discards_left"),
+                acted_screen=acted_screen, stuck=stuck_count,
+                motion_skips=motion_skips)
+
+            if screen != acted_screen and screen != "other":
+                acted_screen = None
+
+            if screen == "result":
+                # C1 GUARD: this branch persists win/loss/draw counts, so acting on
+                # the same result screen twice permanently corrupts progress.json —
+                # potentially past target_wins, ending the run on a fabricated
+                # record. A dropped close_result press, or a result overlay that
+                # outlives wait_for_screen_to_settle(), makes the very next poll
+                # read "result" again. Require an intervening non-result screen
+                # before scoring anything. Deliberately does NOT reset stuck_count
+                # while suppressed, so a genuinely stuck overlay still trips
+                # MAX_STUCK_ATTEMPTS instead of spinning forever.
+                if acted_screen == "result":
+                    stuck_count += 1
+                    print(f"Result screen still up after close_result — not re-scoring "
+                          f"(waiting for it to dismiss, {stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Result screen never dismissed — stopping. Check the game manually.")
+                        stop_reason = "result_never_dismissed"
+                        break
+                    press("close_result")
+                    wait_for_screen_to_settle(max_wait=8.0)
+                    continue
+                # N12: everything below indexes a model-produced dict and writes
+                # persisted state, with no guard. One malformed result payload
+                # would propagate out of run() and end the session, unlike every
+                # other read failure.
+                #
+                # N24: note this DROPS an unscoreable result rather than
+                # retrying it — `acted_screen = "result"` is set first, so the
+                # next poll's guard suppresses a second attempt. That is the
+                # safe direction (double-counting a win is worse than missing
+                # one) and double-counting is structurally impossible here
+                # because save_progress() is the last statement in the try.
+                # QA1-F2: only score a match this process actually PAID FOR.
+                # match_in_progress covered debit->result; the result->next-debit
+                # half was still on bare acted_screen, which cannot see a repeat
+                # with another screen between. Measured: result -> <any misread>
+                # -> result scored the SAME match twice, and when the misread was
+                # match_start_prompt it also debited $50 — the exact screen
+                # confusion observed live at 17:01:46 on 2026-08-25.
+                #
+                # Scoring only a paid match closes it in one place instead of
+                # enumerating misread screens. A result overlay seen when no
+                # match is running is, by definition, one already scored.
+                if not match_in_progress:
+                    stuck_count += 1
+                    print(f"Result screen with no paid match in progress — "
+                          f"already scored, not counting it again "
+                          f"({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Result screen never cleared — stopping.")
+                        stop_reason = "result_never_cleared"
+                        break
+                    press("close_result")
+                    wait_for_screen_to_settle(max_wait=8.0)
+                    continue
+
+                # A 0-0 "result" a play or two into a match is a MISREAD, and an
+                # expensive one: measured live 2026-08-31, one card played and
+                # then "Draw logged", which ended a match that had barely
+                # started, burned the $50 already paid for it, and wrote a draw
+                # into the record that never happened.
+                #
+                # The C5 guard above cannot catch this — it only asks whether
+                # THIS process paid for a match, and it had. What separates the
+                # two is how far in we are: a match is 5 rounds, so a result
+                # after fewer than MIN_PLAYS_FOR_RESULT plays is not a finish.
+                #
+                # Not rejected outright, because a genuine 0-0 result must still
+                # be scorable eventually — a screen that keeps saying the same
+                # thing across separate polls is evidence, a single frame during
+                # a transition overlay is not. So: confirm, then accept.
+                # THE `and _scores_all_zero` CLAUSE WAS REMOVED 2026-09-05.
+                #
+                # It made this guard INERT exactly when it was needed. Mid-match
+                # the scoreboard is normally not 0-0, so the clause switched the
+                # early-result confirm off for the whole window it was built to
+                # cover. One non-zero "result" misread then cleared
+                # match_in_progress — the only thing C5 has to go on — and the
+                # next overlay misread as match_start_prompt debited a SECOND
+                # $50. Reproduced: $100 for one match, a fabricated win in the
+                # record, and two `\` keystrokes into a live match, since
+                # start_match shares its key with confirm_discard.
+                #
+                # The 2026-08-31 observation that motivated the clause happened
+                # to show 0-0, so 0-0 got written into the condition. Nothing in
+                # the reasoning above is about the SCORE — it is about how far
+                # into the match we are. An AND that is false in the common case
+                # is not a narrower guard, it is an absent one.
+                #
+                # COST: a genuine finish reached in fewer than
+                # MIN_PLAYS_FOR_RESULT plays now waits RESULT_CONFIRM_READS
+                # extra polls before scoring. Bounded and accepted.
+                if (plays_this_match < MIN_PLAYS_FOR_RESULT
+                        and unconfirmed_result_reads < RESULT_CONFIRM_READS):
+                    unconfirmed_result_reads += 1
+                    print(f"  {state_json.get('your_score')}-"
+                          f"{state_json.get('opp_score')} result after only "
+                          f"{plays_this_match} play(s) — too early to be a real "
+                          f"finish, re-reading "
+                          f"({unconfirmed_result_reads}/{RESULT_CONFIRM_READS}).")
+                    wait_for_screen_to_settle(max_wait=5.0)
+                    continue
+
+                try:
+                    acted_screen = "result"
+                    stuck_count = 0
+                    unconfirmed_result_reads = 0
+                    your_score = state_json.get("your_score")
+                    opp_score = state_json.get("opp_score")
+                    # Prefer the actual score comparison over result_won, since
+                    # result_won is only true/false and can't distinguish a draw
+                    # (scores tied) from a real loss — both read as false there.
+                    if your_score is not None and opp_score is not None:
+                        if your_score > opp_score:
+                            outcome = "win"
+                        elif your_score == opp_score:
+                            outcome = "draw"
+                        else:
+                            outcome = "loss"
+                    else:
+                        outcome = "win" if state_json.get("result_won") else "loss"
+
+                    if outcome == "win":
+                        wins += 1
+                        print(f"WIN #{wins} logged. {max(target_wins - wins, 0)} to go.")
+                    elif outcome == "draw":
+                        draws += 1
+                        print(f"Draw logged ({draws} total).")
+                    else:
+                        losses += 1
+                        print(f"Loss logged ({losses} total).")
+                    match_in_progress = False   # C5: the paid match is over
+                    polls_without_progress = 0  # a scored result is progress
+                    save_progress(wins, losses, draws, balance, progress_file,
+                      match_in_progress=match_in_progress,
+                      bans_done_this_match=bans_done_this_match)
+                except Exception as e:
+                    stuck_count += 1
+                    print(f"Couldn't score the result screen ({e}), retrying... "
+                          f"({stuck_count}/{MAX_STUCK_ATTEMPTS})")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Could not score results repeatedly — stopping.")
+                        stop_reason = "result_scoring_failed"
+                        break
+                # Dismiss regardless of whether scoring succeeded — leaving the
+                # overlay up would strand the loop on a screen it has already
+                # decided not to re-score.
+                press("close_result")
+                wait_for_screen_to_settle(max_wait=8.0)
+                continue
+
+            elif screen == "match_start_prompt":
+                # C2 GUARD: same defect as C1 but it debits $50 from the tracked
+                # balance and the max_spend cap. Drift here defeats the spend cap,
+                # which exists specifically to honour a lower limit than the real
+                # in-game balance. Require an intervening screen before debiting.
+                if acted_screen == "match_start_prompt":
+                    stuck_count += 1
+                    print(f"Match-start prompt still up after start_match — not re-debiting "
+                          f"({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Match never started — stopping. Check the game manually.")
+                        stop_reason = "match_never_started"
+                        break
+                    # QA1-F1: this recovery press is for a prompt that GENUINELY
+                    # failed to start a match. If a paid match is already
+                    # running, the prompt is a misread (a ROUND/transition
+                    # overlay), and pressing start_match 14 more times sends
+                    # real keystrokes into a live match — the key is `\`, the
+                    # same one as confirm_discard. C5 refused the debit and then
+                    # this pressed anyway: tracked balance -$50, up to $750 of
+                    # untracked in-game spend, max_spend bypassed entirely.
+                    if match_in_progress and not _dealer_prompt_on_screen():
+                        print("  [C5] ...and a paid match is running, so NOT "
+                              "pressing start_match either — just waiting.")
+                        wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
+                        continue
+                    if match_in_progress:
+                        # ...UNLESS THE DEALER PROMPT IS ON SCREEN. The guard above
+                        # exists because a match_start_prompt read DURING a live
+                        # match is a misread of a ROUND transition overlay, and
+                        # pressing there fires `\` into the match. But the world
+                        # HUD — compass strip, quest list — is never drawn over a
+                        # match, so reading it is positive proof no match is
+                        # running and this really is the dealer prompt.
+                        #
+                        # 2026-09-01: one dropped start_match press left the run
+                        # standing at the table watching "Baseball Cards [] Play
+                        # ($50)" for all 15 polls, refusing to press again, then
+                        # stopping. NO RE-DEBIT happens here; only the keystroke
+                        # is retried, so the accounting is untouched either way.
+                        print("  [C5] ...but the dealer's \"Play ($50)\" prompt is "
+                              "on screen, so no match is actually running — "
+                              "retrying the press without re-debiting.")
+                    press("start_match")
+                    wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
+                    continue
+                # C5: DO NOT PAY TWICE FOR ONE MATCH.
+                # The acted_screen guard above only blocks a match_start_prompt
+                # seen back-to-back. It does nothing when another screen falls
+                # between two of them — and one always does: the ban screen.
+                #
+                # Observed live 2026-08-25 on the throwaway save. Paid $50 at
+                # 16:58, scanned and applied 3/3 bans by 17:01:40, the match
+                # began, and the "ROUND 1" transition overlay at 17:01:46 was
+                # classified as match_start_prompt. acted_screen was
+                # "ban_screen" by then, so the guard had already cleared and
+                # this branch was about to debit a SECOND $50 for a match
+                # already paid for and already running. Only a max_spend=50 cap
+                # stopped it, by luck rather than design.
+                #
+                # A paid match stays paid until a result is scored, so track
+                # that directly instead of inferring it from screen order.
+                if match_in_progress:
+                    print("  [C5] match_start_prompt while a paid match is "
+                          "already running (likely a ROUND/transition overlay "
+                          "misread) — NOT debiting again.")
+                    acted_screen = "match_start_prompt"
+                    # QA1-F3: deliberately NOT resetting stuck_count. This
+                    # branch takes no action, so it is not progress. Resetting
+                    # here let match_start_prompt <-> ban_screen alternate
+                    # forever (measured: 3000 screens, 1500 ban re-toggles, no
+                    # stall, no diagnostics) because each screen cleared the
+                    # other's guard. A money bug became a silent hang.
+                    stuck_count += 1
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Repeated match-start prompts during a paid match "
+                              "— stopping. Check the game manually.")
+                        stop_reason = "match_start_prompt_during_match"
+                        break
+                    wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
+                    continue
+
+                acted_screen = "match_start_prompt"
+                stuck_count = 0
+                if balance < 50:
+                    print(f"Only ${balance} left — can't afford the next $50 match. Stopping.")
+                    break
+                if max_spend is not None and spent + 50 > max_spend:
+                    print(f"Spend cap reached (${spent}/${max_spend} spent this session) — stopping.")
+                    break
+                balance -= 50
+                spent += 50
+                match_in_progress = True
+                plays_this_match = 0
+                unconfirmed_result_reads = 0
+                bans_done_this_match = False   # new match, bans are due again
+                # QA-L5: reset the half-tracking too. turns_this_half only
+                # resets when `phase` CHANGES, and last_phase persists across
+                # matches — so a new match opening on the same phase as the
+                # previous one ended carried the old count in, and match 2's
+                # first batter was reported as batter 2. Inert while no
+                # decision function reads batters_used, but it is passed into
+                # GameState on every turn and HEURISTICS.md §5 contemplates
+                # re-enabling that heuristic.
+                turns_this_half = 0
+                last_phase = None
+                polls_without_progress = 0  # a debit is progress
+                save_progress(wins, losses, draws, balance, progress_file,
+                      match_in_progress=match_in_progress,
+                      bans_done_this_match=bans_done_this_match)
+                print(f"Starting next match. ${balance} left"
+                      + (f", ${spent}/${max_spend} of session cap spent." if max_spend is not None else "."))
+                press("start_match")
+                wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
+                continue
+
+            elif screen == "ban_screen":
+                # QA1-F3: bans are once per match. Re-entering this branch after
+                # they are placed re-reads the cached collection and TOGGLES the
+                # same three cards off again.
+                if bans_done_this_match:
+                    stuck_count += 1
+                    print(f"Ban screen again after bans were already placed this "
+                          f"match — not re-toggling ({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Ban screen never cleared — stopping.")
+                        stop_reason = "ban_screen_stuck"
+                        break
+                    # ADVANCE IT RATHER THAN WAIT IT OUT. The ban screen shows
+                    # "PLAY" against the TRIANGLE glyph, and triangle is not a
+                    # toggle — it commits whatever is banned and starts the
+                    # match. The no-recovery-press rule directly above is about
+                    # re-pressing the BAN button, which would un-ban what was
+                    # just banned; it does not apply here.
+                    #
+                    # 2026-09-01: a match was paid for, one of three bans
+                    # landed, the counter read failed so nothing noticed, and
+                    # this loop then polled 15 times for a screen that had been
+                    # waiting for PLAY the whole time — $50 spent for zero
+                    # logged turns. Pressing triangle by hand at that exact
+                    # screen started the match immediately.
+                    #
+                    # Every third poll, so a single dropped press is retried
+                    # without hammering a screen that is merely slow.
+                    if stuck_count % 3 == 1:
+                        print("  [ban] pressing PLAY (triangle) to advance a "
+                              "ban screen whose bans are already placed")
+                        press("pyramid")
+                    wait_for_screen_to_settle(max_wait=8.0, regions="ban")
+                    continue
+                # C3 GUARD: ban selection is a TOGGLE. If the game stays on the ban
+                # screen (dropped confirm, wrong ban count), a second pass re-reads
+                # the same cached collection and UN-bans exactly what it just
+                # banned, then re-bans it, forever. Count repeats and bail out.
+                if acted_screen == "ban_screen":
+                    stuck_count += 1
+                    print(f"Still on the ban screen after selecting bans — not re-toggling "
+                          f"({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Ban screen never advanced — stopping. Check the game manually.")
+                        stop_reason = "ban_screen_never_advanced"
+                        break
+                    # N11: deliberately NO recovery press here, unlike the result /
+                    # match-start guards. Ban selection is a TOGGLE, so a blind
+                    # retry would un-ban what was just banned. A ban screen that is
+                    # one confirm_play short is therefore a hard stop rather than a
+                    # retry — the safe direction, but it does mean any drift in the
+                    # double-confirm (see M11 in input_controller) ends the run
+                    # instead of self-healing.
+                    time.sleep(2)
+                    continue
+                try:
+                    grid = read_full_ban_collection()
+                    collection = [card for _, _, card in grid]
+                    bans = choose_bans(collection, count=3)
+                    # C3 sub-issue: choose_bans() returns sorted(...)[:3] with no
+                    # minimum check. Fewer than 3 bans leaves the game on "BANNED
+                    # CARDS n/3" and it refuses to start — landing in the loop above.
+                    if len(bans) != 3:
+                        raise ValueError(f"need exactly 3 bans, got {len(bans)} from "
+                                         f"{len(collection)} collection cards")
+
+                    # N1: map the chosen cards back to GRID POSITIONS, matching by
+                    # object identity. Name matching is unsafe — a mis-resolved OCR
+                    # read can put the same name (indeed the same PlayerCard object)
+                    # at two positions, and the old name-based path then toggled
+                    # both, banning 4 physical cards for 3 intended bans.
+                    banned_positions = set()
+                    remaining = list(bans)
+                    for row, col, card in grid:
+                        for i, b in enumerate(remaining):
+                            if card is b:
+                                banned_positions.add((row, col))
+                                remaining.pop(i)
+                                break
+                    # N15: distinct POSITIONS is not sufficient on its own. When
+                    # a mis-resolved read puts the SAME PlayerCard object at two
+                    # grid positions, choose_bans can return [X, X, B] — which
+                    # maps to 3 distinct positions and passes a position count
+                    # check, while actually banning 2 real cards plus 1 wrong
+                    # one. ROSTER_BY_NAME shares objects with KNOWN_BAN_ROSTER,
+                    # so duplicate objects are the normal consequence of a
+                    # wrong resolution, not an exotic case. Check identity too.
+                    if len({id(b) for b in bans}) != 3:
+                        raise ValueError(
+                            f"bans are not 3 distinct card objects "
+                            f"({[b.name for b in bans]}) — a duplicate from a "
+                            f"mis-resolved read would ban the wrong physical card")
+                    if len(banned_positions) != 3:
+                        raise ValueError(
+                            f"could not map 3 bans to 3 distinct grid positions "
+                            f"(got {sorted(banned_positions)})")
+                    print(f"Read {len(grid)} cards. Banning: "
+                          f"{sorted(c.name for c in bans)} at {sorted(banned_positions)}")
+                    # Read the counter DURING the ban screen, not after. The
+                    # old post-confirm read fired once the screen had already
+                    # been dismissed, so it reported "not verified" on every
+                    # match ever played and could never have done otherwise.
+                    _ban_count = {}
+
+                    def _verify_bans():
+                        # RETRY. The first version read exactly once and match 1
+                        # of the 2026-08-26 afternoon run reported "not
+                        # verified" — while the logged frames of that very ban
+                        # screen show the counter progressing 0->1->2->3 and
+                        # legible throughout. One unlucky frame (mid-animation)
+                        # returned None and the whole check failed.
+                        #
+                        # There is 4.2s of ban screen left at this point
+                        # (measured across all three episodes) and a read costs
+                        # 0.26s, so several attempts fit comfortably. Stop at
+                        # the first readable value; None only if every attempt
+                        # fails.
+                        for _ in range(BAN_COUNTER_READ_TRIES):
+                            placed = read_ban_counter(capture_screenshot_image())
+                            if placed is not None:
+                                _ban_count["placed"] = placed
+                                return
+                        _ban_count["placed"] = None
+
+                    select_bans_and_start_full(grid, banned_positions,
+                                               before_confirm=_verify_bans)
+
+                    # VERIFY, don't assume. Measured on the cached frames:
+                    # three of five real ban sequences finished at 2/3 and the
+                    # match started anyway, two seconds later, with a ban set
+                    # the engine never chose. Nothing read the counter, so three
+                    # paid matches were played wrong and it was invisible.
+                    #
+                    # Deliberately does NOT raise: the caller's except-and-retry
+                    # would re-enter the ban branch and re-toggle what IS placed.
+                    # Report it, record it, and let the run continue — a match
+                    # with 2 of 3 bans is degraded, not lost.
+                    try:
+                        placed = _ban_count.get("placed")
+                        if placed is None:
+                            print("  [ban] could not read the BANNED CARDS "
+                                  "counter — bans NOT verified this match.")
+                            record_observation(event="ban_count_unreadable")
+                        elif placed < len(banned_positions):
+                            print(f"  [ban] WARNING: only {placed} of "
+                                  f"{len(banned_positions)} bans registered. The "
+                                  "match will start with a ban set the engine "
+                                  "did not choose.")
+                            record_observation(event="ban_count_short",
+                                               placed=placed,
+                                               wanted=len(banned_positions))
+                        else:
+                            print(f"  [ban] verified {placed}/"
+                                  f"{len(banned_positions)} bans placed.")
+                    except Exception as e:
+                        print(f"  [ban] counter check failed ({e}) — continuing.")
+
+                    bans_done_this_match = True
+                    # Persist IMMEDIATELY. This flag only mattered across a
+                    # restart, and save_progress otherwise fires only on a debit
+                    # or a scored result — so a crash in the window between
+                    # placing the bans and finishing the match would lose it,
+                    # which is exactly the case it exists for.
+                    save_progress(wins, losses, draws, balance, progress_file,
+                                  match_in_progress=match_in_progress,
+                                  bans_done_this_match=bans_done_this_match)
+                except Exception as e:
+                    stuck_count += 1
+                    print(f"Couldn't complete the ban screen ({e}), retrying... ({stuck_count}/{MAX_STUCK_ATTEMPTS})")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Stuck too long on the ban screen — stopping. Check the game manually.")
+                        stop_reason = "ban_screen_stuck"
+                        break
+                    time.sleep(2)
+                    continue
+                acted_screen = "ban_screen"
+                stuck_count = 0
+                wait_for_screen_to_settle(max_wait=8.0, regions="ban")
+                continue
+
+            elif screen == "discard_prompt":
+                # N3: same defect class as C1-C3 — this branch sends keypresses and
+                # unconditionally reset stuck_count, so a prompt that never
+                # dismissed produced an unbounded keypress loop. Count repeats.
+                if acted_screen == "discard_prompt":
+                    stuck_count += 1
+                    print(f"Discard prompt still up after acting — "
+                          f"({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Discard prompt never cleared — stopping. Check the game manually.")
+                        stop_reason = "discard_prompt_stuck"
+                        break
+                    time.sleep(1)
+                    continue
+                acted_screen = "discard_prompt"
+                stuck_count = 0
+                # The should_redraw() decision is now made inside play_one_turn(),
+                # before a card is even lifted, via select_and_discard(). This
+                # branch catches the game's own Play/Discard prompt if the poll
+                # lands on it directly (never observed live yet) — defaults to
+                # Play since we don't have a confirmed reason to do otherwise here.
+                press("confirm_play")
+                wait_for_screen_to_settle(max_wait=8.0, regions="menu")
+                continue
+
+            elif screen == "turn":
+                # N14/N25: a recurring "turn" screen is the normal steady state
+                # (every new turn looks identical), so the acted_screen guard
+                # deliberately does not apply here. But the stuck_count reset
+                # below is NOT unconditional — an earlier version of this
+                # comment claimed play_one_turn() "consumes a real card each
+                # time", which is FALSE: the redraw path discards and returns
+                # played=False. With an unconditional reset, a discard that
+                # never lands resets the counter forever and the loop spins
+                # without bound. Reset only on a confirmed play; legitimate
+                # discards are capped by the game at 2-3 per match, well under
+                # MAX_STUCK_ATTEMPTS, so letting the counter climb across them
+                # is safe and still catches a genuinely stuck screen.
+                if state_json["phase"] != last_phase:
+                    turns_this_half = 0
+                    last_phase = state_json["phase"]
+                try:
+                    played, matchup_info = play_one_turn(state_json, turns_this_half)
+                except Exception as e:
+                    # A bad vision read (e.g. an empty hand from a misclassified
+                    # or transient screen) shouldn't kill the whole run — treat
+                    # it the same as an unreadable screen and just retry.
+                    stuck_count += 1
+                    print(f"Couldn't act on this turn ({e}), retrying... ({stuck_count}/{MAX_STUCK_ATTEMPTS})")
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Stuck too long acting on turns — stopping. Check the game manually.")
+                        stop_reason = "turn_action_failed"
+                        break
+                    time.sleep(2)
+                    continue
+                if played:
+                    turns_this_half += 1
+                    plays += 1
+                    plays_this_match += 1
+                    polls_without_progress = 0  # a played card is progress
+                    # Positive per-turn signal. Absence of a misfire warning is
+                    # NOT confirmation — it reads the same whether the auditor
+                    # is working or silently not running. This says outright
+                    # whether the focus cache engaged on the turn just played,
+                    # which is the only way to see the TTL holding (or not)
+                    # under live network conditions before the run ends.
+                    try:
+                        _fc, _fs = input_controller.focus_stats_since_mark()
+                        if _fc + _fs:
+                            print(f"  [input] turn used {_fc + _fs} presses: "
+                                  f"{_fc} focus call(s), {_fs} cached"
+                                  + ("  <-- cache not engaging, TTL may be too "
+                                     "short for live latency" if _fs == 0 and
+                                     _fc > 2 else ""))
+                    except Exception:
+                        pass
+                    if matchup_info is not None:
+                        # Capture the opponent's revealed card for match_log.jsonl.
+                        # Best-effort: matchup logging must never break the real
+                        # turn loop, so any failure here is swallowed and this
+                        # turn just doesn't get logged.
+                        try:
+                            # Was a blind time.sleep(0.5), never validated
+                            # against a real card-clash frame (see
+                            # PENDING_LIVE_VALIDATION.md item 2). Now waits for
+                            # the cards to actually APPEAR at centre. Do not
+                            # "improve" this to wait for the centre to settle —
+                            # the centre keeps animating for ~9s after the
+                            # reveal and only goes quiet once the cards have
+                            # already cleared.
+                            if not wait_for_reveal_cards():
+                                raise RuntimeError("reveal cards never appeared")
+                            reveal_cards = read_matchup_reveal()
+                            # Known accepted limitation (QA, 2026-08-23): if our
+                            # card and the opponent's happen to share a name
+                            # (plausible from a shared card pool), both get
+                            # filtered out here and this turn just isn't logged.
+                            # Fails safe — reduces sample size, never mislabels
+                            # a row — so not worth a fix for throwaway diagnostic data.
+                            #
+                            # Filtered to kind=="player" (2026-08-24 fix): a
+                            # revealed tactics card (e.g. "Fielding Play") also
+                            # has a name != our_card_name, so without this filter
+                            # it could get picked here and logged as if it were
+                            # the opponent's actual player card — wrong entity
+                            # entirely, not just incomplete data.
+                            # Case- and whitespace-insensitive (norm_name): the
+                            # vision model returns the SAME card as "Pitcher" one
+                            # turn and "PITCHER" the next, and an exact != let our
+                            # own card through as the opponent's (match_log row 18).
+                            _ours = norm_name(matchup_info["our_card_name"])
+
+                            # MISFIRE CHECK — the only thing that can catch a
+                            # dropped keystroke. Card selection is N move_right
+                            # presses then a confirm; if ONE press is swallowed
+                            # (stream hiccup, focus not landed, input too fast)
+                            # the cursor stops a card short and we play a card we
+                            # never chose. Nothing downstream notices: the game
+                            # accepts it, the turn resolves, the loop continues.
+                            #
+                            # The reveal is the one place the truth is visible, and
+                            # it was already being fetched and thrown away. If the
+                            # card we INTENDED is not among the revealed players,
+                            # either input misfired or the read is wrong — both
+                            # worth knowing, neither currently detectable.
+                            #
+                            # It also stops a corrupt log row: the filter below
+                            # picks "first player card that isn't ours", so on a
+                            # misfire that is OUR OWN misplayed card, recorded as
+                            # the opponent's.
+                            _players = [c for c in reveal_cards if c.get("kind") == "player"]
+                            # Strip base runners before anything reasons about
+                            # this list — they are face-up cards on the diamond
+                            # that the reveal read cannot tell from the faceoff.
+                            # state_json is the pre-play state, so its runners
+                            # are exactly the ones on screen during the reveal.
+                            _players = exclude_runners(_players,
+                                                       state_json.get("runners"))
+                            # MATCH ON POWER, NOT NAME.
+                            #
+                            # Hand cards do not display a name — the vision model
+                            # returns the type banner ("Batter") because that is
+                            # the only text on the card. The reveal DOES show
+                            # names. Comparing the two could therefore never
+                            # match, and the first live run proved it: 2 of 2
+                            # turns flagged as misfires, zero rows logged, and
+                            # the adaptive backoff then slowed the run in
+                            # response to its own false alarms.
+                            #
+                            # Power is what the hand actually gives, and gives
+                            # reliably: local PaddleOCR and vision agreed on
+                            # power/secondary for every card read live.
+                            #
+                            # Weaker than a name match — two cards can share a
+                            # power — but it still catches the failure that
+                            # matters, a cursor landing on a different card than
+                            # the engine chose, and it abstains rather than
+                            # fabricating when power is unknown.
+                            _ours_power = matchup_info.get("our_power")
+                            # Only a swing/pitch boost changes the power the
+                            # reveal will show. A speed or fielding boost's
+                            # effect is not a confirmed rule (see
+                            # simulate.power_bonus, fixed 2026-08-23), so
+                            # adding its bonus here widened `acceptable` to
+                            # two values for nothing — masking real misfires
+                            # roughly 15% more often, in a check whose entire
+                            # job is to notice a card that isn't ours.
+                            _bonus = (matchup_info.get("our_tactics_bonus") or 0
+                                      if matchup_info.get("our_tactics_kind")
+                                      in POWER_TACTIC_KINDS else 0)
+                            # ONLY AUDIT A COMPLETE READ. reveal_cards is the
+                            # RAW list on purpose — _players has already had
+                            # the runners stripped out of it, so counting that
+                            # would fail every runner-on turn. See
+                            # reveal_is_complete() for the measured invariant
+                            # and the three live false misfires it kills.
+                            if (_players
+                                    and reveal_is_complete(reveal_cards,
+                                                           state_json.get("runners"))
+                                    and not our_card_in_reveal(
+                                        _ours_power, _bonus, _players)):
+                                _seen = [(c.get("name"), c.get("power"),
+                                          sorted(revealed_powers(c)))
+                                         for c in _players]
+                                print(f"  [MISFIRE?] no revealed card has our played "
+                                      f"power {_ours_power} (or {_ours_power + _bonus} "
+                                      f"with the boost) — revealed {_seen}. Either a "
+                                      f"keystroke was dropped during card selection "
+                                      f"or the reveal misread. Not logging this turn.")
+                                record_observation(event="suspected_misfire",
+                                                   intended_power=_ours_power,
+                                                   revealed=_seen)
+                                matchup_info["misfire_suspected"] = True
+                                misfires += 1
+                                # Let the input layer slow itself down. Capped
+                                # and floored there — see report_misfire().
+                                try:
+                                    input_controller.report_misfire()
+                                except Exception as _e:
+                                    # The misfire COUNT climbs either way, so
+                                    # the symptom stays visible while the cause
+                                    # disappears: if this raised, ACTION_DELAY
+                                    # was NOT raised, FOCUS_TTL was NOT killed
+                                    # and the cursor was NOT invalidated. The
+                                    # run then looks like input timing that
+                                    # refuses to self-correct, and the pacing
+                                    # summary at the end will show an
+                                    # ACTION_DELAY that never moved.
+                                    print(f"  WARNING: report_misfire() raised "
+                                          f"{_e!r} — the input layer did NOT "
+                                          f"slow itself down. Misfires will "
+                                          f"keep being counted with nothing "
+                                          f"adjusting in response; this is not "
+                                          f"a timing problem that resisted the "
+                                          f"fix, it is the fix not running.")
+                                raise RuntimeError("intended card absent from reveal")
+
+                            # _players, NOT reveal_cards. This passed the raw
+                            # list until QA caught it on 2026-08-26, which made
+                            # the runner strip above completely inert: both of
+                            # pick_opponent_card's paths need a clean two-card
+                            # faceoff, so with the runners still in, ANY runner
+                            # on base guaranteed None and dropped the turn —
+                            # exactly the 15 drops the strip was written to fix.
+                            opponent_card = pick_opponent_card(
+                                _players, _ours,
+                                our_power=_ours_power, bonus=_bonus,
+                                # _players may still hold runners: the strip
+                                # above refuses to go below two cards. Passing
+                                # them lets the >2 path finish the job.
+                                runners=state_json.get("runners"))
+                            if opponent_card is not None:
+                                matchup_info["opp_card_name"] = opponent_card.get("name")
+                                # Do not log a power the floor says cannot
+                                # exist. match_log.jsonl already contains an
+                                # `opp_power: 3` row — a tactics bonus digit
+                                # read as power. Prefer the roster's value,
+                                # and log None rather than a fiction, so the
+                                # analyser excludes the row instead of
+                                # silently averaging a wrong number into it.
+                                _raw_opp = opponent_card.get("power")
+                                _opp_known = revealed_powers(opponent_card)
+                                matchup_info["opp_power"] = (
+                                    _raw_opp if (_raw_opp or 0) >= MIN_PLAYER_POWER
+                                    else (min(_opp_known) if _opp_known else None))
+                                matchup_info["opp_secondary"] = opponent_card.get("secondary")
+                                # The opponent's tactics card (if any) is whichever
+                                # kind=="tactics" entry is paired with their player
+                                # card — not simply "any tactics entry", since ours
+                                # can also appear in the same reveal. Matters for
+                                # the fielding/speed analysis: an opponent's boosted
+                                # power (see power_bonus() in simulate.py) would
+                                # otherwise look like an unexplained outcome and
+                                # get misattributed to the secondary-stat effect
+                                # actually being investigated.
+                                opp_tactics = next(
+                                    (c for c in reveal_cards
+                                     if c.get("kind") == "tactics"
+                                     and norm_name(c.get("paired_with")) == norm_name(opponent_card.get("name"))),
+                                    None,
+                                )
+                                matchup_info["opp_tactics_bonus"] = opp_tactics.get("bonus", 0) if opp_tactics else 0
+                                # See our_tactics_kind: bonus without type can't
+                                # be turned into effective power.
+                                # Derive the kind from the NAME, not from a
+                                # "type" field — READ_MATCHUP_PROMPT's tactics
+                                # schema is {kind, name, bonus, paired_with} and
+                                # has never contained `type`. The old
+                                # `.get("type")` therefore returned None
+                                # unconditionally: measured None on 39/39 rows,
+                                # including the 8 with a non-zero bonus. Those
+                                # rows were then dropped by analyze_match_log.py
+                                # as "kind missing" — the exact data this field
+                                # was added to capture.
+                                matchup_info["opp_tactics_kind"] = (
+                                    _tactics_kind_from_name(opp_tactics.get("name"))
+                                    if opp_tactics else None)
+                                pending_matchup = matchup_info
+                            else:
+                                # No else here until 2026-08-26, and that was
+                                # the single largest hole in the dataset: the
+                                # opponent is matched BY NAME, the reveal's
+                                # least reliable field, and a miss dropped the
+                                # entire turn without printing one character.
+                                # 27 decisions -> ~3 rows in that run.
+                                _seen_names = [c.get("name") for c in reveal_cards
+                                               if c.get("kind") == "player"]
+                                print(f"  [reveal] no OPPONENT card identified "
+                                      f"(ours={_ours!r}, revealed players="
+                                      f"{_seen_names}) — turn not logged.")
+                                record_observation(event="reveal_no_opponent",
+                                                   ours=_ours,
+                                                   revealed=_seen_names)
+                        except Exception as _e:
+                            # Was `pass`. A bare pass here meant a malformed
+                            # reveal, a bad key, or an OCR crash all looked
+                            # identical to a turn that simply had nothing to
+                            # log — no message, no row, no way to count them.
+                            print(f"  [reveal] turn NOT logged — "
+                                  f"{type(_e).__name__}: {_e}")
+                    stuck_count = 0     # N25: only a confirmed PLAY is progress
+                else:
+                    # A discard leaves the screen looking identical. Legitimate
+                    # discards are capped by the game (2-3 per match), so
+                    # letting the counter climb here still tolerates every real
+                    # redraw while bounding a discard that never lands.
+                    stuck_count += 1
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Discarding repeatedly with no play landing — "
+                              "stopping. Check the game manually.")
+                        stop_reason = "redraw_never_played"
+                        break
+                # Wait only as long as the actual animation takes (a quick out
+                # settles in ~2s, a home run can run longer) instead of always
+                # sleeping the old fixed worst-case delay.
+                #
+                # regions="turn" is the important part: the next loop iteration
+                # reads the hand, scoreboard and bases, so settle must be
+                # judged on THOSE. The old single ROI excluded the hand
+                # entirely and let the loop read cards mid-deal.
+                # WAIT FOR THE DEAL, NOT FOR QUIET. See wait_for_hand_deal():
+                # the hand is quiet for ~15s after a play simply because the
+                # replacement card has not arrived yet, so settling on it here
+                # released a median of 14.7s early on 88/88 real plays, buying
+                # a wasted vision call plus a 2s retry each time — and it is
+                # the source of the empty-hand / power-0 reads that pushed
+                # should_redraw() into discarding a hand that was actually fine.
+                if POST_PLAY_WAIT_FOR_DEAL:
+                    wait_for_hand_deal()
+                wait_for_screen_to_settle(max_wait=8.0, regions="turn")
+                time.sleep(0.4)  # small buffer past "settled" before the next read
+
+            else:
+                # Menus, dialogue, loading, or anything unrecognized.
+                stuck_count += 1
+                print(f"Unrecognized screen ({screen}), waiting... "
+                      f"({stuck_count}/{MAX_UNRECOGNIZED_ATTEMPTS}) "
+                      f"[api {_api_used()} calls spent]")
+                # The tighter limit applies HERE ONLY. Every retry on an
+                # unrecognised screen is a paid API call that learns nothing,
+                # unlike a retry after a transient bad read.
+                if stuck_count >= MAX_UNRECOGNIZED_ATTEMPTS:
+                    print("Stuck too long on an unrecognized screen — stopping. "
+                          "Check the game manually.")
+                    stop_reason = "unrecognized_screen"
+                    break
+                time.sleep(2)
+
+    finally:
+        if screenshot_stop is not None:
+            screenshot_stop.set()
+        if stop_reason is not None:
+            dump_diagnostics(stop_reason, {
+                "wins": wins, "losses": losses, "draws": draws,
+                "balance": balance, "spent": spent,
+                "stuck_count": stuck_count, "acted_screen": acted_screen,
+                "motion_skips": motion_skips, "target_wins": target_wins,
+                "plays": plays, "misfires": misfires,
+            })
+        # Print the real settle distribution. This is the number that decides
+        # whether max_wait=8.0 is right; everything before tonight was
+        # estimated from a log too coarse to resolve the production poll rate.
+        print(settle_stats_summary())
+        if plays:
+            _pct = 100.0 * misfires / plays
+            _verdict = ("input timing looks safe" if misfires == 0 else
+                        "RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py")
+            print(f"  [input] {plays} cards played, {misfires} suspected misfire(s) "
+                  f"({_pct:.1f}%) — {_verdict}")
+            try:
+                print(input_controller.focus_cache_summary())
+                print(input_controller.input_pacing_summary())
+            except Exception as _e:
+                # These two lines are the only evidence in the whole run of
+                # whether report_misfire() ever adjusted anything. Swallowed,
+                # the misfire percentage above stands alone and reads as a
+                # verdict on input timing when it may be a verdict on a
+                # self-correction that never happened.
+                print(f"  [input] focus/pacing summary UNAVAILABLE ({_e!r}) — "
+                      f"the misfire rate above is reported WITHOUT the "
+                      f"ACTION_DELAY and focus-cache figures, so it cannot "
+                      f"tell you whether the input layer adapted or not.")
+
+    if wins >= target_wins:
+        print(f"Done — reached {wins} wins ({losses} losses, {draws} draws).")
+    else:
+        print(f"Stopped early at {wins}/{target_wins} wins ({losses} losses, {draws} draws). "
+              f"Progress is saved — just rerun the script to pick back up.")
+
+
+if __name__ == "__main__":
+    # Adjust to however many wins you actually still need.
+    # Balance is read automatically from the pause menu on the first run.
+    # Pass starting_balance=<amount> instead if you'd rather skip that and
+    # set it manually.
+    run(target_wins=17)

@@ -1,0 +1,62 @@
+# Secrets — each machine keeps its own; .env.example is the committed template.
+.env
+
+# Virtualenvs are architecture- and path-specific. Never put one in this folder
+# if the folder lives on a NAS: paddle_venv already proved that, its pyvenv.cfg
+# still points at a Homebrew path and a scratchpad directory that is long gone.
+env/
+venv/
+.venv/
+paddle_venv/
+
+# 10Hz frame captures. 1.3G and growing; history, not input.
+screenshot_log/
+
+__pycache__/
+*.pyc
+.DS_Store
+
+# --- added 2026-09-05, when this finally became a git repo ------------------
+#
+# What is versioned: code, config, docs, and the SMALL data the code cannot run
+# without (world_map.json, places/, route*_steps.json). What is not: build
+# trees, recorded media, and anything a run regenerates.
+#
+# The rule for anything borderline: if losing it would only cost time, ignore
+# it. If losing it would cost a MEASUREMENT that cannot be retaken, commit it.
+
+# Its own git checkout, and the artefacts built from it. The patch that matters
+# lives in chiaki-patch/ and is versioned there.
+chiaki-ng-src/
+chiaki-ng-build/
+
+# Recorded media. Large, regenerable, and history rather than input.
+# NOTE: demos/walk3_full_20260828_050731 and demos/walk_20260827_214446 ARE
+# referenced by build_world_map.py, go.py, anchors.py and two tests — they are
+# ignored here because of size, not because they are disposable. Do not delete
+# them from disk.
+demos/
+world_log/
+explore/
+diagnostics/
+route_frames/
+hand_samples/
+Photos to train on/
+Photos of ban screen missing cards/
+
+# Test fixtures are load-bearing (30 tests read them) but 96M of images.
+# Ignored for size; must not be deleted.
+test_fixtures/
+
+# Run outputs and hand-made backups, now that history is real.
+overnight/*.log
+overnight/*.json
+*.backup_*
+world_map.json.backup_*
+CLAUDE.md.backup_*
+places_backup_*/
+tests_quarantine/__pycache__/
+
+# Screenshot archives (spaces in the names; no quotes — git takes those
+# literally and the pattern silently matches nothing).
+Photos*/

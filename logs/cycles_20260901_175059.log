@@ -1,0 +1,113 @@
+[cycles] 5 cycles, API budget 400 calls (~$4.80)
+[cycles] === cycle 1 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 83.7) -> YES
+[cycles]   YES press 1 did not register, retrying
+[cycles]   YES press 2 did not register, retrying
+[cycles]   world back after 3.2s, spawn bearing 87 (E)
+  [api] 1/400 calls (~$0.01), 399 left
+[cycles] read $246 off the pause menu
+[cycles] progress reset: balance $246, record 9W/4L/0D carried forward
+[cycles]       t=50s heading 8.0 vs recorded 3.0 (-5.0) — correcting
+[cycles]       t=50s corrected to 1.9 (residual +1.1)
+[cycles]       not at the table yet (dealer 0.251); nudging
+[cycles]       centre_on(dealer_tight): score 0.482 offset -0.140 — turning 86.0 -> 67.0 (-19.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.387 offset +0.021 — turning 66.5 -> 69.5 (+2.9 deg)
+[cycles]       centre_on(dealer_tight): score 0.385 offset -0.008 — turning 69.6 -> 68.4 (-1.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -17.1 deg overall
+[cycles]       centre_on(dealer_tight): score 0.405 offset +0.252 — turning 68.9 -> 100.8 (+31.9 deg)
+[cycles]       centre_on(dealer_tight): score 0.402 offset +0.040 — turning 100.7 -> 106.2 (+5.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.420 , no compass — NOT aiming
+[cycles]       centre_on(dealer_tight): score 0.420 offset -0.019 — turning 106.7 -> 104.0 (-2.7 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.426, offset +0.000) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.439, offset +0.000) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.432 offset -0.040 — turning 104.5 -> 98.9 (-5.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.455 offset +0.019 — turning 99.0 -> 101.6 (+2.7 deg)
+[cycles]       centre_on(dealer_tight): score 0.474 offset -0.013 — turning 101.9 -> 100.1 (-1.8 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -4.3 deg overall
+[cycles]       centre_on(dealer_tight): score 0.496 offset -0.023 — turning 100.2 -> 96.9 (-3.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.475 offset -0.285 — turning 96.6 -> 61.5 (-35.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.482 offset +0.073 — turning 61.4 -> 71.6 (+10.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -28.6 deg overall
+[cycles]       step moved 2.3 (< 2.5) — something is in the way, crabbing free
+[cycles]         unstuck by crabbing left (moved 29.4)
+[cycles]       centre_on(dealer_tight): score 0.498 offset +0.369 — turning 71.6 -> 114.0 (+42.3 deg)
+[cycles]       centre_on(dealer_tight): score 0.517 offset -0.077 — turning 177.7 -> 166.9 (-10.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.653 offset +0.145 — turning 166.7 -> 186.4 (+19.7 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +114.9 deg overall
+[cycles]       ended in dealer_table (score 0.717, margin 0.317)
+[cycles]   [ 1/1] TABLE   ink 0.0467  end  186.5  |  1 ok / 0 missed (100%)  |  streak 1, best 1, need 25
+[cycles] 
+  1/1 reached the table (100%); longest streak 1 of 25 needed
+Resuming with 9 wins / 4 losses / 0 draws logged, $246 on hand. Target: 999 wins total.
+Starting next match. $196 left, $50/$246 of session cap spent.
+  [ban] SCROLL DESYNC: press count says row 5, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 7, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 9, the scrollbar says 5. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 11, the scrollbar says 5. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 13, the scrollbar says 6. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 15, the scrollbar says 7. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 3 position(s) not in the roster [(7, 1), (7, 4), (8, 2)] — skipping as ban candidates (trust_roster).
+No roster coverage at rows 7+ — end of the catalogued collection, stopping the scan.
+Read 26 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+  [ban] WARNING: only 2 of 3 bans registered. The match will start with a ban set the engine did not choose.
+Ban screen again after bans were already placed this match — not re-toggling (1/15).
+  [ban] pressing PLAY (triangle) to advance a ban screen whose bans are already placed
+Unrecognized screen (other), waiting... (2/6) [api 5 calls spent]
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 1 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: tactics 'Power Swing' bonus=2
+  [local-check]   vision hand[1]: power=4 sec=3
+  [local-check]   vision hand[2]: None
+  [local-check]   vision hand[3]: None
+  [local-check]   vision hand[4]: None
+Decision: best card is weak (power 4) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 245 polls — peak edge 0.0561 vs threshold 0.065 (86% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 5 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 246 polls — peak edge 0.0566 vs threshold 0.065 (87% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 245 polls — peak edge 0.0560 vs threshold 0.065 (86% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [api] 10/400 calls (~$0.12), 390 left
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: all 5 slots agree with vision
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 246 polls — peak edge 0.0563 vs threshold 0.065 (87% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 246 polls — peak edge 0.0562 vs threshold 0.065 (86% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 246 polls — peak edge 0.0570 vs threshold 0.065 (88% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 247 polls — peak edge 0.0567 vs threshold 0.065 (87% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand[3]: local power=8 sec=0  vs vision: power=8 sec=1  <<< DISAGREE
+Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run

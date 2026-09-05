@@ -1,0 +1,23 @@
+{
+  // The project runs on ./.venv (Python 3.14), created from
+  // requirements.txt, which was derived from the actual imports across
+  // every module and test.
+  //
+  // NOT paddle_venv: that is Python 3.11 with no pytesseract, no mss, no
+  // Quartz, so selecting it makes every module fail at import with a confusing
+  // error. But do NOT delete it either — it holds paddleocr/paddlepaddle/
+  // paddlex (no 3.14 wheel) and hand_digit_reader.py shells out to it.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": false,
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+  // The offline suite must never drive the live console.
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": false,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "paddle_venv": true,
+    ".venv": true,
+    "screenshot_log": true,
+    "demos": true
+  }
+}

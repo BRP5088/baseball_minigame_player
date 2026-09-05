@@ -1,0 +1,33 @@
+# Runtime dependencies for Auto Baseball, derived from the actual imports
+# across every module and test (not guessed).
+#
+# NOT LISTED, deliberately:
+#   pygame     — imported inside a function in record_input.py only.
+#
+# tesserocr USED to be listed here as deliberately excluded, on the grounds that
+# it "needs Tesseract's C headers to build". THAT IS NO LONGER TRUE: pip
+# installs a prebuilt wheel (tesserocr-2.11.0-cp314-cp314-macosx_15_0_arm64),
+# no compiler involved. It is now a real requirement — see the bottom.
+#   pygame     — imported inside a function in record_input.py only.
+Pillow
+numpy
+opencv-python
+scipy
+mss
+pytesseract
+pyautogui
+pygetwindow
+pyobjc-framework-Quartz
+anthropic
+
+# The IN-PROCESS Tesseract backend. ocr_glyphs prefers it; without it the module
+# shells out to the tesseract binary at ~370ms a call. MEASURED on this machine:
+# compass.read_bearing costs 261ms on the fallback and 31ms on this — an 8.4x
+# speedup worth ~12s of an 85.6s navigation trial, where read_bearing was the
+# single largest component at 21%.
+#
+# Correctness is not taken on trust: tests/routing/test_ocr_glyphs.py pins every backend
+# against the recorded slow-path output. 208 glyph crops across 3 recordings
+# match exactly (124 letters, 84 abstentions), and a real frame through
+# compass.read_bearing gives the same degrees.
+tesserocr

@@ -1,0 +1,295 @@
+[cycles] 5 cycles, API budget 400 calls (~$4.80)
+[cycles] === cycle 1 ===
+[cycles] reloading the last save
+[cycles] reset attempt 1/3 failed: the pause menu will not open and NO input is reaching the game (probe delta 3.3) — chiaki is probably not focused, or the stream is not running.
+[cycles]   a match is in progress — 'Give up?' is up, answering YES so the pause menu can be reached (the reload discards it)
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 80.7) -> YES
+[cycles]   world back after 3.2s, spawn bearing 87 (E)
+  [api] 1/400 calls (~$0.01), 399 left
+  [settle] 'default' regions still moving after 6.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $246 off the pause menu
+[cycles] progress reset: balance $246, record 9W/5L/0D carried forward
+[cycles]       t=50s heading 6.0 vs recorded 3.0 (-3.1) — correcting
+[cycles]       t=50s corrected to 6.0 (residual -3.0)
+[cycles]       not at the table yet (dealer 0.297); nudging
+[cycles]       centre_on(dealer_tight): score 0.453 offset -0.075 — turning 90.1 -> 79.6 (-10.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.500 offset +0.023 — turning 79.2 -> 82.4 (+3.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.513 offset -0.013 — turning 82.9 -> 81.1 (-1.8 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -8.8 deg overall
+[cycles]       step moved 2.1 (< 2.5) — something is in the way, crabbing free
+[cycles]         unstuck by crabbing left (moved 26.1)
+[cycles]       centre_on(dealer_tight): score 0.449 offset +0.250 — turning 81.3 -> 113.0 (+31.7 deg)
+[cycles]       centre_on(dealer_tight): score 0.442 offset -0.285 — turning 113.1 -> 78.0 (-35.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.462 offset +0.287 — turning 78.0 -> 113.3 (+35.4 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +32.3 deg overall
+[cycles]       centre_on(dealer_tight): score 0.447 offset -0.292 — turning 113.1 -> 77.3 (-35.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.453 offset +0.283 — turning 77.7 -> 112.6 (+35.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.472 offset -0.285 — turning 112.5 -> 77.3 (-35.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -35.5 deg overall
+[cycles]       centre_on(dealer_tight): score 0.453 offset +0.283 — turning 77.9 -> 112.9 (+35.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.456 offset -0.292 — turning 117.6 -> 81.8 (-35.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.450 offset +0.058 — turning 82.0 -> 90.2 (+8.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +11.8 deg overall
+[cycles]       centre_on(dealer_tight): score 0.456 offset -0.052 — turning 89.7 -> 82.4 (-7.3 deg)
+[cycles]       centre_on(dealer_tight): score 0.445 offset +0.233 — turning 82.1 -> 112.1 (+30.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.419 offset -0.069 — turning 112.3 -> 102.7 (-9.6 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +13.3 deg overall
+[cycles]       centre_on(dealer_tight): score 0.493 offset -0.194 — turning 103.0 -> 77.4 (-25.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.426 offset +0.275 — turning 78.0 -> 112.2 (+34.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.395 offset -0.079 — turning 113.0 -> 102.0 (-11.1 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -1.4 deg overall
+[cycles]       centre_on(dealer_tight): score 0.451 offset -0.188 — turning 102.0 -> 77.2 (-24.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.463 offset +0.054 — turning 77.5 -> 85.1 (+7.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.520 offset -0.023 — turning 85.1 -> 81.9 (-3.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -20.0 deg overall
+[cycles]       centre_on(dealer_tight): score 0.525 offset +0.008 — turning 82.0 -> 83.2 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.524, offset -0.002) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.522, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.524, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.535, offset -0.006) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.509, offset -0.006) after 0 turn(s)
+[cycles]       retrace step 3 moved 5.7 — going nowhere (1/2)
+[cycles]       retrace step 4 moved 4.6 — going nowhere (2/2)
+[cycles]       retrace is wedged too — stopping rather than twitching out the remaining steps
+[cycles]       ended in beside_dealer_table (score 0.629, margin 0.143)
+[cycles]       not at the table: rejected on INK (0.0100 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0100  end   83.2  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 6.5 vs recorded 3.0 (-3.5) — correcting
+[cycles]       t=50s corrected to 1.4 (residual +1.6)
+[cycles]       not at the table yet (dealer 0.246); nudging
+[cycles]       centre_on(dealer_tight): score 0.477 offset -0.131 — turning 85.4 -> 67.4 (-18.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.382 offset +0.008 — turning 67.8 -> 68.9 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.379, offset +0.000) after 2 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.402, offset +0.006) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.508 offset +0.375 — turning 68.5 -> 111.3 (+42.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.416 offset -0.083 — turning 110.0 -> 98.4 (-11.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.439 offset +0.048 — turning 98.6 -> 105.4 (+6.7 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +36.9 deg overall
+[cycles]       centre_on(dealer_tight): score 0.432 offset +0.150 — turning 105.4 -> 125.7 (+20.3 deg)
+[cycles]       centre_on(dealer_tight): score 0.443 , no compass — NOT aiming
+[cycles]       centre_on(dealer_tight): score 0.420 offset -0.138 — turning 125.6 -> 106.8 (-18.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.431 offset +0.040 — turning 107.3 -> 112.9 (+5.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.444 offset -0.013 — turning 112.7 -> 110.9 (-1.8 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -14.3 deg overall
+[cycles]       centre_on(dealer_tight): score 0.441 offset -0.042 — turning 111.3 -> 105.4 (-5.9 deg)
+[cycles]       centre_on(dealer_tight): score 0.437 offset +0.017 — turning 105.3 -> 107.6 (+2.4 deg)
+[cycles]       centre_on(dealer_tight): score 0.452 offset -0.008 — turning 107.8 -> 106.6 (-1.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -4.5 deg overall
+[cycles]       centre_on(dealer_tight): score 0.482 offset -0.048 — turning 106.8 -> 100.1 (-6.7 deg)
+[cycles]       centre_on(dealer_tight): score 0.459 offset +0.015 — turning 100.3 -> 102.4 (+2.1 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.499, offset -0.004) after 2 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.472 offset -0.027 — turning 102.3 -> 98.5 (-3.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.475 offset +0.008 — turning 98.8 -> 99.9 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.492, offset -0.004) after 2 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.479 offset -0.027 — turning 100.1 -> 96.2 (-3.8 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.467, offset +0.004) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.470, offset -0.002) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.478 offset -0.019 — turning 96.4 -> 93.7 (-2.7 deg)
+[cycles]       centre_on(dealer_tight): score 0.496 offset -0.258 — turning 93.9 -> 61.4 (-32.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.475 offset +0.071 — turning 61.3 -> 71.2 (+9.9 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -25.2 deg overall
+[cycles]       step moved 2.5 (< 2.5) — something is in the way, crabbing free
+[cycles]         unstuck by crabbing left (moved 34.4)
+[cycles]       centre_on(dealer_tight): score 0.500 offset +0.367 — turning 71.2 -> 113.3 (+42.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.500 offset -0.077 — turning 113.6 -> 102.8 (-10.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.501 offset +0.029 — turning 102.4 -> 106.5 (+4.1 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +35.2 deg overall
+[cycles]       retrace step 0 moved 1.9 — going nowhere (1/2)
+[cycles]       ended in beside_dealer_table (score 0.627, margin 0.267)
+[cycles]       not at the table: rejected on INK (0.0000 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0000  end  104.2  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 2/3 did not reach the table
+[cycles]       t=50s heading 6.5 vs recorded 3.0 (-3.5) — correcting
+[cycles]       t=50s corrected to 3.7 (residual -0.7)
+[cycles]       not at the table yet (dealer 0.287); nudging
+[cycles]       centre_on(dealer_tight): score 0.485 offset -0.040 — turning 87.5 -> 81.9 (-5.6 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.491, offset +0.004) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.487, offset +0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.470, offset +0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.467, offset +0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.447, offset +0.002) after 0 turn(s)
+[cycles]       step moved 2.5 (< 2.5) — something is in the way, crabbing free
+[cycles]         unstuck by crabbing left (moved 31.9)
+[cycles]       centre_on(dealer_tight): score 0.477 offset +0.073 — turning 82.3 -> 92.5 (+10.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.515 offset -0.025 — turning 92.2 -> 88.6 (-3.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.505 offset +0.008 — turning 88.8 -> 90.0 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +8.0 deg overall
+[cycles]       centre_on(dealer_tight): score 0.532 offset -0.008 — turning 90.3 -> 89.1 (-1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.536, offset +0.004) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.511, offset +0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.569 offset -0.323 — turning 89.2 -> 50.7 (-38.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.688 offset +0.071 — turning 50.4 -> 60.3 (+9.9 deg)
+[cycles]       centre_on(dealer_tight): score 0.610 offset -0.025 — turning 60.3 -> 56.8 (-3.5 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -32.5 deg overall
+[cycles]       centre_on(dealer_tight): score 0.618 offset +0.008 — turning 56.8 -> 57.9 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.646, offset -0.004) after 1 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.713, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.673 offset -0.008 — turning 57.9 -> 56.7 (-1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.711, offset +0.006) after 1 turn(s)
+[cycles]       ended in dealer_table (score 0.791, margin 0.347)
+[cycles]   [ 1/1] TABLE   ink 0.0270  end   57.3  |  1 ok / 0 missed (100%)  |  streak 1, best 1, need 25
+[cycles] 
+  1/1 reached the table (100%); longest streak 1 of 25 needed
+Resuming with 9 wins / 5 losses / 0 draws logged, $246 on hand. Target: 999 wins total.
+Starting next match. $196 left, $50/$246 of session cap spent.
+Match-start prompt still up after start_match — not re-debiting (1/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (2/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (3/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (4/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (5/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (6/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (7/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+  [api] 10/400 calls (~$0.12), 390 left
+Match-start prompt still up after start_match — not re-debiting (8/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (9/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (10/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (11/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (12/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (13/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (14/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (15/15).
+Match never started — stopping. Check the game manually.
+
+  [diagnostics] wrote /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/diagnostics/20260901_190603_4201
+  [diagnostics] reason: match_never_started
+  [diagnostics] 16 recent observations captured.
+  [diagnostics] API: 17 calls (~$0.20) of 400 allowed
+  [settle] observed latency at the real 0.15s poll rate:
+    match_start n=  15  p50= 0.46s  p90= 0.47s  max= 0.47s  truncated=0/15 (0%)
+Stopped early at 9/999 wins (5 losses, 0 draws). Progress is saved — just rerun the script to pick back up.
+[cycles] after cycle 1: 9W/5L/0D, $196 left, 17 API calls used (~$0.20)
+[cycles] === cycle 2 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 82.9) -> YES
+[cycles]   world back after 3.1s, spawn bearing 87 (E)
+  [settle] 'default' regions still moving after 6.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $246 off the pause menu
+[cycles] progress reset: balance $246, record 9W/5L/0D carried forward
+[cycles]       t=50s heading 5.4 vs recorded 3.0 (-2.4) — correcting
+[cycles]       t=50s corrected to 5.4 (residual -2.4)
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in beside_dealer_table (score 0.643, margin 0.169)
+[cycles]       not at the table: rejected on INK (0.0072 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0072  end   89.4  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 6.4 vs recorded 3.0 (-3.4) — correcting
+[cycles]       t=50s corrected to 6.3 (residual -3.4)
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in an unlabelled place (score 0.520, margin 0.029)
+[cycles]       not at the table: rejected on INK (0.0103 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0103  end   89.4  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 2/3 did not reach the table
+[cycles]       t=50s heading 4.0 vs recorded 3.0 (-1.0) — on profile
+[cycles]       not at the table yet (dealer 0.279); nudging
+[cycles]       centre_on(dealer_tight): score 0.475 offset -0.046 — turning 87.8 -> 81.3 (-6.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.454 offset +0.012 — turning 81.3 -> 83.0 (+1.8 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.492, offset -0.006) after 2 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.445, offset -0.006) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.470 offset -0.008 — turning 83.1 -> 81.9 (-1.2 deg)
+[cycles]       centre_on(dealer_tight): score 0.486 offset +0.008 — turning 81.4 -> 82.6 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.476, offset +0.000) after 2 turn(s)
+[cycles]       step moved 2.1 (< 2.5) — something is in the way, crabbing free
+[cycles]         unstuck by crabbing left (moved 30.8)
+[cycles]       centre_on(dealer_tight): score 0.442 offset +0.062 — turning 82.4 -> 91.2 (+8.8 deg)
+[cycles]       centre_on(dealer_tight): score 0.514 offset -0.021 — turning 90.9 -> 88.0 (-2.9 deg)
+[cycles]       centre_on(dealer_tight): score 0.478 offset +0.012 — turning 87.6 -> 89.3 (+1.8 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +7.3 deg overall
+[cycles]       centre_on(dealer_tight): centred (score 0.526, offset -0.006) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.526, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.535 offset -0.294 — turning 89.7 -> 53.8 (-36.0 deg)
+[cycles]       centre_on(dealer_tight): score 0.494 offset +0.083 — turning 54.3 -> 65.9 (+11.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.532 offset -0.025 — turning 65.4 -> 61.9 (-3.5 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved -28.2 deg overall
+[cycles]       centre_on(dealer_tight): centred (score 0.506, offset -0.006) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.550, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): centred (score 0.645, offset -0.004) after 0 turn(s)
+[cycles]       centre_on(dealer_tight): score 0.720 offset -0.010 — turning 61.5 -> 60.1 (-1.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.733 offset +0.008 — turning 59.7 -> 60.9 (+1.2 deg)
+[cycles]       centre_on(dealer_tight): centred (score 0.748, offset -0.004) after 2 turn(s)
+[cycles]       ended in dealer_table (score 0.779, margin 0.331)
+[cycles]   [ 1/1] TABLE   ink 0.0375  end   61.0  |  1 ok / 0 missed (100%)  |  streak 1, best 1, need 25
+[cycles] 
+  1/1 reached the table (100%); longest streak 1 of 25 needed
+Resuming with 9 wins / 5 losses / 0 draws logged, $246 on hand. Target: 999 wins total.
+Starting next match. $196 left, $50/$246 of session cap spent.
+  [api] 20/400 calls (~$0.24), 380 left
+  [ban] SCROLL DESYNC: press count says row 3, the scrollbar says 2. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 5, the scrollbar says 3. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 7, the scrollbar says 5. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 9, the scrollbar says 6. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 11, the scrollbar says 7. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 3 position(s) not in the roster [(7, 1), (7, 4), (8, 2)] — skipping as ban candidates (trust_roster).
+No roster coverage at rows 7+ — end of the catalogued collection, stopping the scan.
+Read 25 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+  [ban] WARNING: only 1 of 3 bans registered. The match will start with a ban set the engine did not choose.
+Ban screen again after bans were already placed this match — not re-toggling (1/15).
+  [ban] pressing PLAY (triangle) to advance a ban screen whose bans are already placed
+Ban screen again after bans were already placed this match — not re-toggling (2/15).
+Ban screen again after bans were already placed this match — not re-toggling (3/15).
+Ban screen again after bans were already placed this match — not re-toggling (4/15).
+  [ban] pressing PLAY (triangle) to advance a ban screen whose bans are already placed
+Unrecognized screen (other), waiting... (5/6) [api 25 calls spent]
+Unrecognized screen (other), waiting... (6/6) [api 26 calls spent]
+Stuck too long on an unrecognized screen — stopping. Check the game manually.
+
+  [diagnostics] wrote /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/diagnostics/20260901_191212_6126
+  [diagnostics] reason: unrecognized_screen
+  [diagnostics] 14 recent observations captured.
+  [diagnostics] API: 26 calls (~$0.31) of 400 allowed
+  [settle] observed latency at the real 0.15s poll rate:
+    ban      n=   5  p50= 0.46s  p90= 0.66s  max= 0.66s  truncated=0/5 (0%)
+    default  n=   6  p50= 0.46s  p90= 0.65s  max= 0.65s  truncated=0/6 (0%)
+    match_start n=   1  p50= 0.66s  p90= 0.66s  max= 0.66s  truncated=0/1 (0%)
+Stopped early at 9/999 wins (5 losses, 0 draws). Progress is saved — just rerun the script to pick back up.
+[cycles] after cycle 2: 9W/5L/0D, $196 left, 26 API calls used (~$0.31)
+[cycles] === cycle 3 ===
+[cycles] reloading the last save
+[cycles]   a match is in progress — 'Give up?' is up, answering YES so the pause menu can be reached (the reload discards it)
+[cycles] reset attempt 1/3 failed: the pause menu will not open and NO input is reaching the game (probe delta 3.6) — chiaki is probably not focused, or the stream is not running.
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles] reset attempt 2/3 failed: no confirmation dialog appeared (delta 4.0)
+[cycles]   pause menu open (selected 'Load Last Save')
+[cycles]   selected: Load Last Save
+[cycles] reset attempt 3/3 failed: no confirmation dialog appeared (delta 2.1)
+[cycles] cycle 3 failed:
+Traceback (most recent call last):
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/run_cycles.py", line 189, in main
+    outcome = cycle(n)
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/run_cycles.py", line 151, in cycle
+    reset_env.reset_environment(log=log)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/reset_env.py", line 241, in reset_environment
+    raise ResetError(f"no confirmation dialog appeared (delta {delta:.1f})")
+reset_env.ResetError: no confirmation dialog appeared (delta 2.1)
+
+[cycles] DONE: 9W/5L/0D, $196 on hand, 26 API calls (~$0.31)

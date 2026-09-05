@@ -1,0 +1,388 @@
+[cycles] 5 cycles, API budget 400 calls (~$4.80)
+[cycles] === cycle 1 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles] reset attempt 1/3 failed: no confirmation dialog appeared (delta 1.8)
+[cycles]   pause menu open (selected 'Load Last Save')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 81.5) -> YES
+[cycles]   YES press 1 did not register, retrying
+[cycles]   world back after 3.2s, spawn bearing 87 (E)
+  [api] 1/400 calls (~$0.01), 399 left
+  [settle] 'default' regions still moving after 6.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $246 off the pause menu
+[cycles] progress reset: balance $246, record 9W/4L/0D carried forward
+[cycles]       t=50s heading 4.9 vs recorded 3.0 (-2.0) — on profile
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in an unlabelled place (score 0.527, margin 0.054)
+[cycles]       not at the table: rejected on INK (0.0104 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0104  end   88.9  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 4.8 vs recorded 3.0 (-1.9) — on profile
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in beside_dealer_table (score 0.706, margin 0.292)
+[cycles]       not at the table: rejected on INK (0.0073 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0073  end   88.2  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 2/3 did not reach the table
+[cycles]       t=50s heading 5.6 vs recorded 3.0 (-2.6) — correcting
+[cycles]       t=50s corrected to 5.9 (residual -2.9)
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in beside_dealer_table (score 0.844, margin 0.399)
+[cycles]       not at the table: rejected on INK (0.0111 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0111  end   90.6  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 3/3 did not reach the table
+[cycles] could not reach the table in 3 attempts — skipping to the next cycle
+[cycles] === cycle 2 ===
+[cycles] reloading the last save
+[cycles] reset attempt 1/3 failed: the pause menu will not open and NO input is reaching the game (probe delta 1.8) — chiaki is probably not focused, or the stream is not running.
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 83.4) -> YES
+[cycles]   world back after 3.1s, spawn bearing 87 (E)
+  [settle] 'default' regions still moving after 6.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $246 off the pause menu
+[cycles] progress reset: balance $246, record 9W/4L/0D carried forward
+[cycles]       t=50s heading 7.2 vs recorded 3.0 (-4.2) — correcting
+[cycles]       t=50s corrected to 4.3 (residual -1.4)
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in an unlabelled place (score 0.530, margin 0.025)
+[cycles]       not at the table: rejected on INK (0.0110 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0110  end   87.8  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 5.9 vs recorded 3.0 (-2.9) — correcting
+[cycles]       t=50s corrected to 5.9 (residual -2.9)
+[cycles]       not at the table yet (dealer 0.345); nudging
+[cycles]       centre_on(dealer_tight): score 0.527 offset +0.083 — turning 88.9 -> 100.5 (+11.6 deg)
+[cycles]       centre_on(dealer_tight): score 0.557 offset +0.086 — turning 99.5 -> 111.6 (+12.1 deg)
+[cycles]       centre_on(dealer_tight): score 0.565 , no compass — NOT aiming
+[cycles]       ended in dealer_table (score 0.786, margin 0.299)
+[cycles]   [ 1/1] TABLE   ink 0.0465  end  111.5  |  1 ok / 0 missed (100%)  |  streak 1, best 1, need 25
+[cycles] 
+  1/1 reached the table (100%); longest streak 1 of 25 needed
+Resuming with 9 wins / 4 losses / 0 draws logged, $246 on hand. Target: 999 wins total.
+Starting next match. $196 left, $50/$246 of session cap spent.
+  [ban] SCROLL DESYNC: press count says row 1, the scrollbar says 0. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 3, the scrollbar says 0. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 5, the scrollbar says 2. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 7, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 9, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] SCROLL DESYNC: press count says row 11, the scrollbar says 5. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 13, the scrollbar says 6. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 15, the scrollbar says 6. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+  [ban] SCROLL DESYNC: press count says row 17, the scrollbar says 7. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+  [ban] 3 position(s) not in the roster [(7, 1), (7, 4), (8, 2)] — skipping as ban candidates (trust_roster).
+No roster coverage at rows 7+ — end of the catalogued collection, stopping the scan.
+Read 24 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+  [ban] WARNING: only 1 of 3 bans registered. The match will start with a ban set the engine did not choose.
+Unrecognized screen (other), waiting... (1/6) [api 5 calls spent]
+Couldn't read the screen (turn screen with unusable phase: None), retrying... (2/15)
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 4 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: power=4 sec=2
+  [local-check]   vision hand[1]: power=4 sec=2
+  [local-check]   vision hand[2]: power=5 sec=3
+  [local-check]   vision hand[3]: power=5 sec=2
+  [local-check]   vision hand[4]: power=4 sec=3
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 1 discard(s) left — discarding the weakest (power 4) instead of playing
+  [api] 10/400 calls (~$0.12), 390 left
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: all 5 slots agree with vision
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Jedediah Wetters (power 4)
+  [reveal] no cards after 75s over 246 polls — peak edge 0.0376 vs threshold 0.065 (58% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: all 5 slots agree with vision
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [api] 20/400 calls (~$0.24), 380 left
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 0 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: power=4 sec=3
+  [local-check]   vision hand[1]: None
+  [local-check]   vision hand[2]: None
+  [local-check]   vision hand[3]: None
+  [local-check]   vision hand[4]: None
+Decision: best card is weak (power 4) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand[1]: local power=5 sec=0  vs vision: power=5 sec=3  <<< DISAGREE
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [C5] match_start_prompt while a paid match is already running (likely a ROUND/transition overlay misread) — NOT debiting again.
+Couldn't read the screen (turn screen with unusable phase: None), retrying... (12/15)
+Decision: Playing Batter (power 8)
+Decision: Playing Austin "Guv" Bunz (power 8)
+  [api] 30/400 calls (~$0.36), 370 left
+  [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: [{'name': 'Justin "Cur" Bunz', 'power': 6, 'secondary': 1}]
+  [local-check] hand: all 5 slots agree with vision
+Decision: Playing Unknown (power 5); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no OPPONENT card identified (ours='unknown', revealed players=['Mickey Brown', 'Brandon "Binger" Ortiz']) — turn not logged.
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (2/15)
+Couldn't read the screen (turn screen with unusable phase: None), retrying... (3/15)
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 4 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: tactics 'Pitch Focus' bonus=1
+  [local-check]   vision hand[1]: power=7 sec=0
+  [local-check]   vision hand[2]: power=6 sec=0
+  [local-check]   vision hand[3]: power=5 sec=1
+  [local-check]   vision hand[4]: tactics 'Fielding Play' bonus=1
+Decision: Playing J.J. Gain (pitch focus 7); attaching pitch boost (+1) — more focus never hurts
+  [reveal] no cards after 75s over 247 polls — peak edge 0.0360 vs threshold 0.065 (55% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+Decision: Playing Unknown Pitcher (pitch focus 7); attaching pitch boost (+1) — more focus never hurts
+  [api] 40/400 calls (~$0.48), 360 left
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 6) instead of playing
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+  [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: all 5 slots agree with vision
+Decision: Playing J. J. Gain (pitch focus 6); attaching pitch boost (+1) — more focus never hurts
+  [MISFIRE?] no revealed card has our played power 6 (or 7 with the boost) — revealed [('Thomas Thom', 0, [5]), ('P.J. Gain', 5, [5])]. Either a keystroke was dropped during card selection or the reveal misread. Not logging this turn.
+  [reveal] turn NOT logged — RuntimeError: intended card absent from reveal
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+Decision: Playing J.J. Gain (pitch focus 8); attaching pitch boost (+1) — more focus never hurts
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 1, 1]}  vs vision: your=0 opp=1
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 0 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: power=5 sec=2
+  [local-check]   vision hand[1]: None
+  [local-check]   vision hand[2]: None
+  [local-check]   vision hand[3]: None
+  [local-check]   vision hand[4]: None
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+  [api] 50/400 calls (~$0.60), 350 left
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Decision: best card is weak (power 4) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (5/15)
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 1, 1]}  vs vision: your=0 opp=1
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: [{'name': 'Jedediah Wetters', 'power': 4, 'secondary': 2}]
+  [local-check] hand[2]: local power=6 sec=5  [INVALID]  vs vision: power=6 sec=0  <<< DISAGREE
+Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+  [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+Decision: Playing M.J. Gain (focus 5, fielding 1) — runners on, paying 1 focus for fielding; attaching pitch boost (+1) — more focus never hurts
+  [reveal] no cards after 75s over 247 polls — peak edge 0.0360 vs threshold 0.065 (55% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+Decision: Playing J.J. Gain (pitch focus 6); attaching pitch boost (+1) — more focus never hurts
+  [reveal] no cards after 75s over 247 polls — peak edge 0.0361 vs threshold 0.065 (56% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+Decision: Playing M.J. Gain (focus 5, fielding 1) — runners on, paying 1 focus for fielding; attaching pitch boost (+1) — more focus never hurts
+  [reveal] no OPPONENT card identified (ours='m.j. gain', revealed players=[]) — turn not logged.
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 1, 1]}  vs vision: your=0 opp=1
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: local found 0 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+  [local-check]   vision hand[0]: power=6 sec=2
+  [local-check]   vision hand[1]: power=4 sec=2
+  [local-check]   vision hand[2]: None
+  [local-check]   vision hand[3]: None
+  [local-check]   vision hand[4]: None
+Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+  [api] 60/400 calls (~$0.72), 340 left
+Loss logged (5 total).
+Starting next match. $146 left, $100/$246 of session cap spent.
+Match-start prompt still up after start_match — not re-debiting (1/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (2/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (3/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (4/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (5/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (6/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (7/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (8/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+  [api] 70/400 calls (~$0.84), 330 left
+Match-start prompt still up after start_match — not re-debiting (9/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (10/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (11/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (12/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (13/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (14/15).
+  [C5] ...and a paid match is running, so NOT pressing start_match either — just waiting.
+Match-start prompt still up after start_match — not re-debiting (15/15).
+Match never started — stopping. Check the game manually.
+
+  [diagnostics] wrote /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/diagnostics/20260901_184428_4083
+  [diagnostics] reason: match_never_started
+  [diagnostics] 40 recent observations captured.
+  [diagnostics] API: 76 calls (~$0.91) of 400 allowed
+  [settle] observed latency at the real 0.15s poll rate:
+    ban      n=   1  p50= 0.47s  p90= 0.47s  max= 0.47s  truncated=0/1 (0%)
+    default  n=  10  p50= 0.46s  p90= 0.87s  max= 0.87s  truncated=0/10 (0%)
+    match_start n=  17  p50= 0.46s  p90= 0.66s  max= 1.29s  truncated=0/17 (0%)
+    turn     n=  41  p50= 0.46s  p90= 1.08s  max= 1.70s  truncated=0/41 (0%)
+  [input] 11 cards played, 1 suspected misfire(s) (9.1%) — RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py
+  [input] no keypresses sent
+  [input] 1 misfire(s); ACTION_DELAY ended at 0.25s (+0.00s), FOCUS_TTL 3.0s
+Stopped early at 9/999 wins (5 losses, 0 draws). Progress is saved — just rerun the script to pick back up.
+[cycles] after cycle 2: 9W/5L/0D, $146 left, 76 API calls used (~$0.91)
+[cycles] === cycle 3 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 80.6) -> YES
+[cycles]   world back after 3.1s, spawn bearing 87 (E)
+  [settle] 'default' regions still moving after 8.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $100 off the pause menu
+[cycles] progress reset: balance $100, record 9W/5L/0D carried forward
+[cycles]       t=50s heading 6.2 vs recorded 3.0 (-3.2) — correcting
+[cycles]       t=50s corrected to 6.2 (residual -3.2)
+[cycles]       ended in an unlabelled place (score 0.533, margin 0.108)
+[cycles]       not at the table: rejected on INK (0.0098 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0098  end   89.4  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 5.9 vs recorded 3.0 (-2.9) — correcting
+[cycles]       t=50s corrected to 6.0 (residual -3.1)
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in beside_dealer_table (score 0.553, margin 0.129)
+[cycles]       not at the table: rejected on INK (0.0096 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0096  end   90.0  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 2/3 did not reach the table
+[cycles]       t=50s heading 5.2 vs recorded 3.0 (-2.3) — correcting
+[cycles]       t=50s corrected to 5.1 (residual -2.1)
+[cycles]       not at the table yet (dealer 0.423); nudging
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in beside_dealer_table (score 0.550, margin 0.120)
+[cycles]       not at the table: rejected on INK (0.0096 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0096  end   89.1  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 3/3 did not reach the table
+[cycles] could not reach the table in 3 attempts — skipping to the next cycle
+[cycles] === cycle 4 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 80.8) -> YES
+[cycles]   world back after 3.1s, spawn bearing 87 (E)
+  [settle] 'default' regions still moving after 8.0s — reading anyway (retry path will catch a bad read).
+[cycles] read $100 off the pause menu
+[cycles] progress reset: balance $100, record 9W/5L/0D carried forward
+[cycles]       t=50s heading 6.2 vs recorded 3.0 (-3.2) — correcting
+[cycles]       t=50s corrected to 2.6 (residual +0.3)
+[cycles]       not at the table yet (dealer 0.516); nudging
+[cycles]       still moving 8s after clear — judging anyway
+[cycles]       ended in an unlabelled place (score 0.528, margin 0.045)
+[cycles]       not at the table: rejected on INK (0.0130 < 0.024)
+[cycles]   [ 1/1] missed  ink 0.0130  end   85.8  |  0 ok / 1 missed (0%)  |  streak 0, best 0, need 25
+[cycles] 
+  0/1 reached the table (0%); longest streak 0 of 25 needed
+[cycles] route attempt 1/3 did not reach the table
+[cycles]       t=50s heading 5.9 vs recorded 3.0 (-2.9) — correcting
+[cycles]       t=50s corrected to 5.9 (residual -2.9)
+[cycles]       not at the table yet (dealer 0.347); nudging
+[cycles]       centre_on(dealer_tight): score 0.568 offset +0.113 — turning 90.5 -> 106.1 (+15.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.667 offset -0.060 — turning 106.0 -> 97.5 (-8.5 deg)
+[cycles]       centre_on(dealer_tight): score 0.604 offset +0.025 — turning 97.1 -> 100.6 (+3.5 deg)
+[cycles]       centre_on(dealer_tight): gave up after 3 tries; camera moved +10.0 deg overall
+[cycles]       ended in dealer_table (score 0.793, margin 0.325)
+[cycles]   [ 1/1] TABLE   ink 0.0438  end  100.4  |  1 ok / 0 missed (100%)  |  streak 1, best 1, need 25
+[cycles] 
+  1/1 reached the table (100%); longest streak 1 of 25 needed
+Resuming with 9 wins / 5 losses / 0 draws logged, $100 on hand. Target: 999 wins total.
+Starting next match. $50 left, $50/$100 of session cap spent.
+  [api] 80/400 calls (~$0.96), 320 left
+Read 24 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+  [ban] verified 3/3 bans placed.
+Unrecognized screen (other), waiting... (1/6) [api 81 calls spent]
+Couldn't read the screen (turn screen with unusable phase: None), retrying... (2/15)
+Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 248 polls — peak edge 0.0347 vs threshold 0.065 (53% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+  [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+  [local-check] third_base: empty
+  [local-check] first_base: empty
+  [local-check] second_base: empty
+  [local-check] vision runners: []
+  [local-check] hand: all 5 slots agree with vision
+Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+  [reveal] no cards after 75s over 247 polls — peak edge 0.0348 vs threshold 0.065 (54% of the bar)
+  [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run

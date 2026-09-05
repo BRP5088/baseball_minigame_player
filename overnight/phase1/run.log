@@ -1,0 +1,117 @@
+map: 5 links, nodes ['bar_jukebox', 'bar_pool_room', 'office_corridor', 'office_door', 'portrait_room']
+
+=== portrait_room ===
+  not at portrait_room and cannot say where this is (unrecognised (58.000/1.020)) — reloading to a known start
+  route: office_corridor -> office_door -> portrait_room  (16.2s of walking)
+    leg office_corridor -> office_door
+      step 1/7 bearing  270.4 (got  269.8) 0.79s -> walked 0.79s, best change 20.1
+      step 2/7 bearing  270.1 (got  269.8) 0.78s -> walked 0.78s, best change 19.4
+      step 3/7 bearing  270.1 (got  269.8) 0.78s -> walked 0.78s, best change 15.0
+      step 4/7 bearing  270.3 (got  269.8) 0.78s -> walked 0.78s, best change 12.2
+      step 5/7 bearing  270.1 (got  269.8) 0.79s -> walked 0.79s, best change 12.5
+      step 6/7 bearing  270.1 (got  269.8) 0.79s -> walked 0.79s, best change 8.4
+      step 7/7 bearing  270.4 (got  269.8) 0.42s -> walked 0.42s, best change 7.6
+      arrived? None  (no appearance reference by design)
+    leg office_door -> portrait_room
+      step 1/16 bearing  338.1 (got  336.6) 0.79s -> walked 0.79s, best change 12.3
+      step 2/16 bearing  339.2 (got  336.6) 0.70s -> walked 0.70s, best change 13.2
+      step 3/16 bearing  347.9 (got  343.9) 0.42s -> walked 0.42s, best change 19.2
+      step 4/16 bearing  355.2 (got  353.7) 0.79s -> walked 0.79s, best change 46.0
+      step 5/16 bearing  360.0 (got  357.6) 0.51s -> walked 0.51s, best change 33.1
+      step 6/16 bearing    8.6 (got    4.7) 0.78s -> walked 0.78s, best change 17.6
+      step 7/16 bearing    7.7 (got    4.7) 0.78s -> walked 0.78s, best change 23.5
+      step 8/16 bearing    1.7 (got    4.7) 0.80s -> walked 0.80s, best change 32.7
+      step 9/16 bearing  359.6 (got    1.5) 0.36s -> walked 0.36s, best change 27.1
+      step 10/16 bearing  359.4 (got    1.4) 0.78s -> walked 0.78s, best change 27.1
+      step 11/16 bearing  357.9 (got    1.5) 0.79s -> walked 0.79s, best change 22.1
+      step 12/16 bearing  358.0 (got    1.5) 0.79s -> walked 0.79s, best change 19.7
+      step 13/16 bearing  357.8 (got    1.4) 0.79s -> walked 0.79s, best change 21.7
+      step 14/16 bearing  357.9 (got    1.5) 0.79s -> walked 0.79s, best change 24.4
+      step 15/16 bearing    0.8 (got    1.5) 0.79s -> walked 0.79s, best change 29.3
+      step 16/16 bearing    4.0 (got    1.4) 0.36s -> walked 0.36s, best change 21.0
+      arrived? True  (portrait_room 760.000/5.710)
+      align: within 35px (dx=+13.8) after 0 step(s)
+      aligned at portrait_room: 14px from the recorded pose
+  arrived, but 1 node(s) could not be confirmed on the way: ['office_door'] — each is a hole in the reference set
+  verified at portrait_room (portrait_room 698.000/5.330)
+  verified. arrival frame: 1500 keypoints, bearing 1.4922813174374694
+
+=== bar_pool_room ===
+  route: portrait_room -> bar_pool_room  (2.0s of walking)
+    leg portrait_room -> bar_pool_room
+      step 1/4 bearing  286.6 (got  289.1) 0.16s -> walked 0.16s, best change 12.4
+      step 2/4 bearing  292.2 (got  289.1) 0.79s -> walked 0.79s, best change 28.8
+      step 3/4 bearing  285.6 (got  289.1) 0.80s -> walked 0.80s, best change 12.0
+      step 4/4 bearing  287.6 (got  289.1) 0.23s -> walked 0.23s, best change 10.9
+      recovery fan did not find bar_pool_room
+      arrived? None  (unverified, abstained (76.000/1.150))
+  arrived, but 1 node(s) could not be confirmed on the way: ['bar_pool_room'] — each is a hole in the reference set
+  not at bar_pool_room and cannot say where this is (unrecognised (25.000/1.250)) — reloading to a known start
+  route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+    leg office_corridor -> office_door
+      step 1/7 bearing  270.4 (got  272.8) 0.79s -> walked 0.79s, best change 20.3
+      step 2/7 bearing  270.1 (got  272.8) 0.78s -> walked 0.78s, best change 19.3
+      step 3/7 bearing  270.1 (got  272.8) 0.78s -> walked 0.78s, best change 14.4
+      step 4/7 bearing  270.3 (got  272.8) 0.78s -> walked 0.78s, best change 13.2
+      step 5/7 bearing  270.1 (got  272.7) 0.79s -> walked 0.79s, best change 9.5
+      step 6/7 bearing  270.1 (got  272.8) 0.79s -> walked 0.79s, best change 6.5
+      step 7/7 bearing  270.4 (got  272.8) 0.42s -> walked 0.42s, best change 6.9
+      arrived? None  (no appearance reference by design)
+    leg office_door -> portrait_room
+      step 1/16 bearing  338.1 (got  339.6) 0.79s -> walked 0.79s, best change 13.9
+      step 2/16 bearing  339.2 (got  339.6) 0.70s -> walked 0.70s, best change 27.3
+      step 3/16 bearing  347.9 (got  349.2) 0.42s -> walked 0.42s, best change 28.0
+      step 4/16 bearing  355.2 (got  356.1) 0.79s -> walked 0.79s, best change 42.8
+      step 5/16 bearing  360.0 (got  358.1) 0.51s -> walked 0.51s, best change 16.7
+      step 6/16 bearing    8.6 (got    6.2) 0.78s -> walked 0.78s, best change 21.4
+      step 7/16 bearing    7.7 (got    6.2) 0.78s -> walked 0.78s, best change 29.9
+      step 8/16 bearing    1.7 (got    0.6) 0.80s -> walked 0.80s, best change 33.3
+      step 9/16 bearing  359.6 (got    0.6) 0.36s -> walked 0.36s, best change 17.4
+      step 10/16 bearing  359.4 (got    0.6) 0.78s -> walked 0.78s, best change 20.1
+      step 11/16 bearing  357.9 (got    0.8) 0.79s -> walked 0.79s, best change 19.4
+      step 12/16 bearing  358.0 (got    0.6) 0.79s -> walked 0.79s, best change 23.1
+      step 13/16 bearing  357.8 (got    0.9) 0.79s -> walked 0.79s, best change 25.9
+      step 14/16 bearing  357.9 (got    0.6) 0.79s -> walked 0.79s, best change 28.3
+      step 15/16 bearing    0.8 (got    0.6) 0.79s -> walked 0.79s, best change 24.2
+      step 16/16 bearing    4.0 (got    0.6) 0.36s -> walked 0.36s, best change 15.7
+      arrived? True  (portrait_room 595.000/5.170)
+      align: within 35px (dx=-2.8) after 0 step(s)
+      aligned at portrait_room: 3px from the recorded pose
+    leg portrait_room -> bar_pool_room
+      step 1/4 bearing  286.6 (got  286.2) 0.16s -> walked 0.16s, best change 10.2
+      step 2/4 bearing  292.2 (got  290.1) 0.79s -> walked 0.79s, best change 14.9
+      step 3/4 bearing  285.6 (got  288.1) 0.80s -> walked 0.80s, best change 16.5
+      step 4/4 bearing  287.6 (got  288.1) 0.23s -> walked 0.23s, best change 12.0
+      arrived? True  (bar_pool_room 401.000/3.400)
+      align: dx=+205.9 -> strafe right 0.17s
+      align: dx=+162.2 -> strafe right 0.14s
+      align: dx=+106.1 -> strafe right 0.10s
+      align: dx=+84.2 -> strafe right 0.10s
+      align: dx=+50.1 -> strafe right 0.10s
+      align: within 35px (dx=+15.9) after 5 step(s)
+      aligned at bar_pool_room: 16px from the recorded pose
+  arrived, but 1 node(s) could not be confirmed on the way: ['office_door'] — each is a hole in the reference set
+  verified at bar_pool_room (bar_pool_room 315.000/2.690)
+  verified. arrival frame: 1500 keypoints, bearing 288.0927835051546
+
+=== bar_jukebox ===
+  route: bar_pool_room -> bar_jukebox  (3.3s of walking)
+    leg bar_pool_room -> bar_jukebox
+      step 1/5 bearing    2.1 (got    0.9) 0.80s -> walked 0.80s, best change 20.6
+      step 2/5 bearing    1.2 (got    0.9) 0.79s -> walked 0.79s, best change 27.0
+      step 3/5 bearing    0.8 (got    0.9) 0.80s -> walked 0.80s, best change 33.7
+      step 4/5 bearing  359.4 (got    1.0) 0.79s -> walked 0.79s, best change 32.8
+      step 5/5 bearing  359.6 (got    1.0) 0.14s -> walked 0.14s, best change 14.8
+      arrived? True  (bar_jukebox 222.000/2.060)
+      align: dx=-69.3 -> strafe left 0.10s
+      align: dx=-48.6 -> strafe left 0.10s
+      align: within 35px (dx=-18.5) after 2 step(s)
+      aligned at bar_jukebox: 19px from the recorded pose
+  verified at bar_jukebox (bar_jukebox 228.000/2.480)
+  verified. arrival frame: 1500 keypoints, bearing 0.9262435677529948
+
+--- summary ---
+  portrait_room    reached=True  keypoints=1500
+  bar_pool_room    reached=True  keypoints=1500
+  bar_jukebox      reached=True  keypoints=1500
+EXIT=0

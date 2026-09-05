@@ -1,0 +1,1707 @@
+{
+  "hand_20260824_201720_866.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "not a gameplay hand: pack/reveal screen, single card and card backs floating, no 5-card fan"
+  },
+  "hand_20260824_201738_944.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: only 1 card (FIELDING PLAY) dealt plus a face-down card"
+  },
+  "hand_20260824_201739_949.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: only 2 cards dealt"
+  },
+  "hand_20260824_201740_952.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: 4 cards dealt plus a face-down card"
+  },
+  "hand_20260824_201741_954.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "PITCH FOCUS",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "all 5 cards visible and readable but still mid-deal (rightmost card sliding in, slight motion blur)"
+  },
+  "hand_20260824_201750_996.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "PITCH FOCUS",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shield badges on any player card"
+  },
+  "hand_20260824_201756_019.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "PITCH FOCUS",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; rightmost card raised/hovered"
+  },
+  "hand_20260824_201758_029.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "PITCH FOCUS",
+        "bonus": 1,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 4 (PITCH FOCUS) badge is cut off above the top edge of the crop; value 1 inferred from adjacent frames"
+  },
+  "hand_20260824_201807_065.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: 4 cards plus a face-down card in slot 5"
+  },
+  "hand_20260824_201808_070.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201815_103.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201821_120.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 is hovered/enlarged so its banner and power badge sit above the image top edge; 8 inferred from adjacent frames"
+  },
+  "hand_20260824_201830_161.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-play animation: card 3 has left the hand, only 4 cards plus a sliver visible"
+  },
+  "hand_20260824_201832_171.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201844_229.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 2 hovered/enlarged, power badge clipped at top edge; 6 inferred from adjacent frames"
+  },
+  "hand_20260824_201858_294.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-play animation: card 2 has left the hand, only 4 cards visible"
+  },
+  "hand_20260824_201859_299.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201911_341.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 0,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 hovered/enlarged, badge above top edge; 7 inferred from adjacent frames"
+  },
+  "hand_20260824_201925_399.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201935_432.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; no shields"
+  },
+  "hand_20260824_201947_492.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "not a gameplay hand: card-reveal/ban screen showing a single named card (JACOB CHEESEHEAD MCQUEEN) and a card back"
+  },
+  "hand_20260824_202031_680.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "not a gameplay hand: ban/draft grid screen with PLAY button overlay"
+  },
+  "hand_20260824_202041_724.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "not a gameplay hand: ban/draft grid screen zoomed in, PLAY overlay and an X-ed out card"
+  },
+  "hand_20260824_202051_767.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: only 2 cards dealt plus a face-down card"
+  },
+  "hand_20260824_202052_772.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: 4 cards plus a face-down card in slot 5"
+  },
+  "hand_20260824_202053_777.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; shields present on all three BATTER cards"
+  },
+  "hand_20260824_202058_796.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; shields present on all three BATTER cards"
+  },
+  "hand_20260824_202101_811.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 2,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 (POWER SWING) is raised/hovered so its badge sits above the image top edge; bonus 2 inferred from adjacent frames"
+  },
+  "hand_20260824_202102_812.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202103_817.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202116_876.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "card 2 raised/hovered but fully readable"
+  },
+  "hand_20260824_202125_918.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-play animation: card 2 has left the hand (face-down sliver in its place), only 4 cards"
+  },
+  "hand_20260824_202126_921.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; cards 2-4 all read 4/shield 3 with different art"
+  },
+  "hand_20260824_202136_960.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202141_981.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 2,
+        "confident": true
+      }
+    ],
+    "notes": "card 5 raised/hovered but fully readable"
+  },
+  "hand_20260824_202151_014.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 5 is mid-deal (scaled down, sliding in) but its badges are legible: 4 / shield 3"
+  },
+  "hand_20260824_202152_019.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202204_071.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 2 raised/hovered, its power circle is clipped by the top image edge (reads 4, shield 3 clear)"
+  },
+  "hand_20260824_202205_075.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-play animation: card 2 has left the hand and is flying up (ghosted at right), only 4 cards in the fan"
+  },
+  "hand_20260824_202206_080.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202215_115.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202221_143.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 raised/hovered, its power circle is above the top image edge (shield 3 visible); power 4 inferred from adjacent frames"
+  },
+  "hand_20260824_202231_183.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 is mid-deal (scaled down, sliding in) but legible: 4 / shield 2"
+  },
+  "hand_20260824_202232_187.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202239_217.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand"
+  },
+  "hand_20260824_202244_235.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 2,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 raised/hovered but fully readable"
+  },
+  "hand_20260824_202310_330.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; card 3 replaced by BATTER 7 / shield 1"
+  },
+  "hand_20260824_202312_338.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 1,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 raised/hovered, power circle clipped above the top edge (shield 1 visible); power 7 inferred from adjacent frames"
+  },
+  "hand_20260824_202313_340.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "SPEED BOOST",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "tactics",
+        "name": "POWER SWING",
+        "bonus": 1,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 1,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 3,
+        "confident": true
+      }
+    ],
+    "notes": "hover/zoom transition: cards 2 and 3 have their top badges clipped above the image edge; values inferred from adjacent frames"
+  },
+  "hand_20260824_202355_984.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "new hand, settled; note cards 2 and 5 have NO shield (secondary 0) while cards 3 and 4 do"
+  },
+  "hand_20260824_202408_014.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 9,
+        "secondary": 0,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 2 raised/hovered, power circle clipped above the top image edge; power 9 inferred from adjacent frames"
+  },
+  "hand_20260824_202418_037.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: slot 2 holds a face-down card, only 4 face-up cards"
+  },
+  "hand_20260824_202420_042.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; card 2 replaced by PITCHER 6 (no shield)"
+  },
+  "hand_20260824_202426_054.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 1 raised/hovered but fully readable"
+  },
+  "hand_20260824_202444_092.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "tactics",
+        "name": "FIELDING PLAY",
+        "bonus": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 1 raised/hovered but fully readable"
+  },
+  "hand_20260824_202448_102.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "not a gameplay hand: single-card reveal screen (TIMMEH RATTYCUM) over the deck, no 5-card fan"
+  },
+  "hand_20260824_202454_116.jpg": {
+    "usable": false,
+    "cards": [],
+    "notes": "mid-deal animation: face-down card at left, only 3 face-up cards visible"
+  },
+  "hand_20260824_202456_121.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand, all five are PITCHER cards; only cards 3 and 4 carry shields"
+  },
+  "hand_20260824_202508_152.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 2 raised/hovered, banner and power circle clipped above the top edge; power 6 inferred from adjacent frames"
+  },
+  "hand_20260824_202532_209.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; card 2 replaced by PITCHER 8 (no shield)"
+  },
+  "hand_20260824_202538_222.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 1,
+        "confident": false
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "card 3 raised/hovered, power circle clipped above the top edge (shield 1 visible); power 5 inferred from adjacent frames"
+  },
+  "hand_20260824_202556_260.jpg": {
+    "usable": true,
+    "cards": [
+      {
+        "kind": "player",
+        "power": 5,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 8,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 7,
+        "secondary": 0,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 4,
+        "secondary": 1,
+        "confident": true
+      },
+      {
+        "kind": "player",
+        "power": 6,
+        "secondary": 0,
+        "confident": true
+      }
+    ],
+    "notes": "settled 5-card hand; card 3 replaced by PITCHER 7 (no shield; the small ball left of the badge is card art, not a badge)"
+  }
+}

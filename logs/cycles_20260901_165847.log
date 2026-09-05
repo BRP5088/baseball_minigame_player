@@ -1,0 +1,30 @@
+[cycles] 5 cycles, API budget 400 calls (~$4.80)
+[cycles] === cycle 1 ===
+[cycles] reloading the last save
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 2.3) -> YES
+[cycles]   YES press 1 did not register, retrying
+[cycles] reset attempt 1/3 failed: compass never reappeared within 45s — the load may have failed, or the game is on a screen this does not recognise
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 3.1) -> YES
+[cycles] reset attempt 2/3 failed: compass never reappeared within 45s — the load may have failed, or the game is on a screen this does not recognise
+[cycles]   pause menu open (selected 'Resume')
+[cycles]   selected: Load Last Save
+[cycles]   confirmation dialog up (delta 3.1) -> YES
+[cycles] reset attempt 3/3 failed: compass never reappeared within 45s — the load may have failed, or the game is on a screen this does not recognise
+[cycles] cycle 1 failed:
+Traceback (most recent call last):
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/run_cycles.py", line 189, in main
+    outcome = cycle(n)
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/run_cycles.py", line 151, in cycle
+    reset_env.reset_environment(log=log)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/reset_env.py", line 189, in reset_environment
+    raise ResetError(f"compass never reappeared within {LOAD_TIMEOUT_SEC:.0f}s "
+                     "— the load may have failed, or the game is on a screen "
+                     "this does not recognise")
+reset_env.ResetError: compass never reappeared within 45s — the load may have failed, or the game is on a screen this does not recognise
+
+[cycles] DONE: 9W/4L/0D, $96 on hand, 0 API calls (~$0.00)
