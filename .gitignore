@@ -59,6 +59,18 @@ Photos of ban screen missing cards/
 # Run outputs and hand-made backups, now that history is real.
 overnight/*.log
 overnight/*.json
+overnight/*failframes*/        # frames a run writes; regenerated each time
+overnight/phase1/
+overnight/failframes/
+
+# Machine-local calibration and run state. compass_scale.json and
+# view_bounds.json are keyed on a machine id and rebuilt on first use;
+# progress_testing.json is live run state, not source.
+compass_scale.json
+view_bounds.json
+progress_testing.json
+progress.json
+leg_reliability.json
 *.backup_*
 world_map.json.backup_*
 CLAUDE.md.backup_*

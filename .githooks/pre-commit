@@ -1,0 +1,73 @@
+#!/bin/bash
+# Fast pre-commit gate. NOT the full suite — that is ~450s and a gate nobody
+# waits for is a gate nobody keeps.
+#
+# These four were chosen because each guards a class that ACTUALLY broke
+# something here, not because they are fast:
+#
+#   no_undefined_names   caught six constants deleted along with the function
+#                        they sat beside; the escape ladder would have
+#                        NameError'd on its first blockage
+#   buttons_use_keyboard the FIFO button path is dead on this console; a
+#                        regression there silently disables every button
+#   at_table_threshold   at_table gates both "arrived" and the $50 press, and
+#                        its threshold sat below the highest measured negative
+#   api_budget           the only ceiling on PAID vision calls, and a malformed
+#                        value used to fall back to 60 calls silently
+#   leg_distances        pins every map leg against its own recording; the
+#                        jukebox leg was 4.3x too short for a day and no test
+#                        could see it
+#
+# NOT in this list: tests/harness/test_no_side_effects.py. It is the right test
+# and the wrong place — it re-runs every OTHER test file in subprocesses, so it
+# alone exceeds a 300s budget. A gate that takes five minutes is a gate people
+# bypass. It runs in the full suite.
+#
+# Skip with: git commit --no-verify
+# Run everything with: ./run_tests.sh
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# Live console work must not race a test sweep: under saturation Python's sleep
+# degrades from ~5ms to 242ms and corrupts every walked leg. If an experiment is
+# running, skip rather than corrupt it — a missed gate costs less than a ruined
+# hour of trials.
+if pgrep -f "overnight/ab_.*\.py" >/dev/null 2>&1; then
+    echo "pre-commit: an A/B is running — skipping tests rather than loading the machine"
+    exit 0
+fi
+
+PY=.venv/bin/python
+[ -x "$PY" ] || PY=python3
+
+TESTS="
+tests/harness/test_no_undefined_names.py
+tests/rig/test_buttons_use_keyboard.py
+tests/routing/test_at_table_threshold.py
+tests/minigame/test_api_budget.py
+tests/routing/test_leg_distances_match_recording.py
+"
+
+fail=0
+start=$(date +%s)
+for t in $TESTS; do
+    [ -f "$t" ] || continue
+    printf "  %-52s " "$(basename "$t")"
+    if BASEBALL_TEST_RUN=1 PERSONAL_ANTHROPIC_API_KEY="dummy-offline-test" \
+       perl -e 'alarm shift; exec @ARGV' 300 "$PY" -B "$t" >/tmp/_pc.out 2>&1; then
+        echo "PASS"
+    else
+        echo "FAIL"
+        tail -6 /tmp/_pc.out | sed 's/^/      /'
+        fail=1
+    fi
+done
+echo "  ($(($(date +%s) - start))s)"
+
+if [ $fail -ne 0 ]; then
+    echo
+    echo "pre-commit: BLOCKED. Fix the above, or commit with --no-verify if you"
+    echo "know why it fails and are recording that reason somewhere."
+    exit 1
+fi
+exit 0
