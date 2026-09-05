@@ -148,10 +148,18 @@ def main():
                 log(f"    run raised {type(e).__name__}: {e}")
                 d = None
             signal.alarm(0)
-            res["runs"].append({"arm": arm, "trial": t + 1, "depth": d})
+            # NULL THE DEPTH BEFORE RECORDING IT, NOT AFTER. This used to append
+            # the row first and then set `d = None`, so the row kept the
+            # contaminated depth while the log said "discarding this depth". The
+            # analysis below reads res["runs"], not `d`, so every trial the
+            # console slept through was scored as a real result — in the one arm
+            # that had been running longest. CLAUDE.md 10.6 exists because a
+            # sleeping console once made BOTH arms degrade together; this is the
+            # same failure with the evidence deleted.
             if d is not None and not stream_alive():
                 log("    stream died DURING the trial — discarding this depth")
                 d = None
+            res["runs"].append({"arm": arm, "trial": t + 1, "depth": d})
             log(f"    depth {d} of {len(ROUTE)}")
             save()
     if fingerprint() != fp:

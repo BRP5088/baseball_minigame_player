@@ -80,3 +80,7 @@ tests_quarantine/__pycache__/
 # Screenshot archives (spaces in the names; no quotes — git takes those
 # literally and the pattern silently matches nothing).
 /Photos*/          # only at the project ROOT, not test_fixtures/gameplay_photos
+
+# Subagent scratch notes — see agent_progress/README.md
+agent_progress/*
+!agent_progress/README.md

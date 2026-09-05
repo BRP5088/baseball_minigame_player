@@ -90,7 +90,8 @@ fail SILENTLY:
 
 Source of truth is `git diff` in `chiaki-ng-src/`. No line count is quoted
 here on purpose — the one that was ("31 insertions") was already wrong, and a
-number that must be hand-synced is a constant pretending to be evidence. See OPEN-2: `chiaki-patch/` cannot currently rebuild the patch.
+number that must be hand-synced is a constant pretending to be evidence. `chiaki-patch/` holds all five edits (OPEN-2, closed
+2026-09-04); `cd chiaki-ng-src && git diff` remains the authority.
 
 **NOTHING THAT MATTERS GOES IN `/tmp`.** `/tmp/chiaki-ng` was found as 825 empty
 directories with every file gone. Screenshots for analysis are fine there;
@@ -713,14 +714,26 @@ Pinned by `tests/routing/test_at_table_threshold.py` against both real frames.
   message and ZERO matches, forever. Now a loud error. Deliberately NOT fixed by
   raising DEFAULT_BUDGET — that constant caps REAL money.
 
-- **`keep_awake` was nudging 0.41 degrees, not the ~7 its comment claimed.**
-  `NUDGE_MAG` was 0.35, exactly ON `turn_curve.DEAD_BELOW` rather than above it,
-  for 90ms. Now 0.60 for 300ms = 6.75 deg, above the dead band and self-undoing.
-  This module exists because console auto-sleep killed one overnight run and
-  contaminated a leg-tolerance A/B, so a nudge the console may not even register
-  is the catalogue shape guarding the failure that has already cost a
-  measurement. **Whether the PS5 counts a given deflection as activity is still
-  UNVERIFIED** and cannot be tested offline.
+- **`keep_awake` is DELETED (2026-09-05).** It existed to stop the PS5 sleeping,
+  and its `NUDGE_MAG` sat exactly ON `turn_curve.DEAD_BELOW` rather than above
+  it, so the nudge it advertised as ~7 degrees was 0.41 — a guard against a
+  failure that has already cost a measurement, itself unable to fire. That was
+  fixed; the module was deleted anyway, for a better reason.
+
+  A run DRIVES the console, so it cannot sleep during one. The only gap
+  keep_awake covered was idle time between runs — and nothing ever launched it
+  (grep found it only in its own file and its two tests, and no log anywhere
+  contains its output, so it had never run). Meanwhile its `BUSY_PATTERNS`
+  stand-down list named 7 script names and matched NO A/B harness: `run_trial`
+  spawns trials as `<venv>/python <abspath> --one-trial <arm>`. Every 240s it
+  would have sent `clear`, which `injectinput.cpp` zeroes `left_x`/`left_y` on,
+  while `slow_traverse` holds the stick untimed and sleeps out the full
+  duration — **the leg walks short, and no log distinguishes that from a routing
+  failure.** A module that could not help, in a way that could silently corrupt
+  the run it was protecting.
+
+  The lesson that survives it: a guard whose trigger is a hand-kept list of
+  NAMES rots silently, because nothing fails when a new name is missing.
 
 ## A STALE match_in_progress SPENDS AN UNTRACKED $50
 
@@ -773,8 +786,12 @@ basin its own landing point misses, which means those arrivals came from the
 recovery fan, not the leg.
 
 **RESTORED 2026-09-05** to the recorded five steps. Pinned by
-`tests/routing/test_leg_distances_match_recording.py`, which asserts every leg
-covers its recorded distance within 15% and that no leg is implausibly short.
+`tests/routing/test_leg_distances_match_recording.py`. **It pins the JUKEBOX
+leg specifically**, against its recorded 1.031 units within 15%, plus a floor
+that no leg is implausibly short. It does NOT yet check the other four legs
+against their recordings — doing that needs each leg's step-index span in
+`route3_steps.json` established first, and until it is, this test would not
+catch the same defect on a different leg.
 
 ### What this invalidates
 
@@ -968,6 +985,27 @@ numbers; Cause B stayed unexplained for days because nobody kept a picture. One
 jpeg per failure settles arguments immediately — but **check what moment it
 captures**, because a frame taken after recovery, or before the attempt,
 describes something else entirely and looks exactly as authoritative.
+
+**16. A SUBAGENT THAT IS KILLED LOSES EVERYTHING IT HAS NOT WRITTEN DOWN.**
+On 2026-09-05 four parallel workflows hit a usage limit mid-flight and 18 agents
+were killed. One had spent 179 tool calls and twelve minutes reading archived
+frames; it returned nothing, and the transcript holds its tool calls but not its
+conclusion. Re-running costs the same tokens again.
+
+So any prompt that dispatches a subagent must tell it to write to
+`agent_progress/<label>.md` **as it goes** — every few tool calls, not at the
+end. A file written on completion is lost in exactly the case it exists for.
+**This is the DISPATCHER's job**: the agent has no way to know the convention,
+so an instruction missing from the prompt means no notes get written at all.
+
+The file separates **Established** (verified, with the command or file that
+verified it) from **Assumed** (working from, not checked). A half-finished
+analysis restored later reads exactly as authoritative as a finished one, and
+this project has lost days to output that looked like evidence and was not — so
+anything under Assumed is re-verified before it is built on.
+
+`agent_progress/` is gitignored and safe to delete wholesale; its README carries
+the template.
 
 ---
 

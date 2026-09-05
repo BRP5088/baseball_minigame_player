@@ -169,6 +169,9 @@ if __name__ == "__main__":
                 pass
         sys.exit(0)
 
+    # Before the backup, not after: a backup of a contaminated map is
+    # indistinguishable from a backup of a clean one.
+    _harness.assert_map_pristine(MAP, log=log)
     shutil.copy(MAP, BACKUP)
     log(f"OPEN-15: {TRIALS} interleaved trials per arm on {START} -> {TARGET}")
     log(f"  leg FIXED at the restored "
@@ -184,7 +187,7 @@ if __name__ == "__main__":
                                     "reason": "stream dead before"})
                 save()
                 continue
-            r, secs = _harness.run_trial(__file__, name, TIMEOUT)
+            r, secs = _harness.run_trial(__file__, name, TIMEOUT, log=log)
             if r is None or "error" in (r or {}):
                 why = (r or {}).get("error", "timeout/crash")
                 log(f"  [{name}] {t+1}/{TRIALS}: INVALID ({why}) after {secs}s")

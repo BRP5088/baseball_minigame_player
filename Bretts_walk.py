@@ -391,7 +391,15 @@ def build_parser():
                             help="directory to save an arrival frame per node")
             sp.add_argument("--reset", action="store_true",
                             help="reload the save first")
-            sp.add_argument("--attempts", type=int, default=3)
+            # NO --attempts HERE. It was accepted and silently dropped: cmd_walk
+            # calls graph_walk.follow(), which has no attempts parameter at all,
+            # so `walk --attempts 9` did exactly what `walk` did. Retrying is
+            # the one lever the arithmetic says can reach 25 consecutive
+            # (CLAUDE.md 8c), so a flag that looks like it sets retry depth and
+            # sets nothing is worse than no flag. Wiring it would mean switching
+            # `walk` from follow() to follow_verified(), which is a change to
+            # production routing and belongs in a measured A/B, not in a
+            # cleanup. `reset` keeps its --attempts, which IS wired.
         if name == "label":
             sp.add_argument("place", help="e.g. bar_jukebox")
             sp.add_argument("--min-keypoints", type=int, default=200)

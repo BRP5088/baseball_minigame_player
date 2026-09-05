@@ -58,6 +58,7 @@ run_one() {
     f="$1"
     # A stable, filesystem-safe name for this test's result files.
     key=$(echo "$f" | tr '/' '_')
+    start=$(date +%s)
     # BASEBALL_TEST_RUN makes orchestrator stamp any match-log row written from
     # here as _synthetic, even if the test forgot to redirect the log.
     # The key is pinned UNCONDITIONALLY, not ${VAR:-dummy}: this shell exports
@@ -79,9 +80,26 @@ run_one() {
         if [ $rc -eq 142 ]; then echo "HUNG" > "$OUT/$key.status"
         else echo "FAIL" > "$OUT/$key.status"; fi
     fi
+    # LIVE PROGRESS. The suite printed nothing at all until every file had
+    # finished, so a 200s run and a wedged one looked identical from outside for
+    # three minutes — the same "slow step and hung step with identical output"
+    # shape the timeout wrapper above exists to fix, one level up. The count is
+    # derived from the status files rather than a counter variable, because each
+    # run_one runs in its own xargs subshell and a shared variable would not
+    # survive.
+    #
+    # Written to stderr so that redirecting stdout to a log still shows progress
+    # on the terminal, and so it can never be mistaken for a test's own output.
+    secs=$(( $(date +%s) - start ))
+    n=$(ls "$OUT"/*.status 2>/dev/null | wc -l | tr -d ' ')
+    st=$(cat "$OUT/$key.status")
+    slow=""
+    [ "$secs" -ge 30 ] && slow="  <-- slow"
+    printf "  [%3d/%3d] %-6s %-44s %4ds%s\n" \
+        "$n" "$TOTAL" "$st" "$(basename "$f")" "$secs" "$slow" >&2
 }
 export -f run_one
-export OUT TEST_TIMEOUT TIMEOUT_PL
+export OUT TEST_TIMEOUT TIMEOUT_PL TOTAL
 
 # Collect first so the count is known before anything runs — see the zero-tests
 # check below.
@@ -136,6 +154,12 @@ fi
 run_files=$(echo "$files" | grep -v "^${SIDE_EFFECTS}$")
 n_run=$(echo "$run_files" | grep -c . )
 
+# The denominator, known before anything runs. Includes the side-effect check,
+# which is run separately below but is one of the files being reported.
+TOTAL=$ran
+echo "--- $ran test files, JOBS=$JOBS, ${TEST_TIMEOUT}s ceiling each" >&2
+start_all=$(date +%s)
+
 SNAP="$OUT/before_state.json"
 if ! python3 "$SIDE_EFFECTS" --snapshot "$SNAP"; then
     echo "--- could not snapshot project state; refusing to run blind"
@@ -160,6 +184,8 @@ else
     if [ $se_rc -eq 142 ]; then echo "HUNG" > "$OUT/$se_key.status"
     else echo "FAIL" > "$OUT/$se_key.status"; fi
 fi
+printf "  [%3d/%3d] %-6s %-44s\n" "$ran" "$TOTAL" \
+    "$(cat "$OUT/$se_key.status")" "$(basename "$SIDE_EFFECTS")" >&2
 
 # Report in a stable order, grouped by area, so a diff between two runs is
 # readable. Results are printed AFTER the run because parallel output would
@@ -186,6 +212,7 @@ done
 # matched nothing, so a suite that ran nothing at all printed "all green" and
 # exited 0 — indistinguishable from one where everything passed.
 echo
-[ $fail -eq 0 ] && echo "--- all green ($ran files, JOBS=$JOBS)" \
-                || echo "--- FAILURES above ($ran files, JOBS=$JOBS)"
+took=$(( $(date +%s) - start_all ))
+[ $fail -eq 0 ] && echo "--- all green ($ran files, JOBS=$JOBS, ${took}s)" \
+                || echo "--- FAILURES above ($ran files, JOBS=$JOBS, ${took}s)"
 exit $fail

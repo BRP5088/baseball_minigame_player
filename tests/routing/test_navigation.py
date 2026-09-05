@@ -103,11 +103,23 @@ if len(db) >= 2:
         if len(ps) < 2:
             continue
         for held in ps:
-            sub = {r: [(places.descriptor(x), places.frame_heading(x))
-                       for x in xs if x != held]
-                   for r, xs in paths.items()}
-            sub = {r: v for r, v in sub.items() if v}
-            got, score, margin = places.identify(held, sub)
+            # A REAL LEAVE-ONE-OUT. This used to build `sub` and pass it as
+            # places.identify(held, sub) — but identify() ignored that argument
+            # entirely and answered from the full database, so every frame
+            # matched ITSELF and the loop measured nothing. `root=` is the
+            # parameter identify() actually honours, so hold the frame out by
+            # building a reference tree without it.
+            with tempfile.TemporaryDirectory() as _sub_root:
+                for r, xs in paths.items():
+                    kept = [x for x in xs if x != held]
+                    if not kept:
+                        continue
+                    _d = os.path.join(_sub_root, r)
+                    os.makedirs(_d, exist_ok=True)
+                    for x in kept:
+                        os.symlink(os.path.abspath(x),
+                                   os.path.join(_d, os.path.basename(x)))
+                got, score, margin = places.identify(held, root=_sub_root)
             scored += 1
             if got is not None and got != room:
                 wrong_room.append((held, room, got, score))

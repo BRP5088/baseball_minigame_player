@@ -149,7 +149,15 @@ try:
     # when both are working.
     d = tempfile.mkdtemp()
     class Img:
-        def save(self, path):
+        # convert() and **kw because the failure frame is now written as
+        # img.convert("RGB").save(path, quality=85) — a stub missing either one
+        # raises inside the save's own try/except, so NO frame is written and
+        # the test reads as "the code stopped saving frames" when the code is
+        # fine. That cost a diagnosis on 2026-09-05.
+        def convert(self, _mode):
+            return self
+
+        def save(self, path, **_kw):
             open(path, "wb").write(b"x")
 
     def fails():
@@ -215,7 +223,10 @@ try:
         def __init__(self, tag):
             self.tag = tag
 
-        def save(self, path):
+        def convert(self, _mode):
+            return self
+
+        def save(self, path, **_kw):
             frames.append(self.tag)
             open(path, "wb").write(b"x")
 
@@ -224,16 +235,44 @@ try:
     def capture():
         return Marked(state["phase"])
 
-    def verified(m, node, capture=None, read_heading=None, log=None,
-                 attempts=3, shots=None):
+    import tempfile as _tf
+
+    # CASE 1: follow() published the leg's own end frame — the best evidence
+    # there is, because the leg has finished and the recovery fan has not run.
+    # This is what a real attempt does; before 2026-09-05 follow_verified
+    # ignored it and classified `before` instead, which is the PREVIOUS node's
+    # successful arrival.
+    def verified_publishing(m, node, capture=None, read_heading=None, log=None,
+                            attempts=3, shots=None):
+        gw._LAST_LEG_END[node] = Marked("leg_end")
         state["phase"] = "after_recovery"     # the fan has now moved us
         return False
 
-    gw.go_to_node_verified = verified
-    import tempfile as _tf
+    gw.go_to_node_verified = verified_publishing
+    gw._LAST_LEG_END.clear()
     gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
                        shots=_tf.mkdtemp())
-    check("the saved frame is the PRE-recovery one", frames == ["before"])
+    check("the leg's own end frame is the one saved", frames == ["leg_end"])
+
+    # CASE 2: nothing was published. `before` is weaker evidence — it shows the
+    # previous node — but it is still not the post-recovery view, which is the
+    # frame that actively misleads. The fan travels ~7x the leg it is rescuing,
+    # and six archived frames saved that way sat at bearing 98-106 against a
+    # commanded 2.1.
+    frames.clear()
+    state["phase"] = "before"
+
+    def verified_silent(m, node, capture=None, read_heading=None, log=None,
+                        attempts=3, shots=None):
+        state["phase"] = "after_recovery"
+        return False
+
+    gw.go_to_node_verified = verified_silent
+    gw._LAST_LEG_END.clear()
+    gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
+                       shots=_tf.mkdtemp())
+    check("falls back to the PRE-recovery frame, never the post-recovery one",
+          frames == ["before"])
     check("it is not the post-recovery view", "after_recovery" not in frames)
 finally:
     gw.go_to_node_verified = real5

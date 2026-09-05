@@ -186,7 +186,7 @@ def add(room, img, root=PLACES_DIR, name=None, check=None, log=print):
     return p
 
 
-def identify(img, places=None, root=PLACES_DIR, heading=None):
+def identify(img, root=PLACES_DIR):
     """Which room is this? -> (room, score, margin), or (None, ...) to abstain.
 
     DELEGATES TO KEYPOINT MATCHING as of 2026-09-01. `score` is therefore a
@@ -209,6 +209,13 @@ def identify(img, places=None, root=PLACES_DIR, heading=None):
     threshold separates "standing at it" from "looking at it" — see
     view_report(), which returns the same answer with the evidence attached
     and `position: None` stated outright.
+
+    NO `places=` OR `heading=` PARAMETERS. They existed, were accepted, and were
+    silently ignored — the body has been `return identify_orb(img, root=root)`
+    since the ORB switch. tests/routing/test_navigation.py's leave-one-out built
+    a held-out reference pool, passed it as `places=`, and got an answer from
+    the FULL database: every frame matched itself and the test proved nothing.
+    Hold references out with `root=` instead, which is honoured.
     """
     return identify_orb(img, root=root)
 

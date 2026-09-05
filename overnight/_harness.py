@@ -59,7 +59,48 @@ def alive(gap=1.0):
     return float(np.abs(a[:h, :w] - b[:h, :w]).mean()) > STREAM_DELTA_MIN
 
 
-def run_trial(script, arg, timeout, cwd=None):
+def assert_map_pristine(path, log=print):
+    """Refuse to start an A/B whose backup would bake in a previous run's arm.
+
+    Every map-mutating harness does `shutil.copy(MAP, BACKUP)` at startup and
+    restores from that backup at the end. If an earlier run CRASHED with its arm
+    still installed, that backup is a copy of the arm — so the restore reinstates
+    it, and the next run measures an arm against itself while reporting a clean
+    A/B. Nothing errors; the map is valid JSON either way.
+
+    The map is version-controlled, so "pristine" has an exact meaning: identical
+    to the committed version. Set BASEBALL_ALLOW_DIRTY_MAP=1 to proceed anyway,
+    which is correct when the map has been deliberately edited and committed-to-
+    be — but it must be a decision, not a default.
+    """
+    if os.environ.get("BASEBALL_ALLOW_DIRTY_MAP"):
+        log("  map cleanliness check SKIPPED (BASEBALL_ALLOW_DIRTY_MAP set)")
+        return
+    repo = os.path.dirname(os.path.abspath(path))
+    try:
+        r = subprocess.run(["git", "-C", repo, "diff", "--quiet", "--", path],
+                           capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        # CANNOT TELL IS NOT CLEAN. Say so loudly rather than proceeding
+        # silently, which is how the arm got baked in unnoticed.
+        log(f"  WARNING: could not check whether {os.path.basename(path)} is "
+            f"pristine ({type(e).__name__}: {e}). If a previous A/B crashed, "
+            f"its arm may still be installed and this run will measure it.")
+        return
+    if r.returncode == 0:
+        return
+    raise SystemExit(
+        f"{os.path.basename(path)} differs from the committed version. An A/B "
+        f"backs the map up at startup and restores it at the end, so starting "
+        f"from a modified map bakes whatever is in it into the backup and into "
+        f"every trial of BOTH arms.\n"
+        f"  git diff -- {path}          # see what changed\n"
+        f"  git checkout -- {path}      # discard it and start clean\n"
+        f"  BASEBALL_ALLOW_DIRTY_MAP=1  # proceed anyway, deliberately")
+
+
+def run_trial(script, arg, timeout, cwd=None, log=None,
+              check_stream=True):
     """Run one trial as a subprocess and return (result_dict_or_None, seconds).
 
     `script` is re-invoked as `python3 <script> --one-trial <arg>` and must
@@ -67,6 +108,23 @@ def run_trial(script, arg, timeout, cwd=None):
     or prints nothing parseable returns None — an INVALID trial, never a
     failure. Conflating "could not measure" with "did not arrive" is how a
     dying console got recorded as a navigation result.
+
+    THE STREAM IS CHECKED AFTER THE TRIAL, HERE, ONCE. Every A/B harness checked
+    it only BEFORE, so a console that fell asleep mid-leg produced a trial that
+    ran to completion, arrived nowhere, and was scored as an ARM FAILURE. That is
+    CLAUDE.md 10.6 exactly — a run where every arm degrades at once — and it has
+    already cost one overnight run and contaminated one leg-tolerance A/B. Nine
+    scripts had the hole; putting the check in the one function they all route
+    through is the whole point of this module existing.
+
+    THE CHILD'S OUTPUT IS FORWARDED, NOT SWALLOWED. capture_output=True is
+    needed to parse the JSON, but the rest of the child's stdout is the trial's
+    own log — every `log(...)` call inside one_trial, including
+    slow_traverse.turn_to's NO-OP/TURNED lines, which are the only instrument
+    OPEN-3 has. Discarding it made `log=print` inside a trial functionally
+    `lambda m: None`: the first entry in CLAUDE.md's catalogue, reintroduced one
+    layer up in the harness that certifies every measurement. Pass `log=` to get
+    it back.
     """
     cwd = cwd or os.path.dirname(os.path.dirname(os.path.abspath(script)))
     t0 = time.time()
@@ -75,16 +133,39 @@ def run_trial(script, arg, timeout, cwd=None):
             [sys.executable, os.path.abspath(script), "--one-trial", str(arg)],
             cwd=cwd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
+        if log:
+            log(f"    trial exceeded {timeout}s — INVALID, not a failure")
         return None, round(time.time() - t0, 1)
     secs = round(time.time() - t0, 1)
+
+    if log:
+        for line in (r.stdout or "").splitlines():
+            if not line.strip().startswith("{"):
+                log(f"      | {line}")
+        for line in (r.stderr or "").strip().splitlines():
+            log(f"      ! {line}")
+
+    parsed = None
     for line in reversed((r.stdout or "").strip().splitlines()):
         line = line.strip()
         if line.startswith("{"):
             try:
-                return json.loads(line), secs
+                parsed = json.loads(line)
+                break
             except ValueError:
                 continue
-    return None, secs
+    if parsed is None:
+        return None, secs
+
+    # Module-level `alive`, deliberately: a test can substitute it, and the
+    # substitution is the only way to exercise this branch offline.
+    if check_stream and not os.environ.get("BASEBALL_TEST_RUN"):
+        if not alive():
+            if log:
+                log("    stream was DEAD after the trial — recording INVALID, "
+                    "not a failure. The console cannot be told from the arm.")
+            return None, secs
+    return parsed, secs
 
 
 _ROTATED = set()

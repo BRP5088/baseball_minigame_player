@@ -1503,9 +1503,20 @@ _REF_HEADING = {}
 
 
 def reference_heading(node):
-    """The heading the reference frame for `node` was captured at, or None."""
-    if node in _REF_HEADING:
-        return _REF_HEADING[node]
+    """The heading the reference frame for `node` was captured at, or None.
+
+    KEYED ON (REFERENCE_POSE, node), NOT node. The value comes from
+    _recorded_reference(node), which picks a DIFFERENT file depending on
+    REFERENCE_POSE — that mismatch is the entire point of the flag. Keyed on the
+    node alone, an A/B that flips the flag in-process kept serving the first
+    arm's heading to the second, so both arms nulled yaw to the same reference
+    and the comparison measured nothing. An A/B harness that silently returns
+    one arm's value for both is the worst shape available here: it produces a
+    clean null result and no error.
+    """
+    key = (REFERENCE_POSE, node)
+    if key in _REF_HEADING:
+        return _REF_HEADING[key]
     h = None
     ref = _recorded_reference(node)
     if ref is not None:
@@ -1515,7 +1526,7 @@ def reference_heading(node):
             h = compass.read_bearing(Image.open(ref))
         except Exception:
             h = None
-    _REF_HEADING[node] = h
+    _REF_HEADING[key] = h
     return h
 
 
@@ -1595,6 +1606,19 @@ def align_at_node(node, capture=None, read_heading=None, log=print):
     return got
 
 
+# The leg-end frame per node, published by follow() and read by
+# follow_verified. A module global rather than a return value because follow()
+# is called through go_to_node_verified, and threading a frame back up three
+# signatures to fix a diagnostic is not worth the churn.
+#
+# It exists because follow_verified was classifying `before` — a frame captured
+# at the TOP of its own loop, i.e. the PREVIOUS node's successful arrival. Four
+# frames saved that way on 2026-09-04 all identified as bar_pool_room at 506-734
+# matches while claiming to show the jukebox leg, so failures_by_kind was a
+# re-encoding of WHICH node failed, not why.
+_LAST_LEG_END = {}
+
+
 def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
            shots=None):
     """Walk from `start` to `goal` over the recorded graph.
@@ -1652,9 +1676,20 @@ def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
             _at_table = reach_table(capture, read_heading, log=log)
             log(f"      reach_table: {'at the table' if _at_table else 'GAVE UP'}")
         img = capture()
+        # THIS IS THE FRAME THAT CAN DIAGNOSE THE LEG: the leg has ended and
+        # recover_to_node (below) has not run yet. Publish it so follow_verified
+        # can classify the leg rather than the frame it happens to hold — see
+        # _LAST_LEG_END.
+        _LAST_LEG_END[b] = img
         if shots:
             os.makedirs(shots, exist_ok=True)
-            img.convert("RGB").save(os.path.join(shots, f"at_{b}.jpg"), quality=85)
+            # STAMPED, NOT `at_{b}.jpg`. A fixed name is overwritten by every
+            # attempt and every trial, so a 10-trial A/B ended with ONE frame
+            # per node — the last one — and the failures it was collected to
+            # explain had already been overwritten by later successes.
+            img.convert("RGB").save(
+                os.path.join(shots, f"at_{b}_{int(time.time() * 1000)}.jpg"),
+                quality=85)
         verdict, detail = confirm(m, b, img, log=log)
         # A leg that did not land is worth a short hunt BEFORE walking the next
         # one from an unknown spot. Only for nodes the localiser can confirm —
@@ -1776,6 +1811,9 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
         # exactly the fan walking back at +180 after its -80 offset. Six of six.
         # Every overshoot frame collected before this described the fan, and a
         # confident diagnosis was built on them and was wrong.
+        # Drop any leg-end frame left over from an earlier trial, so a failure
+        # can never be diagnosed with a picture of a different run.
+        _LAST_LEG_END.pop(node, None)
         before = None
         if shots:
             try:
@@ -1845,34 +1883,53 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
             # at bar_pool_room — was tested and rejected (p = 0.33), so the
             # answer is not in the numbers already collected. One jpeg per
             # failure costs nothing and is the only way to see it.
-            if shots:
+            # THE LEG'S OWN END, not `before`. `before` is captured at the
+            # top of this loop, so it photographs the PREVIOUS node's
+            # successful arrival — classifying it produced a census that just
+            # re-encoded which node failed. follow() publishes the frame it took
+            # when the leg ended and before recover_to_node ran, which is the
+            # only one that can diagnose the leg.
+            img = _LAST_LEG_END.pop(node, None)
+            source = "the leg's own end"
+            if img is None:
+                img = before
+                source = "before the attempt (PREVIOUS node) — weak evidence"
+            if img is None:
+                try:
+                    img = capture()
+                    source = "after recovery — shows the fan, not the leg"
+                except Exception:
+                    img = None
+
+            # CLASSIFY OUTSIDE `if shots:`. This whole block used to sit inside
+            # it, and measure_streak.py calls consecutive_arrivals with no
+            # shots — so on the runs that actually score the requirement, the
+            # class census was silently EMPTY while still being reported.
+            # Reporting arrival only in TOTAL averages several different
+            # failures together, which is a leading explanation for why so many
+            # well-motivated changes measured flat.
+            if img is not None:
+                try:
+                    import failure_kind as fk
+                    kind, detail = fk.classify(img, node, list(route),
+                                               live=live)
+                    log(f"      failure kind: {kind} — {detail} "
+                        f"[frame: {source}]")
+                    kinds.append(kind)
+                    _LAST_FAILURE_KINDS.append(kind)
+                except Exception as e:
+                    log(f"      could not classify: {e}")
+            else:
+                log("      no frame to classify — this failure is uncategorised")
+
+            if shots and img is not None:
                 try:
                     import os as _os
                     _os.makedirs(shots, exist_ok=True)
                     path = _os.path.join(
-                        shots, f"fail_{node}_{int(time.time())}.jpg")
-                    # The pre-recovery frame if we have one; the current view
-                    # only as a fallback, and it is the misleading one.
-                    img = before if before is not None else capture()
-                    img.save(path)
-                    if before is None:
-                        log("      NOTE: no pre-recovery frame — this shows "
-                            "where recovery left the character, not the leg")
-                    # CLASSIFY IT NOW, while the frame is in hand. Reporting a
-                    # run's arrival only in TOTAL averages three different
-                    # failures together, which is very likely why seven
-                    # consecutive changes all measured flat — each addressed at
-                    # most one class while being scored against the sum.
-                    try:
-                        import failure_kind as fk
-                        kind, detail = fk.classify(img, node, list(route),
-                                                   live=live)
-                        log(f"      failure kind: {kind} — {detail}")
-                        kinds.append(kind)
-                        _LAST_FAILURE_KINDS.append(kind)
-                    except Exception as e:
-                        log(f"      could not classify: {e}")
-                    log(f"      saved the failing frame to {path}")
+                        shots, f"fail_{node}_{int(time.time() * 1000)}.jpg")
+                    img.convert("RGB").save(path, quality=85)
+                    log(f"      saved the failing frame to {path} ({source})")
                 except Exception as e:
                     log(f"      could not save the failing frame: {e}")
             return False, reached

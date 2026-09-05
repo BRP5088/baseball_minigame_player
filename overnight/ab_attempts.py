@@ -106,7 +106,7 @@ if __name__ == "__main__":
         f"{TIMEOUT}s ceiling enforced out-of-process\n")
     try:
         for t, (name, att) in _harness.interleave(ARMS, trials=TRIALS):
-            res_json, secs = _harness.run_trial(__file__, att, TIMEOUT)
+            res_json, secs = _harness.run_trial(__file__, att, TIMEOUT, log=log)
             if res_json is None:
                 ok, depth = None, None
                 log(f"  [{name}] {t+1}/{TRIALS}: INVALID (timeout or crash) "
