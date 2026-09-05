@@ -18,7 +18,11 @@ from PIL import Image
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 from orchestrator import GAMEPLAY_REGIONS_FRAC, ocr_scoreboard
 
-SRC_DIR = "Photos to train on"
+# Moved into test_fixtures/ 2026-09-05. It was "Photos to train on" at the
+# project root — not a fixture directory, so a copy of the project without it
+# lost this test's coverage silently. CLAUDE.md: fixtures live under
+# test_fixtures/, anchored on _ROOT, never on the cwd.
+SRC_DIR = os.path.join(_ROOT, "test_fixtures", "gameplay_photos")
 CASES = [
     ("9.32", {"your": [0, 0, 0], "opponent": [0, 0, 0]}),
     ("9.49", {"your": [2, 0, 2], "opponent": [0, 1, 1]}),

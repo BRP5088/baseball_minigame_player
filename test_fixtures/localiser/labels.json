@@ -1,0 +1,22 @@
+[
+ {
+  "file": "portrait_room_00.jpg",
+  "room": "portrait_room"
+ },
+ {
+  "file": "portrait_room_01.jpg",
+  "room": "portrait_room"
+ },
+ {
+  "file": "bar_pool_room_02.jpg",
+  "room": "bar_pool_room"
+ },
+ {
+  "file": "bar_jukebox_03.jpg",
+  "room": "bar_jukebox"
+ },
+ {
+  "file": "dealer_table_04.jpg",
+  "room": "dealer_table"
+ }
+]

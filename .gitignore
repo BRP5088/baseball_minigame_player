@@ -44,9 +44,17 @@ hand_samples/
 Photos to train on/
 Photos of ban screen missing cards/
 
-# Test fixtures are load-bearing (30 tests read them) but 96M of images.
-# Ignored for size; must not be deleted.
-test_fixtures/
+# test_fixtures/ IS VERSIONED, deliberately, despite being ~180M of images.
+#
+# A test whose data is not committed is a test that cannot be run from a fresh
+# clone, and this suite's entire value is that it runs offline anywhere. 30
+# tests read these. Excluding them for size would mean the repo contains tests
+# that provably do not work — which is worse than a large repo.
+#
+# Images do not delta-compress, so a fixture that CHANGES costs its full size
+# again in history. Fixtures here are captured once and read forever, so that
+# is a bounded cost. Recaptured frames should replace a directory wholesale
+# rather than being appended alongside the old ones.
 
 # Run outputs and hand-made backups, now that history is real.
 overnight/*.log
@@ -59,4 +67,4 @@ tests_quarantine/__pycache__/
 
 # Screenshot archives (spaces in the names; no quotes — git takes those
 # literally and the pattern silently matches nothing).
-Photos*/
+/Photos*/          # only at the project ROOT, not test_fixtures/gameplay_photos

@@ -1,0 +1,11 @@
+{
+ "stationary": [
+  "stationary_0.jpg",
+  "stationary_1.jpg",
+  "stationary_2.jpg"
+ ],
+ "moved": [
+  "moved_0.jpg",
+  "moved_1.jpg"
+ ]
+}

@@ -1,3 +1,13 @@
+# PINNED 2026-09-05. Versions were unpinned until then, which is a real risk
+# here and not a stylistic one: mss 10.2.0's MSS.grab() holds a per-object lock,
+# and orchestrator runs a daemon screenshot logger concurrently with the main
+# capture loop. An unpinned upgrade could silently reintroduce that race.
+#
+# Regenerate with:  .venv/bin/python -m pip freeze
+# Two deps are deliberately absent — both imported lazily behind fallbacks:
+#   pygame     (inside a function in record_input.py)
+#   pyflakes   (never adopted; tests/harness/test_no_undefined_names.py does
+#               the one check that mattered, with a positive control)
 # Runtime dependencies for Auto Baseball, derived from the actual imports
 # across every module and test (not guessed).
 #
@@ -9,16 +19,18 @@
 # installs a prebuilt wheel (tesserocr-2.11.0-cp314-cp314-macosx_15_0_arm64),
 # no compiler involved. It is now a real requirement — see the bottom.
 #   pygame     — imported inside a function in record_input.py only.
-Pillow
-numpy
-opencv-python
-scipy
-mss
-pytesseract
-pyautogui
-pygetwindow
-pyobjc-framework-Quartz
-anthropic
+Pillow==12.3.0
+numpy==2.5.2
+opencv-python==5.0.0.93
+scipy==1.18.1
+mss==10.2.0   # thread-safe grab() (per-object lock) — orchestrator's daemon
+                # screenshot logger runs concurrently with the main loop, so this
+                # is load-bearing, not cosmetic
+pytesseract==0.3.13
+pyautogui==0.9.54
+pygetwindow==0.0.9
+pyobjc-framework-Quartz==12.2.2
+anthropic==1.3.0
 
 # The IN-PROCESS Tesseract backend. ocr_glyphs prefers it; without it the module
 # shells out to the tesseract binary at ~370ms a call. MEASURED on this machine:
@@ -30,4 +42,4 @@ anthropic
 # against the recorded slow-path output. 208 glyph crops across 3 recordings
 # match exactly (124 letters, 84 abstentions), and a real frame through
 # compass.read_bearing gives the same degrees.
-tesserocr
+tesserocr==2.11.0

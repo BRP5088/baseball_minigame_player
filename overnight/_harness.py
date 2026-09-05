@@ -175,3 +175,110 @@ def interleave(arms, trials=TRIALS):
     for t in range(trials):
         for arm in arms:
             yield t, arm
+
+
+# --- STRUCTURED TRIAL RECORDS ----------------------------------------------
+#
+# Every analysis on this project so far has meant grepping prose logs:
+# `grep -c "NO-OP"`, counting "abandoning the rest of this leg", reading
+# "arrived=False (located None, 4 step(s) walked, ABANDONED, 2 stall event(s))"
+# back out of a line that was written for a human. That works once and does not
+# compose — comparing two runs means writing a new regex, and comparing a run
+# from last week means hoping the wording did not change.
+#
+# One JSONL row per trial fixes that. The schema is deliberately flat and
+# additive: unknown keys are fine, missing keys are fine, and nothing here may
+# ever raise into a trial. A harness that dies while recording a result is
+# worse than one that records nothing.
+
+TRIAL_SCHEMA_VERSION = 1
+
+
+def record_trial(path, experiment, arm, trial, **fields):
+    """Append one trial as a JSONL row. Never raises.
+
+    `fields` carries whatever the experiment measured. The conventions that
+    have earned their place, so cross-run queries can rely on them:
+
+        arrived        True / False / None   None means INVALID, never failure
+        invalid_reason str                   why, when arrived is None
+        abandoned      bool                  the leg gave up partway
+        stall_events   int                   how often the stall gate fired
+        steps_walked   int                   of the leg's recorded steps
+        seconds        float
+        stream_alive   bool                  checked, not assumed
+
+    The arrived=None convention is the important one. CLAUDE.md rule 6: CANNOT
+    SEE is not DID NOT ARRIVE, and conflating them already invalidated a whole
+    A/B on this project.
+    """
+    import json as _json
+    import os as _os
+    import time as _time
+    try:
+        row = {
+            "v": TRIAL_SCHEMA_VERSION,
+            "experiment": experiment,
+            "arm": arm,
+            "trial": trial,
+            "t": _time.time(),
+        }
+        row.update(fields)
+        _os.makedirs(_os.path.dirname(_os.path.abspath(path)), exist_ok=True)
+        with open(path, "a") as fh:
+            fh.write(_json.dumps(row) + "\n")
+            fh.flush()
+            _os.fsync(fh.fileno())
+    except Exception:
+        pass          # bookkeeping must never end a run
+
+
+def load_trials(path):
+    """Read a JSONL trial file. Skips unreadable rows rather than dying."""
+    import json as _json
+    import os as _os
+    out = []
+    if not _os.path.exists(path):
+        return out
+    for line in open(path):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(_json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def summarise(rows, experiment=None):
+    """arm -> {arrived, valid, invalid, abandoned, stall_events, median_seconds}.
+
+    Counts VALID trials in the denominator. A rate over a denominator that
+    includes trials nobody could measure is the shape that has misled this
+    project before.
+    """
+    import statistics
+    by = {}
+    for r in rows:
+        if experiment and r.get("experiment") != experiment:
+            continue
+        a = by.setdefault(r.get("arm"), {"arrived": 0, "valid": 0, "invalid": 0,
+                                         "abandoned": 0, "stall_events": 0,
+                                         "seconds": []})
+        if r.get("arrived") is None:
+            a["invalid"] += 1
+            continue
+        a["valid"] += 1
+        if r.get("arrived"):
+            a["arrived"] += 1
+        if r.get("abandoned"):
+            a["abandoned"] += 1
+        a["stall_events"] += r.get("stall_events") or 0
+        if r.get("seconds"):
+            a["seconds"].append(r["seconds"])
+    for a in by.values():
+        a["median_seconds"] = (round(statistics.median(a["seconds"]), 1)
+                               if a["seconds"] else None)
+        del a["seconds"]
+    return by
