@@ -38,6 +38,7 @@ _sys.path.insert(0, _ROOT)
 
 import concurrent.futures
 import hashlib
+import json
 import glob
 import os
 import subprocess
@@ -89,99 +90,138 @@ def snapshot():
     return state
 
 
-before = snapshot()
-
-# WALK, do not glob siblings. This used to collect test_*.py next to itself,
-# which was every test while they all sat in tests/. Once they were split into
-# tests/routing, tests/minigame, tests/rig and tests/harness, that same line
-# found only the two files in harness/ — and this guard would have gone on
-# printing "all green" while checking 86 fewer tests. A guard that silently
-# stops guarding is the catalogue's commonest shape.
-tests = sorted(
-    os.path.join(dirpath, f)
-    for dirpath, _dirs, files in os.walk(os.path.join(_ROOT, "tests"))
-    for f in files
-    if f.startswith("test_") and f.endswith(".py")
-    and os.path.join(dirpath, f) != os.path.abspath(__file__))
-tests = [t for t in tests if t != SELF]
-
-env = dict(os.environ)
-env.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
-# MUST be passed down. This file runs every other test in a subprocess, and
-# BASEBALL_TEST_RUN is what holds the input paths OFF — both the background
-# keyboard path and (since 2026-09-01) FIFO button injection. run_tests.sh sets
-# it, but this file spawns its own children, so without it the "no side
-# effects" guard was itself the one thing running the suite in the mode that
-# drives the live console. It reached the FIFO before this was caught.
-env["BASEBALL_TEST_RUN"] = "1"
-# Deliberately NOT setting BASEBALL_MATCH_LOG / BASEBALL_DIAGNOSTICS_DIR here.
-# Each test must redirect its own writes; setting the overrides from this side
-# would mask a test that forgot to, which is the whole failure being guarded.
-# Return codes are CHECKED, not discarded. QA_VACUOUS demonstrated this file
-# passing while reporting "15 test file(s) ran" with all 15 replaced by a bare
-# `raise SystemExit` — a crashed test writes to nothing, so the side-effect diff
-# was trivially clean and the guard reported success on a suite that never ran.
+# THREE MODES. The default one is self-contained and re-runs the whole suite;
+# the other two let run_tests.sh bracket the pass IT already runs, so the suite
+# is executed ONCE instead of twice.
 #
-# A file that fails here is not this test's business to diagnose (run_tests.sh
-# reports that), but a file that could not RUN AT ALL means its side effects
-# were never exercised, so this guard proved nothing about it.
-_ran, _crashed = 0, []
-
-
-def _run_one(t):
-    # TIMEOUT IS MANDATORY. Without it a hung test blocks this file forever and
-    # burns a full CPU core silently: found 2026-09-02, test_input_timing.py had
-    # been spinning for 1 day 7 hours (1867 minutes of CPU) from a previous
-    # session's code, held open by this very function, slowing the machine and
-    # the game stream with it.
-    try:
-        r = subprocess.run([sys.executable, t], cwd=_ROOT,
-                           env=env, capture_output=True, text=True,
-                           timeout=SUBPROCESS_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        r = subprocess.CompletedProcess(
-            args=[t], returncode=1, stdout="",
-            stderr=f"TIMED OUT after {SUBPROCESS_TIMEOUT}s — killed. A test that "
-                   f"never finishes is a hang, not a slow test.")
-    return t, r
-
-
-# PARALLEL. This file re-runs the entire suite, so it costs about as much as
-# every other test combined — measured 2026-08-26 at 117.3s of a 233.3s suite,
-# i.e. HALF the total, and preflight blocks a live run on all of it.
+#   (no args)              snapshot, run every other test, snapshot, diff
+#   --snapshot <file>      write a snapshot and exit
+#   --check <file> <ran>   read that snapshot, take a fresh one, diff
 #
-# Safe to parallelise: each test already runs in its own subprocess with its
-# own env overrides (that isolation is the point of this file), and the
-# before/after snapshots bracket the whole batch rather than each test, so
-# interleaved writes are caught exactly as well. Order was never meaningful —
-# `tests` is just sorted by filename.
-with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, (os.cpu_count() or 4))) as _ex:
-    for t, r in _ex.map(_run_one, tests):
-        _ran += 1
-        # Distinguish "asserted and failed" (still exercised its writes) from
-        # "could not start" — an import error, missing fixture, bare SystemExit.
-        # `raise SystemExit(...)` exits 0, so a returncode-only check let a
-        # suite where NOTHING RAN pass clean — the exact regression the
-        # comment above claims to have fixed (QA, 2026-08-26: demonstrated
-        # with 15 stubs). A test that produced no stdout did not run.
-        # STDOUT OR STDERR. `unittest` writes its entire report to STDERR, so
-        # test_map_admit.py — the one unittest-style file in the suite — ran
-        # fine (returncode 0, "Ran 5 tests ... OK") and was reported as
-        # "produced no output and exited non-zero". Checking stdout alone made
-        # this guard call a PASSING test a crash, which is the inverse of the
-        # failure it exists to catch and cost a real diagnosis to find.
-        _spoke = r.stdout.strip() or r.stderr.strip()
-        if not _spoke or (r.returncode != 0 and "FAIL" not in r.stderr):
-            _crashed.append((t, (r.stderr.strip().splitlines() or ["no output"])[-1]))
+# The default mode is kept because it is the only form that proves the guard on
+# its own — run it directly when you want the check without the runner.
+_MODE = sys.argv[1] if len(sys.argv) > 1 else ""
 
-if _crashed:
-    for _t, _err in _crashed:
-        print(f"FAIL: {_t} produced no output on either stream, or exited "
-              f"non-zero ({_err}) — it "
-              "never ran, so this guard proved nothing about its side effects")
-    raise SystemExit(
-        f"{len(_crashed)} test file(s) did not execute; the side-effect check "
-        "below is meaningless for them")
+
+def _run_suite():
+    """Run every other test file in a subprocess. Returns how many ran."""
+    # WALK, do not glob siblings. This used to collect test_*.py next to itself,
+    # which was every test while they all sat in tests/. Once they were split into
+    # tests/routing, tests/minigame, tests/rig and tests/harness, that same line
+    # found only the two files in harness/ — and this guard would have gone on
+    # printing "all green" while checking 86 fewer tests. A guard that silently
+    # stops guarding is the catalogue's commonest shape.
+    tests = sorted(
+        os.path.join(dirpath, f)
+        for dirpath, _dirs, files in os.walk(os.path.join(_ROOT, "tests"))
+        for f in files
+        if f.startswith("test_") and f.endswith(".py")
+        and os.path.join(dirpath, f) != os.path.abspath(__file__))
+    tests = [t for t in tests if t != SELF]
+
+    env = dict(os.environ)
+    env.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
+    # MUST be passed down. This file runs every other test in a subprocess, and
+    # BASEBALL_TEST_RUN is what holds the input paths OFF — both the background
+    # keyboard path and (since 2026-09-01) FIFO button injection. run_tests.sh
+    # sets it, but this file spawns its own children, so without it the "no side
+    # effects" guard was itself the one thing running the suite in the mode that
+    # drives the live console. It reached the FIFO before this was caught.
+    env["BASEBALL_TEST_RUN"] = "1"
+    # Deliberately NOT setting BASEBALL_MATCH_LOG / BASEBALL_DIAGNOSTICS_DIR here.
+    # Each test must redirect its own writes; setting the overrides from this side
+    # would mask a test that forgot to, which is the whole failure being guarded.
+    # Return codes are CHECKED, not discarded. QA_VACUOUS demonstrated this file
+    # passing while reporting "15 test file(s) ran" with all 15 replaced by a bare
+    # `raise SystemExit` — a crashed test writes to nothing, so the side-effect
+    # diff was trivially clean and the guard reported success on a suite that
+    # never ran.
+    #
+    # A file that fails here is not this test's business to diagnose
+    # (run_tests.sh reports that), but a file that could not RUN AT ALL means its
+    # side effects were never exercised, so this guard proved nothing about it.
+    ran, crashed = 0, []
+
+    def _run_one(t):
+        # TIMEOUT IS MANDATORY. Without it a hung test blocks this file forever
+        # and burns a full CPU core silently: found 2026-09-02,
+        # test_input_timing.py had been spinning for 1 day 7 hours (1867 minutes
+        # of CPU) from a previous session's code, held open by this very
+        # function, slowing the machine and the game stream with it.
+        try:
+            r = subprocess.run([sys.executable, t], cwd=_ROOT,
+                               env=env, capture_output=True, text=True,
+                               timeout=SUBPROCESS_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            r = subprocess.CompletedProcess(
+                args=[t], returncode=1, stdout="",
+                stderr=f"TIMED OUT after {SUBPROCESS_TIMEOUT}s — killed. A test "
+                       f"that never finishes is a hang, not a slow test.")
+        return t, r
+
+    # PARALLEL. This file re-runs the entire suite, so it costs about as much as
+    # every other test combined — measured 2026-08-26 at 117.3s of a 233.3s
+    # suite, i.e. HALF the total, and preflight blocks a live run on all of it.
+    #
+    # Safe to parallelise: each test already runs in its own subprocess with its
+    # own env overrides (that isolation is the point of this file), and the
+    # before/after snapshots bracket the whole batch rather than each test, so
+    # interleaved writes are caught exactly as well. Order was never meaningful —
+    # `tests` is just sorted by filename.
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(8, (os.cpu_count() or 4))) as ex:
+        for t, r in ex.map(_run_one, tests):
+            ran += 1
+            # Distinguish "asserted and failed" (still exercised its writes) from
+            # "could not start" — an import error, missing fixture, bare
+            # SystemExit. `raise SystemExit(...)` exits 0, so a returncode-only
+            # check let a suite where NOTHING RAN pass clean — the exact
+            # regression the comment above claims to have fixed (QA, 2026-08-26:
+            # demonstrated with 15 stubs). A test that produced no stdout did not
+            # run.
+            # STDOUT OR STDERR. `unittest` writes its entire report to STDERR, so
+            # test_map_admit.py — the one unittest-style file in the suite — ran
+            # fine (returncode 0, "Ran 5 tests ... OK") and was reported as
+            # "produced no output and exited non-zero". Checking stdout alone
+            # made this guard call a PASSING test a crash, which is the inverse
+            # of the failure it exists to catch and cost a real diagnosis to
+            # find.
+            spoke = r.stdout.strip() or r.stderr.strip()
+            if not spoke or (r.returncode != 0 and "FAIL" not in r.stderr):
+                crashed.append(
+                    (t, (r.stderr.strip().splitlines() or ["no output"])[-1]))
+
+    if crashed:
+        for t, err in crashed:
+            print(f"FAIL: {t} produced no output on either stream, or exited "
+                  f"non-zero ({err}) — it "
+                  "never ran, so this guard proved nothing about its side "
+                  "effects")
+        raise SystemExit(
+            f"{len(crashed)} test file(s) did not execute; the side-effect "
+            "check below is meaningless for them")
+    return ran
+
+
+if _MODE == "--snapshot":
+    with open(sys.argv[2], "w") as _fh:
+        json.dump(snapshot(), _fh)
+    raise SystemExit(0)
+
+if _MODE == "--check":
+    with open(sys.argv[2]) as _fh:
+        before = json.load(_fh)
+    # ZERO IS A FAILURE. In --check mode this file does not run the suite, so it
+    # cannot tell "nothing wrote to project state" from "nothing ran at all" —
+    # exactly the shape that let the guard report success on 15 stubbed tests.
+    # The runner passes its own file count; refuse to certify an empty pass.
+    _ran = int(sys.argv[3])
+    if _ran <= 0:
+        raise SystemExit("--check was told 0 test files ran, so a clean diff "
+                         "proves nothing. Refusing to report success.")
+else:
+    before = snapshot()
+    _ran = _run_suite()
 
 after = snapshot()
 

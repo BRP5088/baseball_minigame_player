@@ -61,29 +61,27 @@ export OUT TEST_TIMEOUT
 
 # Collect first so the count is known before anything runs — see the zero-tests
 # check below.
-# HARNESS_LAST: A WELL-MOTIVATED CHANGE THAT MEASURED WORSE. Default is 0.
 #
-# test_no_side_effects.py re-executes every OTHER test file in subprocesses, so
-# with it inside the parallel pass every heavy file runs TWICE — test_map_admit
-# is ~51s of genuine ORB work, charged twice, at peak concurrency of 4 outer +
-# 8 inner. Running it alone at the end looked obviously better.
-#
-# Measured 2026-09-04, 94 files, same machine, back to back:
-#
-#     HARNESS_LAST=1 (alone at the end)   322s
-#     HARNESS_LAST=0 (folded in)          241s
-#
-# The split is 81s SLOWER. The double execution costs CPU but not WALL CLOCK,
-# because it overlaps; serialising the harness just adds its whole duration to
-# the end. The fixture races that concurrency caused were fixed independently by
-# pid-suffixing the /tmp sinks, so the split had no remaining benefit.
-#
-# Kept as a flag rather than deleted: it is the honest record, and it is the
-# right shape if the harness ever stops re-running the suite.
-main_files=$(find tests -name 'test_*.py' -type f -not -path 'tests/harness/*' | sort)
-harness_files=$(find tests/harness -name 'test_*.py' -type f 2>/dev/null | sort)
-files=$(printf '%s\n%s\n' "$main_files" "$harness_files" | grep -c . >/dev/null; \
-        printf '%s\n%s' "$main_files" "$harness_files" | grep .)
+# --affected runs only the tests whose import closure reaches something git says
+# changed. It is for the edit loop; it is NOT a substitute for the full suite,
+# because import edges cannot see a test that reads a fixture or asserts on a
+# JSON file. affected_tests.py knows that and selects everything whenever a
+# non-.py file changed. The pre-commit hook still runs the real thing.
+if [ "$1" = "--affected" ]; then
+    echo "--- affected-only mode"
+    files=$(python3 affected_tests.py)
+    sel_rc=$?
+    if [ $sel_rc -ne 0 ]; then
+        echo "--- could not work out what changed; run without --affected"
+        exit 1
+    fi
+    if [ -z "$(echo "$files" | grep .)" ]; then
+        echo "--- nothing to run (no changes affect any test)"
+        exit 0
+    fi
+else
+    files=$(find tests -name 'test_*.py' -type f | sort)
+fi
 ran=$(echo "$files" | grep -c . )
 
 if [ "$ran" -eq 0 ]; then
@@ -91,15 +89,52 @@ if [ "$ran" -eq 0 ]; then
     exit 1
 fi
 
-# HARNESS_LAST=1 runs tests/harness/ alone after the parallel pass; =0 folds it
-# in. A/B'd 2026-09-04 because the "obvious" answer was wrong — see below.
-if [ "${HARNESS_LAST:-0}" = "1" ]; then
-    echo "$main_files" | grep . | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
-    if [ -n "$harness_files" ]; then
-        for hf in $harness_files; do run_one "$hf"; done
-    fi
+# SINGLE PASS. test_no_side_effects.py used to re-execute every OTHER test file
+# in its own subprocesses, so the whole suite ran TWICE — once here and once
+# inside it. That was ~half the CPU of a run for no extra coverage: the guard
+# only needs a before/after snapshot bracketing SOME execution of the suite, and
+# this script already provides one.
+#
+# So it is driven in two pieces instead. --snapshot writes the "before" state,
+# the parallel pass runs, --check takes the "after" state and diffs. Its
+# self-contained mode (no arguments) still exists and still re-runs everything;
+# that is the form to use when running the guard on its own.
+#
+# The earlier HARNESS_LAST flag was a workaround for the double execution
+# (measured 2026-09-04: serialising harness/ was 81s SLOWER, 322s vs 241s,
+# because the doubling overlapped and cost CPU rather than wall clock). With the
+# doubling gone there is nothing left for it to trade off, so it is gone too.
+SIDE_EFFECTS="tests/harness/test_no_side_effects.py"
+if [ ! -f "$SIDE_EFFECTS" ]; then
+    echo "--- $SIDE_EFFECTS is missing; the side-effect guard cannot run"
+    exit 1
+fi
+run_files=$(echo "$files" | grep -v "^${SIDE_EFFECTS}$")
+n_run=$(echo "$run_files" | grep -c . )
+
+SNAP="$OUT/before_state.json"
+if ! python3 "$SIDE_EFFECTS" --snapshot "$SNAP"; then
+    echo "--- could not snapshot project state; refusing to run blind"
+    exit 1
+fi
+
+echo "$run_files" | grep . | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
+
+# The diff, reported as if it were an ordinary test so it lands in the table
+# below. n_run is passed so --check can refuse to certify a pass where nothing
+# actually ran: on its own a clean diff cannot tell "no test wrote to project
+# state" from "no test executed".
+se_key=$(echo "$SIDE_EFFECTS" | tr '/' '_')
+if BASEBALL_TEST_RUN=1 \
+   PERSONAL_ANTHROPIC_API_KEY="dummy-offline-test" \
+   perl -e 'alarm shift; exec @ARGV' "$TEST_TIMEOUT" \
+   python3 "$SIDE_EFFECTS" --check "$SNAP" "$n_run" \
+   > "$OUT/$se_key.out" 2>&1; then
+    echo "PASS" > "$OUT/$se_key.status"
 else
-    echo "$files" | grep . | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
+    se_rc=$?
+    if [ $se_rc -eq 142 ]; then echo "HUNG" > "$OUT/$se_key.status"
+    else echo "FAIL" > "$OUT/$se_key.status"; fi
 fi
 
 # Report in a stable order, grouped by area, so a diff between two runs is

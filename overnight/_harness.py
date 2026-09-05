@@ -90,7 +90,9 @@ def run_trial(script, arg, timeout, cwd=None):
 _ROTATED = set()
 
 
-def save_result(path, obj):
+def save_result(path, obj, indent=2):
+    # `indent` matters for world_map.json, which humans read and which the map
+    # audit compares by eye. Defaults to 2 for result files.
     """Write a run's results to `path` so an interrupted write cannot destroy
     what is already on disk.
 
@@ -153,7 +155,7 @@ def save_result(path, obj):
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
         with open(tmp, "w") as fh:
-            json.dump(obj, fh, indent=2)
+            json.dump(obj, fh, indent=indent)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, path)

@@ -86,7 +86,10 @@ def log(m):
 
 
 def save():
-    json.dump(res, open(OUT, "w"), indent=2)
+    # Atomic. A Ctrl-C during a truncate-first write loses the whole run, and a
+    # route trial costs ~90s — 20 of them is 30 minutes that cannot be
+    # re-run and compared, because performance varies session to session.
+    _harness.save_result(OUT, res)
 
 
 def set_leg(steps):
@@ -96,12 +99,9 @@ def set_leg(steps):
         "steps": steps,
         "recorded": "A/B arm, set by ab_jukebox_leg.py",
     }
-    tmp = MAP + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(m, fh, indent=1)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, MAP)
+    # Already atomic (temp + fsync + replace); routed through the shared helper
+    # so there is one implementation to audit rather than two.
+    _harness.save_result(MAP, m, indent=1)
 
 
 def one_trial(stall_change):
