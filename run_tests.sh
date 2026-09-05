@@ -16,8 +16,18 @@ cd "$(dirname "$0")"
 # walked leg.
 JOBS=${JOBS:-4}
 
-# Per-test wall clock. macOS ships no `timeout`, but perl is always present and
-# alarm(2) does the same job: exec the test, kill it on SIGALRM (exit 142).
+# Per-test wall clock. macOS ships no `timeout`, but perl is always present.
+#
+# IT MUST BE SIGKILL FROM A PARENT, NOT SIGALRM INTO THE TEST. The obvious
+# wrapper -- alarm, then exec the test -- REPLACES this process, so SIGALRM is
+# delivered to the test itself. cysignals, pulled in transitively through the
+# vision stack, installs a SIGALRM handler that raises AlarmInterrupt, so the
+# test died with an ordinary Python traceback and exit 1. A HANG was therefore
+# indistinguishable from a FAILURE, and the "it never finished, so it proved
+# nothing" branch below could never run. Found 2026-09-05 when
+# tests/routing/test_leg_turn_tolerance.py hit the ceiling under load and was
+# reported as a plain FAIL. Nothing can install a handler for SIGKILL.
+# Pinned by tests/harness/test_suite_timeout_kills.py.
 #
 # Without this, ONE hung test blocks the entire suite forever. On 2026-09-01
 # tests/test_input_timing.py spun in `while ACTION_DELAY < MAX_ACTION_DELAY`
@@ -25,6 +35,20 @@ JOBS=${JOBS:-4}
 # 486% CPU alongside the live game, and the suite reported pass counts from
 # runs that had never finished.
 TEST_TIMEOUT=${TEST_TIMEOUT:-300}
+
+TIMEOUT_PL=$(cat <<'PERL'
+my $t = shift;
+my $pid = fork();
+die "fork failed: $!" unless defined $pid;
+if ($pid == 0) { exec @ARGV; exit 127 }
+$SIG{ALRM} = sub { kill 'KILL', $pid; waitpid($pid, 0); exit 142 };
+alarm $t;
+waitpid($pid, 0);
+my $st = $?;
+alarm 0;
+exit($st & 127 ? 128 + ($st & 127) : $st >> 8);
+PERL
+)
 
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
@@ -47,7 +71,7 @@ run_one() {
     # running game. Comments go above the `if`, never inside it.
     if BASEBALL_TEST_RUN=1 \
        PERSONAL_ANTHROPIC_API_KEY="dummy-offline-test" \
-       perl -e 'alarm shift; exec @ARGV' "$TEST_TIMEOUT" python3 "$f" \
+       perl -e "$TIMEOUT_PL" "$TEST_TIMEOUT" python3 "$f" \
        > "$OUT/$key.out" 2>&1; then
         echo "PASS" > "$OUT/$key.status"
     else
@@ -57,7 +81,7 @@ run_one() {
     fi
 }
 export -f run_one
-export OUT TEST_TIMEOUT
+export OUT TEST_TIMEOUT TIMEOUT_PL
 
 # Collect first so the count is known before anything runs — see the zero-tests
 # check below.
@@ -127,7 +151,7 @@ echo "$run_files" | grep . | xargs -P "$JOBS" -I{} bash -c 'run_one "$@"' _ {}
 se_key=$(echo "$SIDE_EFFECTS" | tr '/' '_')
 if BASEBALL_TEST_RUN=1 \
    PERSONAL_ANTHROPIC_API_KEY="dummy-offline-test" \
-   perl -e 'alarm shift; exec @ARGV' "$TEST_TIMEOUT" \
+   perl -e "$TIMEOUT_PL" "$TEST_TIMEOUT" \
    python3 "$SIDE_EFFECTS" --check "$SNAP" "$n_run" \
    > "$OUT/$se_key.out" 2>&1; then
     echo "PASS" > "$OUT/$se_key.status"
