@@ -1363,6 +1363,57 @@ caller's step line never can (an executed turn also ends inside tolerance, which
 is precisely why this was invisible). **Let it ride along on whatever A/B runs
 next.**
 
+**THE FAILURE CENSUS EXISTS (2026-09-06). It is 80% OVERSHOT, and it is the
+first one ever taken from admissible frames.** OPEN-1 asked for this and OPEN-6
+forbade quoting any class distribution until a run produced it. A run has.
+
+Twenty-eight `at_<node>_<epoch_ms>.jpg` leg-end frames were written live for the
+first time; ten of them are the failing node `bar_pool_room`, classified with the
+stream confirmed live:
+
+    OVERSHOT   8/10   95% Wilson [0.49, 0.94]
+    WEDGED     2/10   95% Wilson [0.06, 0.51]
+
+The interval EXCLUDES a half-and-half split, so "most of these failures are
+overshoot" is supported at n=10. The exact fraction is not. The withdrawn figure
+it replaces was 2 of 8 POST-FAN frames at [0.07, 0.59] — inadmissible and
+uninformative. **OPEN-6's ban on quoting a class distribution is lifted for this
+node only**, and only for the direction of the effect.
+
+Every frame reads bearing 284.8-289.9, i.e. facing the way the leg walked, and
+none identifies as any known place (best scores 1-154 against MIN_MATCHES 140).
+Keypoints split cleanly: the two WEDGED frames hold 10, the OVERSHOT ones 420-1500.
+`test_fixtures/leg_failures/` keeps one of each.
+
+**AND ONE OF THEM IS OUTDOORS.** `overshot_outdoors_1788718155150.jpg` shows the
+character on a CITY STREET — a truck, a lamppost, shop signs — after a leg that
+should have ended in the bar's pool room. That is the shape of §8(k), *"when you
+make the turn, you actually walk right out of the bar"*, which this file has
+recorded since day one as never captured. It is now captured. Whether it is the
+same event the user saw is NOT established; what is established is that a leg
+into the bar can end outdoors and off the mapped route.
+
+**THE START NODE REGRESSED THE SAME DAY, AND THAT IS WHY OPEN-14 DID NOT RUN.**
+This morning `go_to_node_verified("bar_pool_room")` measured 10/10 at a 52.9s
+median (OPEN-4). This afternoon, after the console was power-cycled, it reached
+that node 0 of 3 times at 274-446s. Both arms degraded together, which §10.6 says
+means the environment — the first suspicion was local load from concurrent
+offline work, and that was WRONG: a restart on a quiet machine failed identically.
+
+The signature is a RATIO failure at `portrait_room`, not a missing-features one:
+
+    confirmed   267, 295 matches   ratio 2.04, 2.38
+    abstained   155, 150, 109, 85  ratio 1.21, 1.21, 1.20, 1.16
+
+`MIN_RATIO` is 1.35. When it works it clears comfortably; when it fails the best
+reference barely beats the runner-up, which is ambiguity BETWEEN references
+rather than a dark frame. Alongside it the leg into the bar reports "BLOCKED on
+step 4" and the escape ladder fired five times, consistent with NPC traffic the
+user had already noticed near that path.
+
+**Fix the start node before re-running OPEN-14.** Measuring a leg you reach 0 of
+3 times spends an hour per arm to record INVALID.
+
 **OPEN-14 — Does the RESTORED jukebox leg move arrival?** The leg was 4.3x too
 short and could not reach its destination; it is now back to its recorded
 1.031 units over 3.30s. This is the strongest candidate yet for what has been

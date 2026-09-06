@@ -1,0 +1,80 @@
+{
+  "trials": 10,
+  "runs": [
+    {
+      "arm": "restored",
+      "arrived": true,
+      "seconds": 67.5,
+      "located": "bar_jukebox",
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 5,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": true,
+      "failure_kinds": [],
+      "failure_sources": [],
+      "failure_kinds_leg_end": []
+    },
+    {
+      "arm": "short",
+      "arrived": null,
+      "reason": "start not reached",
+      "seconds": 328.0
+    },
+    {
+      "arm": "restored",
+      "arrived": false,
+      "seconds": 85.1,
+      "located": "portrait_room",
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 5,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "unplaced"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "unplaced"
+      ]
+    },
+    {
+      "arm": "short",
+      "arrived": null,
+      "reason": "start not reached",
+      "seconds": 320.0
+    },
+    {
+      "arm": "restored",
+      "arrived": null,
+      "reason": "start not reached",
+      "seconds": 338.6
+    },
+    {
+      "arm": "short",
+      "arrived": false,
+      "seconds": 215.6,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 1,
+      "fan_ran": true,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "wedged"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "wedged"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1153 @@
+OPEN-14: 10 interleaved trials per arm on bar_pool_room -> bar_jukebox
+  restored = 1.031 units / 3.30s
+  short    = 0.240 units / 0.80s
+
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 82.0) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 271.1 (err -0.8) in 2 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  271.1) 1.95s -> walked 1.95s, best change 19.3
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 335.4 (err +2.7) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 9.9, best 9.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  335.4) 0.79s -> walked 0.79s, best change 9.9
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 335.4, err +3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 16.1, best 16.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  335.4) 0.70s -> walked 0.70s, best change 16.1
+      |         turn to 347.9: TURNED to 349.0 (err -1.1) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 24.3, best 24.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  349.0) 0.42s -> walked 0.42s, best change 24.3
+      |         turn to 355.2: TURNED to 356.0 (err -0.8) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 56.0, best 56.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  356.0) 0.79s -> walked 0.79s, best change 56.0
+      |         turn to 360.0: TURNED to 1.2 (err -1.2) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 37.4, best 37.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got    1.2) 0.51s -> walked 0.51s, best change 37.4
+      |         turn to 8.6: TURNED to 11.5 (err -3.0) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 18.3, best 18.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got   11.5) 0.78s -> walked 0.78s, best change 18.3
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 11.5, err -3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 29.9, best 29.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got   11.5) 0.78s -> walked 0.78s, best change 29.9
+      |         turn to 1.7: TURNED to 1.9 (err -0.1) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 33.2, best 33.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.9) 0.80s -> walked 0.80s, best change 33.2
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.9, err -2.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 16.8, best 16.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.9) 0.36s -> walked 0.36s, best change 16.8
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 1.9, err -2.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 19.2, best 19.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    1.9) 0.78s -> walked 0.78s, best change 19.2
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.8, err -4.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 20.2, best 20.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.8) 0.79s -> walked 0.79s, best change 20.2
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 1.8, err -3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 22.3, best 22.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    1.8) 0.79s -> walked 0.79s, best change 22.3
+      |         turn to 357.8: TURNED to 356.7 (err +1.1) in 1 push(es)
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 27.8, best 27.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  356.7) 0.79s -> walked 0.79s, best change 27.8
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 356.7, err +1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 28.0, best 28.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  356.7) 0.79s -> walked 0.79s, best change 28.0
+      |         turn to 0.8: TURNED to 1.3 (err -0.4) in 1 push(es)
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 25.1, best 25.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    1.3) 0.79s -> walked 0.79s, best change 25.1
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 1.3, err +2.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 16.6, best 16.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    1.3) 0.36s -> walked 0.36s, best change 16.6
+      |       arrived? True  (portrait_room 584.000/5.560)
+      |         turn to 1.5: NO-OP, already inside 0.5 deg (at 1.3, err +0.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |       align at portrait_room: yaw nulled to 1.3 (reference 1.5) — 0.2 deg REMAINING = ~3px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+42.2 (prev --)
+      |       align: dx=+42.2 -> strafe right 0.10s
+      |       align: within 35px (dx=-3.6) after 1 step(s)
+      |       aligned at portrait_room: 4px from the recorded pose
+      |       align at portrait_room: dx +3.6px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.3 (err -0.7) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 9.7, best 9.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.3) 0.16s -> walked 0.16s, best change 9.7
+      |         turn to 292.2: TURNED to 291.5 (err +0.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  291.5) 0.79s -> walked 0.79s, best change 15.5
+      |         turn to 285.6: TURNED to 287.3 (err -1.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 16.9, best 16.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  287.3) 0.80s -> walked 0.80s, best change 16.9
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 287.3, err +0.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 12.1, best 12.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  287.3) 0.23s -> walked 0.23s, best change 12.1
+      |       arrived? True  (bar_pool_room 746.000/6.220)
+      |         turn to 288.2: TURNED to 288.5 (err -0.3) in 1 push(es)
+      |       align at bar_pool_room: yaw nulled to 288.5 (reference 288.2) — 0.3 deg REMAINING = ~6px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+158.1 (prev --)
+      |       align: dx=+158.1 -> strafe right 0.13s
+      |       align: step 2/6 dx=+102.0 (prev +158.1)
+      |       align: dx=+102.0 -> strafe right 0.10s
+      |       align: step 3/6 dx=+49.8 (prev +102.0)
+      |       align: dx=+49.8 -> strafe right 0.10s
+      |       align: within 35px (dx=+3.0) after 3 step(s)
+      |       aligned at bar_pool_room: 3px from the recorded pose
+      |       align at bar_pool_room: dx +3.0px
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['office_door'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |   verified at bar_pool_room (bar_pool_room 626.000/5.170)
+      |   attempt 1/1 at bar_jukebox
+      |   route: bar_pool_room -> bar_jukebox  (3.3s of walking)
+      |     leg bar_pool_room -> bar_jukebox
+      |         turn to 2.1: TURNED to 0.1 (err +2.0) in 1 push(es)
+      |         bar_pool_room->bar_jukebox step 1/5: 1 chunk(s) of 0.80s, change 24.1, best 24.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/5 bearing    2.1 (got    0.1) 0.80s -> walked 0.80s, best change 24.1
+      |         turn to 1.2: NO-OP, already inside 4.0 deg (at 360.0, err +1.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 2/5: 1 chunk(s) of 0.79s, change 39.0, best 39.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/5 bearing    1.2 (got  360.0) 0.79s -> walked 0.79s, best change 39.0
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 0.0, err +0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 3/5: 1 chunk(s) of 0.80s, change 49.3, best 49.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/5 bearing    0.8 (got    0.0) 0.80s -> walked 0.80s, best change 49.3
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 0.1, err -0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 4/5: 1 chunk(s) of 0.79s, change 45.9, best 45.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/5 bearing  359.4 (got    0.1) 0.79s -> walked 0.79s, best change 45.9
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 0.1, err -0.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 5/5: 1 chunk(s) of 0.14s, change 16.3, best 16.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/5 bearing  359.6 (got    0.1) 0.14s -> walked 0.14s, best change 16.3
+      |       arrived? True  (bar_jukebox 772.000/8.580)
+      |         turn to 1.0: TURNED to 1.4 (err -0.4) in 1 push(es)
+      |       align at bar_jukebox: yaw nulled to 1.4 (reference 1.0) — 0.4 deg REMAINING = ~7px of phantom dx still in the dx below
+      |       align: within 35px (dx=-17.6) after 0 step(s)
+      |       aligned at bar_jukebox: 18px from the recorded pose
+      |       align at bar_jukebox: dx +17.6px
+      |   could not verify bar_jukebox after 1 attempt(s); here is 'bar_jukebox' (bar_jukebox 790.000/7.820)
+  [restored] 1/10: arrived=True (located bar_jukebox, 5 step(s) walked, ran to the end, 0 stall event(s)) in 67.5s
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 79.9) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.8 (err -0.6) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 17.5, best 17.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.8) 1.95s -> walked 1.95s, best change 17.5
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 337.6 (err +0.5) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 11.1, best 11.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  337.6) 0.79s -> walked 0.79s, best change 11.1
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 337.6, err +1.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 17.2, best 17.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  337.6) 0.70s -> walked 0.70s, best change 17.2
+      |         turn to 347.9: TURNED to 346.2 (err +1.7) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 24.0, best 24.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  346.2) 0.42s -> walked 0.42s, best change 24.0
+      |         turn to 355.2: TURNED to 356.0 (err -0.8) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 55.8, best 55.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  356.0) 0.79s -> walked 0.79s, best change 55.8
+      |         turn to 360.0: NO-OP, already inside 4.0 deg (at 356.1, err +3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 36.8, best 36.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got  356.1) 0.51s -> walked 0.51s, best change 36.8
+      |         turn to 8.6: TURNED to 11.1 (err -2.5) in 2 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.2, best 17.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got   11.1) 0.78s -> walked 0.78s, best change 17.2
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 11.1, err -3.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 32.7, best 32.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got   11.1) 0.78s -> walked 0.78s, best change 32.7
+      |         turn to 1.7: TURNED to 360.0 (err +1.8) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 33.9, best 33.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got  360.0) 0.80s -> walked 0.80s, best change 33.9
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 0.0, err -0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 18.2, best 18.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    0.0) 0.36s -> walked 0.36s, best change 18.2
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 0.5, err -1.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 35.1, best 35.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    0.5) 0.78s -> walked 0.78s, best change 35.1
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 360.0, err -2.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 24.6, best 24.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got  360.0) 0.79s -> walked 0.79s, best change 24.6
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 360.0, err -2.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 20.6, best 20.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got  360.0) 0.79s -> walked 0.79s, best change 20.6
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 0.0, err -2.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 23.9, best 23.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got    0.0) 0.79s -> walked 0.79s, best change 23.9
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 0.3, err -2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 26.2, best 26.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got    0.3) 0.79s -> walked 0.79s, best change 26.2
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 0.0, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 28.3, best 28.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    0.0) 0.79s -> walked 0.79s, best change 28.3
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 0.0, err +3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 20.3, best 20.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    0.0) 0.36s -> walked 0.36s, best change 20.3
+      |       arrived? True  (portrait_room 965.000/6.990)
+      |         turn to 1.5: TURNED to 1.8 (err -0.3) in 2 push(es)
+      |       align at portrait_room: yaw nulled to 1.8 (reference 1.5) — 0.3 deg REMAINING = ~5px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+58.8 (prev --)
+      |       align: dx=+58.8 -> strafe right 0.10s
+      |       align: within 35px (dx=+25.9) after 1 step(s)
+      |       aligned at portrait_room: 26px from the recorded pose
+      |       align at portrait_room: dx +25.9px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 288.3 (err -1.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 12.8, best 12.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  288.3) 0.16s -> walked 0.16s, best change 12.8
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 288.3, err +3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 41.6, best 41.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  288.3) 0.79s -> walked 0.79s, best change 41.6
+      |         turn to 285.6: NO-OP, already inside 4.0 deg (at 288.2, err -2.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 35.2, best 35.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  288.2) 0.80s -> walked 0.80s, best change 35.2
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 288.3, err -0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 23.2, best 23.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  288.3) 0.23s -> walked 0.23s, best change 23.2
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (124.000/1.000))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |       re-localised by turning 300 deg: portrait_room 350.000/3.330
+      |   re-localised at portrait_room by turning; routing from there
+      |   route: portrait_room -> bar_pool_room  (2.0s of walking)
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.1 (err -0.5) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 13.2, best 13.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.1) 0.16s -> walked 0.16s, best change 13.2
+      |         turn to 292.2: TURNED to 291.5 (err +0.7) in 3 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 40.7, best 40.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  291.5) 0.79s -> walked 0.79s, best change 40.7
+      |         turn to 285.6: TURNED to 286.3 (err -0.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 25.6, best 25.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  286.3) 0.80s -> walked 0.80s, best change 25.6
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 286.4, err +1.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 9.4, best 9.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  286.4) 0.23s -> walked 0.23s, best change 9.4
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (136.000/1.100))
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['bar_pool_room'] — each is a hole in the reference set
+      |   attempt 3/3 at bar_pool_room
+      |       no compass reading — the relocalise sweep did NOT run (this is not 'nothing was recognised')
+      |   not at bar_pool_room and cannot say where this is (unrecognised (26.000/1.080)) — reloading to a known start
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 83.1) -> YES
+      |   world back after 3.2s, spawn bearing 87 (E)
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 269.9 (err +0.3) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  269.9) 1.95s -> walked 1.95s, best change 18.9
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 334.2 (err +3.9) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 9.3, best 9.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  334.2) 0.79s -> walked 0.79s, best change 9.3
+      |         turn to 339.2: TURNED to 339.0 (err +0.2) in 1 push(es)
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 10.6, best 10.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  339.0) 0.70s -> walked 0.70s, best change 10.6
+      |         turn to 347.9: TURNED to 348.0 (err -0.1) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 7.9, best 7.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  348.0) 0.42s -> walked 0.42s, best change 7.9
+      |         turn to 355.2: TURNED to 355.4 (err -0.2) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 55.7, best 55.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  355.4) 0.79s -> walked 0.79s, best change 55.7
+      |         turn to 360.0: TURNED to 0.2 (err -0.2) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 43.3, best 43.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got    0.2) 0.51s -> walked 0.51s, best change 43.3
+      |         turn to 8.6: TURNED to 6.8 (err +1.8) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 30.8, best 30.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    6.8) 0.78s -> walked 0.78s, best change 30.8
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 6.9, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 19.8, best 19.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    6.9) 0.78s -> walked 0.78s, best change 19.8
+      |         turn to 1.7: TURNED to 3.7 (err -1.9) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 39.7, best 39.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    3.7) 0.80s -> walked 0.80s, best change 39.7
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 3.6, err -4.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 15.7, best 15.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    3.6) 0.36s -> walked 0.36s, best change 15.7
+      |         turn to 359.4: TURNED to 359.1 (err +0.3) in 1 push(es)
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 15.8, best 15.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got  359.1) 0.78s -> walked 0.78s, best change 15.8
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 357.2, err +0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 16.6, best 16.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got  357.2) 0.79s -> walked 0.79s, best change 16.6
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 359.0, err -1.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 18.7, best 18.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got  359.0) 0.79s -> walked 0.79s, best change 18.7
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 359.0, err -1.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 27.9, best 27.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  359.0) 0.79s -> walked 0.79s, best change 27.9
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.0, err -1.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 34.4, best 34.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  359.0) 0.79s -> walked 0.79s, best change 34.4
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 358.9, err +1.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got  358.9) 0.79s -> walked 0.79s, best change 18.9
+      |         turn to 4.0: TURNED to 3.4 (err +0.6) in 1 push(es)
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 17.3, best 17.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    3.4) 0.36s -> walked 0.36s, best change 17.3
+      |       arrived? True  (portrait_room 201.000/1.460)
+      |         turn to 1.5: TURNED to 1.9 (err -0.5) in 1 push(es)
+      |       align at portrait_room: yaw nulled to 1.9 (reference 1.5) — 0.5 deg REMAINING = ~9px of phantom dx still in the dx below
+      |       align: within 35px (dx=+2.9) after 0 step(s)
+      |       aligned at portrait_room: 3px from the recorded pose
+      |       align at portrait_room: dx +2.9px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 285.3 (err +1.3) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 8.6, best 8.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  285.3) 0.16s -> walked 0.16s, best change 8.6
+      |         turn to 292.2: TURNED to 290.5 (err +1.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  290.5) 0.79s -> walked 0.79s, best change 17.4
+      |         turn to 285.6: TURNED to 284.9 (err +0.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 14.7, best 14.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  284.9) 0.80s -> walked 0.80s, best change 14.7
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 284.9, err +2.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 10.4, best 10.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  284.9) 0.23s -> walked 0.23s, best change 10.4
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (152.000/1.280))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   could not verify bar_pool_room after 3 attempt(s); here is 'portrait_room' (portrait_room 189.000/1.360)
+  [short] 1/10: INVALID — never reached bar_pool_room, so the leg was never tested (328.0s)
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 81.1) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.5 (err -0.3) in 2 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.5) 1.95s -> walked 1.95s, best change 18.1
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 338.5 (err -0.4) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 13.2, best 13.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  338.5) 0.79s -> walked 0.79s, best change 13.2
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 338.5, err +0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 13.8, best 13.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  338.5) 0.70s -> walked 0.70s, best change 13.8
+      |         turn to 347.9: TURNED to 349.2 (err -1.3) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  349.2) 0.42s -> walked 0.42s, best change 21.3
+      |         turn to 355.2: TURNED to 357.5 (err -2.3) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 50.2, best 50.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  357.5) 0.79s -> walked 0.79s, best change 50.2
+      |         turn to 360.0: NO-OP, already inside 4.0 deg (at 357.5, err +2.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 36.1, best 36.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got  357.5) 0.51s -> walked 0.51s, best change 36.1
+      |         turn to 8.6: TURNED to 9.3 (err -0.8) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.0, best 17.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    9.3) 0.78s -> walked 0.78s, best change 17.0
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 9.3, err -1.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 26.9, best 26.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    9.3) 0.78s -> walked 0.78s, best change 26.9
+      |         turn to 1.7: TURNED to 3.4 (err -1.7) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 37.5, best 37.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    3.4) 0.80s -> walked 0.80s, best change 37.5
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 3.3, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 15.7, best 15.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    3.3) 0.36s -> walked 0.36s, best change 15.7
+      |         turn to 359.4: TURNED to 359.7 (err -0.4) in 1 push(es)
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 25.0, best 25.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got  359.7) 0.78s -> walked 0.78s, best change 25.0
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.8, err -2.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 36.6, best 36.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got  359.8) 0.79s -> walked 0.79s, best change 36.6
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 359.7, err -1.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 25.1, best 25.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got  359.7) 0.79s -> walked 0.79s, best change 25.1
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 359.7, err -1.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  359.7) 0.79s -> walked 0.79s, best change 19.7
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.7, err -1.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 21.1, best 21.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  359.7) 0.79s -> walked 0.79s, best change 21.1
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 359.8, err +1.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 26.3, best 26.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got  359.8) 0.79s -> walked 0.79s, best change 26.3
+      |         turn to 4.0: TURNED to 4.9 (err -0.9) in 1 push(es)
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 20.4, best 20.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    4.9) 0.36s -> walked 0.36s, best change 20.4
+      |       arrived? True  (portrait_room 610.000/4.690)
+      |         turn to 1.5: TURNED to 1.8 (err -0.3) in 2 push(es)
+      |       align at portrait_room: yaw nulled to 1.8 (reference 1.5) — 0.3 deg REMAINING = ~6px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+71.4 (prev --)
+      |       align: dx=+71.4 -> strafe right 0.10s
+      |       align: within 35px (dx=+30.2) after 1 step(s)
+      |       aligned at portrait_room: 30px from the recorded pose
+      |       align at portrait_room: dx +30.2px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 286.1 (err +0.5) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 10.5, best 10.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  286.1) 0.16s -> walked 0.16s, best change 10.5
+      |         turn to 292.2: TURNED to 292.5 (err -0.3) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 23.8, best 23.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.5) 0.79s -> walked 0.79s, best change 23.8
+      |         turn to 285.6: TURNED to 285.0 (err +0.6) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 19.6, best 19.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  285.0) 0.80s -> walked 0.80s, best change 19.6
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 284.9, err +2.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 9.3, best 9.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  284.9) 0.23s -> walked 0.23s, best change 9.3
+      |       recovered bar_pool_room at 325 after 1 step(s)
+      |       arrived? True  (bar_pool_room 208.000/1.620)
+      |         turn to 288.2: TURNED to 288.0 (err +0.1) in 2 push(es)
+      |       align at bar_pool_room: yaw nulled to 288.0 (reference 288.2) — 0.1 deg REMAINING = ~2px of phantom dx still in the dx below
+      |       align: within 35px (dx=+0.1) after 0 step(s)
+      |       aligned at bar_pool_room: 0px from the recorded pose
+      |       align at bar_pool_room: dx +0.1px
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['office_door'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |       re-localised by turning 60 deg: bar_pool_room 209.000/1.850
+      |   re-localised at bar_pool_room by turning — no reset needed
+      |   attempt 1/1 at bar_jukebox
+      |   route: bar_pool_room -> bar_jukebox  (3.3s of walking)
+      |     leg bar_pool_room -> bar_jukebox
+      |         turn to 2.1: TURNED to 3.2 (err -1.2) in 1 push(es)
+      |         bar_pool_room->bar_jukebox step 1/5: 1 chunk(s) of 0.80s, change 46.0, best 46.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/5 bearing    2.1 (got    3.2) 0.80s -> walked 0.80s, best change 46.0
+      |         turn to 1.2: NO-OP, already inside 4.0 deg (at 3.3, err -2.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 2/5: 1 chunk(s) of 0.79s, change 40.3, best 40.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/5 bearing    1.2 (got    3.3) 0.79s -> walked 0.79s, best change 40.3
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 3.3, err -2.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 3/5: 1 chunk(s) of 0.80s, change 41.5, best 41.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/5 bearing    0.8 (got    3.3) 0.80s -> walked 0.80s, best change 41.5
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 3.3, err -3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 4/5: 1 chunk(s) of 0.79s, change 26.9, best 26.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/5 bearing  359.4 (got    3.3) 0.79s -> walked 0.79s, best change 26.9
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 3.3, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         bar_pool_room->bar_jukebox step 5/5: 1 chunk(s) of 0.14s, change 7.0, best 7.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/5 bearing  359.6 (got    3.3) 0.14s -> walked 0.14s, best change 7.0
+      |       arrived? False  (saw portrait_room (162.000/1.380))
+      |     STOPPING at leg bar_pool_room -> bar_jukebox: the destination did not check out, so every leg after this one would be walked from an unknown position
+      |   could not verify bar_jukebox after 1 attempt(s); here is 'portrait_room' (portrait_room 173.000/1.540)
+      |   could not verify bar_jukebox — stopping rather than walking the next leg from an unknown pose
+      |       failure kind: unplaced — at portrait_room, which is not on this route [frame: the leg's own end]
+      |       saved the failing frame to /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/jukebox_failframes/fail_bar_jukebox_1788719389112.jpg (the leg's own end)
+  [restored] 2/10: arrived=False (located portrait_room, 5 step(s) walked, ran to the end, 0 stall event(s)) in 85.1s
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 83.3) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.1 (err +0.1) in 4 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 17.6, best 17.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.1) 1.95s -> walked 1.95s, best change 17.6
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 335.7 (err +2.5) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 8.9, best 8.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  335.7) 0.79s -> walked 0.79s, best change 8.9
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 335.7, err +3.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 10.3, best 10.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  335.7) 0.70s -> walked 0.70s, best change 10.3
+      |         turn to 347.9: TURNED to 348.9 (err -1.0) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 16.2, best 16.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  348.9) 0.42s -> walked 0.42s, best change 16.2
+      |         turn to 355.2: TURNED to 353.6 (err +1.6) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 59.8, best 59.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  353.6) 0.79s -> walked 0.79s, best change 59.8
+      |         turn to 360.0: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 41.0, best 41.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got  353.6) 0.51s -> walked 0.51s, best change 41.0
+      |         turn to 8.6: TURNED to 7.9 (err +0.7) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 20.7, best 20.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    7.9) 0.78s -> walked 0.78s, best change 20.7
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 7.9, err -0.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 23.0, best 23.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    7.9) 0.78s -> walked 0.78s, best change 23.0
+      |         turn to 1.7: TURNED to 1.7 (err +0.0) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 40.3, best 40.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.7) 0.80s -> walked 0.80s, best change 40.3
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.6, err -2.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 14.2, best 14.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.6) 0.36s -> walked 0.36s, best change 14.2
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 1.8, err -2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    1.8) 0.78s -> walked 0.78s, best change 19.5
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.7, err -3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.7) 0.79s -> walked 0.79s, best change 19.1
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 1.7, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    1.7) 0.79s -> walked 0.79s, best change 25.8
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 1.7, err -3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 32.8, best 32.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got    1.7) 0.79s -> walked 0.79s, best change 32.8
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.7, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 19.2, best 19.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got    1.7) 0.79s -> walked 0.79s, best change 19.2
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 1.5, err -0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    1.5) 0.79s -> walked 0.79s, best change 19.7
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 1.7, err +2.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 16.3, best 16.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    1.7) 0.36s -> walked 0.36s, best change 16.3
+      |       arrived? True  (portrait_room 218.000/1.880)
+      |         turn to 1.5: NO-OP, already inside 0.5 deg (at 1.7, err -0.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |       align at portrait_room: yaw nulled to 1.7 (reference 1.5) — 0.2 deg REMAINING = ~4px of phantom dx still in the dx below
+      |       align: within 35px (dx=-6.8) after 0 step(s)
+      |       aligned at portrait_room: 7px from the recorded pose
+      |       align at portrait_room: dx +6.8px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 288.4 (err -1.8) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 10.7, best 10.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  288.4) 0.16s -> walked 0.16s, best change 10.7
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 288.4, err +3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 14.8, best 14.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  288.4) 0.79s -> walked 0.79s, best change 14.8
+      |         turn to 285.6: NO-OP, already inside 4.0 deg (at 288.4, err -2.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 14.5, best 14.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  288.4) 0.80s -> walked 0.80s, best change 14.5
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 288.4, err -0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 9.6, best 9.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  288.4) 0.23s -> walked 0.23s, best change 9.6
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (135.000/1.160))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |   route: portrait_room -> bar_pool_room  (2.0s of walking)
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 289.6 (err -3.1) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 11.8, best 11.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  289.6) 0.16s -> walked 0.16s, best change 11.8
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 289.6, err +2.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 24.1, best 24.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  289.6) 0.79s -> walked 0.79s, best change 24.1
+      |         turn to 285.6: TURNED to 286.1 (err -0.5) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 23.9, best 23.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  286.1) 0.80s -> walked 0.80s, best change 23.9
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 286.1, err +1.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 15.4, best 15.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  286.1) 0.23s -> walked 0.23s, best change 15.4
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (169.000/1.020))
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['bar_pool_room'] — each is a hole in the reference set
+      |   attempt 3/3 at bar_pool_room
+      |   not at bar_pool_room and cannot say where this is (unrecognised (103.000/1.140)) — reloading to a known start
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 78.4) -> YES
+      |   world back after 3.2s, spawn bearing 87 (E)
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.9 (err -0.7) in 2 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 18.7, best 18.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.9) 1.95s -> walked 1.95s, best change 18.7
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 336.5 (err +1.6) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 12.5, best 12.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  336.5) 0.79s -> walked 0.79s, best change 12.5
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 336.5, err +2.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 13.2, best 13.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  336.5) 0.70s -> walked 0.70s, best change 13.2
+      |         turn to 347.9: TURNED to 346.3 (err +1.6) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 21.0, best 21.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  346.3) 0.42s -> walked 0.42s, best change 21.0
+      |         turn to 355.2: TURNED to 351.6 (err +3.5) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 52.8, best 52.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  351.6) 0.79s -> walked 0.79s, best change 52.8
+      |         turn to 360.0: TURNED to 358.5 (err +1.5) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 35.0, best 35.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got  358.5) 0.51s -> walked 0.51s, best change 35.0
+      |         turn to 8.6: TURNED to 8.8 (err -0.2) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    8.8) 0.78s -> walked 0.78s, best change 17.4
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 8.8, err -1.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 36.5, best 36.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    8.8) 0.78s -> walked 0.78s, best change 36.5
+      |         turn to 1.7: TURNED to 1.6 (err +0.2) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.6) 0.80s -> walked 0.80s, best change 19.1
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.2, err -1.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 16.6, best 16.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.2) 0.36s -> walked 0.36s, best change 16.6
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 2.0, err -2.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 28.5, best 28.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    2.0) 0.78s -> walked 0.78s, best change 28.5
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.9, err -4.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 30.4, best 30.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.9) 0.79s -> walked 0.79s, best change 30.4
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 2.0, err -4.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 20.5, best 20.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    2.0) 0.79s -> walked 0.79s, best change 20.5
+      |         turn to 357.8: TURNED to 359.3 (err -1.5) in 1 push(es)
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 19.9, best 19.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  359.3) 0.79s -> walked 0.79s, best change 19.9
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.4, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 23.5, best 23.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  359.4) 0.79s -> walked 0.79s, best change 23.5
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 359.3, err +1.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 28.9, best 28.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got  359.3) 0.79s -> walked 0.79s, best change 28.9
+      |         turn to 4.0: TURNED to 3.4 (err +0.5) in 1 push(es)
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 22.1, best 22.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    3.4) 0.36s -> walked 0.36s, best change 22.1
+      |       arrived? True  (portrait_room 756.000/5.770)
+      |         turn to 1.5: TURNED to 1.2 (err +0.2) in 1 push(es)
+      |       align at portrait_room: yaw nulled to 1.2 (reference 1.5) — 0.2 deg REMAINING = ~4px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+46.7 (prev --)
+      |       align: dx=+46.7 -> strafe right 0.10s
+      |       align: dx barely changed (+47 -> +33) — blocked sideways, cannot correct from here
+      |       aligned at portrait_room: 33px from the recorded pose
+      |       align at portrait_room: dx +33.4px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.8 (err -1.2) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 16.7, best 16.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.8) 0.16s -> walked 0.16s, best change 16.7
+      |         turn to 292.2: TURNED to 292.6 (err -0.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 28.5, best 28.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.6) 0.79s -> walked 0.79s, best change 28.5
+      |         turn to 285.6: TURNED to 284.2 (err +1.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 42.0, best 42.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  284.2) 0.80s -> walked 0.80s, best change 42.0
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 284.2, err +3.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 36.1, best 36.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  284.2) 0.23s -> walked 0.23s, best change 36.1
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (129.000/1.030))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   could not verify bar_pool_room after 3 attempt(s); here is 'portrait_room' (portrait_room 665.000/5.680)
+  [short] 2/10: INVALID — never reached bar_pool_room, so the leg was never tested (320.0s)
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 80.4) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 271.0 (err -0.8) in 4 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  271.0) 1.95s -> walked 1.95s, best change 19.3
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 337.8 (err +0.3) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 10.7, best 10.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  337.8) 0.79s -> walked 0.79s, best change 10.7
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 337.8, err +1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 12.5, best 12.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  337.8) 0.70s -> walked 0.70s, best change 12.5
+      |         turn to 347.9: TURNED to 346.2 (err +1.7) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 20.8, best 20.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  346.2) 0.42s -> walked 0.42s, best change 20.8
+      |         turn to 355.2: TURNED to 355.4 (err -0.2) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 48.9, best 48.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  355.4) 0.79s -> walked 0.79s, best change 48.9
+      |         turn to 360.0: TURNED to 359.3 (err +0.7) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 32.0, best 32.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got  359.3) 0.51s -> walked 0.51s, best change 32.0
+      |         turn to 8.6: TURNED to 6.9 (err +1.7) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.6, best 17.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    6.9) 0.78s -> walked 0.78s, best change 17.6
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 6.9, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 24.8, best 24.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    6.9) 0.78s -> walked 0.78s, best change 24.8
+      |         turn to 1.7: TURNED to 359.2 (err +2.5) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 33.1, best 33.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got  359.2) 0.80s -> walked 0.80s, best change 33.1
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 359.2, err +0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 11.0, best 11.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got  359.2) 0.36s -> walked 0.36s, best change 11.0
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 359.2, err +0.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 14.9, best 14.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got  359.2) 0.78s -> walked 0.78s, best change 14.9
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.2, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 15.2, best 15.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got  359.2) 0.79s -> walked 0.79s, best change 15.2
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 359.2, err -1.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 15.7, best 15.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got  359.2) 0.79s -> walked 0.79s, best change 15.7
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 359.2, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  359.2) 0.79s -> walked 0.79s, best change 15.5
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 359.3, err -1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 15.4, best 15.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  359.3) 0.79s -> walked 0.79s, best change 15.4
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 359.2, err +1.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 15.8, best 15.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got  359.2) 0.79s -> walked 0.79s, best change 15.8
+      |         turn to 4.0: TURNED to 3.3 (err +0.7) in 1 push(es)
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 15.6, best 15.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    3.3) 0.36s -> walked 0.36s, best change 15.6
+      |       arrived? True  (portrait_room 155.000/1.490)
+      |         turn to 1.5: TURNED to 1.5 (err -0.0) in 1 push(es)
+      |       align at portrait_room: yaw nulled to 1.5 (reference 1.5) — 0.0 deg REMAINING = ~0px of phantom dx still in the dx below
+      |       align: within 35px (dx=+10.1) after 0 step(s)
+      |       aligned at portrait_room: 10px from the recorded pose
+      |       align at portrait_room: dx +10.1px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 288.0 (err -1.5) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 17.0, best 17.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  288.0) 0.16s -> walked 0.16s, best change 17.0
+      |         turn to 292.2: TURNED to 291.8 (err +0.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 13.7, best 13.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  291.8) 0.79s -> walked 0.79s, best change 13.7
+      |         turn to 285.6: TURNED to 284.3 (err +1.3) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 2.4, best 2.4, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  284.3) 0.80s -> walked 0.80s, best change 2.4
+      |       step 3 blocked but the scene is MOVING — an NPC in the passage, not a wall
+      |       the view is featureless — this is geometry, not a mover; skipping the escape ladder it has never cleared
+      |       escape ladder: did NOT clear (best 0.0 PIXELS, against SLIP_PROGRESS_PX 20.0px — NOT against STALL_CHANGE 6.0, which is grey_levels)
+      |       step 3 moved only 2.4 grey_levels (< 6.0) over 0.80s — stall score 1
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 284.3, err +3.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 2.2, best 2.2, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  284.3) 0.23s -> walked 0.23s, best change 2.2
+      |       step 4 blocked but the scene is MOVING — an NPC in the passage, not a wall
+      |       the view is featureless — this is geometry, not a mover; skipping the escape ladder it has never cleared
+      |       escape ladder: did NOT clear (best 0.0 PIXELS, against SLIP_PROGRESS_PX 20.0px — NOT against STALL_CHANGE 6.0, which is grey_levels)
+      |       step 4 moved only 2.2 grey_levels (< 6.0) over 0.23s — stall score 2
+      |       BLOCKED on step 4; abandoning the rest of this leg rather than pushing into whatever is in the way
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (1.000/1.000))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |   not at bar_pool_room and cannot say where this is (unrecognised (26.000/1.370)) — reloading to a known start
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 82.2) -> YES
+      |   world back after 3.2s, spawn bearing 87 (E)
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.4 (err -0.2) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 19.8, best 19.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.4) 1.95s -> walked 1.95s, best change 19.8
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 337.2 (err +0.9) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 9.8, best 9.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  337.2) 0.79s -> walked 0.79s, best change 9.8
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 337.2, err +2.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 12.2, best 12.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  337.2) 0.70s -> walked 0.70s, best change 12.2
+      |         turn to 347.9: TURNED to 349.6 (err -1.7) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  349.6) 0.42s -> walked 0.42s, best change 21.3
+      |         turn to 355.2: TURNED to 355.6 (err -0.4) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 50.0, best 50.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  355.6) 0.79s -> walked 0.79s, best change 50.0
+      |         turn to 360.0: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 37.7, best 37.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got --) 0.51s -> walked 0.51s, best change 37.7
+      |         turn to 8.6: TURNED to 9.0 (err -0.4) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.7, best 17.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    9.0) 0.78s -> walked 0.78s, best change 17.7
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 9.0, err -1.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 38.3, best 38.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    9.0) 0.78s -> walked 0.78s, best change 38.3
+      |         turn to 1.7: TURNED to 1.2 (err +0.5) in 2 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.2) 0.80s -> walked 0.80s, best change 19.7
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.2, err -1.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 16.3, best 16.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.2) 0.36s -> walked 0.36s, best change 16.3
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 1.2, err -1.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 28.3, best 28.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    1.2) 0.78s -> walked 0.78s, best change 28.3
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.3, err -3.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 32.1, best 32.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.3) 0.79s -> walked 0.79s, best change 32.1
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 1.2, err -3.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 20.7, best 20.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    1.2) 0.79s -> walked 0.79s, best change 20.7
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 1.3, err -3.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got    1.3) 0.79s -> walked 0.79s, best change 18.9
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.3, err -3.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 23.8, best 23.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got    1.3) 0.79s -> walked 0.79s, best change 23.8
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 1.3, err -0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 25.7, best 25.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    1.3) 0.79s -> walked 0.79s, best change 25.7
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 1.3, err +2.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 27.3, best 27.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    1.3) 0.36s -> walked 0.36s, best change 27.3
+      |       arrived? True  (portrait_room 708.000/5.020)
+      |         turn to 1.5: NO-OP, already inside 0.5 deg (at 1.2, err +0.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |       align at portrait_room: yaw nulled to 1.2 (reference 1.5) — 0.2 deg REMAINING = ~4px of phantom dx still in the dx below
+      |       align: within 35px (dx=+32.7) after 0 step(s)
+      |       aligned at portrait_room: 33px from the recorded pose
+      |       align at portrait_room: dx +32.7px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.9 (err -1.3) in 3 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 12.9, best 12.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.9) 0.16s -> walked 0.16s, best change 12.9
+      |         turn to 292.2: TURNED to 292.6 (err -0.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 39.2, best 39.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.6) 0.79s -> walked 0.79s, best change 39.2
+      |         turn to 285.6: TURNED to 289.1 (err -3.5) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 24.0, best 24.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  289.1) 0.80s -> walked 0.80s, best change 24.0
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 289.0, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 22.4, best 22.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  289.0) 0.23s -> walked 0.23s, best change 22.4
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (109.000/1.030))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 3/3 at bar_pool_room
+      |       re-localised by turning 300 deg: portrait_room 518.000/4.210
+      |   re-localised at portrait_room by turning; routing from there
+      |   route: portrait_room -> bar_pool_room  (2.0s of walking)
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.8 (err -1.2) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 12.0, best 12.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.8) 0.16s -> walked 0.16s, best change 12.0
+      |         turn to 292.2: TURNED to 292.0 (err +0.2) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 31.0, best 31.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.0) 0.79s -> walked 0.79s, best change 31.0
+      |         turn to 285.6: TURNED to 286.7 (err -1.1) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 23.2, best 23.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  286.7) 0.80s -> walked 0.80s, best change 23.2
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 286.8, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 18.3, best 18.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  286.8) 0.23s -> walked 0.23s, best change 18.3
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (121.000/1.130))
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['bar_pool_room'] — each is a hole in the reference set
+      |   could not verify bar_pool_room after 3 attempt(s); here is None (unrecognised (27.000/1.080))
+  [restored] 3/10: INVALID — never reached bar_pool_room, so the leg was never tested (338.6s)
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 78.3) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.0 (err +0.2) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 19.4, best 19.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.0) 1.95s -> walked 1.95s, best change 19.4
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 336.8 (err +1.3) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 13.0, best 13.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  336.8) 0.79s -> walked 0.79s, best change 13.0
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 336.8, err +2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 13.4, best 13.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  336.8) 0.70s -> walked 0.70s, best change 13.4
+      |         turn to 347.9: TURNED to 343.9 (err +4.0) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 21.8, best 21.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  343.9) 0.42s -> walked 0.42s, best change 21.8
+      |         turn to 355.2: TURNED to 354.3 (err +0.8) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 50.8, best 50.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  354.3) 0.79s -> walked 0.79s, best change 50.8
+      |         turn to 360.0: TURNED to 0.3 (err -0.3) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 35.4, best 35.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got    0.3) 0.51s -> walked 0.51s, best change 35.4
+      |         turn to 8.6: TURNED to 11.2 (err -2.6) in 2 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.8, best 17.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got   11.2) 0.78s -> walked 0.78s, best change 17.8
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 11.2, err -3.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 28.7, best 28.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got   11.2) 0.78s -> walked 0.78s, best change 28.7
+      |         turn to 1.7: TURNED to 1.2 (err +0.6) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 35.4, best 35.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.2) 0.80s -> walked 0.80s, best change 35.4
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.1, err -1.5) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 24.1, best 24.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.1) 0.36s -> walked 0.36s, best change 24.1
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 1.1, err -1.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 31.7, best 31.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    1.1) 0.78s -> walked 0.78s, best change 31.7
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.0, err -3.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 21.5, best 21.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.0) 0.79s -> walked 0.79s, best change 21.5
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 1.1, err -3.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    1.1) 0.79s -> walked 0.79s, best change 19.7
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 1.1, err -3.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 22.2, best 22.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got    1.1) 0.79s -> walked 0.79s, best change 22.2
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.1, err -3.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 27.6, best 27.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got    1.1) 0.79s -> walked 0.79s, best change 27.6
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 1.1, err -0.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 27.2, best 27.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    1.1) 0.79s -> walked 0.79s, best change 27.2
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 1.1, err +2.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 16.5, best 16.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    1.1) 0.36s -> walked 0.36s, best change 16.5
+      |       arrived? True  (portrait_room 882.000/7.110)
+      |         turn to 1.5: NO-OP, already inside 0.5 deg (at 1.1, err +0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |       align at portrait_room: yaw nulled to 1.1 (reference 1.5) — 0.4 deg REMAINING = ~7px of phantom dx still in the dx below
+      |       align: within 35px (dx=+19.9) after 0 step(s)
+      |       aligned at portrait_room: 20px from the recorded pose
+      |       align at portrait_room: dx +19.9px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 290.0 (err -3.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 13.3, best 13.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  290.0) 0.16s -> walked 0.16s, best change 13.3
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 290.0, err +2.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 19.6, best 19.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  290.0) 0.79s -> walked 0.79s, best change 19.6
+      |         turn to 285.6: TURNED to 286.3 (err -0.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 12.5, best 12.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  286.3) 0.80s -> walked 0.80s, best change 12.5
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 286.3, err +1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 4.5, best 4.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  286.3) 0.23s -> walked 0.23s, best change 4.5
+      |       step 4 blocked but the scene is MOVING — an NPC in the passage, not a wall
+      |       waited 2.5s: displaced 2.1px
+      |       jump 1: displaced 2.9px
+      |       jump 2: displaced 0.0px
+      |       slip right: displaced 0.0px
+      |       slip left: displaced 3.3px
+      |       nothing cleared it — treating this as geometry, not an NPC
+      |       escape ladder: did NOT clear (best 3.3 PIXELS, against SLIP_PROGRESS_PX 20.0px — NOT against STALL_CHANGE 6.0, which is grey_levels)
+      |       step 4 moved only 4.5 grey_levels (< 6.0) over 0.23s — stall score 1
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (70.000/1.490))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |       re-localised by turning 300 deg: portrait_room 377.000/2.190
+      |   re-localised at portrait_room by turning; routing from there
+      |   route: portrait_room -> bar_pool_room  (2.0s of walking)
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 288.9 (err -2.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 10.3, best 10.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  288.9) 0.16s -> walked 0.16s, best change 10.3
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 288.5, err +3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 15.3, best 15.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  288.5) 0.79s -> walked 0.79s, best change 15.3
+      |         turn to 285.6: NO-OP, already inside 4.0 deg (at 288.8, err -3.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  288.8) 0.80s -> walked 0.80s, best change 17.4
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 288.9, err -1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 13.3, best 13.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  288.9) 0.23s -> walked 0.23s, best change 13.3
+      |       arrived? True  (bar_pool_room 576.000/4.720)
+      |         turn to 288.2: TURNED to 288.5 (err -0.4) in 1 push(es)
+      |       align at bar_pool_room: yaw nulled to 288.5 (reference 288.2) — 0.4 deg REMAINING = ~7px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+120.1 (prev --)
+      |       align: dx=+120.1 -> strafe right 0.10s
+      |       align: step 2/6 dx=+85.4 (prev +120.1)
+      |       align: dx=+85.4 -> strafe right 0.10s
+      |       align: step 3/6 dx=+56.7 (prev +85.4)
+      |       align: dx=+56.7 -> strafe right 0.10s
+      |       align: within 35px (dx=+17.6) after 3 step(s)
+      |       aligned at bar_pool_room: 18px from the recorded pose
+      |       align at bar_pool_room: dx +17.6px
+      |   attempt 3/3 at bar_pool_room
+      |   verified at bar_pool_room (bar_pool_room 368.000/2.830)
+      |   attempt 1/1 at bar_jukebox
+      |   route: bar_pool_room -> bar_jukebox  (0.8s of walking)
+      |     leg bar_pool_room -> bar_jukebox
+      |         turn to 2.1: TURNED to 1.8 (err +0.3) in 1 push(es)
+      |         bar_pool_room->bar_jukebox step 1/1: 1 chunk(s) of 0.80s, change 13.0, best 13.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing    2.1 (got    1.8) 0.80s -> walked 0.80s, best change 13.0
+      |       recovery fan did not find bar_jukebox
+      |       arrived? None  (unverified, abstained (2.000/2.000))
+      |   arrived, but 1 node(s) could not be confirmed on the way: ['bar_jukebox'] — each is a hole in the reference set
+      |   could not verify bar_jukebox after 1 attempt(s); here is None (unrecognised (56.000/1.120))
+      |   could not verify bar_jukebox — stopping rather than walking the next leg from an unknown pose
+      |       failure kind: wedged — 9 keypoints — pressed against geometry [frame: the leg's own end]
+      |       saved the failing frame to /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/jukebox_failframes/fail_bar_jukebox_1788720270595.jpg (the leg's own end)
+  [short] 3/10: arrived=False (located None, 1 step(s) walked, ran to the end, 0 stall event(s)) in 215.6s
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 78.8) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   attempt 1/3 at bar_pool_room
+      |   locate() cannot name office_corridor (it has no appearance reference by design) but the caller reset onto it — routing from there instead of sweeping and reloading
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.3 (err -0.1) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.3) 1.95s -> walked 1.95s, best change 18.9
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 339.6 (err -1.4) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 9.5, best 9.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  339.6) 0.79s -> walked 0.79s, best change 9.5
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 339.6, err -0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 14.5, best 14.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  339.6) 0.70s -> walked 0.70s, best change 14.5
+      |         turn to 347.9: TURNED to 347.8 (err +0.1) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 21.5, best 21.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  347.8) 0.42s -> walked 0.42s, best change 21.5
+      |         turn to 355.2: TURNED to 355.2 (err -0.0) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 48.6, best 48.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  355.2) 0.79s -> walked 0.79s, best change 48.6
+      |         turn to 360.0: TURNED to 2.1 (err -2.1) in 1 push(es)
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 32.8, best 32.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got    2.1) 0.51s -> walked 0.51s, best change 32.8
+      |         turn to 8.6: TURNED to 8.1 (err +0.5) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    8.1) 0.78s -> walked 0.78s, best change 17.4
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 8.0, err -0.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 27.9, best 27.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    8.0) 0.78s -> walked 0.78s, best change 27.9
+      |         turn to 1.7: TURNED to 1.6 (err +0.2) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 38.9, best 38.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    1.6) 0.80s -> walked 0.80s, best change 38.9
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 1.5, err -1.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 14.9, best 14.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    1.5) 0.36s -> walked 0.36s, best change 14.9
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 1.5, err -2.2) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    1.5) 0.78s -> walked 0.78s, best change 19.5
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.7, err -3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 29.1, best 29.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got    1.7) 0.79s -> walked 0.79s, best change 29.1
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 1.7, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 31.2, best 31.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got    1.7) 0.79s -> walked 0.79s, best change 31.2
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 1.7, err -3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 20.0, best 20.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got    1.7) 0.79s -> walked 0.79s, best change 20.0
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 1.6, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got    1.6) 0.79s -> walked 0.79s, best change 19.5
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 1.5, err -0.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 23.1, best 23.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got    1.5) 0.79s -> walked 0.79s, best change 23.1
+      |         turn to 4.0: NO-OP, already inside 4.0 deg (at 1.6, err +2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 20.6, best 20.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    1.6) 0.36s -> walked 0.36s, best change 20.6
+      |       arrived? True  (portrait_room 382.000/3.290)
+      |         turn to 1.5: NO-OP, already inside 0.5 deg (at 1.6, err -0.1) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |       align at portrait_room: yaw nulled to 1.6 (reference 1.5) — 0.1 deg REMAINING = ~2px of phantom dx still in the dx below
+      |       align: within 35px (dx=+22.2) after 0 step(s)
+      |       aligned at portrait_room: 22px from the recorded pose
+      |       align at portrait_room: dx +22.2px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 287.7 (err -1.2) in 2 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 12.4, best 12.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  287.7) 0.16s -> walked 0.16s, best change 12.4
+      |         turn to 292.2: TURNED to 292.6 (err -0.4) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 21.2, best 21.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.6) 0.79s -> walked 0.79s, best change 21.2
+      |         turn to 285.6: TURNED to 286.3 (err -0.7) in 1 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  286.3) 0.80s -> walked 0.80s, best change 18.1
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 286.3, err +1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 8.6, best 8.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  286.3) 0.23s -> walked 0.23s, best change 8.6
+      |       recovery fan did not find bar_pool_room
+      |       arrived? None  (unverified, abstained (120.000/1.020))
+      |   arrived, but 2 node(s) could not be confirmed on the way: ['office_door', 'bar_pool_room'] — each is a hole in the reference set
+      |   attempt 2/3 at bar_pool_room
+      |   route: portrait_room -> bar_pool_room  (2.0s of walking)
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 288.4 (err -1.8) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 7.7, best 7.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  288.4) 0.16s -> walked 0.16s, best change 7.7
+      |         turn to 292.2: NO-OP, already inside 4.0 deg (at 288.4, err +3.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 22.0, best 22.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  288.4) 0.79s -> walked 0.79s, best change 22.0
+      |         turn to 285.6: NO-OP, already inside 4.0 deg (at 288.0, err -2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 21.0, best 21.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  288.0) 0.80s -> walked 0.80s, best change 21.0
+      |         turn to 287.6: NO-OP, already inside 4.0 deg (at 288.0, err -0.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 14.2, best 14.2, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  288.0) 0.23s -> walked 0.23s, best change 14.2
+      |       recovered bar_pool_room at 328 after 1 step(s)
+      |       arrived? True  (bar_pool_room 170.000/1.370)
+      |         turn to 288.2: TURNED to 288.3 (err -0.1) in 3 push(es)
+      |       align at bar_pool_room: yaw nulled to 288.3 (reference 288.2) — 0.1 deg REMAINING = ~2px of phantom dx still in the dx below
+      |       align: offset unmeasurable (step 1)
+      |       aligned at bar_pool_room: unmeasurable
+      |       align at bar_pool_room: no dx (see the reason above)
+      |   attempt 3/3 at bar_pool_room
+      |   not at bar_pool_room and cannot say where this is (unrecognised (47.000/1.120)) — reloading to a known start
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 79.2) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   route: office_corridor -> office_door -> portrait_room -> bar_pool_room  (18.1s of walking)
+      |     leg office_corridor -> office_door
+      |         turn to 270.2: TURNED to 270.0 (err +0.2) in 3 push(es)
+      |         office_corridor->office_door step 1/1: 1 chunk(s) of 1.95s, change 18.0, best 18.0, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/1 bearing  270.2 (got  270.0) 1.95s -> walked 1.95s, best change 18.0
+      |       arrived? None  (no appearance reference by design)
+      |     leg office_door -> portrait_room
+      |         turn to 338.1: TURNED to 336.7 (err +1.4) in 1 push(es)
+      |         office_door->portrait_room step 1/16: 1 chunk(s) of 0.79s, change 12.5, best 12.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/16 bearing  338.1 (got  336.7) 0.79s -> walked 0.79s, best change 12.5
+      |         turn to 339.2: NO-OP, already inside 4.0 deg (at 336.8, err +2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 2/16: 1 chunk(s) of 0.70s, change 10.8, best 10.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/16 bearing  339.2 (got  336.8) 0.70s -> walked 0.70s, best change 10.8
+      |         turn to 347.9: TURNED to 349.8 (err -1.9) in 1 push(es)
+      |         office_door->portrait_room step 3/16: 1 chunk(s) of 0.42s, change 18.3, best 18.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/16 bearing  347.9 (got  349.8) 0.42s -> walked 0.42s, best change 18.3
+      |         turn to 355.2: TURNED to 355.0 (err +0.2) in 1 push(es)
+      |         office_door->portrait_room step 4/16: 1 chunk(s) of 0.79s, change 50.7, best 50.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/16 bearing  355.2 (got  355.0) 0.79s -> walked 0.79s, best change 50.7
+      |         turn to 360.0: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+      |         office_door->portrait_room step 5/16: 1 chunk(s) of 0.51s, change 33.1, best 33.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 5/16 bearing  360.0 (got --) 0.51s -> walked 0.51s, best change 33.1
+      |         turn to 8.6: TURNED to 8.5 (err +0.1) in 1 push(es)
+      |         office_door->portrait_room step 6/16: 1 chunk(s) of 0.78s, change 17.1, best 17.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 6/16 bearing    8.6 (got    8.5) 0.78s -> walked 0.78s, best change 17.1
+      |         turn to 7.7: NO-OP, already inside 4.0 deg (at 8.5, err -0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 7/16: 1 chunk(s) of 0.78s, change 25.5, best 25.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 7/16 bearing    7.7 (got    8.5) 0.78s -> walked 0.78s, best change 25.5
+      |         turn to 1.7: TURNED to 2.4 (err -0.7) in 1 push(es)
+      |         office_door->portrait_room step 8/16: 1 chunk(s) of 0.80s, change 39.7, best 39.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 8/16 bearing    1.7 (got    2.4) 0.80s -> walked 0.80s, best change 39.7
+      |         turn to 359.6: NO-OP, already inside 4.0 deg (at 2.5, err -2.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 9/16: 1 chunk(s) of 0.36s, change 15.8, best 15.8, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 9/16 bearing  359.6 (got    2.5) 0.36s -> walked 0.36s, best change 15.8
+      |         turn to 359.4: NO-OP, already inside 4.0 deg (at 2.4, err -3.0) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 10/16: 1 chunk(s) of 0.78s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 10/16 bearing  359.4 (got    2.4) 0.78s -> walked 0.78s, best change 21.3
+      |         turn to 357.9: TURNED to 357.2 (err +0.7) in 1 push(es)
+      |         office_door->portrait_room step 11/16: 1 chunk(s) of 0.79s, change 28.6, best 28.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 11/16 bearing  357.9 (got  357.2) 0.79s -> walked 0.79s, best change 28.6
+      |         turn to 358.0: NO-OP, already inside 4.0 deg (at 357.1, err +0.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 12/16: 1 chunk(s) of 0.79s, change 31.6, best 31.6, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 12/16 bearing  358.0 (got  357.1) 0.79s -> walked 0.79s, best change 31.6
+      |         turn to 357.8: NO-OP, already inside 4.0 deg (at 357.2, err +0.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 13/16: 1 chunk(s) of 0.79s, change 22.4, best 22.4, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 13/16 bearing  357.8 (got  357.2) 0.79s -> walked 0.79s, best change 22.4
+      |         turn to 357.9: NO-OP, already inside 4.0 deg (at 357.2, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 14/16: 1 chunk(s) of 0.79s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 14/16 bearing  357.9 (got  357.2) 0.79s -> walked 0.79s, best change 18.9
+      |         turn to 0.8: NO-OP, already inside 4.0 deg (at 357.2, err +3.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         office_door->portrait_room step 15/16: 1 chunk(s) of 0.79s, change 23.1, best 23.1, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 15/16 bearing    0.8 (got  357.2) 0.79s -> walked 0.79s, best change 23.1
+      |         turn to 4.0: TURNED to 2.0 (err +1.9) in 1 push(es)
+      |         office_door->portrait_room step 16/16: 1 chunk(s) of 0.36s, change 21.9, best 21.9, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 16/16 bearing    4.0 (got    2.0) 0.36s -> walked 0.36s, best change 21.9
+      |       arrived? True  (portrait_room 406.000/3.440)
+      |         turn to 1.5: TURNED to 1.3 (err +0.2) in 1 push(es)
+      |       align at portrait_room: yaw nulled to 1.3 (reference 1.5) — 0.2 deg REMAINING = ~4px of phantom dx still in the dx below
+      |       align: step 1/6 dx=+131.9 (prev --)
+      |       align: dx=+131.9 -> strafe right 0.11s
+      |       align: step 2/6 dx=+125.9 (prev +131.9)
+      |       align: dx=+125.9 -> strafe right 0.10s
+      |       align: step 3/6 dx=+119.0 (prev +125.9)
+      |       align: dx=+119.0 -> strafe right 0.10s
+      |       align: step 4/6 dx=+78.8 (prev +119.0)
+      |       align: dx=+78.8 -> strafe right 0.10s
+      |       align: step 5/6 dx=+55.7 (prev +78.8)
+      |       align: dx=+55.7 -> strafe right 0.10s
+      |       align: dx barely changed (+56 -> +40) — blocked sideways, cannot correct from here
+      |       aligned at portrait_room: 40px from the recorded pose
+      |       align at portrait_room: dx +40.0px
+      |     leg portrait_room -> bar_pool_room
+      |         turn to 286.6: TURNED to 285.4 (err +1.1) in 1 push(es)
+      |         portrait_room->bar_pool_room step 1/4: 1 chunk(s) of 0.16s, change 12.5, best 12.5, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 1/4 bearing  286.6 (got  285.4) 0.16s -> walked 0.16s, best change 12.5
+      |         turn to 292.2: TURNED to 292.5 (err -0.3) in 1 push(es)
+      |         portrait_room->bar_pool_room step 2/4: 1 chunk(s) of 0.79s, change 21.7, best 21.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 2/4 bearing  292.2 (got  292.5) 0.79s -> walked 0.79s, best change 21.7
+      |         turn to 285.6: TURNED to 282.9 (err +2.7) in 2 push(es)
+      |         portrait_room->bar_pool_room step 3/4: 1 chunk(s) of 0.80s, change 17.7, best 17.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 3/4 bearing  285.6 (got  282.9) 0.80s -> walked 0.80s, best change 17.7
+      |         turn to 287.6: TURNED to 287.0 (err +0.6) in 1 push(es)
+      |         portrait_room->bar_pool_room step 4/4: 1 chunk(s) of 0.23s, change 9.7, best 9.7, hazards none — one push, so `best` IS the whole leg's travel
+      |       step 4/4 bearing  287.6 (got  287.0) 0.23s -> walked 0.23s, best change 9.7

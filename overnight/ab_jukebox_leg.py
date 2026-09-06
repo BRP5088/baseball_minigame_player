@@ -32,7 +32,15 @@ sys.path.insert(0, HERE)
 import _harness
 
 TRIALS = 10
-TIMEOUT = 300
+# 600, not 300. Trial 1 on 2026-09-06 used all THREE attempts at the start node
+# and was killed at 300.4s with the leg under test never walked -- an INVALID
+# trial that cost five minutes of console and measured nothing. Reaching
+# bar_pool_room is 0.667 per attempt (section 8b), so a 3-attempt trial is
+# ordinary, not pathological, and the ceiling has to fit one.
+#
+# It does not censor an arm (CLAUDE.md 10.14): both arms pay the identical
+# start cost, and the legs under test differ by 2.5s.
+TIMEOUT = 600
 MAP = os.path.join(ROOT, "world_map.json")
 BACKUP = os.path.join(HERE, "_ab_map_backup.json")
 OUT = os.path.join(HERE, "ab_jukebox_leg.json")
