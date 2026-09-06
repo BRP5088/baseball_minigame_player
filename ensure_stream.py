@@ -131,6 +131,75 @@ def last_route():
     return _last_route
 
 
+# --- IS THIS CHIAKI'S OWN WINDOW RATHER THAN A VIDEO STREAM? ----------------
+#
+# find_bar answers "is there a horizontal light band here", which is true of the
+# game's compass strip AND of any application toolbar. It is the reason
+# streaming() reported UP while the PS5 was in standby (OPEN-18). These two
+# numbers are what separates the chiaki window's own chrome from decoded video.
+#
+# WHY THESE FEATURES. Qt draws flat fills: large areas of ONE exact RGB value,
+# and bands that run the full width of the window. H.264 never does — even a
+# dark room is dithered by quantisation, so a decoded frame has no long exact
+# runs. Neither feature is about the compass, which is why they still hold on
+# ban screens and gameplay, where no compass exists.
+#
+# MEASURED 2026-09-06 over 848 real streaming frames (demos, screenshot_log,
+# explore, overnight, places; 65 of them pause screens) against the live standby
+# host list plus 70 non-game images that find_bar fires on:
+#
+#                      streaming: p50    p99     MAX  |  the standby host list
+#     flatness              0.0357  0.1131  0.2949  |  0.6678   (2.7x the gate)
+#     widest exact row run  0.1208  0.3917  0.6208  |  1.0000   (2.0x the gate)
+#
+# So the thresholds sit BETWEEN two measured populations (CLAUDE.md 10.4), and
+# the frame that actually cost an hour is clear of both by 2x or better.
+UI_FLAT_FRAC = 0.25      # one exact RGB value over more than a quarter of the frame
+UI_ROW_RUN_FRAC = 0.50   # one exact RGB value across more than half of some row
+
+
+def looks_like_ui(img):
+    """True if this frame looks like flat-shaded chrome rather than video.
+
+    A FALSE ANSWER HERE COSTS SECONDS, NOT A RUN, and that is the whole reason
+    this is safe to add. Rejecting the find_bar branch does not return False --
+    it falls through to `_heartbeat_seen()`, which is the CONSOLE's own word and
+    strictly better evidence than pixels. So on the 0.35% of real streaming
+    frames that trip these gates (fades, and match screens with a large flat
+    band) the answer is still True, a few seconds later. Whereas the standby
+    host list has no session, therefore no heartbeat, and correctly comes back
+    False.
+    """
+    try:
+        import numpy as _np
+        a = _np.asarray(img.convert("RGB"))
+        h, w, _ = a.shape
+        if h == 0 or w == 0:
+            return False
+        flat = a.reshape(-1, 3)
+        packed = ((flat[:, 0].astype(_np.int32) << 16)
+                  | (flat[:, 1].astype(_np.int32) << 8) | flat[:, 2])
+        if float(_np.bincount(packed).max()) / packed.size > UI_FLAT_FRAC:
+            return True
+        # Sample ~120 rows rather than all of them: a full-width fill spans
+        # hundreds of rows, so sampling cannot miss one, and it keeps this at a
+        # few milliseconds on the path every poll takes.
+        for y in range(0, h, max(1, h // 120)):
+            row = a[y]
+            p = ((row[:, 0].astype(_np.int32) << 16)
+                 | (row[:, 1].astype(_np.int32) << 8) | row[:, 2])
+            change = _np.flatnonzero(_np.diff(p)) + 1
+            starts = _np.concatenate(([0], change))
+            ends = _np.concatenate((change, [w]))
+            if int((ends - starts).max()) / float(w) > UI_ROW_RUN_FRAC:
+                return True
+        return False
+    except Exception:
+        # NEVER let this turn into a reason to call a live stream dead. On any
+        # failure, say "not UI" and leave the original behaviour in place.
+        return False
+
+
 def streaming(img=None):
     """Is a game stream actually on screen?
 
@@ -209,7 +278,7 @@ def streaming(img=None):
     # Split from one `or` chain only to record WHICH check answered. The order
     # and the short-circuiting are unchanged, so this decides exactly what the
     # chain decided.
-    if compass.find_bar(img) is not None:
+    if compass.find_bar(img) is not None and not looks_like_ui(img):
         _last_route = "find_bar (compass strip located; may be under an overlay)"
         return True
     if compass.read_bearing(img) is not None:

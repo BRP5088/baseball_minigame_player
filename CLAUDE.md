@@ -222,8 +222,16 @@ a hazard for the dealer template and for anyone eyeballing a screenshot.
 
 **"Am I streaming?" is not "can I read the compass".** `compass.read_bearing()`
 has to identify a LETTER and fails on bright scenes — ~6% of world frames,
-reliably inside the bar. Use `compass.find_bar()`: it locates the strip without
-reading it, and is None only when genuinely disconnected.
+reliably inside the bar. `compass.find_bar()` locates the strip without reading
+it, which is why `ensure_stream.streaming()` uses it.
+
+**BUT `find_bar` IS NOT A STREAM CHECK, and this file used to say it was.** The
+line here read "and is None only when genuinely disconnected". That was never
+measured and it is false: `find_bar` fires on 9 of 13 of chiaki's own Qt
+screenshots, on 5 of 6 arbitrary photographs, and on a synthetic dark window
+with one light toolbar. Only a flat image returns None. Ask it "is there a
+horizontal light band here", nothing more. `streaming()` now pairs it with
+`ensure_stream.looks_like_ui()` — see OPEN-18, CLOSED.
 
 **"Am I in the world?" cannot be answered by the compass readers either.**
 Measured: `find_bar()` returns non-None on EVERY frame including ban and
@@ -1897,6 +1905,61 @@ every failed change MOVED the character while both survivors move nothing.
 exactly the shape that killed `STALL_CHANGE` after a Fisher p = 0.00039 (§10.2).
 `approach_goal` compounds it by aiming at `steps[-1]["bearing"]` and discarding
 the other seven, 10.6 deg off the leg's own net direction.
+
+**OPEN-18 — CLOSED 2026-09-06. `streaming()` no longer reports UP on chiaki's
+own window.** The whole ticket was blocked on one missing frame, and capturing it
+took thirty seconds once chiaki was running.
+
+`test_fixtures/not_streaming/hostlist_standby.png` is the live chiaki window
+showing `State: standby`, at the rig's own 1867x1050. `find_bar` fires on it;
+before today `streaming()` therefore answered **True** on it in 0.0s. It now
+answers **False**. Demonstrated as an A/B on that one frame:
+
+    without the guard   True   via find_bar          0.0s
+    with the guard      False  nothing answered     25.3s
+
+**THE DISCRIMINATOR IS NOT ABOUT THE COMPASS, deliberately.** Qt draws flat
+fills: large areas of one exact RGB value, and bands running the full width.
+H.264 never does — quantisation dithers even a dark room, so decoded video holds
+no long exact runs. A compass-shaped test would have rejected ban screens and
+gameplay, where no compass exists and the stream is perfectly healthy.
+
+Measured over 848 real streaming frames (demos, screenshot_log, explore,
+overnight, places; 65 of them pause screens) against the live host list plus the
+70 non-game images `find_bar` fires on:
+
+                              streaming: p50    p99     MAX  |  host list
+        flatness                  0.0357  0.1131  0.2949  |  0.6678
+        widest exact row run      0.1208  0.3917  0.6208  |  1.0000
+
+`UI_FLAT_FRAC = 0.25` and `UI_ROW_RUN_FRAC = 0.50` sit between the two, with the
+host list clear by 2.7x and 2.0x. **Held out properly** — thresholds fitted on
+half the streaming frames and scored on the other half — gives **0 false
+positives on 71 non-streaming frames and 1.2% false negatives**.
+
+**WHY THE FALSE NEGATIVES ARE CHEAP, which is what makes this safe.** Rejecting
+the `find_bar` branch does NOT return False. It falls through to
+`_heartbeat_seen()`, the console's own word and better evidence than pixels,
+which returns on the first heartbeat (~0.4s). So a real stream whose frame
+happens to be flat still answers True a moment later. The standby host list has
+no session, therefore no heartbeat, and comes back False after the full 25s —
+paid only on the path that was about to give up anyway.
+
+Pinned by `tests/rig/test_streaming_rejects_chiaki_ui.py`, which carries the
+control (without the guard it must still answer True via find_bar, or something
+else is producing the False) and a ceiling on how many real frames may be
+rejected. Three mutants, each caught by a different check: raising the gate,
+removing the guard, and making the check always True.
+
+**One honest limit.** Six captures 1.5s apart were BYTE-IDENTICAL, so the
+negative side is ONE distinct frame, not six. It is the frame that matters — the
+state that cost an hour — but chiaki's settings dialogs and its non-standby host
+list are still unsampled. If `streaming()` ever reports UP on one of those, add
+it to `test_fixtures/not_streaming/` and this rule can be re-scored in minutes.
+
+---
+
+**The original ticket, kept for the diagnosis:**
 
 **OPEN-18 — `ensure_stream.streaming()` REPORTS UP WHILE THE PS5 IS IN STANDBY.**
 Observed 2026-09-05 while verifying OPEN-16. `Bretts_walk.py connect` printed

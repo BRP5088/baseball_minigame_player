@@ -203,6 +203,17 @@ for f in $files; do
         if [ "$status" = "HUNG" ]; then
             echo "    killed after ${TEST_TIMEOUT}s — it never finished, so it"
             echo "    proved nothing. A suite that waits forever reports nothing."
+            # WHICH IT WAS: wedged, or merely starved. This machine runs Sophos,
+            # and chiaki alone takes ~28% of a core while streaming, so a test
+            # that normally takes 51s has been measured at 370s under load and
+            # killed here while being perfectly healthy. Reporting the load
+            # average costs nothing and separates the two causes; asserting
+            # either one without it is the confident wrong diagnosis this
+            # project keeps paying for.
+            echo "    load average now:$(uptime | sed 's/.*averages*://')"
+            echo "    If that first number is above ~4, re-run this file alone"
+            echo "    on a quiet machine before believing it is wedged:"
+            echo "      PATH=\"\$PWD/.venv/bin:\$PATH\" BASEBALL_TEST_RUN=1 python3 $f"
         fi
         sed 's/^/    /' "$OUT/$key.out" | tail -8
     fi

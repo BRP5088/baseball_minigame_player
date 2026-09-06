@@ -87,31 +87,58 @@ check("every wrapped function was counted, with the right call counts",
 # so every assertion is one-sided or generously banded. CLAUDE.md 10.13: under
 # saturation sleep degrades from ~5ms to as much as 242ms, so a tight two-sided
 # band here would be a threshold sitting inside one population.
+# EVERY TIMING ASSERTION BELOW IS A RELATIVE IDENTITY, NOT A BAND.
+#
+# The first version of this file asserted absolute windows ("outer's exclusive
+# is between 0.04 and 0.11"). Those are thresholds sitting inside one
+# population: sleep() only guarantees a LOWER bound, and CLAUDE.md 10.13 records
+# it degrading from ~5ms to 242ms under saturation on this machine. It duly
+# failed once during a 763s suite run and passed on every re-run -- a flaky
+# guard, which is worse than none because it teaches the reader to ignore it.
+#
+# What is checked instead is arithmetic that must hold at ANY speed: exclusive
+# time is inclusive time minus the children's inclusive time. Load inflates
+# every term together, so it cannot move these.
+TOL = 0.05          # 5% of the quantity being compared, never a fixed number
+
 check(f"outer's INCLUSIVE time covers the whole tree "
       f"({incl['outer']:.3f}s vs {elapsed:.3f}s elapsed)",
-      incl["outer"] >= 0.14 and incl["outer"] <= elapsed + 0.01)
+      abs(incl["outer"] - elapsed) < elapsed * TOL)
 
-check(f"outer's EXCLUSIVE time is only its own work "
-      f"({excl['outer']:.3f}s, expected ~0.05, NOT ~0.15)",
-      0.04 <= excl["outer"] < 0.11)
+check(f"outer's EXCLUSIVE time is its inclusive MINUS its children "
+      f"({excl['outer']:.3f} vs {incl['outer'] - incl['middle']:.3f})",
+      abs(excl["outer"] - (incl["outer"] - incl["middle"])) < elapsed * TOL)
 
-check(f"middle's exclusive excludes inner ({excl['middle']:.3f}s, "
-      f"expected ~0.06 across two calls, NOT ~0.10)",
-      0.05 <= excl["middle"] < 0.095)
+check(f"and that is a THIRD of its inclusive time, not all of it "
+      f"({excl['outer']/incl['outer']:.2f} of it) -- the bug being guarded "
+      f"would make this 1.00",
+      excl["outer"] / incl["outer"] < 0.5)
+
+check(f"middle's exclusive is its inclusive minus inner's "
+      f"({excl['middle']:.3f} vs {incl['middle'] - incl['inner']:.3f})",
+      abs(excl["middle"] - (incl["middle"] - incl["inner"])) < elapsed * TOL)
 
 check(f"inner is a leaf, so its exclusive equals its inclusive "
       f"({excl['inner']:.3f} vs {incl['inner']:.3f})",
-      abs(excl["inner"] - incl["inner"]) < 0.002)
+      abs(excl["inner"] - incl["inner"]) < incl["inner"] * TOL)
 
 total_excl = sum(excl.values())
 check(f"THE EXCLUSIVE COLUMN SUMS TO ELAPSED TIME "
       f"({total_excl:.3f}s of {elapsed:.3f}s) -- this is the property that "
-      f"makes the residual real", abs(total_excl - elapsed) < 0.02)
+      f"makes the residual real",
+      abs(total_excl - elapsed) < elapsed * TOL)
 
 total_incl = sum(incl.values())
 check(f"and the INCLUSIVE column does not ({total_incl:.3f}s vs "
       f"{elapsed:.3f}s) -- which is the bug being guarded",
       total_incl > elapsed * 1.5)
+
+# The one absolute assertion, and it is one-sided ON THE SAFE SIDE. sleep()
+# guarantees a lower bound, so load can only make this MORE true. It exists so
+# that a tree which never actually slept cannot satisfy the ratios above by
+# comparing noise to noise.
+check(f"the tree really did sleep for its 0.15s of work ({elapsed:.3f}s)",
+      elapsed >= 0.14)
 
 # --- the frame stack must not leak, or every later row is wrong -------------
 check("the frame stack is empty after the tree unwinds", not pt._FRAMES)
