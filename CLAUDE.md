@@ -1363,6 +1363,53 @@ caller's step line never can (an executed turn also ends inside tolerance, which
 is precisely why this was invisible). **Let it ride along on whatever A/B runs
 next.**
 
+**THE LOCALISER'S GATE SITS INSIDE THE OVERLAP, MEASURED (2026-09-06).**
+`portrait_room` abstains about half the time on frames where the character IS
+there, and §8(b)'s per-leg rates inherit that. The cause is not the leg.
+
+    a GENUINE arrival scored          137 matches
+    a frame taken OUTDOORS ON A       135 matches
+      STREET, off the mapped route
+
+`MIN_MATCHES` is 140. Those two populations are not separated by it, in either
+direction. Raw ORB match count cannot do this job on this game's art: unrelated
+rich frames score 100-155 against any room, because a black-and-white cartoon of
+wood, walls and floors produces promiscuous descriptor matches. **It is NOT the
+HUD** — `places._as_gray` already crops the compass, coin and quest list (top
+10%, bottom 10%, left 28%), and masking them again changes nothing.
+
+So `portrait_room` is not being CONFUSED with `bar_pool_room`. `bar_pool_room`
+simply sits at a constant 100-135 on every rich frame, and the ratio gate is
+dividing a real signal by that floor.
+
+**THE REFERENCE SET IS ALSO TOO THIN TO PASS ITS OWN TEST.** Leave-one-out over
+all nine reference frames — each scored against every room with ITSELF removed —
+the shipped metric names its own room **3 of 9 times**. Two references per room,
+taken at poses that do not match each other, is why a live arrival scores
+anywhere from 137 to 818.
+
+**RANSAC-VERIFIED INLIERS ARE A CANDIDATE, NOT A CONCLUSION.** Fitting one rigid
+transform to the matches and counting inliers, because a spurious match is a
+descriptor coincidence and does not agree with the others:
+
+    metric              leave-one-out      160 unmapped bar frames NAMED
+    raw match count        3/9 correct                16
+    RANSAC inliers         9/9 correct, 0 wrong       55-96 (gate 60 down to 10)
+
+It fixes the true-positive side completely and appears to make the false-positive
+side much worse. **But that second column is not scoreable**: those 160 frames
+are an EXPLORE run through the bar area, and §7 says that area is two-thirds
+unmapped — which means up to a third of them may genuinely be at a mapped node,
+so "named" is not the same as "wrong". Before anything ships, that corpus needs
+labels. Do not quote the 55-96 as a false-positive rate.
+
+Script: `agent_progress/localiser-inliers/validate.py`, self-contained. **It got
+this wrong first, in a way worth remembering**: without replicating
+`_as_gray`'s crop it scored the unmapped corpus at a median of 777 against a 140
+gate and rated it above the references themselves — it was measuring the HUD
+matching itself, 160 times. A reimplementation of a project function means
+nothing until it is checked against the original.
+
 **THE FAILURE CENSUS EXISTS (2026-09-06). It is 80% OVERSHOT, and it is the
 first one ever taken from admissible frames.** OPEN-1 asked for this and OPEN-6
 forbade quoting any class distribution until a run produced it. A run has.
