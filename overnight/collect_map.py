@@ -72,6 +72,14 @@ MIN_NULL_INLIERS = 100
 # How far to travel between sample points. Longer than a probe, so points are
 # genuinely different places rather than the same one measured twice.
 TRAVEL_SEC = 1.4
+
+# WHEN TO STOP, because an unattended explorer that does not know it is finished
+# just keeps paying for console time. Four independent reasons, whichever comes
+# first:
+MAX_MINUTES = 45.0         # a wall clock, so it can be left alone safely
+STUCK_POINTS = 3           # consecutive points with nowhere free to go
+DRY_POINTS = 4             # consecutive points that saw nothing new
+NOVEL_MIN = 140            # places.MIN_MATCHES: below this the view is unmapped
 DEAD_DELTA = 0.35         # at or below this the STREAM is dead, not the path
 
 
@@ -142,13 +150,28 @@ def main():
     ar.open_stream()
     samples = []
     prev_heading = None
+    seen, stuck, dry = [], 0, 0
+    t_start = time.time()
     log(f"collecting {POINTS} points x {DIRECTIONS} directions")
     for i in range(POINTS):
+        mins = (time.time() - t_start) / 60.0
+        if mins >= MAX_MINUTES:
+            log(f"  stopping: {mins:.0f} minutes elapsed (cap {MAX_MINUTES:.0f})")
+            break
+        if stuck >= STUCK_POINTS:
+            log(f"  stopping: {stuck} points in a row with nowhere free to go — "
+                f"this pocket is closed, not the map")
+            break
+        if dry >= DRY_POINTS:
+            log(f"  stopping: {dry} points in a row saw nothing the map does "
+                f"not already have. This area is covered.")
+            break
         if i % RESET_EVERY == 0:
             log(f"  reset ({i}/{POINTS})")
             reset_env.reset_environment(log=lambda *a: None,
                                         progress_file="progress_testing.json")
             time.sleep(1.2)
+            prev_heading = None      # a reload teleports; "keep going" is void
         here = cap()
         base = compass.read_bearing(here)
         if base is None:
@@ -177,9 +200,17 @@ def main():
             f"{'--' if base is None else f'{base:.1f}'}")
         for k in range(DIRECTIONS):
             want = None if base is None else (base + k * (360 / DIRECTIONS)) % 360
+            got, turn_haz = None, []
             if want is not None:
-                st.turn_to(want, lambda: compass.read_bearing(cap()), cap,
-                           log=lambda *a: None, tolerance=6.0)
+                # THE RETURN VALUE IS KEPT. turn_to reports the heading it
+                # ACHIEVED and files an UNDERTURNED hazard when it gives up --
+                # and it exits without sending anything at all when the compass
+                # cannot be read. Discarding that made a turn that never
+                # happened indistinguishable from one that did, which is how a
+                # point's eight "directions" became one direction eight times.
+                got, turn_haz = st.turn_to(
+                    want, lambda: compass.read_bearing(cap()), cap,
+                    log=lambda *a: None, tolerance=6.0)
 
             # PAIRED NULL AND PUSH, at this heading, in this order.
             #
@@ -200,9 +231,19 @@ def main():
                 verdict = "blocked"
             else:
                 verdict = "free"
-                back(PROBE_SEC, PROBE_SPEED)   # return, so the point stays fixed
+            # WALK BACK AFTER EVERY PUSH, not only the free ones. The push has
+            # already happened by the time the verdict is known, so skipping the
+            # return on `blocked` and `unmeasurable` leaves it uncompensated. In
+            # the one real run on disk that was 63 of 160 probes -- 9.92
+            # walk-units of un-undone travel, against a whole five-leg route of
+            # 4.83. And the unmeasurable ones CLUSTER, so it is a feedback loop:
+            # a featureless view scores unmeasurable, pushes anyway, and ends up
+            # closer to the featureless surface.
+            back(PROBE_SEC, PROBE_SPEED)
 
-            rec["probes"].append({"dir": k, "want": want, "ratio": round(ratio, 3),
+            rec["probes"].append({"dir": k, "want": want, "got": got,
+                                  "turn_hazards": [str(h) for h in turn_haz],
+                                  "ratio": round(ratio, 3),
                                   "null_delta": round(n_d, 2), "null_inl": n_i,
                                   "push_delta": round(p_d, 2), "push_inl": p_i,
                                   "verdict": verdict})
@@ -211,8 +252,28 @@ def main():
             if verdict == "INVALID":
                 log("     stream is not updating — stopping rather than "
                     "recording a map of nothing")
+                # SAVE THE POINT FIRST. samples.append happens after this loop,
+                # so returning here discarded every probe already measured at
+                # this point and wrote an empty list over the previous run.
+                samples.append(rec)
                 _harness.save_result(os.path.join(OUT, "probes.json"), samples)
                 return
+        # IS THIS GROUND NEW? The same question record_drive asks the driver,
+        # asked of the explorer so it can stop on its own. A view that matches
+        # something already collected here adds nothing; enough of those in a
+        # row and the area is done.
+        try:
+            _, dsc = places.keypoints(here)
+            best = max((places.match_count(dsc, x) for x in seen), default=0)
+            novel = best < NOVEL_MIN
+            if novel and len(seen) < 200:
+                seen.append(dsc)
+            dry = 0 if novel else dry + 1
+            rec["novel"] = bool(novel)
+            rec["seen_best"] = int(best)
+        except Exception:
+            rec["novel"] = None
+
         samples.append(rec)
         _harness.save_result(os.path.join(OUT, "probes.json"), samples)
 
@@ -226,22 +287,45 @@ def main():
         free = [q for q in rec["probes"] if q["verdict"] == "free"
                 and q["want"] is not None]
         if not free:
-            log("  nowhere free to go from here — resetting")
+            stuck += 1
+            log(f"  nowhere free to go from here — resetting "
+                f"({stuck}/{STUCK_POINTS} before stopping)")
             reset_env.reset_environment(log=lambda *a: None,
                                         progress_file="progress_testing.json")
             time.sleep(1.2)
+            prev_heading = None      # a reload teleports; "keep going" is void
             continue
         # furthest from the reverse of the way we arrived, i.e. keep going
-        want = max(free, key=lambda q: min(
-            abs((q["want"] - prev_heading + 180) % 360 - 180), 180)
-            if prev_heading is not None else q["ratio"])["want"]
+        # KEEP GOING: the direction CLOSEST to the one just travelled. The
+        # previous expression maximised that angle, which is the way it came --
+        # replayed against a stub it produced [87, 267, 87, 267, ...], two
+        # places filed as twelve. Two finders proved it independently.
+        #
+        # On the first point of a block there is no previous heading, so pick
+        # the MOST open direction: `free` means ratio < 0.50 and LOWER means it
+        # moved further, so this is a min, not a max. The old code took the max
+        # and so chose the direction closest to being blocked.
+        if prev_heading is None:
+            want = min(free, key=lambda q: q["ratio"])["want"]
+        else:
+            want = min(free, key=lambda q:
+                       abs((q["want"] - prev_heading + 180) % 360 - 180))["want"]
+        stuck = 0
         st.turn_to(want, lambda: compass.read_bearing(cap()), cap,
                    log=lambda *a: None, tolerance=6.0)
         push(TRAVEL_SEC, PROBE_SPEED)
         prev_heading = want
         log(f"  travelled {TRAVEL_SEC:.1f}s along {want:.0f} to the next point")
     ar.send(["clear"])
-    log(f"\n  {len(samples)} points -> {OUT}/probes.json")
+    n_free = sum(1 for r in samples for q in r["probes"] if q["verdict"] == "free")
+    n_blk = sum(1 for r in samples for q in r["probes"] if q["verdict"] == "blocked")
+    n_unm = sum(1 for r in samples for q in r["probes"]
+                if q["verdict"] == "unmeasurable")
+    novel = sum(1 for r in samples if r.get("novel"))
+    log(f"\n  {len(samples)} points in {(time.time()-t_start)/60:.0f} min")
+    log(f"  probes: {n_free} free, {n_blk} blocked, {n_unm} unmeasurable")
+    log(f"  points on ground the map had not seen: {novel}/{len(samples)}")
+    log(f"  -> {OUT}/probes.json")
 
 
 main()

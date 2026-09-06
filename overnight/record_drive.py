@@ -267,8 +267,13 @@ def main():
     print("     KNOWN       already well photographed, move on")
     print("     repeat      you are filming the same angle — turn or move")
     print("     FEATURELESS pressed against something, or too dark to use")
-    print("     no compass  heading unreadable; this stretch cannot be placed\n",
-          flush=True)
+    print("     no compass  heading unreadable; this stretch cannot be placed")
+    print("")
+    print("  DRIVE LIKE MOWING A LAWN. Walk in straight lines across the space,")
+    print("  turn only at the ends, and keep moving. Triangulation needs the")
+    print("  camera to MOVE; turning on the spot moves the lens not at all and")
+    print("  contributes no depth at all. The first drive was 61% turning and")
+    print("  its reconstruction kept 3 points out of 196,198.\n", flush=True)
     stick = _open_stick()
     print("  controller: " + ("DualSense/joystick found — logging the stick, "
                               "so distance is exact"
@@ -313,17 +318,33 @@ def main():
                           if m.get("verdict")]
                 new_rate = (sum(1 for m in recent if m["verdict"] == "NEW")
                             / max(len(recent), 1))
-                bar = "".join("#" if i in secs_seen else "." 
+                # WALKING vs TURNING, over the last window. This is the number
+                # that decides whether a 3D model is possible at all, and the
+                # first version of this display did not show it. Measured on the
+                # first real drive: 61% turning, 17% walking, camera translation
+                # across three frames a MEDIAN OF ZERO -- and the reconstruction
+                # kept 3 points out of 196,198 tracks, correctly, because a
+                # camera that only rotates carries no depth information.
+                win = meta[-COVERAGE_EVERY:]
+                walk = sum(1 for m in win
+                           if abs((m.get("stick") or {}).get("ly", 0.0)) > 0.08)
+                turn = sum(1 for m in win
+                           if abs((m.get("stick") or {}).get("rx", 0.0)) > 0.08)
+                wr = walk / max(len(win), 1)
+                bar = "".join("#" if i in secs_seen else "."
                               for i in range(SECTORS))
-                done = (len(secs_seen) >= SECTORS - 1
-                        and new_rate <= NEW_RATE_DONE)
+                if wr < 0.35:
+                    advice = ("   TOO MUCH TURNING — walk in straight lines, "
+                              "turn only at the ends")
+                elif len(secs_seen) < SECTORS - 1 and new_rate <= NEW_RATE_DONE:
+                    advice = "   good; cross the room on a new line"
+                elif new_rate > NEW_RATE_DONE:
+                    advice = "   keep going, still finding new ground"
+                else:
+                    advice = "   THIS AREA LOOKS DONE — move to the next room"
                 print(f"\n  --- {t:5.0f}s  angles [{bar}] {len(secs_seen)}/{SECTORS}"
-                      f"   new {100*new_rate:3.0f}% of the last {len(recent)}"
-                      + ("   THIS AREA LOOKS DONE — move to the next room"
-                         if done else
-                         "   keep going" if new_rate > NEW_RATE_DONE
-                         else "   turn to fill the missing angles") + "\n",
-                      flush=True)
+                      f"   walking {100*wr:3.0f}%  turning {100*turn/max(len(win),1):3.0f}%"
+                      f"   new {100*new_rate:3.0f}%" + advice + "\n", flush=True)
 
             if dead_run >= DEAD_RUN_ABORT:
                 print(f"\n  STOPPING: the picture has not changed for "
