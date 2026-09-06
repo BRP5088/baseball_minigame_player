@@ -35,6 +35,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 
@@ -99,6 +100,30 @@ def assert_map_pristine(path, log=print):
         f"  BASEBALL_ALLOW_DIRTY_MAP=1  # proceed anyway, deliberately")
 
 
+def _drain(fh, prefix, log, skip_json=False):
+    """Emit whatever has been appended to `fh` since the last call.
+
+    A partial final line is left in the file for the next poll: the reader's
+    position only advances past a line once its newline has landed, so a line
+    is never split across two log entries.
+    """
+    if log is None:
+        return
+    while True:
+        pos = fh.tell()
+        line = fh.readline()
+        if not line.endswith("\n"):
+            fh.seek(pos)          # incomplete — wait for the rest
+            return
+        line = line.rstrip("\n")
+        # The trial's JSON result is the return value, not log output. Echoing
+        # it would put a second `{`-line in the stream for the parser below to
+        # trip over, and it is unreadable anyway.
+        if skip_json and line.strip().startswith("{"):
+            continue
+        log(f"{prefix}{line}")
+
+
 def run_trial(script, arg, timeout, cwd=None, log=None,
               check_stream=True):
     """Run one trial as a subprocess and return (result_dict_or_None, seconds).
@@ -117,36 +142,77 @@ def run_trial(script, arg, timeout, cwd=None, log=None,
     scripts had the hole; putting the check in the one function they all route
     through is the whole point of this module existing.
 
-    THE CHILD'S OUTPUT IS FORWARDED, NOT SWALLOWED. capture_output=True is
-    needed to parse the JSON, but the rest of the child's stdout is the trial's
-    own log — every `log(...)` call inside one_trial, including
-    slow_traverse.turn_to's NO-OP/TURNED lines, which are the only instrument
-    OPEN-3 has. Discarding it made `log=print` inside a trial functionally
-    `lambda m: None`: the first entry in CLAUDE.md's catalogue, reintroduced one
-    layer up in the harness that certifies every measurement. Pass `log=` to get
-    it back.
+    THE CHILD'S OUTPUT IS FORWARDED LIVE, NOT SWALLOWED AND NOT BUFFERED. The
+    child's stdout is the trial's own log — every `log(...)` call inside
+    one_trial, including slow_traverse.turn_to's NO-OP/TURNED lines, which are
+    the only instrument OPEN-3 has. Discarding it made `log=print` inside a
+    trial functionally `lambda m: None`: the first entry in CLAUDE.md's
+    catalogue, reintroduced one layer up in the harness that certifies every
+    measurement. Pass `log=` to get it back.
+
+    Holding it to the end was the same bug wearing a clock. See the streaming
+    note in the body.
     """
     cwd = cwd or os.path.dirname(os.path.dirname(os.path.abspath(script)))
     t0 = time.time()
-    try:
-        r = subprocess.run(
-            [sys.executable, os.path.abspath(script), "--one-trial", str(arg)],
-            cwd=cwd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        if log:
-            log(f"    trial exceeded {timeout}s — INVALID, not a failure")
-        return None, round(time.time() - t0, 1)
-    secs = round(time.time() - t0, 1)
 
-    if log:
-        for line in (r.stdout or "").splitlines():
-            if not line.strip().startswith("{"):
-                log(f"      | {line}")
-        for line in (r.stderr or "").strip().splitlines():
-            log(f"      ! {line}")
+    # THE CHILD'S OUTPUT IS STREAMED, NOT BUFFERED TO THE END.
+    #
+    # This used to be subprocess.run(capture_output=True), which holds every
+    # line until the child exits. A trial takes 90-340s, so the harness printed
+    # NOTHING for minutes at a time and a slow trial was indistinguishable from
+    # a wedged one -- "a slow step and a hung step with identical output", which
+    # is item seven in CLAUDE.md's own catalogue, and the exact thing
+    # run_tests.sh grew a live progress line to fix one level up. Worse here:
+    # the operator's only signal that an overnight run is alive is this log.
+    #
+    # Popen writing to real files rather than pipes, deliberately. Reading two
+    # pipes from one thread deadlocks the moment either fills its buffer, and
+    # threads-plus-kill is more moving parts than a two-hour measurement should
+    # depend on. Files cannot deadlock, the whole stream is on disk for the JSON
+    # parse at the end, and polling them costs a couple of stats a second.
+    out_path = f"{tempfile.gettempdir()}/trial_{os.getpid()}_{arg}.out"
+    err_path = f"{tempfile.gettempdir()}/trial_{os.getpid()}_{arg}.err"
+    timed_out = False
+    try:
+        with open(out_path, "w") as ow, open(err_path, "w") as ew:
+            p = subprocess.Popen(
+                [sys.executable, os.path.abspath(script), "--one-trial", str(arg)],
+                cwd=cwd, stdout=ow, stderr=ew, text=True)
+            with open(out_path) as orr, open(err_path) as err:
+                deadline = t0 + timeout
+                while True:
+                    _drain(orr, "      | ", log, skip_json=True)
+                    _drain(err, "      ! ", log)
+                    if p.poll() is not None:
+                        break
+                    if time.time() >= deadline:
+                        # KILL, not terminate. CLAUDE.md 10.14: a trial blocked
+                        # inside a capture did not answer SIGALRM, and signal
+                        # handlers in this stack swallow the polite signals.
+                        p.kill()
+                        p.wait()
+                        timed_out = True
+                        break
+                    time.sleep(0.5)
+                _drain(orr, "      | ", log, skip_json=True)
+                _drain(err, "      ! ", log)
+        secs = round(time.time() - t0, 1)
+        if timed_out:
+            if log:
+                log(f"    trial exceeded {timeout}s and was killed — INVALID, "
+                    f"not a failure")
+            return None, secs
+        stdout = open(out_path).read()
+    finally:
+        for path in (out_path, err_path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
     parsed = None
-    for line in reversed((r.stdout or "").strip().splitlines()):
+    for line in reversed((stdout or "").strip().splitlines()):
         line = line.strip()
         if line.startswith("{"):
             try:
@@ -246,6 +312,152 @@ def save_result(path, obj, indent=2):
         except OSError:
             pass
         raise
+
+
+def walk_leg_under_test(gw, m, start, target, shots=None, log=print):
+    """Walk ONE leg from a PROVEN `start` and return everything measurable.
+
+    The caller must already have verified the character is standing at `start`;
+    this walks a single execution of `start -> target` and reports it.
+
+    WHY THIS IS NOT `gw.walk_link`. Two harnesses (ab_jukebox_leg,
+    ab_stall_on_restored) called walk_link, which walks the leg and PUBLISHES NO
+    LEG-END FRAME. `_LAST_LEG_END` is set inside follow(), immediately after its
+    post-leg capture and BEFORE recover_to_node runs, and follow_verified is
+    what pops it and classifies it. So both harnesses -- whose whole purpose is
+    to report a leg's arrival BY FAILURE CLASS -- collected no evidence at all
+    about the leg under test. There is no at_bar_jukebox frame anywhere on disk,
+    and OPEN-1 says exactly that.
+
+    ONE ATTEMPT, deliberately. The retrying primitive is a DIFFERENT quantity
+    (OPEN-4 measured it at 10/10), and retries would hide precisely the
+    difference these A/Bs exist to find. One attempt is one execution of the leg.
+
+    `start_hint=start` is EVIDENCE, not an assumption: the caller proved it.
+
+    THE FAN IS REPORTED SEPARATELY FROM ARRIVAL. recover_to_node travels roughly
+    seven times the leg's own distance, so a trial it rescues is not evidence
+    that the leg arrives. Scoring those as arrivals lets a bad leg pass by being
+    rescued. It succeeded 2/31 historically, so the masking should be small --
+    but "should be small" is not a measurement, so the count is recorded and the
+    caller can subtract it.
+
+    THE CENSUS CARRIES ITS PROVENANCE. A class counted off the pre-attempt view
+    or the post-fan view is indistinguishable from one counted off the leg's own
+    end, and a census that mixes them re-encodes WHICH node failed rather than
+    HOW. `failure_kinds_leg_end` is the admissible subset; both are returned so
+    that a shrinking denominator is visible rather than silent.
+    """
+    lines = []
+
+    def tee(msg):
+        lines.append(str(msg))
+        log(msg)
+
+    ok, _reached = gw.follow_verified(m, [target], log=tee, attempts=1,
+                                      shots=shots, start_hint=start)
+
+    # INDEPENDENT CONFIRMATION. follow_verified already believes only locate(),
+    # so agreement is not news -- but a DISAGREEMENT would be, and it costs one
+    # capture.
+    where, detail = gw.locate(m, log=log)
+    joined = "\n".join(lines)
+
+    kinds = list(getattr(gw, "_LAST_FAILURE_KINDS", []))
+    sources = list(getattr(gw, "_LAST_FAILURE_SOURCES", []))
+    leg_end = [k for k, src in zip(kinds, sources)
+               if src == getattr(gw, "LEG_END_SOURCE", None)]
+
+    return {
+        "reached_start": True,
+        "arrived": where == target,
+        "verified_arrived": bool(ok),
+        "located": where,
+        "detail": str(detail)[:120],
+        "abandoned": "abandoning the rest of this leg" in joined,
+        "stall_events": joined.count("stall score"),
+        "steps_walked": joined.count("-> walked"),
+        "fan_ran": ("recovery fan" in joined) or ("recovered " in joined),
+        "fan_rescued": "recovered " in joined,
+        "failure_kinds": kinds,
+        "failure_sources": sources,
+        "failure_kinds_leg_end": leg_end,
+    }
+
+
+# The measurements walk_leg_under_test produces, as recorded on a trial row.
+# Named once so a harness cannot record a subset of them and then report a
+# summary that silently omits whichever it forgot.
+MEASURED_KEYS = ("located", "abandoned", "stall_events", "steps_walked",
+                 "fan_ran", "fan_rescued", "verified_arrived",
+                 "failure_kinds", "failure_sources", "failure_kinds_leg_end")
+
+
+def leg_trial_row(arm, r, secs, arrived):
+    """Build one result row from a walk_leg_under_test dict."""
+    row = {"arm": arm, "arrived": arrived, "seconds": secs}
+    row.update({k: r.get(k) for k in MEASURED_KEYS})
+    return row
+
+
+def report_leg_arm(name, rows, n_invalid, out=print):
+    """Print one arm's result. Rows are the VALID trials for that arm.
+
+    Reported BY CLASS and not only as a total, because an arrival rate averages
+    several different failures together -- so a change that eliminates a whole
+    class moves the overall rate by roughly a third of it, which is invisible at
+    n=10. That is the leading explanation on this project for why so many
+    well-motivated changes measured flat.
+    """
+    if not rows:
+        out(f"  {name:9} NO VALID TRIALS ({n_invalid} invalid)")
+        return
+    n = len(rows)
+    a = sum(1 for r in rows if r["arrived"])
+    ab = sum(1 for r in rows if r.get("abandoned"))
+    st = sum(r.get("stall_events") or 0 for r in rows)
+    sw = sum(r.get("steps_walked") or 0 for r in rows)
+    out(f"  {name:9} arrived {a}/{n} valid   ({n_invalid} invalid)")
+    out(f"            abandoned by the stall gate: {ab}/{n}   "
+        f"stall events {st}   steps walked {sw}")
+
+    # ARRIVAL MINUS THE FAN. recover_to_node travels ~7x the leg's own distance,
+    # so a trial it rescued is not evidence that the LEG arrives -- scoring
+    # those as arrivals lets a bad leg pass by being rescued. Reported
+    # alongside, never instead: dropping trials without saying so is how a
+    # denominator goes missing.
+    resc = sum(1 for r in rows if r.get("fan_rescued"))
+    ran = sum(1 for r in rows if r.get("fan_ran"))
+    out(f"            recovery fan ran {ran}/{n}, rescued {resc}"
+        f"  -> arrived WITHOUT the fan: {a - resc}/{n}")
+
+    # THE CENSUS, SPLIT BY PROVENANCE. `failure_kinds` mixes classes taken off
+    # the pre-attempt view and the post-fan view in with the ones taken off the
+    # leg's own end. OPEN-1 exists because a census built that way was reported
+    # as evidence about a leg and was not. The leg-end line is the one to read;
+    # both are printed so a shrinking denominator is visible, not silent.
+    allk = tally_kinds(rows, "failure_kinds")
+    legk = tally_kinds(rows, "failure_kinds_leg_end")
+    n_all, n_leg = sum(allk.values()), sum(legk.values())
+    if not n_all:
+        out("            no failures classified (either none failed, or no "
+            "frame was available -- check the per-trial log)")
+        return
+    out(f"            failures by class (ALL frames, n={n_all}): "
+        + ", ".join(f"{k}={v}" for k, v in sorted(allk.items())))
+    out(f"            failures by class (LEG-END frames only, n={n_leg}): "
+        + (", ".join(f"{k}={v}" for k, v in sorted(legk.items())) or "none")
+        + f"   [{n_all - n_leg} classified off a fallback frame and EXCLUDED "
+          f"-- not evidence about the leg]")
+
+
+def tally_kinds(rows, key):
+    """Count failure classes across trial rows. {} when there are none."""
+    out = {}
+    for r in rows:
+        for k in (r.get(key) or []):
+            out[k] = out.get(k, 0) + 1
+    return out
 
 
 def interleave(arms, trials=TRIALS):

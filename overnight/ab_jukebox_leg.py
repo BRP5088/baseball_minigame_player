@@ -89,7 +89,8 @@ def one_trial():
 
     # Reaching the START must be VERIFIED, or the leg is walked from nowhere in
     # particular and the trial says nothing about the leg.
-    if not gw.go_to_node_verified(m, START, log=log, attempts=3, shots=SHOTS):
+    if not gw.go_to_node_verified(m, START, log=log, attempts=3, shots=SHOTS,
+                                  start_hint=gw.SPAWN):
         return {"reached_start": False}
 
     # CAPTURE WHETHER THE LEG WAS ABANDONED, not just whether it arrived.
@@ -97,20 +98,8 @@ def one_trial():
     # gets five chances to fire instead of one — and its threshold (6.0
     # grey_levels) sits INSIDE the measured moving population (3.1-7.9). A bare
     # arrived/not tells us nothing about which of those two things happened.
-    lines = []
-    def tee(m):
-        lines.append(str(m))
-        log(m)
-    gw.walk_link(m, START, TARGET, log=tee)
-    where, detail = gw.locate(m, log=log)
-    joined = "\n".join(lines)
-    abandoned = "abandoning the rest of this leg" in joined
-    stalls = joined.count("stall score")
-    steps_walked = joined.count("-> walked")
-    return {"reached_start": True, "arrived": where == TARGET,
-            "located": where, "detail": str(detail)[:120],
-            "abandoned": abandoned, "stall_events": stalls,
-            "steps_walked": steps_walked}
+    return _harness.walk_leg_under_test(gw, m, START, TARGET,
+                                       shots=SHOTS, log=log)
 
 
 if __name__ == "__main__":
@@ -165,12 +154,8 @@ if __name__ == "__main__":
                     f"{r.get('steps_walked')} step(s) walked, "
                     f"{'ABANDONED' if r.get('abandoned') else 'ran to the end'}, "
                     f"{r.get('stall_events')} stall event(s)) in {secs}s")
-                res["runs"].append({"arm": name, "arrived": ok,
-                                    "located": r.get("located"),
-                                    "abandoned": r.get("abandoned"),
-                                    "stall_events": r.get("stall_events"),
-                                    "steps_walked": r.get("steps_walked"),
-                                    "seconds": secs})
+                res["runs"].append(
+                    _harness.leg_trial_row(name, r, secs, ok))
             save()
     finally:
         shutil.copy(BACKUP, MAP)
@@ -186,13 +171,4 @@ if __name__ == "__main__":
     for name, _ in ARMS:
         v = [r for r in res["runs"] if r["arm"] == name and r["arrived"] is not None]
         inv = sum(1 for r in res["runs"] if r["arm"] == name and r["arrived"] is None)
-        if v:
-            a = sum(1 for r in v if r["arrived"])
-            ab = sum(1 for r in v if r.get("abandoned"))
-            st = sum(r.get("stall_events") or 0 for r in v)
-            sw = sum(r.get("steps_walked") or 0 for r in v)
-            print(f"  {name:9} arrived {a}/{len(v)} valid   ({inv} invalid)")
-            print(f"            abandoned by the stall gate: {ab}/{len(v)}   "
-                  f"stall events {st}   steps walked {sw}")
-        else:
-            print(f"  {name:9} NO VALID TRIALS ({inv} invalid)")
+        _harness.report_leg_arm(name, v, inv)

@@ -71,7 +71,8 @@ def one(attempts):
     # discarded all of it — the first entry in this project's own diagnosis
     # catalogue is "a logger passed as lambda m: None", and I reproduced it.
     ok, reached = gw.follow_verified(m, ROUTE, log=log,
-                                     attempts=attempts, shots=SHOTS)
+                                     attempts=attempts, shots=SHOTS,
+                                     start_hint=gw.SPAWN)
     return bool(ok), len(reached), round(time.time() - t0, 1)
 
 

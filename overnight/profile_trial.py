@@ -53,7 +53,8 @@ if __name__ == "__main__":
     try:
         reset_env.reset_environment(log=lambda *a: None)
         time.sleep(1.2)
-        ok = gw.go_to_node_verified(m, "portrait_room", log=lambda *a: None)
+        ok = gw.go_to_node_verified(m, "portrait_room", log=lambda *a: None,
+                                    start_hint=gw.SPAWN)
     finally:
         try:
             ar.send(["clear"])

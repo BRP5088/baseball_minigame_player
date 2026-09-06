@@ -47,7 +47,7 @@ def one(local):
     m = wm.WorldMap.load()
     reset_env.reset_environment(log=_quiet); time.sleep(1.2)
     t0 = time.time()
-    ok = gw.go_to_node_verified(m, TARGET, log=log)
+    ok = gw.go_to_node_verified(m, TARGET, log=log, start_hint=gw.SPAWN)
     return bool(ok), round(time.time() - t0, 1)
 
 if __name__ == "__main__":
