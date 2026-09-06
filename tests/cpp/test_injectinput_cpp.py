@@ -109,13 +109,49 @@ if not os.path.isdir(SRC_DIR):
         "https://github.com/streetpea/chiaki-ng.git chiaki-ng-src" % SRC_DIR)
 check("the chiaki-ng build tree is present", True)
 
-# A guard on the guard. If PATCH_FILES were emptied or trimmed, every comparison
-# below would vacuously succeed and this file would report a clean patch while
-# checking nothing — CLAUDE.md 10.12. The floor is the patch's own documented
-# size: five edits across three files, plus the two new files, which is five
-# distinct paths.
-check("the divergence check has files to compare", len(PATCH_FILES) >= 5,
-      "%d pairs" % len(PATCH_FILES))
+# A GUARD ON THE GUARD, BY COVERAGE RATHER THAN BY COUNT.
+#
+# If PATCH_FILES were emptied or trimmed, every comparison below would vacuously
+# succeed and this file would report a clean patch while checking nothing
+# (CLAUDE.md 10.12). The obvious defence is a floor on len(PATCH_FILES) — and
+# that is what this used to be, and it is not enough. Demonstrated 2026-09-06:
+# REPLACING the gui/src/main.cpp row with a second copy of the injectinput.h row
+# keeps the count at five, leaves main.cpp compared against nothing, and the
+# whole run still prints "all green" at exit 0. A near-duplicate ("./injectinput.h")
+# defeats a len(set(...)) floor the same way, because it is a distinct tuple
+# naming the same file.
+#
+# So the assertion is COVERAGE: the patch-side paths listed here must be exactly
+# the files that actually exist in chiaki-patch/. A row that is deleted,
+# duplicated, near-duplicated, or renamed leaves some real file unlisted and
+# fails here by name; a new patched file added to the directory and forgotten
+# fails here too, which the old floor could never catch.
+_listed = set()
+for _rp, _rs in PATCH_FILES:
+    _listed.add(os.path.normpath(_rp))
+
+_on_disk = set()
+for _dirpath, _dirnames, _filenames in os.walk(PATCH_DIR):
+    for _fn in _filenames:
+        _rel = os.path.relpath(os.path.join(_dirpath, _fn), PATCH_DIR)
+        # README.md documents the patch; it is not part of it.
+        if os.path.normpath(_rel) == "README.md":
+            continue
+        _on_disk.add(os.path.normpath(_rel))
+
+_unlisted = sorted(_on_disk - _listed)
+_phantom = sorted(_listed - _on_disk)
+check("the divergence check covers every file in chiaki-patch/",
+      not _unlisted and not _phantom,
+      ("%d listed, %d on disk" % (len(_listed), len(_on_disk)))
+      + ("; NOT COMPARED: %s" % ", ".join(_unlisted) if _unlisted else "")
+      + ("; LISTED BUT ABSENT: %s" % ", ".join(_phantom) if _phantom else ""))
+
+# The count floor is kept as well. Coverage alone would be satisfied by an empty
+# chiaki-patch/ and an empty list — five is the patch's own documented size:
+# five edits across three files, plus the two new files.
+check("the divergence check has files to compare", len(_listed) >= 5,
+      "%d distinct patch-side paths" % len(_listed))
 
 diverged, missing = [], []
 for rel_patch, rel_src in PATCH_FILES:

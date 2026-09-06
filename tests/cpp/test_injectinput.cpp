@@ -79,11 +79,30 @@ static const long long STALE_TRIPWIRE_MS = 2500;
 
 // injectinput.cpp's RELEASE_MS: how long `clear` keeps transmitting the zeroed
 // state before going inactive. It lives in an anonymous namespace so it cannot
-// be included from here. Duplicating it is safe ONLY because it is used below
-// to choose between PASS and INCONCLUSIVE, never between PASS and FAIL: if the
-// real constant grows this becomes conservative, and if it shrinks the check
-// goes inconclusive rather than failing wrongly.
+// be included from here.
+//
+// THE OLD COMMENT HERE CLAIMED THIS DUPLICATE WAS SAFE BECAUSE IT ONLY EVER
+// CHOSE BETWEEN PASS AND INCONCLUSIVE, AND THAT WAS FALSE. It also set the pump
+// horizon for the OPEN-16 check (`past = t_clear + RELEASE_MS_MIRROR + 150`),
+// so a real constant above 250 stopped the loop BEFORE the real deadline: the
+// stale-deadline release never got a chance to fire and the check passed having
+// measured nothing. Demonstrated 2026-09-06 — with the OPEN-16 fix DELETED and
+// RELEASE_MS raised to 300, the whole file reported pass=21 fail=0 and "all
+// green". A defect present and the guard reporting clean is exactly what this
+// file exists to refuse.
+//
+// So the mirror is now a FLOOR, not the value. `g_release_observed_ms` below
+// holds the window this process actually MEASURED on this machine a moment
+// earlier, and every use takes the larger of the two. Load inflates the
+// measurement and the horizon together, so load can only make the wait longer —
+// and waiting longer only makes the bug more certain to fire, never less.
 static const long long RELEASE_MS_MIRROR = 100;
+
+// How long `clear` was observed to keep the pump active, measured by the
+// "after the release window the pump goes inactive" check below. Zero until
+// that check has run. An UPPER bound: it includes poll granularity and
+// whatever the scheduler added, which is the safe direction for a horizon.
+static long long g_release_observed_ms = 0;
 
 static const char *CORRECT = "correctness";
 static const char *TIMING = "timing";
@@ -654,7 +673,17 @@ int main()
 		while(InjectInputActive() && now_ms() < give_up)
 			sleep_ms(5);
 		if(!InjectInputActive())
-			pass(CORRECT, "after the release window the pump goes inactive", "");
+		{
+			// RECORD WHAT THE WINDOW ACTUALLY WAS. This is the only place in
+			// this file that observes the real deadline, and the OPEN-16 check
+			// below needs it: sizing that check's pump horizon from the
+			// hardcoded mirror let a grown RELEASE_MS turn a live defect into a
+			// green run. Measured here, load can only lengthen it.
+			g_release_observed_ms = now_ms() - t_clear;
+			pass(CORRECT, "after the release window the pump goes inactive",
+			     "observed " + std::to_string(g_release_observed_ms) +
+			     "ms (mirror says " + std::to_string(RELEASE_MS_MIRROR) + ")");
+		}
 		else
 			fail(CORRECT, "after the release window the pump goes inactive",
 			     "still active 3s after the clear — the pump would transmit forever");
@@ -688,6 +717,12 @@ int main()
 	// Once the write is provably inside, waiting longer only makes the bug more
 	// certain to fire, never less — which is what makes the verdict load-proof.
 	{
+		// THE MEASURED WINDOW, FLOORED BY THE MIRROR. Never the mirror alone:
+		// sizing the horizon below from a hardcoded constant is what let a
+		// grown RELEASE_MS report "all green" with the bug present.
+		long long release_window = g_release_observed_ms > RELEASE_MS_MIRROR
+		                         ? g_release_observed_ms : RELEASE_MS_MIRROR;
+
 		long long t_clear = write_fifo("clear");
 		write_fifo("left_y -9830");                   // untimed: holds indefinitely
 		g_marker = (g_marker % 200) + 1;
@@ -714,11 +749,11 @@ int main()
 			inconc("a write inside the window SURVIVES the window expiring",
 			       "the write was never applied, so there was nothing left to "
 			       "swallow and nothing was measured");
-		else if(a.s.after >= t_clear + RELEASE_MS_MIRROR)
+		else if(a.s.after >= t_clear + release_window)
 			inconc("a write inside the window SURVIVES the window expiring",
 			       "the write was only proven parsed " +
 			       std::to_string(a.s.after - t_clear) + "ms after the clear, past "
-			       "the " + std::to_string(RELEASE_MS_MIRROR) + "ms release window — "
+			       "the " + std::to_string(release_window) + "ms release window — "
 			       "this machine was too loaded to place the write INSIDE it, which "
 			       "is where the bug lives, so nothing was measured");
 		else
@@ -726,7 +761,7 @@ int main()
 			// Pump past the deadline the way chiaki does. InjectInputActive() is
 			// what expires the window, so it has to be the thing polled: a loop
 			// that only called InjectInputApply would never trigger the bug.
-			long long past = t_clear + RELEASE_MS_MIRROR + 150;
+			long long past = t_clear + release_window + 150;
 			while(now_ms() < past)
 			{
 				if(InjectInputActive())
