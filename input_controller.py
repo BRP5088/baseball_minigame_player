@@ -13,6 +13,7 @@ here is ready to go.
 Requires: pip install pyautogui --break-system-packages
 """
 
+import os as _os_env   # for the BASEBALL_TEST_RUN guards below
 import os
 import subprocess
 import sys
@@ -1266,6 +1267,20 @@ def _load_view_cache(me=None):
 
 
 def _save_view_cache():
+    # OFFLINE TESTS MUST NOT WRITE A PRODUCTION CALIBRATION FILE.
+    #
+    # This is read back by live runs, so a test that writes it changes what the
+    # next real run believes about the screen. It already happened twice: an
+    # offline analysis pass added a live geometry's key to a worktree's copy,
+    # and on 2026-09-06 the ordinary offline suite added "1400,787,117,0" from
+    # a DEMO ARCHIVE frame -- a geometry no live capture ever produces -- to the
+    # file the rig uses. Nothing failed, because nothing ever does when a cache
+    # is silently wrong; that is the whole hazard.
+    #
+    # The IN-MEMORY cache is untouched, so behaviour inside a test run is
+    # exactly what it would be live. Only the persistence is suppressed.
+    if _os_env.environ.get("BASEBALL_TEST_RUN"):
+        return
     try:
         import json
         try:
