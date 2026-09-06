@@ -1453,11 +1453,26 @@ So `portrait_room` is not being CONFUSED with `bar_pool_room`. `bar_pool_room`
 simply sits at a constant 100-135 on every rich frame, and the ratio gate is
 dividing a real signal by that floor.
 
-**THE REFERENCE SET IS ALSO TOO THIN TO PASS ITS OWN TEST.** Leave-one-out over
-all nine reference frames — each scored against every room with ITSELF removed —
-the shipped metric names its own room **3 of 9 times**. Two references per room,
-taken at poses that do not match each other, is why a live arrival scores
-anywhere from 137 to 818.
+**A CLAIM MADE HERE EARLIER THE SAME DAY WAS WRONG, AND IS WITHDRAWN.** This
+section said "the reference set is too thin to pass its own test: leave-one-out
+names its own room 3 of 9 times". **It names it 9 of 9, with zero wrong and zero
+abstentions**, at best 248-698 and ratios 1.91-5.29 — which reproduces §7's
+"249-698" exactly. The reference set passes its own test.
+
+The 3-of-9 came from a REIMPLEMENTATION that was never checked against the
+original. `places.match_count` filters matches by Hamming distance
+(`places.py:409`); the mirror in `agent_progress/localiser-inliers/validate.py`
+used a raw `len(bf.match(...))`. Unfiltered, spurious matches inflate the
+SECOND-best room, which collapses the ratio and produces six false abstentions.
+The same file's own docstring warns about exactly this trap, having already been
+caught by it once that morning over the HUD crop. Anything scored through that
+mirror's RAW-COUNT column is suspect; its RANSAC-inlier column and everything
+computed through `places.identify` / `places.room_scores` are not.
+
+**WHAT STILL STANDS, because it went through the project's own path:** a genuine
+arrival at `portrait_room` scored 137 while a frame taken OUTDOORS ON A STREET
+scored 135, against a `MIN_MATCHES` of 140. The gate sits inside the overlap.
+That is the finding; "the references cannot recognise themselves" is not.
 
 **RANSAC-VERIFIED INLIERS ARE A CANDIDATE, NOT A CONCLUSION.** Fitting one rigid
 transform to the matches and counting inliers, because a spurious match is a

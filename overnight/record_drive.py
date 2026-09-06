@@ -62,6 +62,35 @@ HZ = 5.0
 DEAD_DELTA = 0.35
 DEAD_RUN_ABORT = 15        # consecutive dead pairs (3s at 5 Hz) before stopping
 
+# ARE YOU MOVING TOO FAST? Reconstruction chains frame to frame, so consecutive
+# frames must share enough of the scene to be matched. Measured over all 3357
+# archived frames of the walks that DID reconstruct:
+#     consecutive-frame inliers   p05 61   p25 521   median 751   p95 1296
+# So those recordings dipped to 61 and still worked; below that is outside
+# anything shown to reconstruct. This is a floor from real data, not a guess --
+# but note it is a FLOOR, not a separation between two populations: nobody has
+# recorded a walk fast enough to fail, so the true breaking point is unmeasured.
+OVERLAP_SLOW = 400         # comfortable
+OVERLAP_FAST = 61          # the p05 of recordings that reconstructed
+
+# WHEN IS A ROOM DONE? Two things have to be true, and they fail differently:
+#
+#   ANGLES   you can stand everywhere in a room and still have filmed it from
+#            one direction. The compass is split into 8 sectors and each is
+#            counted, because a reference matched from the wrong side does not
+#            match at all -- that is why the current reference set fails its own
+#            leave-one-out 3 times in 9.
+#
+#   NOVELTY  the honest stopping rule. While the room still has unseen ground,
+#            frames keep coming back NEW. When they stop, there is nothing left
+#            to photograph -- whatever the map's own opinion is.
+#
+# Neither alone is enough: all 8 sectors from one spot is a panorama, not a
+# room, and a NEW rate near zero with 2 sectors covered means you walked a line.
+SECTORS = 8
+COVERAGE_EVERY = 50        # frames, i.e. every 10s at 5 Hz
+NEW_RATE_DONE = 0.10       # under 10% new over the last window = nothing left
+
 # The controller, read directly. pygame was excluded from requirements.txt, but
 # record_input.py genuinely imports it and a DualSense is visible on this Mac
 # with six axes. Reading the stick exactly beats inferring distance from vision,
@@ -75,9 +104,28 @@ META = os.path.join(OUT, "meta.json")
 
 
 def _feedback_setup():
-    """Descriptors for everywhere the map already knows."""
+    """Descriptors for everywhere the map already knows.
+
+    ABSOLUTE PATH, AND A LOUD FAILURE IF IT IS EMPTY. places.PLACES_DIR is the
+    relative string "places", and places._room_dirs returns [] for a missing
+    directory without error. Run from any directory but the repo root, this
+    loaded ZERO references -- and with no references `best` is always 0, so the
+    KNOWN and thin branches cannot fire and every frame reads NEW. The driver
+    would be told to keep filming ground the map already covers, for a whole
+    session, with nothing on screen saying anything was wrong.
+
+    Same frame, two working directories: repo root -> KNOWN (bar_pool_room
+    1500); anywhere else -> NEW (best None 0).
+    """
     import places
-    refs = places.load_keypoints(places.PLACES_DIR)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    refs = places.load_keypoints(os.path.join(root, "places"))
+    if not refs:
+        raise SystemExit(
+            f"no reference frames under {os.path.join(root, 'places')}.\n"
+            f"Without them every frame reads NEW and the coverage advice is "
+            f"worthless -- refusing to record a session you would be driving "
+            f"blind.")
     return refs
 
 
@@ -153,6 +201,32 @@ def _read_stick(h):
         return None
 
 
+def _kp(img):
+    import places
+    return places.keypoints(img)
+
+
+def _overlap(prev, img):
+    """RANSAC-verified inliers against the frame about a second ago, or None."""
+    try:
+        import cv2
+        import places
+        k1, d1 = prev
+        k2, d2 = places.keypoints(img)
+        if d1 is None or d2 is None or len(d1) < 12 or len(d2) < 12:
+            return None
+        m = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True).match(d1, d2)
+        if len(m) < 12:
+            return 0
+        p1 = np.float32([k1[x.queryIdx].pt for x in m]).reshape(-1, 1, 2)
+        p2 = np.float32([k2[x.trainIdx].pt for x in m]).reshape(-1, 1, 2)
+        _, mask = cv2.estimateAffinePartial2D(p1, p2, method=cv2.RANSAC,
+                                              ransacReprojThreshold=6.0)
+        return 0 if mask is None else int(mask.sum())
+    except Exception:
+        return None
+
+
 def _delta(a, b):
     a = np.asarray(a.convert("L"), dtype=float)
     b = np.asarray(b.convert("L"), dtype=float)
@@ -190,7 +264,7 @@ def main():
                               "vision, which tracks only 0.55 on walks"), flush=True)
     t0 = time.time()
     meta, n, unreadable, dark_run = [], 0, 0, 0
-    prev_img, dead_run = None, 0
+    prev_img, dead_run, last_kp, last_verdict = None, 0, None, None
     tally = {}
     try:
         while time.time() - t0 < SECONDS:
@@ -213,8 +287,31 @@ def main():
                 dead_run = 0
             prev_img = img
 
+            # The coverage verdict is SAVED, not merely printed. Without it no
+            # later reconstruction can know which frames were new ground, and
+            # the whole point of the drive is to find new ground.
             meta.append({"t": round(t, 2), "frame": fn, "bearing": b,
-                         "stick": _read_stick(stick), "delta": d})
+                         "stick": _read_stick(stick), "delta": d,
+                         "verdict": last_verdict})
+            if n % COVERAGE_EVERY == 0:
+                secs_seen = {int(m["bearing"] // (360 / SECTORS))
+                             for m in meta if m.get("bearing") is not None}
+                recent = [m for m in meta[-COVERAGE_EVERY:]
+                          if m.get("verdict")]
+                new_rate = (sum(1 for m in recent if m["verdict"] == "NEW")
+                            / max(len(recent), 1))
+                bar = "".join("#" if i in secs_seen else "." 
+                              for i in range(SECTORS))
+                done = (len(secs_seen) >= SECTORS - 1
+                        and new_rate <= NEW_RATE_DONE)
+                print(f"\n  --- {t:5.0f}s  angles [{bar}] {len(secs_seen)}/{SECTORS}"
+                      f"   new {100*new_rate:3.0f}% of the last {len(recent)}"
+                      + ("   THIS AREA LOOKS DONE — move to the next room"
+                         if done else
+                         "   keep going" if new_rate > NEW_RATE_DONE
+                         else "   turn to fill the missing angles") + "\n",
+                      flush=True)
+
             if dead_run >= DEAD_RUN_ABORT:
                 print(f"\n  STOPPING: the picture has not changed for "
                       f"{dead_run} frames ({dead_run/HZ:.0f}s).\n"
@@ -235,13 +332,25 @@ def main():
                                             "complete": False, "frames": meta})
             if n % 5 == 0:                      # about once a second
                 room, score, verdict = _novelty(img, refs, seen)
+                last_verdict = verdict
+                # OVERLAP with the frame ~1s ago, which is what reconstruction
+                # actually needs. Turning fast breaks it sooner than walking
+                # fast does, because the whole view leaves the frame.
+                speed = ""
+                if last_kp is not None:
+                    ov = _overlap(last_kp, img)
+                    if ov is not None and ov < OVERLAP_FAST:
+                        speed = f"   TOO FAST (overlap {ov}, need {OVERLAP_FAST}+)"
+                    elif ov is not None and ov < OVERLAP_SLOW:
+                        speed = f"   brisk (overlap {ov})"
+                last_kp = _kp(img)
                 tally[verdict] = tally.get(verdict, 0) + 1
                 bs = "  --  " if b is None else f"{b:6.1f}"
                 note = ""
                 if dark_run >= 10:
                     note = "   <-- no compass for 2s+, this stretch cannot be placed"
                 print(f"  {t:6.1f}s  hdg {bs}  {verdict:11} "
-                      f"(best {room or '-'} {score})" + note, flush=True)
+                      f"(best {room or '-'} {score})" + speed + note, flush=True)
             time.sleep(max(0.0, 1.0 / HZ - (time.time() - tick)))
     except KeyboardInterrupt:
         print("\n  stopped by hand")
@@ -265,6 +374,15 @@ def main():
     if tally:
         print("  coverage seen: " + ", ".join(f"{k}={v}" for k, v in
                                               sorted(tally.items())))
+    secs_seen = {int(m["bearing"] // (360 / SECTORS))
+                 for m in meta if m.get("bearing") is not None}
+    bar = "".join("#" if i in secs_seen else "." for i in range(SECTORS))
+    late = [m for m in meta[-COVERAGE_EVERY:] if m.get("verdict")]
+    rate = sum(1 for m in late if m["verdict"] == "NEW") / max(len(late), 1)
+    print(f"  angles filmed  [{bar}] {len(secs_seen)}/{SECTORS} compass sectors")
+    print(f"  still finding new ground at the end: {100*rate:.0f}%"
+          + ("   <-- there is more here, consider another pass"
+             if rate > NEW_RATE_DONE else "   (looks covered)"))
     print(f"  -> {OUT}")
     print(f"\n  ship it to Snoopy with:")
     print(f"    tools/ship_drive.sh {os.path.relpath(OUT)}")
