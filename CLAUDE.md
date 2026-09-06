@@ -1015,6 +1015,62 @@ the template.
 
 ---
 
+## SAVING A FRAME CAN MAKE THE COMPASS READ 90 DEGREES WRONG (2026-09-05)
+
+`read_bearing`'s docstring promises it "returns None rather than guessing — a
+wrong bearing would turn the player to face the wrong way and the walk would end
+somewhere arbitrary, which is worse than not turning at all." **It does guess.**
+
+Measured on 120 archived demo frames, 80 of which read on the original. Each was
+re-encoded as JPEG and re-read — nothing else changed:
+
+    quality 75   ABSTAINED 5 (6.2%)   WRONG BY >5 deg 2 (2.5%)   errors [90.0, 15.2]
+    quality 88   ABSTAINED 1 (1.2%)   WRONG BY >5 deg 3 (3.8%)   errors [90.0, 90.0, 74.9]
+
+Same scene, same code, two encodings, two different CONFIDENT answers. At least
+one of each pair is wrong.
+
+**THE ERRORS ARE EXACTLY 90.0, WHICH NAMES THE MECHANISM.** N/E/S/W are 90 apart,
+so this is CARDINAL LETTER CONFUSION — one glyph misidentified as another — not
+gradual degradation of a good read. That is the single failure two agreeing
+letters cannot make, which is why this is direct evidence for the
+`REQUIRE_TWO_LETTERS` work in OPEN-15 rather than an argument against its
+coverage cost.
+
+**QUALITY 88 PRODUCED MORE WRONG ANSWERS THAN 75.** Non-monotonic, so this is a
+chaotic threshold flip and not something a higher quality setting buys safety
+from. 88 is what `places.py:185` and `play_now.py:39` save at; 82-88 is the range
+used across the project.
+
+### What this costs, in order of how sure it is
+
+- **CERTAIN: §10.15's KEEP A FRAME is unsafe FOR THE COMPASS.** A kept frame can
+  answer 90 degrees differently from the live capture it came from, so no compass
+  threshold may be tuned or validated on a saved JPEG. The rule stands for
+  everything else — a kept frame is what settled the wedge diagnosis the same day
+  — but not for this detector.
+- **CERTAIN: any bearing pinned in a test from a `.jpg` fixture pins what the
+  COMPRESSED frame says.** It is still a valid regression guard on the code; it is
+  not evidence about live behaviour.
+- **NOT ESTABLISHED, AND THE REASON TO CARE: the live path is also lossy.** The
+  stream is H.264 with varying quantization, and chiaki logs
+  `StreamConnection reporting corrupt frame(s)` during normal play. Nobody has
+  shown this fires live. But the old assumption — that the live path is immune
+  because no JPEG is involved — is not available any more, and a wrong bearing
+  live is the failure the docstring says is worse than not turning at all.
+- **A HYPOTHESIS, EXPLICITLY NOT ESTABLISHED.** §8(k) is the user's unexplained
+  observation, *"when you make the turn, you actually walk right out of the
+  bar"* — seen on the stream the first day, never captured. A 90-degree bearing
+  error is exactly the mechanism that produces it, and nothing else in this file
+  explains it. **If `REQUIRE_TWO_LETTERS` lands and §8(k) stops happening, that is
+  the strongest signal available.** Do not treat the coincidence as evidence
+  before then.
+
+Reproduce: re-encode any frame `read_bearing` reads, at quality 75 and 88, and
+compare. No rig, no console, ~2 minutes.
+
+---
+
 ## §11 OPEN
 
 Nothing outside this section may claim to be open.
@@ -1585,26 +1641,84 @@ on a file whose own comment says it lives on a NAS. That collides directly with
 OPEN-8's cut 3, which makes the write once-per-geometry; merged together, the
 frozen value becomes the tick-derived one.
 
-**OPEN-16 — `clear` arms a release window, and a stick write that lands inside it
-is killed while the console holds the deflection.** Found 2026-09-05 by
-`tests/cpp/probe_release_window.cpp`, reproduced from a second independent build.
-12 runs per gap, `clear` then `left_y -5000 300`, scored at +800ms:
+**OPEN-16 — CLOSED 2026-09-05.** Fixed, pinned by a mutation-tested check, and
+verified on the rig against a rebuilt binary.
+
+`Apply("clear")` armed `release_until = NowMs() + RELEASE_MS` (100ms) and nothing
+ever disarmed it. A later write set `active = true` and left the deadline
+standing, so when it expired `InjectInputActive()` ran its release path on the
+FRESH input: `active = false`, `has_left = false`, `has_right = false`. chiaki's
+pump is `if(InjectInputActive()) SendFeedbackState()`, so it then stops sending
+and **the console keeps the last state it received** — the deflection — while the
+hold's own deadline expires inside the injector and is never transmitted.
 
     gap 400ms (outside the ~100ms window)   12/12 correctly released  [control]
     gap  30ms (inside it)                   12/12 STILL DEFLECTED
-    gap  90ms (inside it)                    7-9/12 still deflected
+    gap  90ms (inside it)                    9/12 deflected, 3/12 push dropped
 
-`clear` arms the release deadline and nothing clears it, so a write inside the
-window is later killed by the release path and the pump stops sending — **this
-recreates exactly the failure the release window was added to prevent**, and
-unlike §5's lost-release-packet hazard it is DETERMINISTIC rather than a dropped
-UDP edge. It is in the LIVE INPUT PATH and is **NOT fixed**. Live reachability is
-UNESTABLISHED: every `ar.clear()` call site checked (`teach_repeat`,
-`run_anchored`, `brett_walk`, `walk_steps`, `run_to_table`, `perform_brett_walk`,
-`follow_path`, `route_follow`, `waypoint_replay`, `go`, `macro_replay`) is
-followed by a capture or a log, not by a stick write within 100ms. It may be
-latent — but the probe is compiled by nothing automatically, so the evidence for
-it can rot.
+**THE RUNAWAY GUARD CANNOT SAVE IT.** `INJECT_TIMEOUT_MS` is evaluated inside
+`InjectInputApply`, which the pump has stopped calling — so the 5s bound that
+exists precisely to stop a stick being held forever is unreachable in the one
+state that needs it. That is the sharpest form of this defect and is worth
+remembering as a shape: **a guard that lives downstream of the switch that
+disables it.**
+
+**The fix is one line:** `g_inject.release_until = 0;` on the non-clear path of
+`Apply()`, beside `g_inject.active = true;`. In BOTH copies
+(`chiaki-patch/injectinput.cpp` and `chiaki-ng-src/gui/src/injectinput.cpp` —
+`tests/cpp/test_injectinput_cpp.py` compares them byte for byte).
+
+**Pinned by `tests/cpp/test_injectinput.cpp`**, check *"a write inside the window
+SURVIVES the window expiring"*. Mutation-tested: deleting the one line produces
+exactly that one FAIL and ZERO inconclusives — so unlike the sibling
+release-window check, which can only report INCONCLUSIVE, this one has a
+load-proof verdict. It goes INCONCLUSIVE rather than passing when load pushes the
+write outside the window, because outside the window there is no bug to find.
+`probe_release_window.cpp` became this check and is deleted.
+
+### Verified on the rig
+
+Incremental rebuild 29s (not the 15 minutes a clean build costs).
+`restart_chiaki.sh` installed and re-signed it; `nm -U` shows
+`InjectInputStart/Apply/Active`; Circle closes the pause book and OPTIONS opens
+it. Then the defect's own scenario, using a CAMERA turn so nothing could move
+position — `clear`, wait the gap, one timed `right_x 16000 600`, compass read at
++2.0s and again at +4.0s:
+
+    gap 400ms (control)   turned 7.49 deg, then a further  0.000 deg
+    gap  30ms (the bug)   turned 7.21 deg, then a further -0.026 deg
+
+Both arms turn the same amount and both stop dead. Bearing went 86.8 -> 101.5,
+which is 7.49 + 7.21 exactly.
+
+### Live reachability: latent on the route, LIVE in one harness — FROM NOW ON
+
+Grepped every `clear` written to the FIFO (`ar.clear()`, `ar.send(["clear"])`,
+`inject_reset.clear()` — 30 sites, more than the 11 first checked).
+
+- Every site on the production route is TERMINAL: a `return`, a `raise`, a log,
+  or a harness `finally:`. The shortest gap on a live walking path is
+  `brett_walk._push` (:277), which clears inside its 0.8s chunk loop and then
+  sleeps `walk_steps.SETTLE = 0.25` plus a capture — ~290ms, outside.
+- **`overnight/walk_curve.py:52` is inside the window.** It loops
+  `ar.send(["clear"])` straight back to the top and the next stick write is two
+  `fast_capture()` calls later — ~75ms at the 37ms/capture from §8(h). The only
+  site of that shape. Note `ar.clear()` also CLOSES the FIFO, so a reopen sits
+  between it and any following write; `ar.send(["clear"])` does not, which is why
+  the reachable site is one of the latter.
+
+**THIS DOES NOT IMPLICATE §6's WALKING TABLE, AND AN EARLIER DRAFT HERE SAID IT
+DID.** `overnight/walk_curve.json` is dated 2026-09-04 13:00 and its contents ARE
+that table; the release window was added 2026-09-05, so the run predates the
+defect. The claim was made by reading the call site and never checking that the
+mechanism existed when the measurement was taken — a mechanism that makes sense
+is not evidence (§10.2). Git cannot date this for anyone: the repo's history
+begins at "Initial commit: Auto Baseball" because git was added on 2026-09-05, so
+`git log -S RELEASE_MS` returns that commit for everything and READS AS THOUGH THE
+CODE WAS ALWAYS THERE. File mtimes and the run's own JSON are the datable
+artifacts here.
+
+**The question it does open is still open — see OPEN-19.**
 
 **OPEN-17 — Does the executor's ARRIVAL HEADING cost the two bad nodes?
 PARKED — do not build it before OPEN-14 reports.** The executor ends every leg
@@ -1625,3 +1739,215 @@ every failed change MOVED the character while both survivors move nothing.
 exactly the shape that killed `STALL_CHANGE` after a Fisher p = 0.00039 (§10.2).
 `approach_goal` compounds it by aiming at `steps[-1]["bearing"]` and discarding
 the other seven, 10.6 deg off the leg's own net direction.
+
+**OPEN-18 — `ensure_stream.streaming()` REPORTS UP WHILE THE PS5 IS IN STANDBY.**
+Observed 2026-09-05 while verifying OPEN-16. `Bretts_walk.py connect` printed
+`[stream] up via find_bar (compass strip located)` and returned success; the
+capture was chiaki's HOST LIST reading **`State: standby`**. The console was
+asleep, there was no stream at all, and `connect` therefore never ran its wake
+sequence — the three `_key` presses at `ensure_stream.py:231-233`. Driving those
+by hand woke the console in 112s.
+
+This is §3's rule biting a caller that predates it. `find_bar()` locates the
+compass strip WITHOUT reading it and returns non-None on essentially every frame,
+which is why §3 says it answers "am I streaming" and NOT "am I in the world" —
+but `streaming()` uses it as the liveness test, and a standby host list is
+neither. `read_bearing()` is no better: on the PS5 Control Center overlay sitting
+on top of the paused game it returned **43.7**, a confident number for a frame
+with no world in it, which sent this session's own "WORLD IS UP" check wrong until
+the user looked at the screen and said so.
+
+Cost here was two minutes of hand-driving. Cost to an unattended run is a night
+spent pressing buttons at a sleeping console while every log line says the stream
+is up — §10.1's shape exactly, where doing nothing looks like working.
+### What the diagnosis established, 2026-09-05
+
+**`streaming()`'s OWN DOCSTRING CENSUS IS WRONG.** It claims
+
+    chiaki host list, disconnected  find_bar None   bearing None
+
+Measured on the standby host-list frame: **`find_bar` returns `(70, 1089, 1810)`**,
+not None. The one state the function exists to detect is the one its evidence
+cannot see. `read_bearing` (None) and `is_pause_screen` (False) both answered
+correctly — only `find_bar` fired, and it is the check that runs first.
+
+**AND §3 ALREADY SAID SO, TWO SECTIONS AWAY.** CLAUDE.md:229 records, as a
+measurement: *"`find_bar()` returns non-None on EVERY frame including ban and
+gameplay screens."* So the docstring census does not merely lack evidence — it
+CONTRADICTS a measured fact already written in this file, in a table laid out to
+read exactly like measurement. **That is what this entry is really about:** not a
+detector needing a better threshold, but a caller asserting the opposite of a
+known result in its own docstring, where prose cannot fail and everyone reads it.
+
+Note §3's frames are the POSITIVE population — ban screens and gameplay, every one
+a state where the stream IS up. They establish that `find_bar` firing means
+nothing; they do not help separate standby. The negative side is still n = 1.
+
+**THE PRECEDENT IS §7's `identify_edges`.** There, `descriptor()` divides by the
+vector norm, so a near-featureless frame becomes mostly the shared vignette and an
+upstairs office door scored 0.906 against `beside_dealer_table` — higher than any
+genuine match. A standby host list satisfying "thin bright band, dark above and
+below" is the same failure: **a detector answering confidently about a frame
+containing none of its subject.** §7's verdict on that one is the part to carry
+over — *no score threshold fixes it* — which is why the search below stops hunting
+for a better `find_bar` threshold and goes after a non-pixel signal instead.
+
+**WHAT IT MATCHED.** `find_bar` returns `(y, x_left, x_right)` and looks for a
+thin bright band with dark rows above and below. chiaki's own blue toolbar
+("Create Steam Shortcut / Refresh PSN Hosts") is exactly that, at **y = 70**
+against the real compass strip's **y = 64**. No y-band and no thinness rule can
+separate them; the impostor is 6px away from the target.
+
+**ONE CANDIDATE REFUTED, WITH n = 800.** "Qt chrome is flat fills, a rendered game
+frame is textured" — scored as the fraction of pixels sharing the single most
+common exact RGB value, over 800 archived frames from `demos/` and
+`screenshot_log/`:
+
+    game frames   p50 0.0300   p90 0.0598   p99 0.1121   MAX 0.6556
+    host list, standby                                       0.6262
+
+The populations OVERLAP — the flattest game frames (loading/black screens) are
+flatter than the host list. A threshold here would sit inside one population,
+which is §10.4 exactly. **Do not rebuild this one.**
+
+**NO FREE WINDOW-TITLE DISCRIMINATOR.** `kCGWindowName` is empty for both of
+chiaki's windows, so the pixel-independent route that `game_window_rect()` almost
+offers is not available; it matches on `kCGWindowOwnerName` because that is all
+macOS hands over here.
+
+**THE SURVIVING CANDIDATE, AND IT IS NOT YET A CENSUS.** The compass strip is
+CENTRED in the game frame; chiaki's toolbar is right-aligned.
+
+    world, in game        x 609..1328   centre  968   (frame 1920 -> offset  -11)
+    host list, standby    x 1089..1810  centre 1450   (offset +490)
+    pause book            x 279..1607   centre  943
+    PS5 Control Center    x 221..1636   centre  929
+
+Three game-side states cluster at the centre and the chrome sits far right. **But
+this is n = 1 on the chrome side**, and a threshold on one sample is the thing
+this file keeps being caught by. Collecting more host-list frames requires taking
+the stream DOWN, so it was not done: OPEN-16's verification and the rig work
+needed the stream up.
+
+**THE LIVE-VS-SAVED INCONSISTENCY IS RESOLVED, AND THE ANSWER IS ITS OWN
+FINDING — see the section below §10.** Live, on the PS5 Control Center overlay,
+`read_bearing` returned **43.7**; on the JPEG saved from that same capture it
+returns **None**. The cache is exonerated by direct test (same file, cache
+as-loaded / cleared / restored — None all three times). It is the lossy save, and
+saving is not a harmless record.
+
+**Not fixed:** the replacement predicate still has to sit between two measured
+populations (§10.4). Next step is the centring test above with a real host-list
+population behind it; the peer's suggestion of the literal text `State: standby`
+remains the fallback.
+
+**OPEN-19 — Did the OLD `clear` corrupt §6's walking table?** Raised 2026-09-05
+and deliberately left open rather than inherited.
+
+OPEN-16 does NOT implicate that table: `overnight/walk_curve.json` is dated
+2026-09-04 13:00, the release window was added 2026-09-05. But `walk_curve.py`
+had the same clear-then-push-75ms-later loop then, and BEFORE the release window
+`clear` never transmitted a release at all — that is the defect the window was
+ADDED to fix, measured at the time as "0.4s after `clear`, the PS5 still believed
+left_y = -9830" (`chiaki-patch/injectinput.cpp`). So the question is whether the
+walk-back push at `walk_curve.py:49` stayed deflected into the next sample's own
+`before` capture and its `walk_forward`. That is unestablished, and it is not the
+same mechanism as OPEN-16.
+
+It would inflate exactly the high-magnitude rows, and those are the strange ones:
+
+    mag    median   spread   n
+    0.60     71.2       27   3
+    0.75    106.0      124   3
+    0.85    352.9      476   2      <- 3.3x the row below it
+    1.00    113.4       73   3      <- and then DOWN again
+
+A response that rises 3.3x and then falls is not a shape a monotonic
+stick-to-distance relation has. **`LEG_SPEED_MAX = 0.60` derives from these
+numbers** (§6), so this is load-bearing, not curiosity.
+
+**Do NOT re-measure with `walk_curve.py` until OPEN-16's fix is on the rig** — its
+loop is the one live site inside the release window, so the script would corrupt
+the very table it is being run to check. It is the fix's own test case. (The fix
+IS on the rig as of 2026-09-05, so this no longer blocks.)
+
+**DOWNGRADED 2026-09-05 — LOW VALUE, and the user was right to ask.**
+`LEG_SPEED_MAX` has exactly ONE production consumer, `graph_walk.py:1308`, which
+is leg-speed scaling — and §8(h) already measured that lever: *"a 32% cut in
+walking bought 5% and a worse mean."* So this table feeds one thing and that thing
+is known not to pay. `walk_curve.py` also drives `left_y` ONLY (`walk_forward`
+with the default `strafe=0`), so it cannot speak to the question that actually
+motivated it — see OPEN-20. Answer it if it is ever cheap; do not spend rig time
+on it.
+
+An attempt on 2026-09-05 was VOID and is not in the record: run straight from a
+reset, it measured the character pressed against the typewriter desk (the spawn
+FACES that desk, so forward is blocked). 18 of 21 samples read displacement 0.0,
+which is what a wedge looks like and also what a dead stream looks like — the
+script has no way to tell those apart and reported a table of zeros as though it
+were data. **If it is ever re-run, position in the office corridor first and
+assert a non-zero control sample before trusting any row.**
+
+**OPEN-20 — THE EXECUTOR NEVER WALKS DIAGONALLY, AND THE HUMAN ALWAYS DID.**
+Raised 2026-09-05 by the user, who says this was the original point of the
+walking-response work: *"get claude to walk diagonally instead of walking straight
+then turning right and walking forward."* Nothing was ever built.
+
+**The executor cannot steer with the left stick, by construction:**
+
+    graph_walk.py:623   st.walk_leg(0.0, -abs(speed), dur, ...)
+                                    ^^^ lx is a hardcoded literal zero
+
+So every step of every leg is: turn the CAMERA to the step's bearing, then push
+the left stick straight ahead. `slow_traverse.walk_leg` takes `lx` and
+`walk_steps.walk_forward` takes `strafe` — the machinery is already there and is
+used ONLY by the escape manoeuvres (`unstick`, the slip ladder, `goaround`), never
+by a leg.
+
+**The evidence that the human did the opposite is already in this file.** On
+`portrait_room -> bar_pool_room` the recorded `cam` is constant to **0.13 deg**
+across the whole leg while `bearing` spans **6.59 deg**. The human did not turn
+the camera at all; they held it still and steered entirely with the left stick.
+The same section notes the final leg's `cam` is 86.73-87.01 across all eight steps
+while `bearing` swings 71.99 -> 97.63 -> 75.46. `bearing` = camera heading +
+left-stick angle, and the executor throws the second term away.
+
+**Why this is not a rediscovery.** GRAVEYARD's only strafe row is *"blind crabbing
+to get around an obstacle"* — an unguided escape push when already stuck, not
+replay of a recorded vector. And this is the OPPOSITE shape to both closed
+families: "steering while walking" is a mid-push feedback loop converting heading
+error into position error, while this is open-loop with the camera FIXED; and
+"chunking a leg into more cycles" adds accelerations, while collapsing a
+turn-then-walk pair into one diagonal push REMOVES a turn and an acceleration per
+step. Both survivors in the graveyard move nothing; this moves less than what it
+replaces.
+
+**IT IS A REGRESSION, NOT A NEW FEATURE.** `route_follow.py:184` already replays
+`leg["lx"]`/`leg["ly"]`. An earlier generation of this code steered with the left
+stick and `graph_walk` dropped the term. That is a much easier thing to argue for
+than a new capability, and it means the shape has been run here before.
+
+**LEAD WITH TIME, NOT ACCURACY — the accuracy argument does not survive its own
+data.** Per-leg lateral loss from the discarded term is
+`office_door->portrait_room` **-0.260** units, `portrait_room->bar_pool_room`
++0.099, `bar_pool_room->bar_jukebox` -0.038, `dealer_table` -0.010,
+`office_door` +0.020. **The leg with the LARGEST loss is the one that arrives
+20/20.** So loss does not predict arrival, and this is NOT a clean explanation of
+the two bad legs — an earlier draft of this entry let it read as though it might
+be. What survives on accuracy is narrower: `portrait_room->bar_pool_room` has the
+highest median angle of any leg at 5.9 deg, a consistent BIAS rather than
+cancelling wobble.
+
+The time argument is the strong one. Replaying the vector means one camera turn
+per LEG instead of one per STEP — **5 turns instead of 40** — against `turn_to`'s
+11.4s of an 85.6s trial (§8(h)).
+
+**What it would take.** `route3_steps.json` already stores `cam` per step, so the
+inputs exist. Hold the camera at `cam`, drive `left_x`/`left_y` as the recorded
+vector, and the per-step turn disappears. Then A/B against turn-then-walk: 10
+trials per arm, interleaved, verified arrivals, reported by failure class (§10.3,
+§10.5).
+
+**Note the left stick's DIAGONAL response is unmeasured.** §6's table is
+`left_y`-only, so it does not cover this — see OPEN-19, which is why that one is
+downgraded rather than closed.
