@@ -55,7 +55,19 @@ PROBE_SPEED = 0.35        # well inside the linear range (section 6)
 DIRECTIONS = 8            # every 45 degrees
 POINTS = int(sys.argv[1]) if len(sys.argv) > 1 else 12
 RESET_EVERY = 6
-STILL_DELTA = 6.5         # at or below this the view did not change
+# MEASURED 2026-09-06, six headings from the spawn. push-inliers divided by
+# that heading's own null-inliers: 0.10 0.11 0.26 0.30 0.34 against 0.82. The
+# gate sits in the 0.49-wide gap between those two populations, which is what
+# CLAUDE.md 10.4 requires and what frame delta could never provide here.
+MOVED_MAX_RATIO = 0.50
+
+# A RATIO NEEDS A DENOMINATOR WORTH DIVIDING BY. A null of 9 inliers means the
+# view holds almost no structure -- pressed against geometry, or a dark frame --
+# and 0/9 is noise, not "it moved". Below this the probe is UNMEASURABLE and is
+# recorded as such rather than being scored. Section 8(f): a wedged frame holds
+# 9-11 keypoints and the next lowest non-wedged frame holds 744, so this floor
+# sits between two measured populations rather than inside one.
+MIN_NULL_INLIERS = 100
 DEAD_DELTA = 0.35         # at or below this the STREAM is dead, not the path
 
 
@@ -92,6 +104,29 @@ def push(seconds, speed):
     ar.send(["clear"])
 
 
+def back(seconds, speed):
+    """Walk back the same distance, so a point stays a point."""
+    ar.send([f"left_y {int(abs(speed) * 32767)} {int(seconds * 1000)}"])
+    time.sleep(seconds + 0.55)
+    ar.send(["clear"])
+
+
+def measure(do_push):
+    """(frame delta, inliers) across an interval with or without a push.
+
+    The NULL arm takes the identical capture pair and waits the identical time
+    without pushing, so the two are comparable. Anything that changes on its own
+    -- an NPC, a flickering light -- appears in both.
+    """
+    a = cap()
+    if do_push:
+        ar.send([f"left_y {int(-PROBE_SPEED * 32767)} {int(PROBE_SEC * 1000)}"])
+    time.sleep(PROBE_SEC + 0.55)
+    ar.send(["clear"])
+    b = cap()
+    return delta(a, b), inliers(a, b)
+
+
 def log(m):
     print(m, flush=True)
 
@@ -111,6 +146,23 @@ def main():
             time.sleep(1.2)
         here = cap()
         base = compass.read_bearing(here)
+        if base is None:
+            # WITHOUT A HEADING THERE IS NO DIRECTION CONTROL, so every probe
+            # would go the same way and be recorded as eight different ones.
+            # That happened on the first trial run and produced a point whose
+            # eight "directions" were one direction eight times.
+            log("  no compass at this point — turning to re-acquire rather "
+                "than probing eight times in one direction")
+            for _ in range(6):
+                ar.send(["right_x 12000 220"]); time.sleep(1.1)
+                ar.send(["clear"])
+                base = compass.read_bearing(cap())
+                if base is not None:
+                    break
+            if base is None:
+                log("  still no heading — skipping this point")
+                continue
+            here = cap()
         stamp = int(time.time() * 1000)
         fp = os.path.join(OUT, f"p{stamp}.jpg")
         here.convert("RGB").save(fp, quality=88)
@@ -123,21 +175,34 @@ def main():
             if want is not None:
                 st.turn_to(want, lambda: compass.read_bearing(cap()), cap,
                            log=lambda *a: None, tolerance=6.0)
-            a = cap()
-            push(PROBE_SEC, PROBE_SPEED)
-            b = cap()
-            dl, inl = delta(a, b), inliers(a, b)
-            if dl <= DEAD_DELTA:
+
+            # PAIRED NULL AND PUSH, at this heading, in this order.
+            #
+            # An ABSOLUTE gate cannot work and that is measured, not assumed:
+            # over six headings the null inlier count ranged 353-1366 and the
+            # push 35-908, so the same number means "blocked" in one place and
+            # "moved" in another. Dividing by THIS heading's own null removes
+            # the local scene animation -- and an NPC wandering through the
+            # shot lowers both halves, so it cannot fake a verdict either.
+            n_d, n_i = measure(False)
+            p_d, p_i = measure(True)
+            ratio = p_i / max(n_i, 1)
+            if n_d <= DEAD_DELTA and p_d <= DEAD_DELTA:
                 verdict = "INVALID"          # the stream, not the path
-            elif dl <= STILL_DELTA:
+            elif n_i < MIN_NULL_INLIERS:
+                verdict = "unmeasurable"     # nothing to divide by
+            elif ratio >= MOVED_MAX_RATIO:
                 verdict = "blocked"
             else:
                 verdict = "free"
-                push(PROBE_SEC, -PROBE_SPEED)   # walk back, keep the point fixed
-            rec["probes"].append({"dir": k, "want": want, "delta": round(dl, 2),
-                                  "inliers": inl, "verdict": verdict})
+                back(PROBE_SEC, PROBE_SPEED)   # return, so the point stays fixed
+
+            rec["probes"].append({"dir": k, "want": want, "ratio": round(ratio, 3),
+                                  "null_delta": round(n_d, 2), "null_inl": n_i,
+                                  "push_delta": round(p_d, 2), "push_inl": p_i,
+                                  "verdict": verdict})
             log(f"     dir {k} @{'--' if want is None else f'{want:5.1f}'}  "
-                f"delta {dl:6.2f}  inliers {inl:4}  {verdict}")
+                f"null {n_i:4} push {p_i:4}  ratio {ratio:5.2f}  {verdict}")
             if verdict == "INVALID":
                 log("     stream is not updating — stopping rather than "
                     "recording a map of nothing")

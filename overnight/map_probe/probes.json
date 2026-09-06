@@ -1,128 +1,263 @@
 [
- {
-  "stamp": 1788725284178,
-  "frame": "p1788725284178.jpg",
-  "bearing": 87.02327691921678,
-  "probes": [
-   {
-    "dir": 0,
-    "want": 87.02327691921678,
-    "delta": 22.69,
-    "inliers": 802,
-    "verdict": "free"
-   },
-   {
-    "dir": 1,
-    "want": 132.02327691921678,
-    "delta": 25.89,
-    "inliers": 47,
-    "verdict": "free"
-   },
-   {
-    "dir": 2,
-    "want": 177.02327691921678,
-    "delta": 10.49,
-    "inliers": 91,
-    "verdict": "free"
-   },
-   {
-    "dir": 3,
-    "want": 222.02327691921678,
-    "delta": 5.62,
-    "inliers": 0,
-    "verdict": "blocked"
-   },
-   {
-    "dir": 4,
-    "want": 267.02327691921676,
-    "delta": 8.55,
-    "inliers": 0,
-    "verdict": "free"
-   },
-   {
-    "dir": 5,
-    "want": 312.02327691921676,
-    "delta": 9.06,
-    "inliers": 0,
-    "verdict": "free"
-   },
-   {
-    "dir": 6,
-    "want": 357.02327691921676,
-    "delta": 22.65,
-    "inliers": 18,
-    "verdict": "free"
-   },
-   {
-    "dir": 7,
-    "want": 42.023276919216755,
-    "delta": 29.91,
-    "inliers": 104,
-    "verdict": "free"
-   }
-  ]
- },
- {
-  "stamp": 1788725308591,
-  "frame": "p1788725308591.jpg",
-  "bearing": 46.571621711714585,
-  "probes": [
-   {
-    "dir": 0,
-    "want": 46.571621711714585,
-    "delta": 30.14,
-    "inliers": 95,
-    "verdict": "free"
-   },
-   {
-    "dir": 1,
-    "want": 91.57162171171458,
-    "delta": 6.63,
-    "inliers": 707,
-    "verdict": "free"
-   },
-   {
-    "dir": 2,
-    "want": 136.57162171171458,
-    "delta": 12.65,
-    "inliers": 100,
-    "verdict": "free"
-   },
-   {
-    "dir": 3,
-    "want": 181.57162171171458,
-    "delta": 11.9,
-    "inliers": 15,
-    "verdict": "free"
-   },
-   {
-    "dir": 4,
-    "want": 226.57162171171458,
-    "delta": 10.75,
-    "inliers": 4,
-    "verdict": "free"
-   },
-   {
-    "dir": 5,
-    "want": 271.57162171171456,
-    "delta": 12.9,
-    "inliers": 0,
-    "verdict": "free"
-   },
-   {
-    "dir": 6,
-    "want": 316.57162171171456,
-    "delta": 17.32,
-    "inliers": 12,
-    "verdict": "free"
-   },
-   {
-    "dir": 7,
-    "want": 1.5716217117145561,
-    "delta": 8.45,
-    "inliers": 73,
-    "verdict": "free"
-   }
-  ]
- }
+  {
+    "stamp": 1788726674856,
+    "frame": "p1788726674856.jpg",
+    "bearing": 87.01541164411782,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 87.01541164411782,
+        "ratio": 0.178,
+        "null_delta": 8.8,
+        "null_inl": 517,
+        "push_delta": 25.18,
+        "push_inl": 92,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 132.01541164411782,
+        "ratio": 0.074,
+        "null_delta": 3.55,
+        "null_inl": 1180,
+        "push_delta": 19.21,
+        "push_inl": 87,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 177.01541164411782,
+        "ratio": 0.55,
+        "null_delta": 2.96,
+        "null_inl": 776,
+        "push_delta": 14.43,
+        "push_inl": 427,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 222.01541164411782,
+        "ratio": 0.0,
+        "null_delta": 1.49,
+        "null_inl": 9,
+        "push_delta": 8.01,
+        "push_inl": 0,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 267.0154116441178,
+        "ratio": 0.157,
+        "null_delta": 1.6,
+        "null_inl": 751,
+        "push_delta": 13.78,
+        "push_inl": 118,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 312.0154116441178,
+        "ratio": 0.114,
+        "null_delta": 3.31,
+        "null_inl": 281,
+        "push_delta": 10.89,
+        "push_inl": 32,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 357.0154116441178,
+        "ratio": 0.283,
+        "null_delta": 4.61,
+        "null_inl": 1309,
+        "push_delta": 15.42,
+        "push_inl": 370,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 42.01541164411782,
+        "ratio": 0.573,
+        "null_delta": 6.34,
+        "null_inl": 811,
+        "push_delta": 19.45,
+        "push_inl": 465,
+        "verdict": "blocked"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726708897,
+    "frame": "p1788726708897.jpg",
+    "bearing": null,
+    "probes": [
+      {
+        "dir": 0,
+        "want": null,
+        "ratio": 0.706,
+        "null_delta": 5.43,
+        "null_inl": 1107,
+        "push_delta": 9.74,
+        "push_inl": 782,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 1,
+        "want": null,
+        "ratio": 0.38,
+        "null_delta": 4.36,
+        "null_inl": 1158,
+        "push_delta": 10.6,
+        "push_inl": 440,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": null,
+        "ratio": 0.264,
+        "null_delta": 3.24,
+        "null_inl": 1294,
+        "push_delta": 11.51,
+        "push_inl": 341,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": null,
+        "ratio": 0.247,
+        "null_delta": 1.48,
+        "null_inl": 1326,
+        "push_delta": 13.34,
+        "push_inl": 327,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": null,
+        "ratio": 0.26,
+        "null_delta": 1.1,
+        "null_inl": 1340,
+        "push_delta": 14.75,
+        "push_inl": 349,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": null,
+        "ratio": 0.267,
+        "null_delta": 2.55,
+        "null_inl": 1321,
+        "push_delta": 12.9,
+        "push_inl": 353,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": null,
+        "ratio": 0.156,
+        "null_delta": 3.96,
+        "null_inl": 1253,
+        "push_delta": 17.68,
+        "push_inl": 195,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": null,
+        "ratio": 0.154,
+        "null_delta": 4.67,
+        "null_inl": 805,
+        "push_delta": 14.24,
+        "push_inl": 124,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726734266,
+    "frame": "p1788726734266.jpg",
+    "bearing": 39.214422283067904,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 39.214422283067904,
+        "ratio": 0.076,
+        "null_delta": 3.1,
+        "null_inl": 474,
+        "push_delta": 14.81,
+        "push_inl": 36,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 84.2144222830679,
+        "ratio": 0.136,
+        "null_delta": 1.19,
+        "null_inl": 88,
+        "push_delta": 8.26,
+        "push_inl": 12,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 129.2144222830679,
+        "ratio": 0.018,
+        "null_delta": 3.76,
+        "null_inl": 487,
+        "push_delta": 15.96,
+        "push_inl": 9,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 174.2144222830679,
+        "ratio": 0.146,
+        "null_delta": 4.14,
+        "null_inl": 1127,
+        "push_delta": 16.86,
+        "push_inl": 165,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 219.2144222830679,
+        "ratio": 0.331,
+        "null_delta": 4.22,
+        "null_inl": 1328,
+        "push_delta": 24.14,
+        "push_inl": 440,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 264.2144222830679,
+        "ratio": 0.241,
+        "null_delta": 3.41,
+        "null_inl": 486,
+        "push_delta": 14.61,
+        "push_inl": 117,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 309.2144222830679,
+        "ratio": 0.0,
+        "null_delta": 1.73,
+        "null_inl": 151,
+        "push_delta": 8.63,
+        "push_inl": 0,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 354.2144222830679,
+        "ratio": 0.419,
+        "null_delta": 1.67,
+        "null_inl": 1394,
+        "push_delta": 11.42,
+        "push_inl": 584,
+        "verdict": "free"
+      }
+    ]
+  }
 ]
