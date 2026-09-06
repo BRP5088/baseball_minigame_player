@@ -49,12 +49,32 @@ import places
 import reset_env
 import slow_traverse as st
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_probe")
+# TIMESTAMPED, so runs cannot pile up. It was a fixed path, and the frames are
+# named p<epoch_ms>.jpg so they ACCUMULATED across runs while probes.json was
+# replaced -- the archive already showed the footprint: 21 jpegs against 20
+# recorded points, with one orphan from a run that died between saving a frame
+# and finishing its probes.
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_probe",
+                   time.strftime("%Y%m%d_%H%M%S"))
 PROBE_SEC = 0.45          # long enough to move, short enough to stop safely
 PROBE_SPEED = 0.35        # well inside the linear range (section 6)
 DIRECTIONS = 8            # every 45 degrees
 POINTS = int(sys.argv[1]) if len(sys.argv) > 1 else 12
-RESET_EVERY = 6
+# HOW FAR IT MAY GET FROM THE SPAWN. Every reset teleports back, so this caps
+# the radius of everything the explorer can ever reach: at 6 it mapped a bubble
+# around the office and could never have reached the bar, the stairs or the
+# table. Measured on that run -- 17 points, 3 resets, a wandering ratio of 0.38
+# and an extent of 8 by 4 travel-legs.
+#
+# It was 6 when the explorer walked BACKWARDS every point and skipped two-thirds
+# of its walk-backs, and a tight leash was the right answer to a thing that
+# drifted. Both are fixed, so the leash is now stricter than the risk.
+#
+# THE SAFETY IS NOT THIS NUMBER. It is `stuck`: three consecutive points with
+# nowhere free to go resets and then stops, so a dead end cannot be ground away
+# at. Raising this trades a larger blast radius for reach, and the blast radius
+# is bounded by a reset costing ~8 seconds.
+RESET_EVERY = 20
 # MEASURED 2026-09-06, six headings from the spawn. push-inliers divided by
 # that heading's own null-inliers: 0.10 0.11 0.26 0.30 0.34 against 0.82. The
 # gate sits in the 0.49-wide gap between those two populations, which is what
