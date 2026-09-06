@@ -106,3 +106,52 @@ judge between them. Not implemented.
 
 **Until then the turn at the doorway must be OPEN-LOOP**, driven by
 turn_curve's measured rate rather than by turn_to's closed loop.
+
+## CORRECTION 2026-09-06 — the compass finding above is PARTLY UNSUPPORTED
+
+The section above says read_bearing abstains at the bar doorway. Read it with
+this attached.
+
+**WHAT STILL STANDS.** The analysis OF THE SAVED FILE
+`test_fixtures/compass/bar_doorway_abstains_1920.png` is reproducible from the
+file and does not depend on the rig: W and N are recognised, the pooled loop
+stops at threshold 110, the centroid is 10px off, and the tick-snap check
+rejects at 3.40 deg against a 3.0 limit. The revert of the attempted fix, and
+the reason for it (it lost 00068, a correct read), also stand — both were
+measured offline against files.
+
+**WHAT DOES NOT STAND.** That a LIVE frame at that pose fails. The follow-up
+tests — five sweep targets returning None, "open-loop turning works", the
+nudges — were all run while the rig was not delivering a picture. Frame deltas
+were 0.17, 0.08, 0.03 and finally 0.00 on a hard 0.85/700ms turn. A delta of
+0.00 is byte-identical frames; a live picture never does that, since standing
+still measures 0.9-6.4.
+
+Root cause, per the user: **the PS5 was off.** chiaki cannot stream from a
+console that is not awake, and every reconnect attempt failed for that reason.
+
+**THREE THINGS THAT MADE THIS TAKE AN HOUR**, all worth more than the compass
+question:
+
+1. `find_bar` matches chiaki's own blue toolbar. Every failed attempt announced
+   "[stream] up via find_bar (compass strip located)" first — including while
+   chiaki was NOT RUNNING AT ALL. That is the peer session's OPEN-18, confirmed
+   live and captured in the host-list screenshot.
+2. `Bretts_walk.py connect` is DESTRUCTIVE when the console is unreachable. It
+   reads a static picture as a stalled decoder, restarts chiaki by a route that
+   does not work, and leaves nothing running — twice. `./restart_chiaki.sh`
+   works; connect's internal restart does not. Do not run connect to diagnose;
+   run doctor, then restart_chiaki.sh.
+3. I compared two screenshots BY EYE, concluded the camera had moved, and
+   reported it. It had not. The frame-delta arithmetic is what caught it. Never
+   judge "did the character/camera move" from looking at two frames.
+
+**THERE IS NO WAKE PATH IN THIS PROJECT.** Nothing greps for one; go_now.py
+only prints "is chiaki up and the console awake?" on failure, and chiaki's own
+host-list keys are not in input_controller.KEYMAP (game actions only — no
+return/enter). So an asleep console is a HARD STOP requiring a human, and the
+standing permission to "wake the PS5" cannot currently be exercised in code.
+
+**TO RE-TEST**: with the console on and a verified live picture (idle frame
+delta > 0.5, capture 1920x1080), walk to the doorway pose and read the bearing.
+Until then treat "the compass abstains at the bar doorway" as UNVERIFIED.
