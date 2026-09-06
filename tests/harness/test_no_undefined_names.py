@@ -37,6 +37,21 @@ def check(name, cond):
 SKIP_DIRS = {".venv", "paddle_venv", "chiaki-ng-src", "chiaki-ng-build",
              "_obsolete", "tests_quarantine", "places_quarantine",
              "__pycache__", "demos", "screenshot_log"}
+
+# DELIBERATELY BROKEN FILES, excluded BY NAME rather than by directory.
+#
+# ollama_test.py is a scratch target written 2026-09-06 to give a code-review
+# tool something to find. Its undefined names (`number`, `intial`) are the whole
+# point of it, so this scanner flagging them is the scanner WORKING — which is
+# why the exclusion is one exact filename and not a pattern.
+#
+# AN EXCLUSION LIST ON A GUARD IS THE THING THAT ROTS. This project's own rule,
+# from the keep_awake post-mortem: "a guard whose trigger is a hand-kept list of
+# NAMES rots silently, because nothing fails when a new name is missing." So
+# every entry here is CHECKED TO STILL EXIST below — delete the file and this
+# test fails until the name goes too, rather than carrying a dead exemption that
+# would silently cover a real module if someone reused the name.
+SKIP_FILES = {"ollama_test.py"}
 # Module implicits are not in `builtins` but are always bound.
 BUILTINS = set(dir(builtins)) | {
     "__file__", "__name__", "__doc__", "__package__", "__spec__",
@@ -131,10 +146,20 @@ targets = []
 for dirpath, dirs, files in os.walk(_ROOT):
     dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
     for f in files:
-        if f.endswith(".py"):
+        if f.endswith(".py") and f not in SKIP_FILES:
             targets.append(os.path.join(dirpath, f))
 
 check(f"found production modules to scan ({len(targets)})", len(targets) > 50)
+
+# THE EXCLUSION CHECKS ITSELF. A skip entry whose file no longer exists is a
+# standing exemption for a name anyone might later reuse, and nothing would say
+# so. Fail here instead, naming the fix.
+_on_disk = {f for _dp, _d, fs in os.walk(_ROOT) for f in fs}
+_stale = sorted(SKIP_FILES - _on_disk)
+check(f"every SKIP_FILES entry still exists ({sorted(SKIP_FILES)})", not _stale)
+if _stale:
+    print(f"     {_stale} is skipped but no longer on disk — remove it from "
+          f"SKIP_FILES so this scanner stops carrying a dead exemption")
 
 problems = {}
 for t in targets:
