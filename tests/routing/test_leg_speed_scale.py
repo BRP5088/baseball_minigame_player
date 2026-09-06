@@ -143,7 +143,16 @@ finally:
     gw.LEG_SPEED_BY_LEG = old_by_leg
     gw.LEG_SPEED_SCALE = old_scale
 
-check("no per-leg overrides ship enabled", gw.LEG_SPEED_BY_LEG == {})
+# Pinned by CONTENTS, not by emptiness. The guard exists to catch an override
+# that arrives WITHOUT a measurement behind it -- but `== {}` cannot express
+# that, so landing the first legitimate override forced the check to be deleted,
+# which would have taken the guard with it. This form survives: a second entry
+# fails, and so does the silent loss of this one.
+#
+# office_corridor -> office_door at 3.0 ships deliberately, on a measured 10/10
+# arrival (OPEN-4 harness, 2026-09-06). It is the ONE leg with an override.
+check("exactly the measured overrides ship",
+      gw.LEG_SPEED_BY_LEG == {("office_corridor", "office_door"): 3.0})
 
 print(f"\n{len(FAILS)} FAIL" if FAILS else "\nall green")
 sys.exit(1 if FAILS else 0)
