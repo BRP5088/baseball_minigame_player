@@ -74,7 +74,19 @@ POINTS = int(sys.argv[1]) if len(sys.argv) > 1 else 12
 # nowhere free to go resets and then stops, so a dead end cannot be ground away
 # at. Raising this trades a larger blast radius for reach, and the blast radius
 # is bounded by a reset costing ~8 seconds.
-RESET_EVERY = 20
+# SIX, DELIBERATELY, and this is a scope decision rather than a safety one.
+#
+# Every reset teleports back to the spawn, so this is the radius of everything
+# the explorer can reach. At 6 it maps a bubble around the office thoroughly and
+# can never reach the bar, the stairs or the table. Raised to 20 it reaches
+# further, and it was tried -- but DRIVING covers far ground far better: a
+# four-minute hand-driven pass produced 789 frames of new ground, where the
+# explorer manages roughly 40 seconds per point.
+#
+# So the division is: the explorer maps the area around the spawn unattended,
+# and anywhere far is driven. Not because 20 was dangerous, but because it was
+# the slower way to reach the same places.
+RESET_EVERY = 6
 # MEASURED 2026-09-06, six headings from the spawn. push-inliers divided by
 # that heading's own null-inliers: 0.10 0.11 0.26 0.30 0.34 against 0.82. The
 # gate sits in the 0.49-wide gap between those two populations, which is what
