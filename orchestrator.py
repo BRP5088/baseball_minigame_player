@@ -1051,7 +1051,49 @@ def ocr_ban_card_name(card_img):
     # smaller claim than "the new matcher is equivalent to the old one on every
     # input". The direct pass also compares the RAW text, spaces and
     # punctuation included, which is genuinely different evidence. Keep both.
-    return match_roster_name_ocr(cleaned)
+    hit = match_roster_name_ocr(cleaned)
+    if hit is not None:
+        return hit
+
+    # THIRD pass: a vision model on the LAN, reached ONLY after both local
+    # passes have refused. Strictly additive for the same reason the second
+    # pass is -- every cell that resolved above still resolves identically, and
+    # only abstentions can change.
+    #
+    # What it replaces is not tesseract, it is the PAID vision call this
+    # function's abstention currently falls through to. Measured over these
+    # same 110 cells: 63 -> 95 resolved, 0 wrong either way. See vlm_ocr.py for
+    # the numbers, the crop trap, and why every failure path abstains.
+    return _vlm_ban_card(card_img)
+
+
+def _vlm_ban_card(card_img):
+    """Resolve one ban-grid card through the LAN vision model, or None.
+
+    THE ROSTER LOOKUP LIVES HERE, not in vlm_ocr, so there is exactly one place
+    that turns text into a card to ban. A name that maps to two DIFFERENT cards
+    abstains: the roster holds families of near-identical names (four Jody
+    Gains, two Mickey Browns) and picking between them on a name alone is the
+    coin flip BAN_OCR_KEY_MARGIN exists to refuse.
+    """
+    try:
+        import vlm_ocr
+        by_name = {}
+        for card in KNOWN_BAN_ROSTER.values():
+            by_name.setdefault(card.name, set()).add(
+                (card.name, card.power, card.secondary))
+        text = vlm_ocr.read_card_text(card_img)
+        name = vlm_ocr.resolve_against(text, list(by_name))
+        if name is None or len(by_name.get(name, ())) != 1:
+            return None
+        for card in KNOWN_BAN_ROSTER.values():
+            if card.name == name:
+                return card
+        return None
+    except Exception:
+        # Never let this path raise into a match. It is an optional extra rung
+        # on a ladder that worked without it.
+        return None
 
 
 def _read_ban_rows_separately(masked_img, expected_positions):
