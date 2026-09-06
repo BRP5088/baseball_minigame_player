@@ -66,11 +66,10 @@ no added variance. **Measure the whole thing before optimising any part of it.**
 
 Any proposal of that shape is a rediscovery unless it brings new evidence.
 
-**`LEG_TURN_TOLERANCE` is deliberately NOT that shape**, which is why it remains
-the one in-leg idea worth testing. It adds no chunks and does not steer while
-walking. The leg already contains N turn-then-walk steps; tightening the
-tolerance only makes turns that are currently NO-OPS actually execute — same
-structure, same number of accelerations, same distance. See OPEN-3 in CLAUDE.md.
+**`LEG_TURN_TOLERANCE` was deliberately NOT that shape** — it adds no chunks and
+does not steer while walking — which is why it survived as the one in-leg idea
+worth testing. **It died on 2026-09-05 without ever being run, and it is the only
+entry here killed by arithmetic rather than by trials.** See the row below.
 
 ---
 
@@ -91,6 +90,22 @@ structure, same number of accelerations, same distance. See OPEN-3 in CLAUDE.md.
 - **Any n=3 A/B.** Power 0.00 here. Ten per arm, interleaved, or do not write it
   up as a result.
 
+
+## Cancelled before it ran (2026-09-05) — `LEG_TURN_TOLERANCE`
+
+| Change | Why it was cancelled | Cost avoided |
+|---|---|---|
+| **Tightening `LEG_TURN_TOLERANCE` below `slow_traverse.TURN_TOLERANCE = 4.0`**, so that the mid-leg turns currently discarded as NO-OPS actually execute. The mechanism was verified and this was billed as "the highest-value navigation experiment available". | The mechanism IS real — from the two live traces at `graph_walk.py:1339-1340`, the failed attempt walked `portrait_room -> bar_pool_room` at a spread of **0.00 deg** against a commanded 6.59. But integrating both traces, **they end 0.0021 walk-units apart on a 0.7203-unit leg**, and the flat one was the MORE faithful to the recording. Across all five legs the tolerance costs **0.37 / 2.63 / 0.27 / 2.32 / 0.83 %** of leg displacement — and **6.79% worst-case** on the worst leg once the entry offset the tolerance also permits is priced in (corrected on review; the first pass modelled only the discarded turns). Either way the project's own leg-distance pin accepts 15%, the shortfall that genuinely broke the jukebox leg was 68%, and tightening 4.0 -> 1.0 buys **0.258 walk-units over the whole route** against that 0.703-unit shortfall. Separately, `cam` shows the "recorded curve" is the human's LEFT THUMB: **\|delta cam\| exceeds 4 deg on 1 of 64 transitions, \|delta bearing\| on 23 of 64** — and `walk_link` passes `lx = 0.0`, so the executor cannot strafe and would be turning the camera to chase that jitter. | **20 trials, ~2 h of console.** At 338 s/trial and a 0.60 baseline, detecting +2 points at 80% power needs 9,337 trials per arm. 10/arm can see about +30 points. The A/B could only ever have returned a meaningless null. |
+
+**The lesson is new to this file.** Every other row here was killed by trials.
+This one was killed by asking, before booking the console, *how large can the
+effect possibly be* — bounding it from the recordings alone. The bound took an
+afternoon offline and is pinned by
+`tests/routing/test_leg_curve_is_stick_not_camera.py`. Two of the rows above
+(`STALL_CHANGE`, the reference pose) would have survived that question; several
+would not.
+
+---
 
 ## CORRECTION 2026-09-05 — the re-record row was not a null, it was a regression
 

@@ -94,13 +94,22 @@ h = gw.reference_heading("portrait_room")
 gw._REF_HEADING.clear()
 check("the reference frame carries a readable heading", h is not None)
 # Pinned as a literal: comparing it to itself would pass for any value.
-check("and it is the measured 1.39 degrees", h is not None and abs(h - 1.39) < 0.05)
+#
+# 1.39 -> 1.47 on 2026-09-05, when compass.read_bearing gained REQUIRE_TWO_LETTERS
+# and POOL_THRESHOLDS. The reference frame is unchanged; the READER is. Measured
+# on the same file both ways: portrait_room 1.38936 -> 1.47248, bar_pool_room
+# 288.092 -> 288.157, bar_jukebox 1.08247 -> 1.00441 — all under a tenth of a
+# degree, which is what you expect when a rule that rejects single-letter reads
+# meets a frame that already had two. The value is updated rather than the
+# tolerance widened: a band loose enough to hold both would be loose enough to
+# hide a real drift, and this constant exists to catch drift.
+check("and it is the measured 1.47 degrees", h is not None and abs(h - 1.47) < 0.05)
 
 # --- the yaw must actually be nulled BEFORE measuring ---------------------
 turned, log = run()
 check("align_at_node turns before measuring", len(turned) == 1)
 check("and it turns to the REFERENCE's heading, not the leg's bearing",
-      turned and abs(turned[0][0] - 1.39) < 0.05)
+      turned and abs(turned[0][0] - 1.47) < 0.05)
 check("and it says so", "yaw nulled" in log)
 
 # THE DEFECT THE OLD TEST COULD NOT SEE. align_at_node omitted `tolerance`, so

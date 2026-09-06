@@ -21,7 +21,9 @@ few seconds), then auto-detects the fresh hand and resumes. If you
 want the walk-and-pay step automated too, that's worth tackling
 separately once this core loop is proven reliable over real games.
 
-Requires: pip install pyautogui anthropic pytesseract numpy Pillow
+Requires: pip install pyautogui anthropic tesserocr pytesseract numpy Pillow
+(tesserocr is what the local reads actually use; without it every one of them
+falls back to spawning a tesseract process — see _ocr_text)
 Requires: PERSONAL_ANTHROPIC_API_KEY set in your environment.
 Optional (audit-only local OCR): a Python 3.11 venv at ./paddle_venv with
   paddlepaddle + paddleocr — see hand_digit_reader.py.
@@ -43,6 +45,10 @@ import time
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 import pyautogui
+import ocr_glyphs
+# Kept, and still imported at the top: _ocr_text falls back to it when the
+# in-process reader cannot start, and that fallback must not be the first thing
+# that discovers pytesseract is missing.
 import pytesseract
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
@@ -73,6 +79,58 @@ import env_loader as _env_loader
 _env_loader.load()          # .env if present; the shell still wins
 
 _API_KEY = os.environ["PERSONAL_ANTHROPIC_API_KEY"]
+
+
+# --- Local OCR: in process, no subprocess, no temp file (OPEN-12) ----------
+#
+# Every local read on this file used to be pytesseract, which spawns a
+# `tesseract` process per call and passes the image through a TEMP FILE. Two
+# separate costs, and the second is the one that hurt:
+#
+#   * ~193ms a call against ~79ms through the Tesseract C API in process;
+#   * the temp file itself. This is a work machine running Sophos, which scans
+#     that file as it is written and again as it is unlinked. Six
+#     pytesseract-heavy tests intermittently blew the suite's 300s ceiling and
+#     a faulthandler dump caught them stopped inside pytesseract.cleanup,
+#     unlinking exactly that file. ocr_glyphs writes no temp file at all, so
+#     the migration removes the whole class of stall rather than 114ms of it.
+#
+# What it does NOT do is change the question. Same PSM, same whitelist, same
+# already-preprocessed image; ocr_glyphs.tesseract_config builds the same
+# config string the fallback passes, from one definition, so the two cannot
+# drift into asking different things.
+def _ocr_text(image, psm, whitelist=None):
+    """Local OCR of an already-preprocessed crop. Returns tesseract's raw text.
+
+    Raw, INCLUDING trailing newlines: ocr_scoreboard splits this into lines and
+    a changed terminator changes the split. Callers that want it tidy strip it
+    themselves, exactly as they did when this was a pytesseract call.
+
+    Falls back to pytesseract if the in-process reader is unavailable, and says
+    so ONCE. The warning has to spell out the combination, because it is the
+    one that otherwise goes untraced: the answers stay RIGHT and the run gets
+    slower and starts stalling in the AV. Nothing downstream looks broken, so a
+    reader profiling it would blame the console, the network or the walk.
+    """
+    try:
+        name = ocr_glyphs.backend()
+        if name == "tesserocr":
+            return ocr_glyphs.image_to_text(image, psm=psm, whitelist=whitelist)
+        why = (f"ocr_glyphs selected the {name!r} backend, which still spawns "
+               f"a tesseract process per call")
+    except Exception as e:                       # import, tessdata, API init
+        why = f"{type(e).__name__}: {e}"
+    _warn_once(
+        f"WARNING: the in-process OCR reader is unavailable ({why}) — every "
+        f"local read for the rest of this process (ban-grid card names, the "
+        f"scoreboard, runner banners, the ban counter) falls back to "
+        f"pytesseract. THE ANSWERS STAY CORRECT, so nothing downstream will "
+        f"look broken; the run simply gets slower (measured ~79ms -> ~193ms a "
+        f"call) and regains the temp-file-per-call stall that Sophos turns "
+        f"into multi-second pauses inside pytesseract.cleanup. This is the "
+        f"only place that says why. (Warned once per process.)")
+    return pytesseract.image_to_string(
+        image, config=ocr_glyphs.tesseract_config(psm, whitelist))
 
 
 class _LazyAnthropic:
@@ -942,7 +1000,7 @@ def ocr_ban_card_name(card_img):
     strip = card_img.crop((0, int(h * y0), w, int(h * y1))).convert("L")
     strip = strip.resize((strip.width * 4, strip.height * 4))
     strip = ImageOps.invert(strip).point(lambda p: 255 if p > 190 else 0)
-    text = pytesseract.image_to_string(strip, config="--psm 6").strip()
+    text = _ocr_text(strip, ocr_glyphs.PSM_TEXT_BLOCK).strip()
     candidates = [" ".join(re.findall(r"[A-Za-z]{2,}", line)) for line in text.splitlines()]
     cleaned = max(candidates, key=len, default="")
 
@@ -1369,7 +1427,7 @@ def ocr_scoreboard(scoreboard_img) -> dict:
     time — cheaper to treat O/o/Q as 0 when parsing than to fight the
     OCR engine for a cleaner read.
     """
-    text = pytesseract.image_to_string(scoreboard_img, config="--psm 6")
+    text = _ocr_text(scoreboard_img, ocr_glyphs.PSM_TEXT_BLOCK)
     result = {"your": None, "opponent": None}
     for line in text.splitlines():
         line = line.strip()
@@ -3342,7 +3400,7 @@ def ocr_runner_card(base_crop_img):
     strip = base_crop_img.crop((0, int(h * y0), w, int(h * y1))).convert("L")
     strip = strip.resize((strip.width * 4, strip.height * 4))
     strip = ImageOps.invert(strip).point(lambda p: 255 if p > 190 else 0)
-    text = pytesseract.image_to_string(strip, config="--psm 6").strip()
+    text = _ocr_text(strip, ocr_glyphs.PSM_TEXT_BLOCK).strip()
 
     # The ribbon banner's pointed/notched tail ends often OCR as a
     # second (sometimes first) line of junk — stray punctuation-like
@@ -3473,8 +3531,8 @@ def read_ban_counter(img):
         c = c.resize((c.width * 4, c.height * 4), Image.LANCZOS)
         for thr in (110, 130, 150):
             b = c.point(lambda p, t=thr: 0 if p < t else 255)
-            text = pytesseract.image_to_string(
-                b, config="--psm 7 -c tessedit_char_whitelist=0123456789/").strip()
+            text = _ocr_text(b, ocr_glyphs.PSM_SINGLE_LINE,
+                             whitelist="0123456789/").strip()
             m = re.search(r"([0-3])\s*/\s*3", text)
             if m:
                 return int(m.group(1))

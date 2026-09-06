@@ -6,8 +6,10 @@ arrival averages THREE different failures, so a change that eliminates one
 class moves the overall rate by a third of that class, which at n=8-10 is
 invisible.
 
-The three classes are separable with signals already being captured. Measured
-over the eight archived frames in overnight/failframes/:
+The three classes are separable with signals already being captured. These are
+the eight archived frames in overnight/failframes_prerecovery/ (NOT
+overnight/failframes/, which this docstring named until 2026-09-05 and which
+holds four frames of a single class):
 
     kp     identify              bearing   class
     -------------------------------------------------------------------
@@ -16,6 +18,18 @@ over the eight archived frames in overnight/failframes/:
     1346   None (105/1.54)       101.8     OVERSHOT  out in an unmapped hallway
     1500   portrait_room 480     5.8       REGRESSED back at an earlier node
     1500   portrait_room 498     30.7      REGRESSED
+
+THAT TABLE IS APPEARANCE DATA, NOT A CLASS DISTRIBUTION, and the difference has
+already cost this project a premise. All eight frames were captured AFTER
+recover_to_node ran, so they describe where the recovery FAN left the character
+— six of the eight read bearing 98.1-105.8 against a leg commanded 2.1. They
+are genuine examples of what each class LOOKS like, which is what a classifier
+needs. They are not a sample of how route failures are distributed, and the
+4/2/2 split here must never be quoted as one: even taken at face value the 95%
+Wilson interval on 2/8 runs from 0.07 to 0.59.
+
+No live run has ever recorded a class census — checked 2026-09-05, zero
+"failures by signature" lines in any archived log.
 
 Report arrival BY CLASS, never just overall, or the next seven changes will
 also look flat.

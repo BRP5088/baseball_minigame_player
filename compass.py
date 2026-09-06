@@ -80,6 +80,35 @@ def _warn_once(key, msg):
     print(msg)
 
 
+def _warn_ocr_glyphs_unavailable(e):
+    """THE ANSWERS STAY RIGHT AND THE RUN GETS 8x SLOWER PER READ, which is
+    the worst combination to leave unannounced: the pytesseract sweep has the
+    longest record of being correct, so nothing downstream looks broken and
+    there is no failure to trace back. Measured 2026-09-04: 31ms per bearing
+    read through ocr_glyphs (in-process Tesseract C API) against 261ms through
+    the sweep, which spawns a tesseract subprocess per glyph per threshold.
+    read_bearing was 21% of a whole trial before that fix.
+
+    Without this a reader profiling a slow run would conclude the console, the
+    network or the walk had degraded. It is the OCR backend, and it says so
+    exactly once per process.
+
+    IT LIVES HERE, not inline, because read_bearing now has TWO places that
+    call ocr_glyphs -- the pooled threshold sweep and the single-threshold
+    path -- and the pooled one is the SHIPPED one. When the message existed
+    only on the unpooled branch it was unreachable in the shipped
+    configuration, and tests/rig/test_rig_diagnostics.py caught exactly that.
+    """
+    _warn_once(
+        "ocr_glyphs",
+        f"  [compass] the fast in-process glyph reader is unavailable "
+        f"({type(e).__name__}: {e}) — EVERY bearing read for the rest "
+        f"of this process falls back to the pytesseract sweep. "
+        f"Measured 31ms -> 261ms per read. Bearings stay CORRECT, so "
+        f"nothing will look broken; the run is simply ~8x slower per "
+        f"read and this is the only place that says why.")
+
+
 def fast_capture():
     """Grab JUST THE GAME, without focusing or sleeping. ~30ms vs ~800ms.
 
@@ -304,6 +333,17 @@ CONSENSUS_TOLERANCE_DEG = 15.0
 # background has risen to meet the old ones.
 BLOB_THRESHOLDS = (120, 140, 170, 200, 225, 240)
 
+# The ladder used when POOL_THRESHOLDS is on. Same range, twice the resolution,
+# and it reaches DOWN to 110. MEASURED: on
+# explore/20260904_152521_bar_area/00119.jpg the S at x=614.5 separates ONLY at
+# 110 (its N at 1192.2 separates from 110 to 155); on 00138.jpg the N at 624.5
+# is likewise 110-only; on 00053.jpg the W at 1311.5 is 110-only. Each of those
+# frames has a second letter that the shipped ladder simply never sees, so the
+# read ends up resting on one unchecked letter or abstaining outright.
+# Affordable because the sweep STOPS at two letters -- on a clean frame it is
+# one threshold, exactly as before.
+BLOB_THRESHOLDS_FINE = (110, 120, 130, 140, 155, 170, 185, 200, 215, 225, 240)
+
 
 def _candidate_blobs(gray_crop, threshold=120, min_width_frac=0.0110,
                      frame_width=REFERENCE_WIDTH):
@@ -447,8 +487,19 @@ def read_bearing(img):
     x0, x1 = int(vmid - vw * 0.235), int(vmid + vw * 0.235)
     y0, y1 = bar_y - band, bar_y + band
     glyph_top, glyph_bot = bar_y - glyph_band, bar_y + glyph_band
-    crop = img.convert("L").crop((x0, y0, x1, y1))
+    gray_full = img.convert("L")
+    crop = gray_full.crop((x0, y0, x1, y1))
     arr = np.asarray(crop, dtype=float)
+
+    # Fit the tick lattice once, here, while the geometry is in hand. It is
+    # pure numpy over one row band -- no recognition, no subprocess.
+    tick = (fit_tick_lattice(tick_peaks(gray_full, bar_y, x0, x1, band), w)
+            if USE_TICK_LATTICE else None)
+    if tick is not None and (tick[2] < TICK_MIN_INLIERS
+                             or tick[3] > tick[0] * TICK_MAX_RMS_FRAC
+                             or not (PITCH_MIN_FRAC * w <= 9.0 * tick[0]
+                                     <= PITCH_MAX_FRAC * w)):
+        tick = None
 
     # Geometry is DERIVED from the frame, not assumed. The hardcoded fractions
     # below are only a fallback: they are calibrated to one chiaki window
@@ -485,53 +536,104 @@ def read_bearing(img):
     # with only one letter found. At 140 and above both letters separate
     # cleanly. Take the first threshold that yields at least two candidates —
     # two is what fixes the scale, and one is never enough.
-    blobs = []
-    for _thr in BLOB_THRESHOLDS:
-        blobs = _candidate_blobs(arr, threshold=_thr, frame_width=w)
-        if len(blobs) >= 2:
-            break
+    # STOP ON TWO LETTERS, NOT ON TWO BLOBS. The old rule took the first
+    # threshold that produced two candidate BLOBS and never looked further, so
+    # a threshold that yields two blobs of which only one is a letter ended the
+    # search with a single unchecked reading -- and a single unchecked reading
+    # is where every one of the 116 measured confidently-wrong bearings came
+    # from. The letters that would have contradicted it are often right there
+    # at another threshold: measured on
+    # explore/20260904_152521_bar_area/00119.jpg and 00138.jpg, the full ladder
+    # finds S and N, and the first-two-blobs rule finds neither.
+    #
+    # The extra cost is paid only when the early threshold did NOT settle it,
+    # and it is one batched in-process OCR call per extra threshold, not a
+    # subprocess.
+    gray = img.convert("L")
 
-    crops, centres = [], []
-    for a, b in blobs:
-        cx = x0 + (a + b) / 2
-        crops.append(img.convert("L").crop(
-            (int(cx - half), glyph_top, int(cx + half), glyph_bot)))
-        centres.append(cx)
+    def _cut(blobs):
+        crops, centres = [], []
+        for a, b in blobs:
+            cx = x0 + (a + b) / 2
+            crops.append(gray.crop((int(cx - half), glyph_top,
+                                    int(cx + half), glyph_bot)))
+            centres.append(cx)
+        return crops, centres
 
-    if crops:
+    # DID THE FAST READER ACTUALLY RUN? An abstention from ocr_glyphs and a
+    # crash inside it look identical downstream — both leave `readings` empty —
+    # and only one is worth ~5s of pytesseract subprocesses to double-check.
+    # Measured 2026-09-05 over 24 archived in-the-bar frames: gating this took
+    # read_bearing from 5113ms to 55ms per frame while losing NOT ONE read.
+    # Set in BOTH branches, because POOL_THRESHOLDS decides which one calls the
+    # reader and it ships True.
+    fast_reader_ran = False
+    blobs, crops, centres = [], [], []
+    if POOL_THRESHOLDS:
+        pooled = {}
+        for _thr in BLOB_THRESHOLDS_FINE:
+            got = _candidate_blobs(arr, threshold=_thr, frame_width=w)
+            cs, cx_s = _cut(got)
+            try:
+                import ocr_glyphs
+                # SET THE FLAG ONLY WHEN recognise() WAS ACTUALLY CALLED. The
+                # `if cs else []` short-circuit means a threshold that finds no
+                # blobs never reaches the reader — and setting the flag there
+                # claimed the fast reader had run when nothing had, which
+                # silently disabled the pytesseract fallback for the whole
+                # frame. Caught by test_compass_no_duplicate_ocr's control,
+                # which exists because a build that simply deleted the fallback
+                # would otherwise look identical.
+                if cs:
+                    got_letters = ocr_glyphs.recognise(cs)
+                    fast_reader_ran = True
+                else:
+                    got_letters = []
+            except Exception as e:
+                _warn_ocr_glyphs_unavailable(e)
+                got_letters = [None] * len(cs)
+            for cx, crop, letter in zip(cx_s, cs, got_letters):
+                key = round(cx / max(3.0, w * 0.004))
+                if key not in pooled or (pooled[key][2] is None
+                                         and letter is not None):
+                    pooled[key] = (cx, crop, letter)
+            named = {v[2] for v in pooled.values() if v[2] in _BEARING}
+            if len(named) >= 2:
+                break
+        for cx, crop, letter in sorted(pooled.values()):
+            centres.append(cx)
+            crops.append(crop)
+            if letter in _BEARING:
+                readings.append((cx, letter))
+    else:
+        for _thr in BLOB_THRESHOLDS:
+            blobs = _candidate_blobs(arr, threshold=_thr, frame_width=w)
+            if len(blobs) >= 2:
+                break
+        crops, centres = _cut(blobs)
+
+    if crops and not POOL_THRESHOLDS:
         try:
             import ocr_glyphs
             letters = ocr_glyphs.recognise(crops)
+            fast_reader_ran = True
         except Exception as e:
-            # THE ANSWERS STAY RIGHT AND THE RUN GETS 8x SLOWER PER READ, which
-            # is the worst combination to leave unannounced: the pytesseract
-            # sweep below has the longest record of being correct, so nothing
-            # downstream looks broken and there is no failure to trace back.
-            # Measured 2026-09-04: 31ms per bearing read through ocr_glyphs
-            # (in-process Tesseract C API) against 261ms through the sweep,
-            # which spawns a tesseract subprocess per glyph per threshold.
-            # read_bearing was 21% of a whole trial before that fix.
-            #
-            # Without this line a reader profiling a slow run would conclude
-            # the console, the network or the walk had degraded. It is the OCR
-            # backend, and it says so exactly once per process.
-            _warn_once(
-                "ocr_glyphs",
-                f"  [compass] the fast in-process glyph reader is unavailable "
-                f"({type(e).__name__}: {e}) — EVERY bearing read for the rest "
-                f"of this process falls back to the pytesseract sweep. "
-                f"Measured 31ms -> 261ms per read. Bearings stay CORRECT, so "
-                f"nothing will look broken; the run is simply ~8x slower per "
-                f"read and this is the only place that says why.")
+            _warn_ocr_glyphs_unavailable(e)
             letters = [None] * len(crops)
         for cx, letter in zip(centres, letters):
             if letter in _BEARING:
                 readings.append((cx, letter))
 
-    if not readings and crops:
-        # Fall back to the original per-blob sweep. Slow, but it has the
-        # longest record of being correct, and abstaining on a frame the old
-        # code could read would be a regression.
+    if not readings and crops and not fast_reader_ran:
+        # ONLY WHEN THE FAST READER COULD NOT RUN AT ALL. This was
+        # `if not readings and crops`, which also fired when ocr_glyphs RAN and
+        # abstained — re-asking tesseract the identical question through a ~50x
+        # slower invocation, so it could only repeat the abstention.
+        # Measured on 24 in-the-bar frames: 5113ms/frame -> 55ms/frame, 23/24
+        # read either way. The fallback cost five seconds a frame to recover
+        # nothing, and walk_steps.read_heading RETRIES up to four times.
+        # Kept for the case it was written for: ocr_glyphs missing or broken,
+        # where `letters` is a row of Nones that nothing computed.
         for cx, glyph in zip(centres, crops):
             g6 = glyph.resize((glyph.width * 6, glyph.height * 6), Image.LANCZOS)
             for level in (110, 140, 170, 90):
@@ -587,7 +689,24 @@ def read_bearing(img):
     # never hit (10 of 17 frames abstained). The reticle is the view centre —
     # it moves only when the window actually moves.
     geom = (w, h, round(centre_x / 6.0), round(vb[2] / 6.0))
-    if spans:
+    if tick is not None:
+        # THE TICKS SETTLE THE SCALE BEFORE THE LETTERS GET A VOTE, and that
+        # includes what goes into the cache. Measured on this very corpus: the
+        # letter-derived path wrote 174.25 px/90deg for 1400x787 frames whose
+        # true pitch is 212.5 -- a bad pair, self-consistent, and 0.1245 of the
+        # frame width so it sailed through the plausibility gate below. Once
+        # written it is reused by every one-letter frame at that geometry.
+        # A pitch measured from marks nothing has to recognise cannot be
+        # poisoned that way.
+        pitch = 9.0 * tick[0]
+        # ONCE PER GEOMETRY. The tick fit is re-derived per frame, so `pitch`
+        # differs in the low decimals every time and `!= pitch` wrote the file
+        # on essentially every read. Same reasoning as the spans branch below.
+        known = geom in _SCALE_CACHE
+        _SCALE_CACHE[geom] = pitch
+        if not known:
+            _save_scale_cache()
+    elif spans:
         candidate = float(np.median(spans))
         # A derived scale must be PLAUSIBLE, not merely self-consistent.
         # Measured, the bar runs ~0.15 of the frame width per 90 degrees
@@ -602,8 +721,16 @@ def read_bearing(img):
             pitch = _SCALE_CACHE[geom]
         else:
             return None
-        if _SCALE_CACHE.get(geom) != pitch:
-            _SCALE_CACHE[geom] = pitch
+        # ONCE PER GEOMETRY, NOT ONCE PER FRAME. `pitch` is re-derived from
+        # this frame's blob centres, so it practically never equals the stored
+        # float: 16 of 26 archived reads wrote the file, all under ONE key. ~9ms
+        # a write (n=60), so ~0.4s of an 85.6s trial — kept because it is a
+        # strictly removed disk write, not because it is worth a percent. No
+        # threshold: a moved window makes a different `geom`, absent, written at
+        # once.
+        known = geom in _SCALE_CACHE
+        _SCALE_CACHE[geom] = pitch
+        if not known:
             _save_scale_cache()
     elif geom in _SCALE_CACHE:
         pitch = _SCALE_CACHE[geom]
@@ -613,10 +740,170 @@ def read_bearing(img):
     readings = spacing_consistent(readings, pitch)
     if not readings:
         return None
+    if REQUIRE_TWO_LETTERS and len(readings) < 2:
+        # ONE LETTER CANNOT CORROBORATE ITSELF, and the cost of trusting it is
+        # not a small error: a letter misread as the one opposite is exactly
+        # 180 degrees, and the ticks cannot see it because 180 is a whole
+        # number of tick spacings. MEASURED on
+        # demos/walk_20260827_214446/f_0073.40.jpg -- the only letter the blob
+        # sweep recognises is an E at 711.5 read as 'W', and the frame reports
+        # 264.9 where the truth is 84.8.
+        #
+        # This used to be unaffordable: two letters were the only way to
+        # measure the SCALE, and demanding them took the logged frames from
+        # 17/17 readable to 7/17. The ticks supply the scale now, so the only
+        # thing a second letter is being asked for is the identity check.
+        return None
     degs = [_BEARING[letter] + (centre_x - cx) / pitch * 90.0
             for cx, letter in readings]
 
+    if tick is not None:
+        # SNAP TO THE LATTICE. A blob centroid wanders a few px -- at 212-292
+        # px per 90 degrees that is about a degree of pure measurement noise --
+        # while the lattice is fitted to 0.2px. So take the fine part from the
+        # ticks and let each letter choose only its multiple of 10 degrees.
+        phase = tick_phase_deg(centre_x, tick[0], tick[1])
+        snapped = [(10.0 * round((d0 - phase) / 10.0) + phase) % 360.0
+                   for d0 in degs]
+        # A letter sitting BETWEEN two decades has not chosen one; its snap is
+        # a coin toss and the frame is not readable.
+        if any(abs(angular_error(a, b)) > TICK_SNAP_MAX_DEG
+               for a, b in zip(degs, snapped)):
+            return None
+        degs = snapped
+
     return _mean_circular(consensus(degs))
+
+
+# --- The tick lattice ------------------------------------------------------
+# The bar carries a tick every 10 degrees as well as the four letters, and the
+# ticks are the part of it that CANNOT be misrecognised: they are identical
+# marks, so all that is ever asked of them is where they are.
+#
+# MEASURED, explore/20260904_152521_bar_area/00001.jpg (1920 wide). The letters
+# stand at S 615.0, W 906.4, N 1198.0 -- 291.5px apart. The marks between S and
+# W are 663.3 695.6 728.3 760.6 793.1 825.5 858.1: seven of them, spaced 32.3
+# to 32.7, with 48.3px from the letter to the first. 48.3 is 1.5 spacings, so
+# 1.5 + 6 + 1.5 = 9 spacings span 90 degrees, THE TICKS SIT AT ODD MULTIPLES OF
+# 5 DEGREES, and a letter sits half a spacing off the tick lattice. (The two
+# ticks either side of a letter are hidden under its circle, which is why seven
+# show and not eight.)
+#
+# Fitted that way the lattice gives 9d = 291.55 against the 291.5 the letters
+# measure -- 0.017% -- at an rms of 0.200px, and it gives it from marks that no
+# recogniser ever has to identify. Two things follow, and the project has paid
+# for both:
+#
+#   * THE SCALE NO LONGER NEEDS TWO LETTERS. PITCH_PX_PER_90 is calibrated to
+#     one window size and using it on a moved window put a heading 29 degrees
+#     out; requiring two letters instead took the logged frames from 17/17
+#     readable to 7/17. The ticks are a third answer that is neither.
+#   * THE FINE PART OF THE HEADING COMES FROM THE TICKS, so a letter only has
+#     to pick the right multiple of 10 degrees. Measured over 3628 archived
+#     frames, snapping to the lattice removed the blob-centroid jitter that had
+#     been rejecting 316 frames as "letters disagree": it fell to 5.
+#
+# THIS IS NOT THE BAR CORRELATION THAT WAS TRIED AND REVERTED. That aliased
+# because the ticks repeat every 10 degrees and it had nothing to break the
+# ambiguity -- it reported -80 for a press that moved +38. Here the ticks are
+# only ever asked for the sub-10-degree phase; the LETTERS choose the decade,
+# and a frame with no letter still abstains.
+# THREE SWITCHES, so each part of this can be measured on its own. The
+# defaults are the settings measured best over 2571 archived frames with
+# established ground truth -- see tests/routing/test_compass_accuracy.py and
+# test_fixtures/compass/.
+SIGNED_SPACING = True        # the letters' ORDER is evidence, not just the gap
+POOL_THRESHOLDS = True       # keep sweeping until TWO letters, not two blobs
+USE_TICK_LATTICE = True      # take the scale and the fine part from the ticks
+REQUIRE_TWO_LETTERS = True   # one letter cannot corroborate its own identity
+
+TICK_MIN_INLIERS = 12          # marks that must sit on the fitted lattice
+TICK_MAX_RMS_FRAC = 0.030      # fit rms, as a fraction of the tick spacing
+TICK_SNAP_MAX_DEG = 3.0        # how far a letter may be from its snapped value
+
+
+def tick_peaks(gray, bar_y, x0, x1, band):
+    """Column centres of everything standing ABOVE the bar's line.
+
+    The ticks do not cross the line, so a band above it holds ticks, the tops
+    of the letter circles, and whatever scenery is bright there. Scored against
+    a local background rather than an absolute level, because the strip is
+    drawn over the scene and the scene's brightness is not ours to choose.
+    """
+    top, bot = bar_y - int(band * 0.75), bar_y - int(band * 0.25)
+    if bot <= top or top < 0:
+        return []
+    col = np.asarray(gray, dtype=float)[top:bot, x0:x1].mean(axis=0)
+    k = max(9, int((x1 - x0) * 0.045)) | 1
+    sig = col - np.convolve(col, np.ones(k) / k, mode="same")
+    thr = max(5.0, float(np.percentile(sig, 92)) * 0.45)
+    peaks, i, n = [], 0, len(sig)
+    while i < n:
+        if sig[i] > thr:
+            j = i
+            while j < n and sig[j] > thr:
+                j += 1
+            seg = sig[i:j]
+            if seg.size:
+                peaks.append(i + float(np.average(np.arange(seg.size),
+                                                  weights=seg)) + x0)
+            i = j
+        else:
+            i += 1
+    return peaks
+
+
+def fit_tick_lattice(peaks, w):
+    """(spacing, phase_x, inliers, rms) for the 10-degree tick train, or None.
+
+    A LETTER'S OWN STROKES ARE NOT TICKS. They arrive as tight clusters 6-13px
+    apart, and left in they drag the fit: the spacing came out 32.254 instead
+    of 32.389, every letter then measured half a spacing plus 2px off the
+    lattice, and 1894 of 3628 frames were rejected for it. A tick is isolated
+    by construction, so dropping any peak with a neighbour closer than half a
+    spacing removes the letters and nothing else.
+    """
+    xs = np.asarray(sorted(peaks), dtype=float)
+    if xs.size < 6:
+        return None
+    gaps = np.diff(xs)
+    plausible = gaps[(gaps > w * 0.012) & (gaps < w * 0.026)]
+    if plausible.size < 4:
+        return None
+    d0 = float(np.median(plausible))
+    nn = np.full(xs.size, np.inf)
+    nn[1:] = np.minimum(nn[1:], xs[1:] - xs[:-1])
+    nn[:-1] = np.minimum(nn[:-1], xs[1:] - xs[:-1])
+    xs = xs[nn > 0.5 * d0]
+    if xs.size < 6:
+        return None
+    d, c = d0, float(xs[0])
+    for _ in range(6):
+        k = np.round((xs - c) / d)
+        sol, *_ = np.linalg.lstsq(np.vstack([k, np.ones_like(k)]).T, xs,
+                                  rcond=None)
+        d, c = float(sol[0]), float(sol[1])
+    inl = np.abs(xs - (np.round((xs - c) / d) * d + c)) < d * 0.15
+    if inl.sum() < 6:
+        return None
+    xs = xs[inl]
+    for _ in range(3):
+        k = np.round((xs - c) / d)
+        sol, *_ = np.linalg.lstsq(np.vstack([k, np.ones_like(k)]).T, xs,
+                                  rcond=None)
+        d, c = float(sol[0]), float(sol[1])
+    rms = float(np.sqrt(((xs - (np.round((xs - c) / d) * d + c)) ** 2).mean()))
+    return d, c, int(xs.size), rms
+
+
+def tick_phase_deg(centre_x, d, c):
+    """Heading modulo 10 degrees, from the ticks alone -- no letter involved.
+
+    A tick at bearing b sits at x = centre_x - (H - b)/90 * 9d, and the ticks
+    are the odd multiples of 5, so the fitted phase c satisfies
+    c = centre_x - (H - 5)/10 * d  (mod d).
+    """
+    return (5.0 + (centre_x - c) / d * 10.0) % 10.0
 
 
 def _mean_circular(vals):
@@ -638,8 +925,13 @@ def spacing_consistent(readings, pitch, tol_frac=0.28):
     answer with confidence.
 
     Spacing breaks the tie because a swapped letter implies a gap the pixels do
-    not show: S and W at 295px is consistent, N and W at 295px is impossible
+    not show: S then W at 295px is consistent, N then W at 295px is impossible
     (that pair needs 885px).
+
+    THE GAP IS SIGNED. Bearing increases to the RIGHT along the bar, so "S then
+    W" and "W then S" are different claims about the same 295px, and only one
+    of them is possible. Comparing unsigned magnitudes accepted both, which let
+    a misread letter corroborate itself -- see the comment on the check below.
     """
     if len(readings) < 2 or not pitch:
         return list(readings)
@@ -651,11 +943,45 @@ def spacing_consistent(readings, pitch, tol_frac=0.28):
                 continue
             cxa, la = readings[i]
             cxb, lb = readings[j]
-            want = abs(angular_error(_BEARING[la], _BEARING[lb])) / 90.0 * pitch
-            got = abs(cxb - cxa)
-            # same letter twice: any gap is a repeat of one ring, skip the pair
+            # SIGNED, because the ORDER of the letters is half the evidence and
+            # taking abs() threw it away. Going RIGHT along the bar the bearing
+            # INCREASES (cx = centre - (H - B)/90 * pitch), so from a letter at
+            # bearing Ba the letter at Bb sits (Bb - Ba) mod 360 degrees to its
+            # RIGHT -- one, two or three pitches, never zero and never left.
+            #
+            # WHAT IT REJECTS: 'W' at 713.5 and 'S' at 920.5, 207px apart at a
+            # 207px pitch. Unsigned, |270-180| = 90 degrees wants exactly 207px
+            # and the pair PASSES -- a letter misread as the one 180 degrees
+            # away corroborates itself against a correct neighbour. Signed, W
+            # left of S needs +3 pitches (621px) and the pair is impossible.
+            #
+            # ITS STANDING, CORRECTED 2026-09-05. It was first written up as
+            # "a hole that has NOT yet fired", on the grounds that adding it
+            # to the OLD reader changed no answer over 2571 archived frames:
+            # there, every confidently wrong read came from a frame where only
+            # ONE letter was ever recognised, so this check was never reached.
+            # That is true of the baseline and FALSE of what ships. Measured
+            # on test_fixtures/compass/wrong_one_letter_180.jpg with
+            # POOL_THRESHOLDS on, which is the shipped setting:
+            #
+            #     SIGNED_SPACING = True   -> abstains
+            #     SIGNED_SPACING = False  -> 264.81, truth 84.82
+            #
+            # Pooling goes and finds a second blob, and unsigned the pair
+            # corroborates the misread letter 180 degrees away -- exactly the
+            # failure this check describes. Do not drop it for a leaner diff.
             if la == lb:
+                # same letter twice: any gap is a repeat of one ring, or one of
+                # them is a misread. Either way the pair carries no spacing
+                # evidence, so skip it.
                 continue
+            if SIGNED_SPACING:
+                want = ((_BEARING[lb] - _BEARING[la]) % 360.0) / 90.0 * pitch
+                got = cxb - cxa
+            else:
+                want = (abs(angular_error(_BEARING[la], _BEARING[lb]))
+                        / 90.0 * pitch)
+                got = abs(cxb - cxa)
             if abs(got - want) <= tol_frac * max(pitch, 1.0):
                 group.append(readings[j])
         if len(group) > len(best):

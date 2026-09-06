@@ -1,0 +1,206 @@
+{
+ "what": "Labelled compass frames. truth_deg is the heading at the view centre, in degrees, 0=N 90=E.",
+ "how_truth_was_established": {
+  "L+T": "Two or more distinct letters recognised over the full threshold ladder, at a pitch measured from the TICK LATTICE rather than from the letters, all implying the same heading once snapped to the tick phase.",
+  "L+T+R": "As L+T, and the frame also sits inside a run of frames over which the recorded controller never moved the right stick out of its deadzone (demos/*/input.json, ~50Hz, on the frames' own time base). Only the right stick turns the camera, so the heading cannot have changed across such a run, and every frame in it must read the same. 725 of 726 letter-truth frames inside such a run agreed with their run to within 3 degrees.",
+  "R": "No letters could be established on this frame, but it lies inside such a run and takes the run's heading."
+ },
+ "frames": [
+  {
+   "file": "wrong_one_letter_180.jpg",
+   "source": "demos/walk_20260827_214446/f_0073.40.jpg",
+   "size": [
+    1400,
+    787
+   ],
+   "truth_deg": 84.818,
+   "truth_source": "R",
+   "letters_found": null,
+   "baseline_read": 264.9176,
+   "baseline_letters": [
+    [
+     711.5,
+     "W"
+    ]
+   ],
+   "why": "THE REGRESSION ANCHOR. The only letter the blob sweep recognises at the first qualifying threshold is the E at 711.5, read as 'W'. Baseline reports 264.92 against a truth of 84.82 -- 179.9 degrees wrong, and stable enough that the next frame agrees with it."
+  },
+  {
+   "file": "wrong_one_letter_scenery.jpg",
+   "source": "demos/walk_20260827_214446/f_0028.93.jpg",
+   "size": [
+    1400,
+    787
+   ],
+   "truth_deg": 84.818,
+   "truth_source": "R",
+   "letters_found": null,
+   "baseline_read": 233.0023,
+   "baseline_letters": [
+    [
+     572.0,
+     "S"
+    ]
+   ],
+   "why": "A blob at 572.0 that is not a letter at all (the letters are at 499.5, 711.7, 924.0) is read as 'S' and, being the only one, is believed: 233.00 against a truth of 84.82."
+  },
+  {
+   "file": "wrong_one_letter_quadrant.jpg",
+   "source": "demos/walk_20260827_214446/f_0035.53.jpg",
+   "size": [
+    1400,
+    787
+   ],
+   "truth_deg": 84.818,
+   "truth_source": "R",
+   "letters_found": null,
+   "baseline_read": 324.0,
+   "baseline_letters": [
+    [
+     572.0,
+     "W"
+    ]
+   ],
+   "why": "A third wrong value from the same static scene: the single letter used is a 'W' at 572.0 -- again a position where no letter stands -- giving 324.00 against a truth of 84.82. The same frame carries a correct E at 711.5 and S at 920.5, so it proves its own label without leaning on the propagated segment heading."
+  },
+  {
+   "file": "three_letters_1400.jpg",
+   "source": "demos/walk3_full_20260828_050731/f_0001.69.jpg",
+   "size": [
+    1400,
+    787
+   ],
+   "truth_deg": 87.011,
+   "truth_source": "L+T+R",
+   "letters_found": "NES",
+   "baseline_read": 86.8235,
+   "baseline_letters": [
+    [
+     494.5,
+     "N"
+    ],
+    [
+     707.0,
+     "E"
+    ],
+    [
+     919.5,
+     "S"
+    ]
+   ],
+   "why": "A clean three-letter frame at the demo capture size: N 494.8, E 706.8, S 919.5, tick spacing 23.61 so 9d = 212.5 -- the same pitch the letters measure."
+  },
+  {
+   "file": "three_letters_1920.jpg",
+   "source": "explore/20260904_152521_bar_area/00001.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 286.389,
+   "truth_source": "L+T",
+   "letters_found": "SWN",
+   "baseline_read": 286.3636,
+   "baseline_letters": [
+    [
+     906.5,
+     "W"
+    ],
+    [
+     1198.0,
+     "N"
+    ]
+   ],
+   "why": "The calibration frame for the tick geometry. S 615.0, W 906.4, N 1198.0; ticks 32.394 apart at rms 0.200px, so 9d = 291.55 against 291.5 from the letters, and each letter sits within 0.14px of a half-lattice node."
+  },
+  {
+   "file": "two_letters_1920.jpg",
+   "source": "explore/20260904_152521_bar_area/00050.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 23.986,
+   "truth_source": "L+T",
+   "letters_found": "NE",
+   "baseline_read": 23.928,
+   "baseline_letters": [
+    [
+     882.0,
+     "N"
+    ],
+    [
+     1173.5,
+     "E"
+    ]
+   ],
+   "why": "Two letters, N and E, at the live capture size."
+  },
+  {
+   "file": "abstains_but_readable_1920.jpg",
+   "source": "explore/20260904_152521_bar_area/00119.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 288.173,
+   "truth_source": "L+T",
+   "letters_found": "SN",
+   "baseline_read": null,
+   "baseline_letters": null,
+   "why": "read_bearing abstains; the full threshold sweep finds S and N and the tick lattice agrees. Recoverable coverage at the live geometry."
+  },
+  {
+   "file": "abstains_but_readable_1920_b.jpg",
+   "source": "explore/20260904_152521_bar_area/00138.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 103.53,
+   "truth_source": "L+T",
+   "letters_found": "NS",
+   "baseline_read": null,
+   "baseline_letters": null,
+   "why": "The other 1920x1080 frame read_bearing abstains on that has established truth."
+  },
+  {
+   "file": "one_letter_right_1920.jpg",
+   "source": "explore/20260904_152521_bar_area/00053.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 160.332,
+   "truth_source": "L+T",
+   "letters_found": "SW",
+   "baseline_read": 159.9303,
+   "baseline_letters": [
+    [
+     1023.5,
+     "S"
+    ]
+   ],
+   "why": "A single-letter read at the live geometry that is CORRECT (159.93 vs 160.33). This is what REQUIRE_TWO_LETTERS costs -- 10 such frames of 366 at 1920x1080, none of them wrong."
+  },
+  {
+   "file": "one_letter_right_1920_b.jpg",
+   "source": "explore/20260904_152521_bar_area/00065.jpg",
+   "size": [
+    1920,
+    1080
+   ],
+   "truth_deg": 343.313,
+   "truth_source": "L+T",
+   "letters_found": "WNE",
+   "baseline_read": 343.3276,
+   "baseline_letters": [
+    [
+     722.0,
+     "W"
+    ]
+   ],
+   "why": "Another correct single-letter read at the live geometry."
+  }
+ ]
+}

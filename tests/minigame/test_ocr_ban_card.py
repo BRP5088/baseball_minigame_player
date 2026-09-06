@@ -145,12 +145,19 @@ _probe = Image.new("L", (200, 300), 128)
 
 
 def _resolve(ocr_text):
-    real = orchestrator.pytesseract.image_to_string
-    orchestrator.pytesseract.image_to_string = lambda *a, **k: ocr_text
+    # Stub `_ocr_text`, NOT `pytesseract.image_to_string`. OPEN-12 moved the
+    # local reads onto the in-process Tesseract C API, and a stub left on
+    # pytesseract goes UNUSED rather than failing: ocr_ban_card_name then
+    # really OCRs the blank grey probe, reads nothing, and abstains. Every
+    # MUST_ABSTAIN case below would have passed for the wrong reason — the
+    # exact "a test that passes when the code is broken" shape CLAUDE.md warns
+    # about, and it is why MUST_RESOLVE is here to catch it from the other side.
+    real = orchestrator._ocr_text
+    orchestrator._ocr_text = lambda *a, **k: ocr_text
     try:
         return orchestrator.ocr_ban_card_name(_probe)
     finally:
-        orchestrator.pytesseract.image_to_string = real
+        orchestrator._ocr_text = real
 
 
 # Two-sided on purpose. MUST_ABSTAIN are plausible names NOT in the roster:

@@ -1,0 +1,772 @@
+{
+ "20260824_200520_984__bancard__r0c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "mt, oF\nFa weomk \u201c\n\\. JOHNNY ORAWERS $= /\n",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r0c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "| L.\n\\ MAMA JODYGAIN, \u00ab=F\n",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r0c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r0c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": ". oda\n4 -o. \u00e9\ni \\ J\n\\ JENNY JODYGAIN. = 7\n_\u2014 ~- _\u2014r\n",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r0c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "ws\n\\. DONNY MEKESZ = 7\n",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r1c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r1c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r1c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r1c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "\\ JOSHUADIAZ) ss /\n",
+  "whitelist": null
+ },
+ "20260824_200520_984__bancard__r1c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200520_984.jpg",
+  "text": "wt! 4, .\n\\ JUSTINYOUNG 7\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r0c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "NX\n\\ RUBESHARP /\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r0c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "A\n\naan\n\\ aUSTIN-CUR\u201dBUNZ 7\n_\u2014 - ie)\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r0c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r0c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "\\. WILLIAMBROWN =\nyy. wee\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r0c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "\\. JEREMIAH CURD 37\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r1c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "\\. MARIAN BUNZ-TWAROG 7\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r1c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "\\. JEDEDIAH WETTERS 7\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r1c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "- \\-\nrh eZ\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r1c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "\\.TIMMEH RATTYCUM = 7\n_\u2014 \u2014e\n",
+  "whitelist": null
+ },
+ "20260824_200601_124__bancard__r1c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200601_124.jpg",
+  "text": "Ld\ni.\" i\n\\ JOEJOOYGAIN, =A\n_\u2014 i;\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r0c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "TT a\n\\ PAPA JODY GAIN L\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r0c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "\\. oanige \u201cTHE RAT TA TRAN CRUZ Z\n_\u2014\u2014 ~\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r0c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r0c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "\\ JOEL BLUNT /\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r0c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "wo ee Doty \u2018 !\n\\. BARTHOLOMEW CREASLEY /\n:\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r1c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "a v\n\\. JAKE SAUCEPAN BLACK /\n=\u2014_\u2014 i\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r1c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "| eae |\n\\. MICKEY BROWN 7\n_\u2014 |\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r1c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": ": - \u2019 we - .\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r1c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": "nog . ~~ . . . ; . \u201c .\n",
+  "whitelist": null
+ },
+ "20260824_200604_139__bancard__r1c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/20260824_200604_139.jpg",
+  "text": ", \u2018 .\n. | . \u201caR . . . ie ,\nf\u201d\n",
+  "whitelist": null
+ },
+ "20260824_201103_128__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201103_128.jpg",
+  "text": "Yy \u00a3\n",
+  "whitelist": null
+ },
+ "20260824_201103_128__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201103_128.jpg",
+  "text": "I \\ J aa\n",
+  "whitelist": null
+ },
+ "20260824_201103_128__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201103_128.jpg",
+  "text": "XxX \u00a2 |\n",
+  "whitelist": null
+ },
+ "20260824_201103_128__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201103_128.jpg",
+  "text": "*\n4\n125\nJACK PEPPER 2 O 2\nOPPONENT 0 0 0\nROUND \u00b0\nDISCARDS +\n",
+  "whitelist": null
+ },
+ "20260824_201945_482__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201945_482.jpg",
+  "text": "i\n",
+  "whitelist": null
+ },
+ "20260824_201945_482__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201945_482.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260824_201945_482__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201945_482.jpg",
+  "text": "ba\n",
+  "whitelist": null
+ },
+ "20260824_201945_482__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/20260824_201945_482.jpg",
+  "text": "ad\na\n1258\nJACK PEPPER 2 O 2\nOPPONENT O 1 1\nROUND \u201c*eee\nDISCARDS + \u00ab+\n",
+  "whitelist": null
+ },
+ "20260824_202514_167__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_202514_167.jpg",
+  "text": "pe i\n",
+  "whitelist": null
+ },
+ "20260824_202514_167__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_202514_167.jpg",
+  "text": "\\ ee\n",
+  "whitelist": null
+ },
+ "20260824_202514_167__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_202514_167.jpg",
+  "text": "yo\n",
+  "whitelist": null
+ },
+ "20260824_202514_167__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/20260824_202514_167.jpg",
+  "text": "\u00bb\n=\n125\nJACK PEPPER O O O [>\nOPPONENT 0 0 0\nROUND +++\nDISCARDS \u00ab +\n",
+  "whitelist": null
+ },
+ "20260824_204106_408__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_204106_408.jpg",
+  "text": "Yy \u00a3\n",
+  "whitelist": null
+ },
+ "20260824_204106_408__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_204106_408.jpg",
+  "text": "Aw nN >\n",
+  "whitelist": null
+ },
+ "20260824_204106_408__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/20260824_204106_408.jpg",
+  "text": "yy\n",
+  "whitelist": null
+ },
+ "20260824_204106_408__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/20260824_204106_408.jpg",
+  "text": "9\n_\n125\nJACK PEPPER 1 O 1\nOPPONENT 0 0 0\nROUND -\nDISCARDS + +\n",
+  "whitelist": null
+ },
+ "20260826_133925_665__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133925_665__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133925_665__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133925_665__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "07/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133925_665__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "0/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133925_665__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133925_665.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "7\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "73\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133957_697__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133957_697.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "1/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "1/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_133958_816__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_133958_816.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "2/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134001_536__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134001_536.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "3/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260826_134004_720__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_counter/20260826_134004_720.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "07/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "0/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140309_081__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140309_081.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b0t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "0/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b0t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "0/3\n",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b0t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b1t110.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b1t130.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140315_271__bancounter__b1t150.png": {
+  "kind": "ban_counter",
+  "psm": 7,
+  "src": "test_fixtures/ban_scan/20260828_140315_271.jpg",
+  "text": "",
+  "whitelist": "0123456789/"
+ },
+ "20260828_140320_608__bancard__r0c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "\\. JOHNNY DRAWERS \u00a7=/\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r0c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "| Ve\n\\. MAMA JODY GAIN, = 7\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r0c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r0c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "\\. JENNY JODYGAIN. = 7\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r0c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "ueattis\nNNY MEKESZ\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r1c0.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r1c1.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r1c2.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "4 !\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r1c3.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "\\ SOSHUADIAZ.#\n",
+  "whitelist": null
+ },
+ "20260828_140320_608__bancard__r1c4.png": {
+  "kind": "ban_card",
+  "psm": 6,
+  "src": "test_fixtures/ban_ocr/20260828_140320_608.jpg",
+  "text": "a 1\n. !\n\\ JUSTINYOUNG 7\n",
+  "whitelist": null
+ },
+ "result__0__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/result__0.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "result__0__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/result__0.jpg",
+  "text": "a aa ae\n",
+  "whitelist": null
+ },
+ "result__0__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/result__0.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "result__0__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/screens/result__0.jpg",
+  "text": "LOUND re |\nDISCARDS\n\nas\n\n:\n\n= , a. FT\n",
+  "whitelist": null
+ },
+ "turn__0__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__0.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "turn__0__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__0.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "turn__0__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__0.jpg",
+  "text": "\u201c  OONMY HERETO = 7\n, \u2014 !\n",
+  "whitelist": null
+ },
+ "turn__0__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__0.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "turn__1__runner__first_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__1.jpg",
+  "text": "ae _\n",
+  "whitelist": null
+ },
+ "turn__1__runner__second_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__1.jpg",
+  "text": "a -\n",
+  "whitelist": null
+ },
+ "turn__1__runner__third_base.png": {
+  "kind": "runner",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__1.jpg",
+  "text": "",
+  "whitelist": null
+ },
+ "turn__1__scoreboard.png": {
+  "kind": "scoreboard",
+  "psm": 6,
+  "src": "test_fixtures/screens/turn__1.jpg",
+  "text": "loiseanos:. 9\n",
+  "whitelist": null
+ }
+}

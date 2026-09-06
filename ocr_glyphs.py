@@ -72,8 +72,18 @@ USAGE
 
 `glyph_crops` are the RAW crops as compass.read_bearing cuts them, BEFORE the
 6x upscale and thresholding — those are recognition steps and live in here.
+
+There is a second, separate entry point for WHOLE LINES AND BLOCKS of text —
+ban-grid card names, the scoreboard, runner banners, the ban counter:
+
+    text = ocr_glyphs.image_to_text(prepared, psm=6)                # a block
+    text = ocr_glyphs.image_to_text(prepared, psm=7, whitelist="0123456789/")
+
+That one takes an ALREADY-preprocessed image, because each of its callers has
+its own recipe tuned against real frames. See the WORD MODE section below.
 """
 
+import collections
 import os
 import shutil
 import subprocess
@@ -114,6 +124,23 @@ PSM_SINGLE_CHAR = 10
 # To get the parallelism back, build tesserocr with cysignals absent at build
 # time (its pyx compiles a no-op branch then) and re-measure. Do not simply
 # silence the warning.
+#
+# WORD MODE (added for OPEN-12) shares all of the above. It asks tesseract a
+# different QUESTION — a line or a block of text rather than one character —
+# but by the same route, in process, off the same handle cache. It deliberately
+# does NOT bring its own preprocessing: every word-mode caller in this project
+# already has preprocessing that was tuned against real frames and paid for by
+# live failures, and re-tuning it here would change the answers, which is the
+# one thing this module promises never to do.
+PSM_TEXT_BLOCK = 6      # tesseract's "assume a single uniform block of text"
+PSM_SINGLE_LINE = 7     # tesseract's "assume a single text line"
+
+# How many (psm, whitelist) handles one thread keeps open. Three is what this
+# codebase actually uses (glyphs at 10/NESW, names at 6/none, the ban counter
+# at 7/digits); the fourth is slack so that adding one caller does not silently
+# start thrashing Init.
+_MAX_APIS = 4
+
 _UNSET = object()
 _lock = threading.Lock()
 _backend = None
@@ -231,30 +258,56 @@ def _accept(txt, whitelist):
 
 # --- Backend: tesserocr (no subprocess at all) ------------------------------
 
-def _api(whitelist):
-    """A PyTessBaseAPI owned by, and reused by, the calling thread."""
-    from tesserocr import PyTessBaseAPI, PSM
-    cur = getattr(_local, "api", None)
-    if cur is not None and getattr(_local, "whitelist", None) == whitelist:
-        return cur
-    if cur is not None:
-        cur.End()
-    api = PyTessBaseAPI(path=_find_tessdata(), psm=PSM.SINGLE_CHAR)
-    api.SetVariable("tessedit_char_whitelist", whitelist)
-    _local.api = api
-    _local.whitelist = whitelist
+def _api(psm, whitelist):
+    """A PyTessBaseAPI owned by, and reused by, the calling thread.
+
+    KEYED ON (psm, whitelist), NOT ON WHITELIST ALONE. It used to be the
+    latter, back when this module only ever asked for PSM 10. Word mode reads
+    a name banner at PSM 6 and the ban counter at PSM 7, and both of those use
+    the whitelist differently from the glyph path — so with the old key a
+    SINGLE_CHAR handle would have been handed straight back to a caller asking
+    for a whole line of text, and returned one character of a player's name.
+    That is the exact shape this project keeps finding: a wrong answer that
+    looks like a working one.
+
+    Handles are CACHED, not swapped. Re-Init costs ~134ms against ~23ms warm,
+    and the ban screen alternates PSM 6 (card names) with PSM 7 (the counter),
+    so a single-slot cache would pay that on every alternation. The cache is
+    bounded because the key space is caller-supplied: exceeding _MAX_APIS ends
+    the least recently used handle rather than growing without limit.
+    """
+    from tesserocr import PyTessBaseAPI
+    apis = getattr(_local, "apis", None)
+    if apis is None:
+        apis = _local.apis = collections.OrderedDict()
+    key = (psm, whitelist)
+    if key in apis:
+        apis.move_to_end(key)
+        return apis[key]
+    api = PyTessBaseAPI(path=_find_tessdata(), psm=psm)
+    # Setting an EMPTY whitelist is how tesseract expresses "no whitelist", and
+    # it is what a fresh handle already has; writing it anyway keeps one code
+    # path and makes a recycled handle impossible to confuse with a fresh one.
+    api.SetVariable("tessedit_char_whitelist", whitelist or "")
+    apis[key] = api
+    while len(apis) > _MAX_APIS:
+        _, evicted = apis.popitem(last=False)
+        evicted.End()
     return api
 
 
-def ocr_prepared(image, whitelist="NESW"):
+def ocr_prepared(image, whitelist="NESW", psm=PSM_SINGLE_CHAR):
     """OCR ONE already-upscaled-and-thresholded image, in process.
 
     This is the exact substitute for a single pytesseract.image_to_string call
     and exists so a caller (or a test) can swap the OCR out at that call site
     without also taking over the preprocessing. recognise() is the interface
     to prefer; this is the seam.
+
+    Note it STRIPS. That is right for a single glyph and wrong for a block of
+    text, where the line structure is the answer — see image_to_text.
     """
-    api = _api(whitelist)
+    api = _api(psm, whitelist)
     api.SetImage(image)
     return api.GetUTF8Text().strip()
 
@@ -348,6 +401,76 @@ def _recognise_pytesseract(images, whitelist):
                 break
         out.append(got)
     return out
+
+
+# --- WORD MODE: whole lines and blocks, same in-process handle -------------
+#
+# WHY THIS EXISTS (OPEN-12). orchestrator.py read the ban-grid card names, the
+# scoreboard, the runner banners and the ban counter through pytesseract, which
+# spawns a `tesseract` process per call and hands it the image through a TEMP
+# FILE. On this machine that temp file is scanned by Sophos as it is written
+# and again as it is unlinked: six pytesseract-heavy tests intermittently blew
+# the suite's 300s ceiling, and a faulthandler dump caught them stopped inside
+# pytesseract.cleanup, unlinking that file. So the migration is not merely
+# ~114ms a call — it removes the temp file, and with it the whole stall.
+#
+# It changes HOW tesseract is invoked and nothing else: same PSM, same
+# whitelist, same image, same bytes back. The agreement evidence is in
+# tests/minigame/test_ocr_word_mode.py, which pins every word-mode call site's
+# real crops against what pytesseract returns for them.
+
+
+def tesseract_config(psm, whitelist=None):
+    """The `config=` string pytesseract needs for this (psm, whitelist).
+
+    One definition, so the fast path and the fallback cannot drift apart. A
+    fallback that quietly asks a DIFFERENT question is worse than no fallback:
+    it keeps answering, and the answers change.
+    """
+    cfg = f"--psm {psm}"
+    if whitelist:
+        cfg += f" -c tessedit_char_whitelist={whitelist}"
+    return cfg
+
+
+def _text_tesserocr(image, psm, whitelist):
+    api = _api(psm, whitelist)
+    api.SetImage(image)
+    return api.GetUTF8Text()
+
+
+def _text_pytesseract(image, psm, whitelist):
+    import pytesseract
+    return pytesseract.image_to_string(
+        image, config=tesseract_config(psm, whitelist))
+
+
+# "batch" exists for the GLYPH path, where one spawn can carry forty images.
+# Word mode gets one image per call, so batching has nothing to batch and the
+# CLI backend collapses onto plain pytesseract. Mapping it explicitly beats
+# leaving a KeyError for a backend selection that is otherwise perfectly valid.
+_WORD_BACKENDS = {
+    "tesserocr": _text_tesserocr,
+    "batch": _text_pytesseract,
+    "pytesseract": _text_pytesseract,
+}
+
+
+def image_to_text(image, psm=PSM_TEXT_BLOCK, whitelist=None):
+    """Read a line or block of text out of an ALREADY-PREPROCESSED image.
+
+    The drop-in for `pytesseract.image_to_string(image, config=...)`, returning
+    the same string for the same image — trailing newlines included, because
+    callers split it into lines and a missing terminator changes the split.
+    Nothing is stripped here for that reason; strip at the call site, as the
+    pytesseract callers already do.
+
+    `image` is whatever the caller has already upscaled, inverted and
+    thresholded. This function adds no preprocessing of its own on purpose:
+    each caller's recipe was tuned against real frames, and changing it would
+    change what the game does with the answer.
+    """
+    return _WORD_BACKENDS[backend()](image, psm, whitelist)
 
 
 _BACKENDS = {

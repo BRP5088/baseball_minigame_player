@@ -247,7 +247,7 @@ try:
     try:
         gw.go_to_node_verified = (
             lambda m, node, capture=None, read_heading=None, log=None,
-            attempts=3, shots=None: False)
+            attempts=3, shots=None, **_kw: False)
         r = gw.consecutive_arrivals(Map(), ROUTE, 1,
                                     capture=Rig(live_calls=10 ** 6),
                                     read_heading=lambda: 90.0,
@@ -260,7 +260,7 @@ try:
 
         gw.go_to_node_verified = (
             lambda m, node, capture=None, read_heading=None, log=None,
-            attempts=3, shots=None: True)
+            attempts=3, shots=None, **_kw: True)
         r = gw.consecutive_arrivals(Map(), ROUTE, 1,
                                     capture=Rig(live_calls=10 ** 6),
                                     read_heading=lambda: 90.0,
@@ -311,7 +311,7 @@ try:
         s = list(seq)
 
         def f(m, route, capture=None, read_heading=None, log=None, attempts=3,
-              shots=None):
+              shots=None, **_kw):
             arrived, measurable, kinds = s.pop(0)
             gw._LAST_FAILURE_KINDS[:] = list(kinds)
             gw._LAST_TRIAL_MEASURABLE = measurable
@@ -348,7 +348,7 @@ try:
     seen = {"n": 0}
 
     def leaky(m, route, capture=None, read_heading=None, log=None, attempts=3,
-              shots=None):
+              shots=None, **_kw):
         seen["n"] += 1
         if seen["n"] == 1:
             gw._LAST_TRIAL_MEASURABLE = False       # trial 1: picture dead

@@ -1033,9 +1033,58 @@ def stream_is_live(capture=None, gap=1.2, log=None):
     return float(np.abs(a - b).mean()) > FROZEN_DELTA
 
 
+# A CALLER THAT HAS JUST RESET KNOWS WHERE THE CHARACTER IS. WE WERE PAYING
+# ~24 SECONDS A TRIAL TO REDISCOVER IT, AND FAILING.
+#
+# reset_environment() lands the character on SPAWN = office_corridor, which is
+# in UNSEEDED — it has no appearance reference BY DESIGN (CLAUDE.md 7: seeding
+# office_door from a dark frame instantly created false positives). So locate()
+# cannot name it, ever. go_to_node_verified therefore read `start is None`,
+# concluded "lost", spent a 13.9s relocalise sweep that had nothing to find, and
+# then RESET A SECOND TIME to get back to the place it was already standing.
+#
+# Measured 2026-09-05 across three complete archived runs — streak2.log 10/10
+# trials, failframes.log 8/8, newleg.log 8/8, **26 of 26** — every one opens
+# with "not at portrait_room and cannot say where this is — reloading to a known
+# start", immediately after the harness's own reset. Cost, from
+# overnight/profile.json's own numbers: sweep 13.9s (its `turn_to 6 calls
+# 11.41s` IS this sweep) + reset 8.96s + sleep 1.2s = **~24s per trial**, in
+# every harness shaped `reset; go_to_node_verified(target)`.
+#
+# The sweep is NOT useless in general and is not being removed: **11 of 82
+# sweeps re-localised (13.4%)**, each saving a reset. (This first read "22 of
+# 85 (26%)", which was a DOUBLE COUNT — one successful sweep prints TWO lines,
+# `re-localised by turning N deg:` from _look_around_for_a_node and
+# `re-localised at X by turning; routing from there` from the caller, so a grep
+# for "re-localised" counts every success twice. The corrected count is over
+# all six archived logs that contain the string: overnight/{streak2,failframes,
+# newleg,streak}.log and overnight/phase1/{run,step3}.log — 71 sweeps that
+# reloaded plus 11 that re-localised. 85 was the ESCAPE-LADDER count from a
+# different analysis and does not belong here.) It is useless only where the
+# answer is already known — at the spawn, straight after a reset.
+#
+# THIS ASSERTS NOTHING NEW. go_to_node_verified already sets `start = SPAWN`
+# after its OWN reset, unverified, on the same grounds (CLAUDE.md 8d: the spawn
+# bearing reads 86.9/87/87 on every reset). All that changes is who paid for the
+# reset. The hint is consumed on the FIRST attempt only, so a second attempt —
+# where the character HAS moved — behaves exactly as before.
+#
+# UNMEASURED SIDE EFFECT, stated rather than hidden: the route now starts ~24s
+# earlier after the load, so the NPCs in the passage have wandered ~24s less.
+# That is a real mechanism by which arrival could move, in either direction.
+# Flip this to False for the control arm; the A/B is cheap precisely because the
+# True arm is 24s a trial faster.
+TRUST_RESET_SPAWN = True
+
+
 def go_to_node_verified(m, node, capture=None, read_heading=None, log=print,
-                        attempts=3, shots=None):
+                        attempts=3, shots=None, start_hint=None):
     """Stand at `node` and PROVE it, or report failure. Returns bool.
+
+    `start_hint` is where the CALLER knows the character is standing, and is
+    believed only on the first attempt and only when locate() cannot answer.
+    Pass SPAWN after a reset_environment() that returned normally; see
+    TRUST_RESET_SPAWN.
 
     follow() deliberately treats an unrecognised node as advisory and carries on
     — the goal's own prompt is the authoritative check, and stopping on every
@@ -1054,6 +1103,17 @@ def go_to_node_verified(m, node, capture=None, read_heading=None, log=print,
         # to see whether a node fell on the first try or the third — which is
         # exactly the per-attempt rate OPEN-4 needs.
         log(f"  attempt {i + 1}/{attempts} at {node}")
+        # SPEND THE HINT HERE, BEFORE ANYTHING CAN DECIDE NOT TO USE IT.
+        #
+        # It used to be consumed inside the `start is None` branch below, which
+        # meant a hint survived any attempt that DID locate a node — so attempt
+        # 1 could walk a leg from a located start and attempt 2 could then use
+        # "the caller just reset onto SPAWN" one leg later. That is the stale
+        # cached handle from CLAUDE.md 10's catalogue, and it is exactly what
+        # the comment below already promised did not happen. Found 2026-09-05:
+        # a mutant that dropped the `start is None` guard passed the whole
+        # suite, which is what sent someone looking at this line.
+        hint, start_hint = start_hint, None
         where, detail = locate(m, capture=capture, log=log)
         if where == node:
             log(f"  verified at {node} ({detail})")
@@ -1082,6 +1142,23 @@ def go_to_node_verified(m, node, capture=None, read_heading=None, log=print,
                     f"one-way) — reloading rather than walking a route that "
                     f"does not exist")
                 start = None
+        # BELIEVE THE CALLER BEFORE SPENDING A SWEEP AND A RESET ON A PLACE THE
+        # LOCALISER IS DESIGNED NOT TO RECOGNISE. See TRUST_RESET_SPAWN for the
+        # 26-of-26 measurement. `start is None` first, deliberately: the hint is
+        # the caller's CLAIM and locate() is EVIDENCE, so a named, routable node
+        # always wins. The hint was already spent at the top of the loop, so
+        # only attempt 1 can reach this at all.
+        if start is None and hint is not None:
+            why = (m.route_reason(hint, node) if hasattr(m, "route_reason")
+                   else "ok")
+            if why == "ok":
+                log(f"  locate() cannot name {hint} (it has no appearance "
+                    f"reference by design) but the caller reset onto it — "
+                    f"routing from there instead of sweeping and reloading")
+                start = hint
+            else:
+                log(f"  caller's start hint {hint!r} is {why} for {node} — "
+                    f"ignoring it and recovering normally")
         if start is None:
             # TRY A LOCAL SEARCH BEFORE THROWING THE RUN AWAY.
             #
@@ -1256,12 +1333,20 @@ LEG_SPEED_BY_LEG = {}
 
 # Record rich-but-unrecognised views seen while walking, as map candidates.
 #
-# A quarter of route failures are OVERSHOT: a detailed frame (744-1500
-# keypoints) that identify() cannot name, because the character has walked
-# somewhere the map has no reference for. The run is then blind — it cannot
-# route back, so it resets and re-walks everything. Those places can only be
-# mapped if something looks at them, and the route walks through them several
-# times a trial while throwing every frame away.
+# The motivating class is OVERSHOT: a detailed frame (744-1500 keypoints) that
+# identify() cannot name, because the character has walked somewhere the map
+# has no reference for. The run is then blind — it cannot route back, so it
+# resets and re-walks everything. Those places can only be mapped if something
+# looks at them, and the route walks through them several times a trial while
+# throwing every frame away.
+#
+# HOW OFTEN THAT HAPPENS IS NOT KNOWN. This comment said "a quarter of route
+# failures", which was 2 of the 8 frames in overnight/failframes_prerecovery/ —
+# frames captured after the recovery fan, so they describe the fan and not the
+# leg, and 2/8 carries a 95% Wilson interval of [0.07, 0.59] even if they were
+# admissible. No live run has ever recorded a class census. Re-derive the
+# distribution from leg-end frames before this flag is turned on: it is the
+# only number that says whether surveying is worth anything.
 #
 # Affordable only since tesserocr: one identify() per sample is 43ms, and the
 # frames are already captured for the view-change measurement so they are free.
@@ -1765,6 +1850,27 @@ def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
 # follow_verified's (arrived, reached) signature is already used elsewhere.
 _LAST_FAILURE_KINDS = []
 
+# The frame a failure was classified FROM is not always the leg's own end —
+# when no leg into `node` ever completed (the reset raised, the route was
+# unreachable, follow() stopped at an earlier leg on every attempt) the
+# classifier is handed the pre-attempt frame or the post-recovery view
+# instead. Those two are the exact frames OPEN-1 was opened about: eight
+# post-fan frames read bearing 98-106 against a leg commanded 2.1, and four
+# pre-attempt frames identified as the node the leg DEPARTS FROM at 506-734
+# matches. Both were classified confidently, and both described something
+# other than the leg.
+#
+# So the class alone is not the measurement — the class AND where its frame
+# came from is. This list runs in lockstep with _LAST_FAILURE_KINDS so a
+# census can be taken over the admissible frames only, instead of over a
+# mixture that no number in the result distinguishes.
+_LAST_FAILURE_SOURCES = []
+
+# The one provenance that is evidence about the leg. Named rather than spelled
+# out at each site: the whole point is that the census compares against the
+# SAME string the classifier recorded, and two copies of a sentence drift.
+LEG_END_SOURCE = "the leg's own end"
+
 # False when the last follow_verified PROVED the picture was not updating. Same
 # reason for being a global as the list above, and read by consecutive_arrivals
 # to record that trial as INVALID rather than as a route failure.
@@ -1783,7 +1889,7 @@ RECORD_RELIABILITY = False
 
 
 def follow_verified(m, route, capture=None, read_heading=None, log=print,
-                    attempts=3, shots=None):
+                    attempts=3, shots=None, start_hint=None):
     """Walk `route` node by node, PROVING position at each one.
 
     Returns (arrived_at_all, reached) where `reached` is the list of nodes
@@ -1797,6 +1903,7 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
     global _LAST_TRIAL_MEASURABLE
     capture = capture or _default_capture
     _LAST_FAILURE_KINDS.clear()
+    _LAST_FAILURE_SOURCES.clear()
     _LAST_TRIAL_MEASURABLE = True
     reached, kinds = [], []
     for node in route:
@@ -1829,9 +1936,15 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
         # as bar_pool_room at 506-734 matches while claiming to show the
         # jukebox leg. The fix produced output, the output looked like
         # evidence, and it was not.
+        # THE HINT IS FOR THE FIRST NODE ONLY, and is consumed here. After
+        # node 1 the character has walked a leg, so the caller's "I just reset
+        # onto SPAWN" is no longer true — passing it on would be the stale
+        # cached handle from CLAUDE.md's catalogue, one leg later.
+        hint, start_hint = start_hint, None
         ok = go_to_node_verified(m, node, capture=capture,
                                  read_heading=read_heading, log=log,
-                                 attempts=attempts, shots=shots)
+                                 attempts=attempts, shots=shots,
+                                 start_hint=hint)
         # Record it where arrival is actually KNOWN, so the reliability record
         # builds itself from real runs rather than being hand-maintained.
         if RECORD_RELIABILITY and reached:
@@ -1890,7 +2003,7 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
             # when the leg ended and before recover_to_node ran, which is the
             # only one that can diagnose the leg.
             img = _LAST_LEG_END.pop(node, None)
-            source = "the leg's own end"
+            source = LEG_END_SOURCE
             if img is None:
                 img = before
                 source = "before the attempt (PREVIOUS node) — weak evidence"
@@ -1917,6 +2030,9 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
                         f"[frame: {source}]")
                     kinds.append(kind)
                     _LAST_FAILURE_KINDS.append(kind)
+                    # LOCKSTEP. A kind recorded without its provenance is
+                    # indistinguishable from one classified off the fan.
+                    _LAST_FAILURE_SOURCES.append(source)
                 except Exception as e:
                     log(f"      could not classify: {e}")
             else:
@@ -1966,6 +2082,8 @@ def consecutive_arrivals(m, route, trials, capture=None, read_heading=None,
 
     outcomes, streak, best = [], 0, 0
     all_kinds, invalid_why = [], []
+    # Provenance, in lockstep with all_kinds. See _LAST_FAILURE_SOURCES.
+    all_sources = []
 
     def invalid(i, why):
         # NOT `outcomes.append(False)`. The streak is deliberately left alone:
@@ -1993,10 +2111,19 @@ def consecutive_arrivals(m, route, trials, capture=None, read_heading=None,
         # stubbed follow_verified (every offline test has one) would otherwise
         # leave the previous trial's verdict standing.
         _LAST_TRIAL_MEASURABLE = True
+        # THE RESET ABOVE ALREADY PUT THE CHARACTER ON SPAWN. Telling
+        # follow_verified so saves the 13.9s sweep plus the second reset that
+        # opened 26 of 26 archived trials — see TRUST_RESET_SPAWN. Only sent
+        # when reset_between actually reset on THIS iteration; otherwise the
+        # character is wherever the previous trial left it.
         ok, reached = follow_verified(m, route, capture=capture,
                                       read_heading=read_heading, log=log,
-                                      shots=shots)
+                                      shots=shots,
+                                      start_hint=(SPAWN if (reset_between
+                                                  and TRUST_RESET_SPAWN)
+                                                  else None))
         kinds = list(_LAST_FAILURE_KINDS)
+        sources = list(_LAST_FAILURE_SOURCES)
         # AFTER, and follow_verified's own verdict first. The two catch
         # different things and neither is redundant: follow_verified only
         # spends a liveness check when a node FAILS, so a trial that walked
@@ -2014,6 +2141,7 @@ def consecutive_arrivals(m, route, trials, capture=None, read_heading=None,
             invalid(i, why)
             continue
         all_kinds.extend(kinds)
+        all_sources.extend(sources)
         outcomes.append(bool(ok))
         streak = streak + 1 if ok else 0
         best = max(best, streak)
@@ -2021,9 +2149,30 @@ def consecutive_arrivals(m, route, trials, capture=None, read_heading=None,
             f"(verified {len(reached)}/{len(route)})  streak {streak}, best {best}")
     import failure_kind as fk
     by_kind = fk.tally(all_kinds)
+    # THE CENSUS THAT IS EVIDENCE ABOUT THE LEGS is the one taken over frames
+    # that came from a leg's own end. The rest were classified off the
+    # pre-attempt view or the post-recovery view, and OPEN-1 exists because
+    # exactly those two frames were once reported as a failure census.
+    #
+    # Reported as a SEPARATE key rather than by silently filtering by_kind:
+    # dropping frames without saying so is how a denominator goes missing, and
+    # a census over 3 of 11 failures that reads like a census over 11 is worse
+    # than no census.
+    leg_kinds = [k for k, src in zip(all_kinds, all_sources)
+                 if src == LEG_END_SOURCE]
+    by_kind_leg = fk.tally(leg_kinds)
+    n_other = len(all_kinds) - len(leg_kinds)
     if by_kind:
         log("  failures by signature: " +
             ", ".join(f"{k}={v}" for k, v in sorted(by_kind.items())))
+        log(f"    of which classified from the leg's own end: "
+            f"{len(leg_kinds)}/{len(all_kinds)}" +
+            (f"  ({', '.join(f'{k}={v}' for k, v in sorted(by_kind_leg.items()))})"
+             if by_kind_leg else ""))
+        if n_other:
+            log(f"    {n_other} classified from a fallback frame (the "
+                f"pre-attempt view or the post-recovery view) — NOT evidence "
+                f"about the leg; excluded from failures_by_kind_leg_end")
     n_valid = sum(1 for o in outcomes if o is not None)
     n_invalid = sum(1 for o in outcomes if o is None)
     # STATE THE INVALID COUNT WHEREVER THE RATE IS STATED. A rate over an
@@ -2038,4 +2187,6 @@ def consecutive_arrivals(m, route, trials, capture=None, read_heading=None,
             "valid": n_valid,
             "invalid": n_invalid,
             "invalid_reasons": invalid_why,
-            "failures_by_kind": by_kind}
+            "failures_by_kind": by_kind,
+            "failures_by_kind_leg_end": by_kind_leg,
+            "failures_from_fallback_frame": n_other}

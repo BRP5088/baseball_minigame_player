@@ -48,15 +48,23 @@ trace it never was.
 Both halves of that are fixed here and both must stay:
   * EVERY phase prints as it completes, flushed. A future stall names the phase
     it is in on the line before it.
-  * the corpus OCRs through a thread pool. pytesseract is a subprocess, so the
-    GIL is released across the spawn; measured 14.97s -> 2.65s at 8 workers,
-    with all 110 results IDENTICAL to serial (checked card-by-card, not by
-    count). Threads change the schedule, never the answer.
+  * the corpus OCRs SERIALLY, in process. It used to run through an 8-worker
+    thread pool (14.97s -> 2.65s), which was sound only while pytesseract
+    shelled out and released the GIL across the spawn. OPEN-12 removed the
+    spawn, and the in-process reader must not be driven from worker threads —
+    see ocr_batch's docstring, and the cysignals note in ocr_glyphs.py. The
+    spawn the pool was compensating for is the thing that went away.
   * MAX_OCR_CELLS is a hard ceiling on OCR work, asserted rather than intended,
     so this file cannot silently grow back into a multi-minute stall.
 
-Runtime after that: 3.7-4.1s at load average 20, 14.6-16.2s at load average 28,
-against the serial file's 20s and 49.6s at the same two loads. The whole corpus
+Runtime with the pool and pytesseract was 3.7-4.1s at load average 20 and
+14.6-16.2s at load average 28, against that file's serial 20s and 49.6s at the
+same two loads. Serial and IN PROCESS, measured 2026-09-05: the 110-cell corpus
+takes 3.0s and the whole file 4.7s — AT LOAD AVERAGE 150. Faster with one
+thread under a saturated machine than with eight under an idle one, because the
+cost was never the OCR; it was the spawn and the temp file. The results are
+unchanged: 63/110 correct, 0 wrong, 47 abstained, the same numbers this file
+recorded under pytesseract. The whole corpus
 is kept because it is what the file is FOR — a mutant that shifts the ban grid
 one column produces 65 wrong-card failures here, and nothing else in the suite
 would notice.
@@ -88,7 +96,6 @@ _sys.path.insert(0, _ROOT)
 import difflib
 import itertools
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
 
@@ -109,7 +116,6 @@ say("imported")
 # frames without thinking about the clock fails the file instead of stalling
 # the suite.
 MAX_OCR_CELLS = 130
-OCR_WORKERS = 8
 
 failures = []
 
@@ -120,30 +126,41 @@ def check(cond, msg):
 
 
 def ocr_batch(crops, what):
-    """OCR every crop through ONE pool, in order, printing as it goes.
+    """OCR every crop ON THIS THREAD, in order, printing as it goes.
 
-    One pool for the whole batch, not one per frame: a 10-cell pool over 8
-    workers runs two ragged waves and idles at every frame boundary (measured
-    1.4s a frame, 15.5s for the corpus), where a single 110-crop pool measured
-    2.65s against 14.97s serial. Cropping happens on this thread first — it is
-    ~1ms a cell and a shared PIL Image is not worth handing to threads.
+    THE POOL IS GONE, AND MUST STAY GONE. It existed because pytesseract SHELLS
+    OUT — the GIL is released across the spawn, so eight workers turned 14.97s
+    into 2.65s. The old docstring here ended "anything that moves this onto an
+    in-process backend must re-check that, not assume it", and OPEN-12 is
+    exactly that move: ocr_ban_card_name now drives the Tesseract C API in
+    process.
 
-    Threads are safe here only because pytesseract SHELLS OUT, so the GIL is
-    released across the spawn and nothing in the match path holds state: the
-    110 results were checked card-by-card against the serial loop and were
-    identical (2026-09-04). Anything that moves this onto an in-process
-    backend must re-check that, not assume it.
+    Re-checked, and the answer is no. ocr_glyphs.py records the measurement in
+    full: a pool of eight PyTessBaseAPI handles was built here, ran 3.7x
+    faster, agreed on every glyph, and was REMOVED anyway, because tesserocr
+    links cysignals and cysignals wraps GetUTF8Text in a PROCESS-GLOBAL
+    sig_on/sig_off meant for the main thread. Driven from workers it printed
+    `RuntimeWarning: sig_off() without sig_on()`, and that state is what decides
+    where a signal longjmps in a process that drives a PS5 and gets Ctrl-C'd.
+
+    There is a second, quieter reason. Backend selection imports tesserocr, and
+    that import installs a SIGINT handler, which `signal.signal` refuses to do
+    off the main thread. Run first from a worker, ocr_glyphs.backend() would
+    catch that, fall back to the CLI, and every read in the process would go
+    back to spawning a subprocess — silently, and reported as a passing test.
+
+    Serial is no longer the slow option anyway: the spawn this pool was hiding
+    is what OPEN-12 removed.
     """
     done = 0
     t = _time.time()
     out = []
-    with ThreadPoolExecutor(max_workers=OCR_WORKERS) as ex:
-        for hit in ex.map(ocr_ban_card_name, crops):
-            out.append(hit)
-            done += 1
-            if done % 20 == 0 or done == len(crops):
-                say(f"   {what}: {done}/{len(crops)} cells "
-                    f"({_time.time() - t:.1f}s)")
+    for crop in crops:
+        out.append(ocr_ban_card_name(crop))
+        done += 1
+        if done % 20 == 0 or done == len(crops):
+            say(f"   {what}: {done}/{len(crops)} cells "
+                f"({_time.time() - t:.1f}s)")
     return out
 
 
@@ -199,12 +216,16 @@ _PROBE = Image.new("L", (200, 300), 128)
 
 
 def resolve(text):
-    real = orchestrator.pytesseract.image_to_string
-    orchestrator.pytesseract.image_to_string = lambda *a, **k: text
+    # Stub `_ocr_text`, NOT `pytesseract.image_to_string` — see the same note in
+    # test_ocr_ban_card.py. Since OPEN-12 the read is in process, so a stub left
+    # on pytesseract is simply never consulted, and every MUST_ABSTAIN below
+    # then passes because the blank probe reads as nothing.
+    real = orchestrator._ocr_text
+    orchestrator._ocr_text = lambda *a, **k: text
     try:
         return orchestrator.ocr_ban_card_name(_PROBE)
     finally:
-        orchestrator.pytesseract.image_to_string = real
+        orchestrator._ocr_text = real
 
 
 # Every string below is REAL: lifted from the cached frames' raw OCR, or a name

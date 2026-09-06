@@ -24,8 +24,23 @@ import slow_traverse as st
 
 # A real frame, not None: with None the leg raises after the turn and the test
 # would be asserting through an exception.
-FRAME = Image.fromarray(
-    (np.random.RandomState(0).rand(270, 480, 3) * 255).astype("uint8"))
+#
+# AND IT MUST CHANGE BETWEEN CALLS. A constant frame reads as ZERO view change,
+# which is the stall signal, so walk_link took the blocked branch into
+# `_slip_past` -> `walk_steps.turn_to` — which this test does NOT mock and which
+# calls the real `compass.fast_capture()` in a sleep loop. The test then ran for
+# over 280s and was written off as machine load; it is not load, and it did the
+# same on an idle machine. It never reported either way, so the plumbing this
+# file exists to guard was going UNCHECKED (2026-09-05).
+_FRAMES = [Image.fromarray(
+    (np.random.RandomState(k).rand(270, 480, 3) * 255).astype("uint8"))
+    for k in range(64)]
+_seq = {"i": 0}
+
+
+def FRAME():
+    _seq["i"] += 1
+    return _FRAMES[_seq["i"] % len(_FRAMES)]
 
 FAILS = []
 
@@ -57,7 +72,7 @@ def run_leg():
     st.turn_to = fake_turn_to
     try:
         gw.walk_link(FakeMap(), "a", "b",
-                     capture=lambda: FRAME,
+                     capture=FRAME,
                      read_heading=lambda: 289.1,
                      log=lambda *a: None)
     except Exception as e:

@@ -36,7 +36,7 @@ def fake_verified(results):
     seq = list(results)
 
     def f(m, node, capture=None, read_heading=None, log=None, attempts=3,
-          shots=None):
+          shots=None, **_kw):
         visited.append(node)
         return seq.pop(0) if seq else False
     return f
@@ -69,7 +69,7 @@ try:
     def scripted(seq):
         s = list(seq)
         def f(m, route, capture=None, read_heading=None, log=None, attempts=3,
-              shots=None):
+              shots=None, **_kw):
             v = s.pop(0)
             return v, route if v else []
         return f
@@ -118,7 +118,7 @@ real_sleep = gw.time.sleep
 gw.time.sleep = lambda *a: None
 try:
     def always_ok(m, route, capture=None, read_heading=None, log=None,
-                  attempts=3, shots=None):
+                  attempts=3, shots=None, **_kw):
         return True, route
     gw.follow_verified = always_ok
     r = gw.consecutive_arrivals(None, ROUTE, 5, capture=lambda: None,
@@ -142,7 +142,7 @@ import tempfile, glob as _glob
 real3 = gw.go_to_node_verified
 try:
     gw.go_to_node_verified = lambda m, node, capture=None, read_heading=None, \
-        log=None, attempts=3, shots=None: node != "b"
+        log=None, attempts=3, shots=None, **_kw: node != "b"
     # COUNT THE TWO KINDS SEPARATELY. An arrival now also saves a control
     # frame (into shots/success/), so a bare "how many files" count conflates
     # the failure evidence with the control group and reads as a regression
@@ -173,7 +173,7 @@ try:
           any("_b_" in os.path.basename(f) for f in fails()))
 
     gw.go_to_node_verified = lambda m, node, capture=None, read_heading=None, \
-        log=None, attempts=3, shots=None: True
+        log=None, attempts=3, shots=None, **_kw: True
     before_fails = len(fails())
     gw.follow_verified(None, ROUTE, capture=lambda: Img(),
                        log=lambda *a: None, shots=d)
@@ -189,7 +189,7 @@ finally:
 real4 = gw.follow_verified
 try:
     def one_wedged(m, route, capture=None, read_heading=None, log=None,
-                   attempts=3, shots=None):
+                   attempts=3, shots=None, **_kw):
         gw._LAST_FAILURE_KINDS[:] = ["wedged"]
         return False, []
     gw.follow_verified = one_wedged
@@ -199,7 +199,7 @@ try:
           r.get("failures_by_kind") == {"wedged": 3})
 
     def clean(m, route, capture=None, read_heading=None, log=None,
-              attempts=3, shots=None):
+              attempts=3, shots=None, **_kw):
         gw._LAST_FAILURE_KINDS[:] = []
         return True, route
     gw.follow_verified = clean
@@ -243,7 +243,7 @@ try:
     # ignored it and classified `before` instead, which is the PREVIOUS node's
     # successful arrival.
     def verified_publishing(m, node, capture=None, read_heading=None, log=None,
-                            attempts=3, shots=None):
+                            attempts=3, shots=None, **_kw):
         gw._LAST_LEG_END[node] = Marked("leg_end")
         state["phase"] = "after_recovery"     # the fan has now moved us
         return False
@@ -263,7 +263,7 @@ try:
     state["phase"] = "before"
 
     def verified_silent(m, node, capture=None, read_heading=None, log=None,
-                        attempts=3, shots=None):
+                        attempts=3, shots=None, **_kw):
         state["phase"] = "after_recovery"
         return False
 
