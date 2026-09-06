@@ -1,261 +1,1740 @@
 [
   {
-    "stamp": 1788726674856,
-    "frame": "p1788726674856.jpg",
-    "bearing": 87.01541164411782,
+    "stamp": 1788726834013,
+    "frame": "p1788726834013.jpg",
+    "bearing": 87.02306233106637,
     "probes": [
       {
         "dir": 0,
-        "want": 87.01541164411782,
-        "ratio": 0.178,
-        "null_delta": 8.8,
-        "null_inl": 517,
-        "push_delta": 25.18,
+        "want": 87.02306233106637,
+        "ratio": 0.314,
+        "null_delta": 7.69,
+        "null_inl": 1024,
+        "push_delta": 22.77,
+        "push_inl": 322,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 132.02306233106637,
+        "ratio": 0.045,
+        "null_delta": 3.86,
+        "null_inl": 1305,
+        "push_delta": 21.15,
+        "push_inl": 59,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 177.02306233106637,
+        "ratio": 0.834,
+        "null_delta": 3.13,
+        "null_inl": 776,
+        "push_delta": 6.95,
+        "push_inl": 647,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 222.02306233106637,
+        "ratio": 0.505,
+        "null_delta": 1.06,
+        "null_inl": 1292,
+        "push_delta": 10.78,
+        "push_inl": 653,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 4,
+        "want": 267.0230623310664,
+        "ratio": 0.229,
+        "null_delta": 2.46,
+        "null_inl": 712,
+        "push_delta": 21.77,
+        "push_inl": 163,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 312.0230623310664,
+        "ratio": 0.057,
+        "null_delta": 3.37,
+        "null_inl": 141,
+        "push_delta": 12.42,
+        "push_inl": 8,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 357.0230623310664,
+        "ratio": 0.071,
+        "null_delta": 4.25,
+        "null_inl": 666,
+        "push_delta": 11.54,
+        "push_inl": 47,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 42.0230623310664,
+        "ratio": 0.522,
+        "null_delta": 2.07,
+        "null_inl": 1415,
+        "push_delta": 11.82,
+        "push_inl": 738,
+        "verdict": "blocked"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726871803,
+    "frame": "p1788726871803.jpg",
+    "bearing": 47.41227545377427,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 47.41227545377427,
+        "ratio": 0.474,
+        "null_delta": 1.15,
+        "null_inl": 1411,
+        "push_delta": 14.72,
+        "push_inl": 669,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 92.41227545377427,
+        "ratio": 0.287,
+        "null_delta": 2.68,
+        "null_inl": 1115,
+        "push_delta": 11.74,
+        "push_inl": 320,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 137.41227545377427,
+        "ratio": 0.097,
+        "null_delta": 3.26,
+        "null_inl": 1317,
+        "push_delta": 21.14,
+        "push_inl": 128,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 182.41227545377427,
+        "ratio": 0.209,
+        "null_delta": 3.19,
+        "null_inl": 1261,
+        "push_delta": 25.51,
+        "push_inl": 263,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 227.41227545377427,
+        "ratio": 0.196,
+        "null_delta": 1.78,
+        "null_inl": 1334,
+        "push_delta": 21.81,
+        "push_inl": 262,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 272.41227545377427,
+        "ratio": 0.0,
+        "null_delta": 1.44,
+        "null_inl": 102,
+        "push_delta": 11.03,
+        "push_inl": 0,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 317.41227545377427,
+        "ratio": 0.059,
+        "null_delta": 1.17,
+        "null_inl": 85,
+        "push_delta": 8.35,
+        "push_inl": 5,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 7,
+        "want": 2.4122754537742708,
+        "ratio": 0.0,
+        "null_delta": 3.06,
+        "null_inl": 14,
+        "push_delta": 6.89,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726905799,
+    "frame": "p1788726905799.jpg",
+    "bearing": 4.401328760747461,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 4.401328760747461,
+        "ratio": 0.0,
+        "null_delta": 4.13,
+        "null_inl": 11,
+        "push_delta": 6.31,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 49.40132876074746,
+        "ratio": 0.11,
+        "null_delta": 3.46,
+        "null_inl": 1007,
+        "push_delta": 15.34,
+        "push_inl": 111,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 94.40132876074746,
+        "ratio": 0.141,
+        "null_delta": 0.93,
+        "null_inl": 1156,
+        "push_delta": 11.74,
+        "push_inl": 163,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 139.40132876074745,
+        "ratio": 0.049,
+        "null_delta": 3.88,
+        "null_inl": 1262,
+        "push_delta": 23.02,
+        "push_inl": 62,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 184.40132876074745,
+        "ratio": 0.289,
+        "null_delta": 4.95,
+        "null_inl": 1082,
+        "push_delta": 25.5,
+        "push_inl": 313,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 229.40132876074745,
+        "ratio": 0.193,
+        "null_delta": 3.18,
+        "null_inl": 1356,
+        "push_delta": 20.91,
+        "push_inl": 262,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 274.40132876074745,
+        "ratio": 0.056,
+        "null_delta": 2.18,
+        "null_inl": 125,
+        "push_delta": 13.56,
+        "push_inl": 7,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 319.40132876074745,
+        "ratio": 0.0,
+        "null_delta": 3.74,
+        "null_inl": 53,
+        "push_delta": 8.98,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726941011,
+    "frame": "p1788726941011.jpg",
+    "bearing": 326.08365886347605,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 326.08365886347605,
+        "ratio": 0.0,
+        "null_delta": 1.77,
+        "null_inl": 13,
+        "push_delta": 6.1,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 11.083658863476046,
+        "ratio": 0.0,
+        "null_delta": 4.16,
+        "null_inl": 12,
+        "push_delta": 5.88,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 56.083658863476046,
+        "ratio": 0.263,
+        "null_delta": 2.71,
+        "null_inl": 80,
+        "push_delta": 7.65,
+        "push_inl": 21,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 3,
+        "want": 101.08365886347605,
+        "ratio": 0.097,
+        "null_delta": 3.91,
+        "null_inl": 1170,
+        "push_delta": 13.05,
+        "push_inl": 113,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 146.08365886347605,
+        "ratio": 0.111,
+        "null_delta": 3.36,
+        "null_inl": 1222,
+        "push_delta": 28.94,
+        "push_inl": 136,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 191.0836588634761,
+        "ratio": 0.557,
+        "null_delta": 1.2,
+        "null_inl": 1239,
+        "push_delta": 19.25,
+        "push_inl": 690,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 6,
+        "want": 236.0836588634761,
+        "ratio": 0.312,
+        "null_delta": 2.87,
+        "null_inl": 378,
+        "push_delta": 19.97,
+        "push_inl": 118,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 281.0836588634761,
+        "ratio": 0.0,
+        "null_delta": 4.25,
+        "null_inl": 31,
+        "push_delta": 14.31,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788726970099,
+    "frame": "p1788726970099.jpg",
+    "bearing": 281.02110359927514,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 281.02110359927514,
+        "ratio": 0.0,
+        "null_delta": 1.45,
+        "null_inl": 9,
+        "push_delta": 11.57,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 326.02110359927514,
+        "ratio": 1.0,
+        "null_delta": 1.44,
+        "null_inl": 25,
+        "push_delta": 2.52,
+        "push_inl": 25,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 11.021103599275136,
+        "ratio": 0.556,
+        "null_delta": 1.37,
+        "null_inl": 1334,
+        "push_delta": 9.73,
+        "push_inl": 742,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 56.021103599275136,
+        "ratio": 0.523,
+        "null_delta": 3.53,
+        "null_inl": 1405,
+        "push_delta": 12.03,
+        "push_inl": 735,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 4,
+        "want": 101.02110359927514,
+        "ratio": 0.038,
+        "null_delta": 6.42,
+        "null_inl": 681,
+        "push_delta": 17.76,
+        "push_inl": 26,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 146.02110359927514,
+        "ratio": 0.055,
+        "null_delta": 3.67,
+        "null_inl": 956,
+        "push_delta": 34.71,
+        "push_inl": 53,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 191.0211035992752,
+        "ratio": 0.101,
+        "null_delta": 2.14,
+        "null_inl": 1308,
+        "push_delta": 23.49,
+        "push_inl": 132,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 236.0211035992752,
+        "ratio": 0.052,
+        "null_delta": 3.07,
+        "null_inl": 305,
+        "push_delta": 19.64,
+        "push_inl": 16,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727002945,
+    "frame": "p1788727002945.jpg",
+    "bearing": 239.20577731382897,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 239.20577731382897,
+        "ratio": 0.206,
+        "null_delta": 3.79,
+        "null_inl": 68,
+        "push_delta": 18.49,
+        "push_inl": 14,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 284.205777313829,
+        "ratio": 0.29,
+        "null_delta": 2.64,
+        "null_inl": 31,
+        "push_delta": 12.13,
+        "push_inl": 9,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 329.205777313829,
+        "ratio": 0.883,
+        "null_delta": 5.33,
+        "null_inl": 734,
+        "push_delta": 20.7,
+        "push_inl": 648,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 14.205777313829003,
+        "ratio": 0.246,
+        "null_delta": 3.89,
+        "null_inl": 293,
+        "push_delta": 22.43,
+        "push_inl": 72,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 59.205777313829,
+        "ratio": 0.0,
+        "null_delta": 2.58,
+        "null_inl": 0,
+        "push_delta": 10.04,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 5,
+        "want": 104.205777313829,
+        "ratio": 0.21,
+        "null_delta": 3.51,
+        "null_inl": 415,
+        "push_delta": 14.41,
+        "push_inl": 87,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 149.205777313829,
+        "ratio": 0.062,
+        "null_delta": 3.9,
+        "null_inl": 1048,
+        "push_delta": 17.23,
+        "push_inl": 65,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 194.205777313829,
+        "ratio": 0.015,
+        "null_delta": 2.17,
+        "null_inl": 814,
+        "push_delta": 18.75,
+        "push_inl": 12,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727049037,
+    "frame": "p1788727049037.jpg",
+    "bearing": 87.02262721532398,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 87.02262721532398,
+        "ratio": 0.21,
+        "null_delta": 8.66,
+        "null_inl": 1044,
+        "push_delta": 24.68,
+        "push_inl": 219,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 132.02262721532398,
+        "ratio": 0.051,
+        "null_delta": 3.55,
+        "null_inl": 1255,
+        "push_delta": 20.62,
+        "push_inl": 64,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 177.02262721532398,
+        "ratio": 0.102,
+        "null_delta": 1.7,
+        "null_inl": 890,
+        "push_delta": 9.72,
+        "push_inl": 91,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 222.02262721532398,
+        "ratio": 0.0,
+        "null_delta": 1.71,
+        "null_inl": 9,
+        "push_delta": 9.05,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 4,
+        "want": 267.02262721532395,
+        "ratio": 0.601,
+        "null_delta": 3.61,
+        "null_inl": 409,
+        "push_delta": 5.31,
+        "push_inl": 246,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 5,
+        "want": 312.02262721532395,
+        "ratio": 0.287,
+        "null_delta": 3.36,
+        "null_inl": 282,
+        "push_delta": 11.32,
+        "push_inl": 81,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 357.02262721532395,
+        "ratio": 0.259,
+        "null_delta": 3.01,
+        "null_inl": 1102,
+        "push_delta": 18.54,
+        "push_inl": 285,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 42.02262721532395,
+        "ratio": 0.337,
+        "null_delta": 7.06,
+        "null_inl": 406,
+        "push_delta": 24.6,
+        "push_inl": 137,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727081695,
+    "frame": "p1788727081695.jpg",
+    "bearing": 40.64424787392733,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 40.64424787392733,
+        "ratio": 0.17,
+        "null_delta": 6.02,
+        "null_inl": 541,
+        "push_delta": 30.74,
         "push_inl": 92,
         "verdict": "free"
       },
       {
         "dir": 1,
-        "want": 132.01541164411782,
-        "ratio": 0.074,
-        "null_delta": 3.55,
-        "null_inl": 1180,
-        "push_delta": 19.21,
-        "push_inl": 87,
+        "want": 85.64424787392733,
+        "ratio": 0.126,
+        "null_delta": 4.51,
+        "null_inl": 1274,
+        "push_delta": 21.38,
+        "push_inl": 160,
         "verdict": "free"
       },
       {
         "dir": 2,
-        "want": 177.01541164411782,
-        "ratio": 0.55,
-        "null_delta": 2.96,
-        "null_inl": 776,
-        "push_delta": 14.43,
-        "push_inl": 427,
-        "verdict": "blocked"
+        "want": 130.64424787392733,
+        "ratio": 0.097,
+        "null_delta": 2.06,
+        "null_inl": 299,
+        "push_delta": 13.79,
+        "push_inl": 29,
+        "verdict": "free"
       },
       {
         "dir": 3,
-        "want": 222.01541164411782,
+        "want": 175.64424787392733,
+        "ratio": 0.006,
+        "null_delta": 3.65,
+        "null_inl": 1090,
+        "push_delta": 12.43,
+        "push_inl": 6,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 220.64424787392733,
         "ratio": 0.0,
-        "null_delta": 1.49,
-        "null_inl": 9,
-        "push_delta": 8.01,
+        "null_delta": 4.06,
+        "null_inl": 0,
+        "push_delta": 7.17,
         "push_inl": 0,
-        "verdict": "free"
-      },
-      {
-        "dir": 4,
-        "want": 267.0154116441178,
-        "ratio": 0.157,
-        "null_delta": 1.6,
-        "null_inl": 751,
-        "push_delta": 13.78,
-        "push_inl": 118,
-        "verdict": "free"
+        "verdict": "unmeasurable"
       },
       {
         "dir": 5,
-        "want": 312.0154116441178,
-        "ratio": 0.114,
-        "null_delta": 3.31,
-        "null_inl": 281,
-        "push_delta": 10.89,
-        "push_inl": 32,
-        "verdict": "free"
+        "want": 265.6442478739273,
+        "ratio": 0.0,
+        "null_delta": 2.0,
+        "null_inl": 0,
+        "push_delta": 7.51,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
       },
       {
         "dir": 6,
-        "want": 357.0154116441178,
-        "ratio": 0.283,
-        "null_delta": 4.61,
-        "null_inl": 1309,
-        "push_delta": 15.42,
-        "push_inl": 370,
+        "want": 310.6442478739273,
+        "ratio": 0.012,
+        "null_delta": 1.25,
+        "null_inl": 498,
+        "push_delta": 11.49,
+        "push_inl": 6,
         "verdict": "free"
       },
       {
         "dir": 7,
-        "want": 42.01541164411782,
-        "ratio": 0.573,
-        "null_delta": 6.34,
-        "null_inl": 811,
-        "push_delta": 19.45,
-        "push_inl": 465,
-        "verdict": "blocked"
+        "want": 355.6442478739273,
+        "ratio": 0.009,
+        "null_delta": 3.75,
+        "null_inl": 991,
+        "push_delta": 28.74,
+        "push_inl": 9,
+        "verdict": "free"
       }
     ]
   },
   {
-    "stamp": 1788726708897,
-    "frame": "p1788726708897.jpg",
-    "bearing": null,
+    "stamp": 1788727116575,
+    "frame": "p1788727116575.jpg",
+    "bearing": 358.3137937631936,
     "probes": [
       {
         "dir": 0,
-        "want": null,
-        "ratio": 0.706,
-        "null_delta": 5.43,
-        "null_inl": 1107,
-        "push_delta": 9.74,
-        "push_inl": 782,
-        "verdict": "blocked"
+        "want": 358.3137937631936,
+        "ratio": 0.011,
+        "null_delta": 2.71,
+        "null_inl": 1243,
+        "push_delta": 26.57,
+        "push_inl": 14,
+        "verdict": "free"
       },
       {
         "dir": 1,
-        "want": null,
-        "ratio": 0.38,
-        "null_delta": 4.36,
-        "null_inl": 1158,
-        "push_delta": 10.6,
-        "push_inl": 440,
+        "want": 43.31379376319359,
+        "ratio": 0.185,
+        "null_delta": 3.47,
+        "null_inl": 914,
+        "push_delta": 28.82,
+        "push_inl": 169,
         "verdict": "free"
       },
       {
         "dir": 2,
-        "want": null,
-        "ratio": 0.264,
-        "null_delta": 3.24,
-        "null_inl": 1294,
-        "push_delta": 11.51,
-        "push_inl": 341,
+        "want": 88.31379376319359,
+        "ratio": 0.136,
+        "null_delta": 3.45,
+        "null_inl": 1117,
+        "push_delta": 30.78,
+        "push_inl": 152,
         "verdict": "free"
       },
       {
         "dir": 3,
-        "want": null,
-        "ratio": 0.247,
-        "null_delta": 1.48,
-        "null_inl": 1326,
-        "push_delta": 13.34,
-        "push_inl": 327,
-        "verdict": "free"
-      },
-      {
-        "dir": 4,
-        "want": null,
-        "ratio": 0.26,
-        "null_delta": 1.1,
-        "null_inl": 1340,
-        "push_delta": 14.75,
-        "push_inl": 349,
-        "verdict": "free"
-      },
-      {
-        "dir": 5,
-        "want": null,
-        "ratio": 0.267,
-        "null_delta": 2.55,
-        "null_inl": 1321,
-        "push_delta": 12.9,
-        "push_inl": 353,
-        "verdict": "free"
-      },
-      {
-        "dir": 6,
-        "want": null,
-        "ratio": 0.156,
-        "null_delta": 3.96,
-        "null_inl": 1253,
-        "push_delta": 17.68,
-        "push_inl": 195,
-        "verdict": "free"
-      },
-      {
-        "dir": 7,
-        "want": null,
-        "ratio": 0.154,
-        "null_delta": 4.67,
-        "null_inl": 805,
-        "push_delta": 14.24,
-        "push_inl": 124,
-        "verdict": "free"
-      }
-    ]
-  },
-  {
-    "stamp": 1788726734266,
-    "frame": "p1788726734266.jpg",
-    "bearing": 39.214422283067904,
-    "probes": [
-      {
-        "dir": 0,
-        "want": 39.214422283067904,
-        "ratio": 0.076,
-        "null_delta": 3.1,
-        "null_inl": 474,
-        "push_delta": 14.81,
-        "push_inl": 36,
-        "verdict": "free"
-      },
-      {
-        "dir": 1,
-        "want": 84.2144222830679,
-        "ratio": 0.136,
-        "null_delta": 1.19,
-        "null_inl": 88,
-        "push_delta": 8.26,
+        "want": 133.3137937631936,
+        "ratio": 0.012,
+        "null_delta": 3.81,
+        "null_inl": 982,
+        "push_delta": 14.23,
         "push_inl": 12,
         "verdict": "free"
       },
       {
-        "dir": 2,
-        "want": 129.2144222830679,
-        "ratio": 0.018,
-        "null_delta": 3.76,
-        "null_inl": 487,
-        "push_delta": 15.96,
+        "dir": 4,
+        "want": 178.31379376319364,
+        "ratio": 0.009,
+        "null_delta": 3.75,
+        "null_inl": 1038,
+        "push_delta": 14.89,
         "push_inl": 9,
         "verdict": "free"
       },
       {
+        "dir": 5,
+        "want": 223.31379376319364,
+        "ratio": 0.0,
+        "null_delta": 2.47,
+        "null_inl": 0,
+        "push_delta": 9.0,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 6,
+        "want": 268.31379376319364,
+        "ratio": 0.0,
+        "null_delta": 3.44,
+        "null_inl": 0,
+        "push_delta": 5.34,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 7,
+        "want": 313.31379376319364,
+        "ratio": 0.186,
+        "null_delta": 2.53,
+        "null_inl": 59,
+        "push_delta": 8.88,
+        "push_inl": 11,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727149226,
+    "frame": "p1788727149226.jpg",
+    "bearing": 312.0104597038899,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 312.0104597038899,
+        "ratio": 0.298,
+        "null_delta": 0.88,
+        "null_inl": 57,
+        "push_delta": 10.77,
+        "push_inl": 17,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 357.0104597038899,
+        "ratio": 0.097,
+        "null_delta": 2.83,
+        "null_inl": 483,
+        "push_delta": 16.97,
+        "push_inl": 47,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 42.01045970388992,
+        "ratio": 0.3,
+        "null_delta": 4.24,
+        "null_inl": 979,
+        "push_delta": 28.72,
+        "push_inl": 294,
+        "verdict": "free"
+      },
+      {
         "dir": 3,
-        "want": 174.2144222830679,
-        "ratio": 0.146,
-        "null_delta": 4.14,
-        "null_inl": 1127,
-        "push_delta": 16.86,
-        "push_inl": 165,
+        "want": 87.01045970388992,
+        "ratio": 0.122,
+        "null_delta": 3.43,
+        "null_inl": 953,
+        "push_delta": 15.66,
+        "push_inl": 116,
         "verdict": "free"
       },
       {
         "dir": 4,
-        "want": 219.2144222830679,
-        "ratio": 0.331,
-        "null_delta": 4.22,
-        "null_inl": 1328,
-        "push_delta": 24.14,
-        "push_inl": 440,
+        "want": 132.01045970388992,
+        "ratio": 0.545,
+        "null_delta": 4.0,
+        "null_inl": 418,
+        "push_delta": 7.09,
+        "push_inl": 228,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 5,
+        "want": 177.01045970388986,
+        "ratio": 0.0,
+        "null_delta": 0.87,
+        "null_inl": 0,
+        "push_delta": 1.17,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 6,
+        "want": 222.01045970388986,
+        "ratio": 0.0,
+        "null_delta": 2.81,
+        "null_inl": 0,
+        "push_delta": 7.9,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 7,
+        "want": 267.01045970388986,
+        "ratio": 0.0,
+        "null_delta": 3.53,
+        "null_inl": 0,
+        "push_delta": 3.61,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727179328,
+    "frame": "p1788727179328.jpg",
+    "bearing": 262.3666764149536,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 262.3666764149536,
+        "ratio": 0.0,
+        "null_delta": 2.37,
+        "null_inl": 0,
+        "push_delta": 1.68,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 307.3666764149536,
+        "ratio": 0.0,
+        "null_delta": 0.83,
+        "null_inl": 12,
+        "push_delta": 7.24,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 352.3666764149536,
+        "ratio": 0.063,
+        "null_delta": 1.89,
+        "null_inl": 669,
+        "push_delta": 17.48,
+        "push_inl": 42,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 37.36667641495359,
+        "ratio": 0.173,
+        "null_delta": 3.48,
+        "null_inl": 1286,
+        "push_delta": 27.86,
+        "push_inl": 222,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 82.36667641495359,
+        "ratio": 0.084,
+        "null_delta": 3.78,
+        "null_inl": 953,
+        "push_delta": 18.14,
+        "push_inl": 80,
         "verdict": "free"
       },
       {
         "dir": 5,
-        "want": 264.2144222830679,
-        "ratio": 0.241,
-        "null_delta": 3.41,
-        "null_inl": 486,
-        "push_delta": 14.61,
-        "push_inl": 117,
+        "want": 127.36667641495359,
+        "ratio": 0.525,
+        "null_delta": 1.02,
+        "null_inl": 444,
+        "push_delta": 6.46,
+        "push_inl": 233,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 6,
+        "want": 172.36667641495364,
+        "ratio": 0.0,
+        "null_delta": 3.33,
+        "null_inl": 0,
+        "push_delta": 4.11,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 7,
+        "want": 217.36667641495364,
+        "ratio": 0.0,
+        "null_delta": 4.63,
+        "null_inl": 0,
+        "push_delta": 11.66,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727208782,
+    "frame": "p1788727208782.jpg",
+    "bearing": 214.50963400775515,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 214.50963400775515,
+        "ratio": 0.0,
+        "null_delta": 1.18,
+        "null_inl": 0,
+        "push_delta": 5.95,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 259.50963400775515,
+        "ratio": 0.0,
+        "null_delta": 1.9,
+        "null_inl": 0,
+        "push_delta": 2.95,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 304.50963400775515,
+        "ratio": 0.0,
+        "null_delta": 3.19,
+        "null_inl": 0,
+        "push_delta": 3.67,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 3,
+        "want": 349.50963400775515,
+        "ratio": 0.01,
+        "null_delta": 2.12,
+        "null_inl": 768,
+        "push_delta": 20.85,
+        "push_inl": 8,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 34.50963400775515,
+        "ratio": 0.173,
+        "null_delta": 2.11,
+        "null_inl": 1198,
+        "push_delta": 29.89,
+        "push_inl": 207,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 79.50963400775515,
+        "ratio": 0.329,
+        "null_delta": 4.3,
+        "null_inl": 832,
+        "push_delta": 31.55,
+        "push_inl": 274,
         "verdict": "free"
       },
       {
         "dir": 6,
-        "want": 309.2144222830679,
+        "want": 124.50963400775515,
+        "ratio": 0.007,
+        "null_delta": 4.05,
+        "null_inl": 678,
+        "push_delta": 16.18,
+        "push_inl": 5,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 169.50963400775515,
         "ratio": 0.0,
-        "null_delta": 1.73,
-        "null_inl": 151,
-        "push_delta": 8.63,
+        "null_delta": 4.72,
+        "null_inl": 0,
+        "push_delta": 4.5,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727251166,
+    "frame": "p1788727251166.jpg",
+    "bearing": 87.01776888223205,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 87.01776888223205,
+        "ratio": 0.159,
+        "null_delta": 3.39,
+        "null_inl": 1370,
+        "push_delta": 24.73,
+        "push_inl": 218,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 132.01776888223205,
+        "ratio": 0.116,
+        "null_delta": 3.28,
+        "null_inl": 1215,
+        "push_delta": 19.12,
+        "push_inl": 141,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 177.01776888223205,
+        "ratio": 0.646,
+        "null_delta": 2.88,
+        "null_inl": 711,
+        "push_delta": 8.99,
+        "push_inl": 459,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 222.01776888223205,
+        "ratio": 0.178,
+        "null_delta": 1.46,
+        "null_inl": 1319,
+        "push_delta": 28.98,
+        "push_inl": 235,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 267.0177688822321,
+        "ratio": 0.099,
+        "null_delta": 1.9,
+        "null_inl": 365,
+        "push_delta": 20.01,
+        "push_inl": 36,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 312.0177688822321,
+        "ratio": 0.04,
+        "null_delta": 3.81,
+        "null_inl": 99,
+        "push_delta": 15.76,
+        "push_inl": 4,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 6,
+        "want": 357.0177688822321,
+        "ratio": 0.515,
+        "null_delta": 4.21,
+        "null_inl": 132,
+        "push_delta": 8.98,
+        "push_inl": 68,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 7,
+        "want": 42.017768882232076,
+        "ratio": 0.381,
+        "null_delta": 3.16,
+        "null_inl": 1392,
+        "push_delta": 12.48,
+        "push_inl": 530,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727283857,
+    "frame": "p1788727283857.jpg",
+    "bearing": 40.50365620228513,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 40.50365620228513,
+        "ratio": 0.458,
+        "null_delta": 4.1,
+        "null_inl": 1396,
+        "push_delta": 14.01,
+        "push_inl": 639,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 85.50365620228513,
+        "ratio": 0.387,
+        "null_delta": 2.77,
+        "null_inl": 974,
+        "push_delta": 13.2,
+        "push_inl": 377,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 130.50365620228513,
+        "ratio": 0.093,
+        "null_delta": 2.58,
+        "null_inl": 659,
+        "push_delta": 19.94,
+        "push_inl": 61,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 175.50365620228513,
+        "ratio": 0.171,
+        "null_delta": 4.66,
+        "null_inl": 595,
+        "push_delta": 20.56,
+        "push_inl": 102,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 220.50365620228513,
+        "ratio": 0.227,
+        "null_delta": 3.42,
+        "null_inl": 1373,
+        "push_delta": 23.15,
+        "push_inl": 311,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 265.50365620228513,
+        "ratio": 0.09,
+        "null_delta": 2.74,
+        "null_inl": 167,
+        "push_delta": 15.72,
+        "push_inl": 15,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 310.50365620228513,
+        "ratio": 0.052,
+        "null_delta": 4.07,
+        "null_inl": 116,
+        "push_delta": 7.86,
+        "push_inl": 6,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 355.50365620228513,
+        "ratio": 0.0,
+        "null_delta": 1.94,
+        "null_inl": 75,
+        "push_delta": 9.05,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727317959,
+    "frame": "p1788727317959.jpg",
+    "bearing": 352.9161476362242,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 352.9161476362242,
+        "ratio": 8.0,
+        "null_delta": 1.58,
+        "null_inl": 0,
+        "push_delta": 2.67,
+        "push_inl": 8,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 37.916147636224196,
+        "ratio": 0.189,
+        "null_delta": 1.1,
+        "null_inl": 1234,
+        "push_delta": 15.12,
+        "push_inl": 233,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 82.9161476362242,
+        "ratio": 0.337,
+        "null_delta": 1.18,
+        "null_inl": 760,
+        "push_delta": 10.74,
+        "push_inl": 256,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 127.9161476362242,
+        "ratio": 0.031,
+        "null_delta": 4.64,
+        "null_inl": 876,
+        "push_delta": 25.35,
+        "push_inl": 27,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 172.9161476362242,
+        "ratio": 0.079,
+        "null_delta": 3.19,
+        "null_inl": 1281,
+        "push_delta": 26.44,
+        "push_inl": 101,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 217.9161476362242,
+        "ratio": 0.174,
+        "null_delta": 2.59,
+        "null_inl": 1294,
+        "push_delta": 24.78,
+        "push_inl": 225,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 262.9161476362242,
+        "ratio": 0.035,
+        "null_delta": 1.1,
+        "null_inl": 228,
+        "push_delta": 16.89,
+        "push_inl": 8,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 307.9161476362242,
+        "ratio": 0.0,
+        "null_delta": 3.2,
+        "null_inl": 51,
+        "push_delta": 8.78,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727352968,
+    "frame": "p1788727352968.jpg",
+    "bearing": 304.59270892165705,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 304.59270892165705,
+        "ratio": 0.0,
+        "null_delta": 3.93,
+        "null_inl": 0,
+        "push_delta": 5.01,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 349.59270892165705,
+        "ratio": 0.0,
+        "null_delta": 2.76,
+        "null_inl": 11,
+        "push_delta": 6.37,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 34.59270892165705,
+        "ratio": 0.154,
+        "null_delta": 1.13,
+        "null_inl": 26,
+        "push_delta": 7.37,
+        "push_inl": 4,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 3,
+        "want": 79.59270892165705,
+        "ratio": 0.125,
+        "null_delta": 3.75,
+        "null_inl": 24,
+        "push_delta": 9.64,
+        "push_inl": 3,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 4,
+        "want": 124.59270892165705,
+        "ratio": 0.071,
+        "null_delta": 4.2,
+        "null_inl": 987,
+        "push_delta": 20.93,
+        "push_inl": 70,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 169.59270892165705,
+        "ratio": 0.138,
+        "null_delta": 3.44,
+        "null_inl": 1341,
+        "push_delta": 26.1,
+        "push_inl": 185,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 214.59270892165705,
+        "ratio": 0.274,
+        "null_delta": 3.58,
+        "null_inl": 782,
+        "push_delta": 19.16,
+        "push_inl": 214,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 259.59270892165705,
+        "ratio": 0.0,
+        "null_delta": 2.85,
+        "null_inl": 49,
+        "push_delta": 14.84,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727382816,
+    "frame": "p1788727382816.jpg",
+    "bearing": 258.88507718696394,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 258.88507718696394,
+        "ratio": 0.0,
+        "null_delta": 1.12,
+        "null_inl": 0,
+        "push_delta": 1.6,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 1,
+        "want": 303.88507718696394,
+        "ratio": 0.0,
+        "null_delta": 3.22,
+        "null_inl": 0,
+        "push_delta": 5.9,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 348.88507718696394,
+        "ratio": 0.0,
+        "null_delta": 4.73,
+        "null_inl": 15,
+        "push_delta": 7.44,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 3,
+        "want": 33.88507718696394,
+        "ratio": 0.25,
+        "null_delta": 2.64,
+        "null_inl": 36,
+        "push_delta": 7.42,
+        "push_inl": 9,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 4,
+        "want": 78.88507718696394,
+        "ratio": 0.173,
+        "null_delta": 2.79,
+        "null_inl": 799,
+        "push_delta": 13.09,
+        "push_inl": 138,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 123.88507718696394,
+        "ratio": 0.082,
+        "null_delta": 4.07,
+        "null_inl": 805,
+        "push_delta": 25.74,
+        "push_inl": 66,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 168.88507718696394,
+        "ratio": 0.126,
+        "null_delta": 3.6,
+        "null_inl": 1265,
+        "push_delta": 24.37,
+        "push_inl": 159,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 213.88507718696394,
+        "ratio": 0.049,
+        "null_delta": 1.29,
+        "null_inl": 907,
+        "push_delta": 22.53,
+        "push_inl": 44,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727413482,
+    "frame": "p1788727413482.jpg",
+    "bearing": 216.1302312085738,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 216.1302312085738,
+        "ratio": 0.014,
+        "null_delta": 3.31,
+        "null_inl": 628,
+        "push_delta": 23.14,
+        "push_inl": 9,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 261.13023120857383,
+        "ratio": 0.179,
+        "null_delta": 3.99,
+        "null_inl": 39,
+        "push_delta": 9.5,
+        "push_inl": 7,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 2,
+        "want": 306.13023120857383,
+        "ratio": 0.0,
+        "null_delta": 0.91,
+        "null_inl": 40,
+        "push_delta": 8.14,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 3,
+        "want": 351.13023120857383,
+        "ratio": 0.0,
+        "null_delta": 3.69,
+        "null_inl": 31,
+        "push_delta": 10.38,
+        "push_inl": 0,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 4,
+        "want": 36.13023120857383,
+        "ratio": 0.2,
+        "null_delta": 3.3,
+        "null_inl": 35,
+        "push_delta": 8.09,
+        "push_inl": 7,
+        "verdict": "unmeasurable"
+      },
+      {
+        "dir": 5,
+        "want": 81.13023120857383,
+        "ratio": 0.044,
+        "null_delta": 0.89,
+        "null_inl": 686,
+        "push_delta": 12.62,
+        "push_inl": 30,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 126.13023120857383,
+        "ratio": 0.101,
+        "null_delta": 3.33,
+        "null_inl": 785,
+        "push_delta": 25.18,
+        "push_inl": 79,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 171.13023120857383,
+        "ratio": 0.107,
+        "null_delta": 4.35,
+        "null_inl": 1302,
+        "push_delta": 25.75,
+        "push_inl": 139,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727454209,
+    "frame": "p1788727454209.jpg",
+    "bearing": 87.02170113579169,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 87.02170113579169,
+        "ratio": 0.319,
+        "null_delta": 8.62,
+        "null_inl": 1017,
+        "push_delta": 22.97,
+        "push_inl": 324,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 132.0217011357917,
+        "ratio": 0.052,
+        "null_delta": 3.8,
+        "null_inl": 1303,
+        "push_delta": 21.09,
+        "push_inl": 68,
+        "verdict": "free"
+      },
+      {
+        "dir": 2,
+        "want": 177.0217011357917,
+        "ratio": 0.416,
+        "null_delta": 2.75,
+        "null_inl": 829,
+        "push_delta": 13.61,
+        "push_inl": 345,
+        "verdict": "free"
+      },
+      {
+        "dir": 3,
+        "want": 222.0217011357917,
+        "ratio": 0.029,
+        "null_delta": 0.95,
+        "null_inl": 1151,
+        "push_delta": 18.96,
+        "push_inl": 33,
+        "verdict": "free"
+      },
+      {
+        "dir": 4,
+        "want": 267.02170113579166,
+        "ratio": 0.326,
+        "null_delta": 2.44,
+        "null_inl": 518,
+        "push_delta": 20.76,
+        "push_inl": 169,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 312.02170113579166,
+        "ratio": 0.097,
+        "null_delta": 1.63,
+        "null_inl": 186,
+        "push_delta": 11.64,
+        "push_inl": 18,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 357.02170113579166,
+        "ratio": 0.11,
+        "null_delta": 3.36,
+        "null_inl": 1329,
+        "push_delta": 13.22,
+        "push_inl": 146,
+        "verdict": "free"
+      },
+      {
+        "dir": 7,
+        "want": 42.02170113579166,
+        "ratio": 0.433,
+        "null_delta": 3.34,
+        "null_inl": 1411,
+        "push_delta": 14.74,
+        "push_inl": 611,
+        "verdict": "free"
+      }
+    ]
+  },
+  {
+    "stamp": 1788727489413,
+    "frame": "p1788727489413.jpg",
+    "bearing": 36.83625522635015,
+    "probes": [
+      {
+        "dir": 0,
+        "want": 36.83625522635015,
+        "ratio": 0.372,
+        "null_delta": 2.42,
+        "null_inl": 1388,
+        "push_delta": 13.79,
+        "push_inl": 517,
+        "verdict": "free"
+      },
+      {
+        "dir": 1,
+        "want": 81.83625522635015,
+        "ratio": 0.654,
+        "null_delta": 3.63,
+        "null_inl": 976,
+        "push_delta": 12.2,
+        "push_inl": 638,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 2,
+        "want": 126.83625522635015,
+        "ratio": 0.865,
+        "null_delta": 6.44,
+        "null_inl": 780,
+        "push_delta": 8.46,
+        "push_inl": 675,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 3,
+        "want": 171.83625522635015,
+        "ratio": 1.03,
+        "null_delta": 6.45,
+        "null_inl": 694,
+        "push_delta": 6.38,
+        "push_inl": 715,
+        "verdict": "blocked"
+      },
+      {
+        "dir": 4,
+        "want": 216.83625522635015,
+        "ratio": 0.149,
+        "null_delta": 2.04,
+        "null_inl": 1302,
+        "push_delta": 26.23,
+        "push_inl": 194,
+        "verdict": "free"
+      },
+      {
+        "dir": 5,
+        "want": 261.83625522635015,
+        "ratio": 0.052,
+        "null_delta": 3.4,
+        "null_inl": 307,
+        "push_delta": 16.64,
+        "push_inl": 16,
+        "verdict": "free"
+      },
+      {
+        "dir": 6,
+        "want": 306.83625522635015,
+        "ratio": 0.0,
+        "null_delta": 4.13,
+        "null_inl": 110,
+        "push_delta": 9.54,
         "push_inl": 0,
         "verdict": "free"
       },
       {
         "dir": 7,
-        "want": 354.2144222830679,
-        "ratio": 0.419,
-        "null_delta": 1.67,
-        "null_inl": 1394,
-        "push_delta": 11.42,
-        "push_inl": 584,
+        "want": 351.83625522635015,
+        "ratio": 0.0,
+        "null_delta": 4.07,
+        "null_inl": 213,
+        "push_delta": 9.47,
+        "push_inl": 0,
         "verdict": "free"
       }
     ]

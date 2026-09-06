@@ -68,6 +68,10 @@ MOVED_MAX_RATIO = 0.50
 # 9-11 keypoints and the next lowest non-wedged frame holds 744, so this floor
 # sits between two measured populations rather than inside one.
 MIN_NULL_INLIERS = 100
+
+# How far to travel between sample points. Longer than a probe, so points are
+# genuinely different places rather than the same one measured twice.
+TRAVEL_SEC = 1.4
 DEAD_DELTA = 0.35         # at or below this the STREAM is dead, not the path
 
 
@@ -137,6 +141,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     ar.open_stream()
     samples = []
+    prev_heading = None
     log(f"collecting {POINTS} points x {DIRECTIONS} directions")
     for i in range(POINTS):
         if i % RESET_EVERY == 0:
@@ -210,6 +215,31 @@ def main():
                 return
         samples.append(rec)
         _harness.save_result(os.path.join(OUT, "probes.json"), samples)
+
+        # TRAVEL TO A NEW POINT. Without this every "point" is the same place:
+        # the probe walks back after each free direction, so nothing ever moves,
+        # and a first run of 24 points collected 24 samples of the spawn. Caught
+        # by the user noticing every photo was the office.
+        #
+        # It walks a FREE direction, preferring one it has not just come from,
+        # so coverage follows open space instead of repeatedly testing a wall.
+        free = [q for q in rec["probes"] if q["verdict"] == "free"
+                and q["want"] is not None]
+        if not free:
+            log("  nowhere free to go from here — resetting")
+            reset_env.reset_environment(log=lambda *a: None,
+                                        progress_file="progress_testing.json")
+            time.sleep(1.2)
+            continue
+        # furthest from the reverse of the way we arrived, i.e. keep going
+        want = max(free, key=lambda q: min(
+            abs((q["want"] - prev_heading + 180) % 360 - 180), 180)
+            if prev_heading is not None else q["ratio"])["want"]
+        st.turn_to(want, lambda: compass.read_bearing(cap()), cap,
+                   log=lambda *a: None, tolerance=6.0)
+        push(TRAVEL_SEC, PROBE_SPEED)
+        prev_heading = want
+        log(f"  travelled {TRAVEL_SEC:.1f}s along {want:.0f} to the next point")
     ar.send(["clear"])
     log(f"\n  {len(samples)} points -> {OUT}/probes.json")
 
