@@ -1704,9 +1704,68 @@ the user looked at the screen and said so.
 Cost here was two minutes of hand-driving. Cost to an unattended run is a night
 spent pressing buttons at a sleeping console while every log line says the stream
 is up — §10.1's shape exactly, where doing nothing looks like working.
-**Not fixed:** the replacement predicate has to sit between two measured
-populations (§10.4) and no such census exists. Cheapest starting point is that the
-host-list frame carries the literal text `State: standby`.
+### What the diagnosis established, 2026-09-05
+
+**`streaming()`'s OWN DOCSTRING CENSUS IS WRONG.** It claims
+
+    chiaki host list, disconnected  find_bar None   bearing None
+
+Measured on the standby host-list frame: **`find_bar` returns `(70, 1089, 1810)`**,
+not None. The one state the function exists to detect is the one its evidence
+cannot see. `read_bearing` (None) and `is_pause_screen` (False) both answered
+correctly — only `find_bar` fired, and it is the check that runs first.
+
+**WHAT IT MATCHED.** `find_bar` returns `(y, x_left, x_right)` and looks for a
+thin bright band with dark rows above and below. chiaki's own blue toolbar
+("Create Steam Shortcut / Refresh PSN Hosts") is exactly that, at **y = 70**
+against the real compass strip's **y = 64**. No y-band and no thinness rule can
+separate them; the impostor is 6px away from the target.
+
+**ONE CANDIDATE REFUTED, WITH n = 800.** "Qt chrome is flat fills, a rendered game
+frame is textured" — scored as the fraction of pixels sharing the single most
+common exact RGB value, over 800 archived frames from `demos/` and
+`screenshot_log/`:
+
+    game frames   p50 0.0300   p90 0.0598   p99 0.1121   MAX 0.6556
+    host list, standby                                       0.6262
+
+The populations OVERLAP — the flattest game frames (loading/black screens) are
+flatter than the host list. A threshold here would sit inside one population,
+which is §10.4 exactly. **Do not rebuild this one.**
+
+**NO FREE WINDOW-TITLE DISCRIMINATOR.** `kCGWindowName` is empty for both of
+chiaki's windows, so the pixel-independent route that `game_window_rect()` almost
+offers is not available; it matches on `kCGWindowOwnerName` because that is all
+macOS hands over here.
+
+**THE SURVIVING CANDIDATE, AND IT IS NOT YET A CENSUS.** The compass strip is
+CENTRED in the game frame; chiaki's toolbar is right-aligned.
+
+    world, in game        x 609..1328   centre  968   (frame 1920 -> offset  -11)
+    host list, standby    x 1089..1810  centre 1450   (offset +490)
+    pause book            x 279..1607   centre  943
+    PS5 Control Center    x 221..1636   centre  929
+
+Three game-side states cluster at the centre and the chrome sits far right. **But
+this is n = 1 on the chrome side**, and a threshold on one sample is the thing
+this file keeps being caught by. Collecting more host-list frames requires taking
+the stream DOWN, so it was not done: OPEN-16's verification and the rig work
+needed the stream up.
+
+**AN UNRESOLVED INCONSISTENCY, RECORDED RATHER THAN EXPLAINED.** Live, on the PS5
+Control Center overlay, `read_bearing` returned **43.7** — that is what made this
+session's own "WORLD IS UP" check believe a frame with no world in it. Re-measured
+on the JPEG saved from that same capture it returns **None**. Same moment, two
+answers. Either the lossy save changed the pixels the letter reader depends on, or
+`compass._SCALE_CACHE` was primed differently in the two processes. **This matters
+beyond one detector**: §10.15 says KEEP A FRAME, and a kept frame that answers
+differently from the live capture is not evidence about the live capture. Settle
+it before using saved frames to tune any compass threshold.
+
+**Not fixed:** the replacement predicate still has to sit between two measured
+populations (§10.4). Next step is the centring test above with a real host-list
+population behind it; the peer's suggestion of the literal text `State: standby`
+remains the fallback.
 
 **OPEN-19 — Did the OLD `clear` corrupt §6's walking table?** Raised 2026-09-05
 and deliberately left open rather than inherited.
@@ -1734,5 +1793,67 @@ stick-to-distance relation has. **`LEG_SPEED_MAX = 0.60` derives from these
 numbers** (§6), so this is load-bearing, not curiosity.
 
 **Do NOT re-measure with `walk_curve.py` until OPEN-16's fix is on the rig** — its
-loop is the one live site inside the release window, so the script would now
-corrupt the very table it is being run to check. It is the fix's own test case.
+loop is the one live site inside the release window, so the script would corrupt
+the very table it is being run to check. It is the fix's own test case. (The fix
+IS on the rig as of 2026-09-05, so this no longer blocks.)
+
+**DOWNGRADED 2026-09-05 — LOW VALUE, and the user was right to ask.**
+`LEG_SPEED_MAX` has exactly ONE production consumer, `graph_walk.py:1308`, which
+is leg-speed scaling — and §8(h) already measured that lever: *"a 32% cut in
+walking bought 5% and a worse mean."* So this table feeds one thing and that thing
+is known not to pay. `walk_curve.py` also drives `left_y` ONLY (`walk_forward`
+with the default `strafe=0`), so it cannot speak to the question that actually
+motivated it — see OPEN-20. Answer it if it is ever cheap; do not spend rig time
+on it.
+
+An attempt on 2026-09-05 was VOID and is not in the record: run straight from a
+reset, it measured the character pressed against the typewriter desk (the spawn
+FACES that desk, so forward is blocked). 18 of 21 samples read displacement 0.0,
+which is what a wedge looks like and also what a dead stream looks like — the
+script has no way to tell those apart and reported a table of zeros as though it
+were data. **If it is ever re-run, position in the office corridor first and
+assert a non-zero control sample before trusting any row.**
+
+**OPEN-20 — THE EXECUTOR NEVER WALKS DIAGONALLY, AND THE HUMAN ALWAYS DID.**
+Raised 2026-09-05 by the user, who says this was the original point of the
+walking-response work: *"get claude to walk diagonally instead of walking straight
+then turning right and walking forward."* Nothing was ever built.
+
+**The executor cannot steer with the left stick, by construction:**
+
+    graph_walk.py:623   st.walk_leg(0.0, -abs(speed), dur, ...)
+                                    ^^^ lx is a hardcoded literal zero
+
+So every step of every leg is: turn the CAMERA to the step's bearing, then push
+the left stick straight ahead. `slow_traverse.walk_leg` takes `lx` and
+`walk_steps.walk_forward` takes `strafe` — the machinery is already there and is
+used ONLY by the escape manoeuvres (`unstick`, the slip ladder, `goaround`), never
+by a leg.
+
+**The evidence that the human did the opposite is already in this file.** On
+`portrait_room -> bar_pool_room` the recorded `cam` is constant to **0.13 deg**
+across the whole leg while `bearing` spans **6.59 deg**. The human did not turn
+the camera at all; they held it still and steered entirely with the left stick.
+The same section notes the final leg's `cam` is 86.73-87.01 across all eight steps
+while `bearing` swings 71.99 -> 97.63 -> 75.46. `bearing` = camera heading +
+left-stick angle, and the executor throws the second term away.
+
+**Why this is not a rediscovery.** GRAVEYARD's only strafe row is *"blind crabbing
+to get around an obstacle"* — an unguided escape push when already stuck, not
+replay of a recorded vector. And this is the OPPOSITE shape to both closed
+families: "steering while walking" is a mid-push feedback loop converting heading
+error into position error, while this is open-loop with the camera FIXED; and
+"chunking a leg into more cycles" adds accelerations, while collapsing a
+turn-then-walk pair into one diagonal push REMOVES a turn and an acceleration per
+step. Both survivors in the graveyard move nothing; this moves less than what it
+replaces.
+
+**What it would take.** `route3_steps.json` already stores `cam` per step, so the
+inputs exist. Hold the camera at `cam`, drive `left_x`/`left_y` as the recorded
+vector, and the per-step turn disappears. Then A/B against turn-then-walk: 10
+trials per arm, interleaved, verified arrivals, reported by failure class (§10.3,
+§10.5).
+
+**Note the left stick's DIAGONAL response is unmeasured.** §6's table is
+`left_y`-only, so it does not cover this — see OPEN-19, which is why that one is
+downgraded rather than closed.
