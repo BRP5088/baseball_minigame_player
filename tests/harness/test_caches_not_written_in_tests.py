@@ -100,5 +100,48 @@ for fn in ("compass_scale.json", "view_bounds.json"):
         check(f"{fn} carries no demo-archive geometry key"
               + (f" (found {polluted})" if polluted else ""), not polluted)
 
+# --- 4. a forced write must be redirected first -----------------------------
+# `force=True` is the escape hatch for the two tests that exercise persistence
+# itself. It is also a way to reintroduce the exact bug: forcing a write while
+# the module still points at the project's own file pollutes the rig again, and
+# nothing would fail. So any test that forces must also redirect the path.
+import ast
+
+FORCED = {"_save_scale_cache": "_SCALE_CACHE_FILE",
+          "_save_view_cache": "_VIEW_CACHE_FILE"}
+_forcing = []
+tests_root = os.path.join(_ROOT, "tests")
+for dirpath, _dirnames, filenames in os.walk(tests_root):
+    for fn in filenames:
+        if not (fn.startswith("test_") and fn.endswith(".py")):
+            continue
+        full = os.path.join(dirpath, fn)
+        try:
+            tree = ast.parse(open(full).read(), full)
+        except SyntaxError:
+            continue
+        forced_here, redirected = set(), set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                    and node.func.attr in FORCED:
+                if any(k.arg == "force" and getattr(k.value, "value", False) is True
+                       for k in node.keywords):
+                    forced_here.add(node.func.attr)
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Attribute) and t.attr in FORCED.values():
+                        redirected.add(t.attr)
+        for call in sorted(forced_here):
+            _forcing.append((fn, call, FORCED[call] in redirected))
+
+for fn, call, redirected in _forcing:
+    check(f"{fn} redirects {FORCED[call]} before calling {call}(force=True)"
+          + ("" if redirected else " -- without it, that call writes the RIG's "
+                                   "real calibration file"),
+          redirected)
+
+check("at least one test exercises the forced-write path, so rule 4 is not "
+      f"vacuous (found {len(_forcing)})", len(_forcing) >= 2)
+
 print("\nall green" if ok else "\nFAILURES above")
 sys.exit(0 if ok else 1)

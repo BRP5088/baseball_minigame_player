@@ -510,7 +510,7 @@ this table with its n and date**; it predates the button fix.
 ### (c) Retrying is the only lever that reaches the target
 
     follow() once, single attempt         ~55% per node
-    go_to_node_verified (3 attempts)      4/4 in one sample, ~75s each
+    go_to_node_verified (3 attempts)      10/10, median 52.9s  (OPEN-4, n=10)
 
 Retrying costs TIME, not probability. At the measured per-attempt 0.40 for the
 jukebox leg: attempts=3 gives a node rate of 0.784; attempts=7, 0.972;
@@ -1069,6 +1069,126 @@ used across the project.
 Reproduce: re-encode any frame `read_bearing` reads, at quality 75 and 88, and
 compare. No rig, no console, ~2 minutes.
 
+### CORRECTION 2026-09-06 — re-measured twice, and the entry above is wrong in
+### four ways. Read them before quoting any number from it.
+
+Two agents reproduced this independently, the second adversarially. The effect
+is REAL and the mechanism named above is RIGHT. Everything quantitative is not.
+
+**1. IT WAS MEASURED ON A READER THAT NO LONGER SHIPS.** The numbers above come
+from the pre-OPEN-15 `compass.py` (41,144 bytes). On the same worst-case run the
+SHIPPED reader gives **5 of 270 at q75 and 0 of 262 at q88** wrong by >5 deg.
+The guards landed; this is largely a description of the old reader.
+
+**2. IT UNDER-REPORTS ITS OWN FINDING BY ABOUT 10x.** "2.5%" and "3.8%" come from
+a 120-frame subset. Over the whole run that produced them, the OLD reader's rate
+is **25.1% and 22.7%**. The entry was too kind to itself.
+
+**3. IT IS A SINGLE-RUN EFFECT, NOT A RESOLUTION EFFECT.** All eight demo runs
+are 1400x787, so "demo archive" and "0.73x linear resolution" were perfectly
+confounded, and the RUN wins: `demos/walk3_full_20260828_050731`, same geometry,
+710 frames, **zero** errors >5 deg at either quality, max 0.89 deg. Every flip
+anyone has found is in `demos/walk_20260827_214446`. So "zero at 1920x1080" does
+not license "the live geometry is safe" — it says those particular scenes are.
+
+**4. PNG IS LOSSLESS AND CHANGES NOTHING.** 3,154 reads, max delta **0.0000**.
+Only JPEG re-encoding perturbs anything. A compass fixture must therefore be a
+PNG, and `test_fixtures/compass/bar_doorway_abstains_1920.png` already is — the
+bearings derived from it are unaffected by any of this.
+
+**THE ATTRIBUTION IS RIGHT, WITH ONE REFINEMENT.** It is the LETTER-
+CORROBORATION family that stops the cardinal flips — `REQUIRE_TWO_LETTERS` **or**
+`POOL_THRESHOLDS`, either alone is enough. `USE_TICK_LATTICE` stops a DIFFERENT
+failure whose signature is ~32-37 deg: with the lattice on and both letter guards
+off, >5 deg goes 5/270 to 34/178 at q75 with a correct cached pitch. A first pass
+that credited the lattice was confounded by leaving `POOL_THRESHOLDS` on.
+
+**THE §8(k) HYPOTHESIS LOSES ITS OFFLINE SUPPORT.** No 90-degree error is
+producible at 1920x1080 on any frame that actually contains a compass bar, on
+either reader. And the bullet above beginning "If `REQUIRE_TWO_LETTERS` lands" is
+stale: it ships True. §8(k) is back to having no candidate explanation.
+
+**THE LIVE PATH, CHECKED PROPERLY.** `graph_walk.reference_heading()` (~:1748) is
+the ONE production caller that reads a bearing from a SAVED file rather than a
+live capture — `places/<node>/route_*.jpg` — and `align_at_node` turns the camera
+to that heading before measuring dx, so a wrong read there moves the character.
+On the four files that exist, both readers agree to within **0.066 deg** across
+original / PNG / q88 / q75. The best available proxy for the live question — 206
+`world_log` pairs of a live in-memory read against the q82 JPEG saved from the
+same object, all at 1920x1080 — gives max **0.591 deg** and zero disagreements
+>5 deg. **No live hazard is demonstrated.** What remains unknown offline is
+whether the ORIGINAL capture that produced those JPEGs read the same as the file.
+
+**THE REPRODUCE RECIPE ABOVE NO LONGER WORKS** at HEAD on any corpus except
+`demos/walk_20260827_214446`.
+
+---
+
+## Five more guards that could not fire, and one that wrote to the rig (2026-09-06)
+
+All five found by re-verifying claims rather than by a failure. Same shape every
+time: something reported clean while the thing it guarded was broken.
+
+**THE OFFLINE SUITE WAS WRITING THE RIG'S CALIBRATION FILES.**
+`compass_scale.json` and `view_bounds.json` are read back by LIVE runs — the
+scale cache sets degrees-per-pixel on the compass strip, the view cache moves the
+view centre and hence every bearing — and both were written unconditionally.
+`./run_tests.sh` added a key derived from DEMO ARCHIVE frames at 1400x787, a
+geometry no live capture produces, to the file the rig uses. Nothing errored;
+nothing ever does when a cache is quietly wrong. Only the WRITE is now suppressed
+under `BASEBALL_TEST_RUN` — the in-memory cache fills exactly as it would live,
+so tests exercise the same path with the same values. Pinned by
+`tests/harness/test_caches_not_written_in_tests.py`, which also refuses a
+demo-archive geometry key found in either real file, catching the pollution even
+if it arrives by another route. §11's OPEN-6 audit named this hazard and nothing
+had closed it.
+
+**THE OPEN-16 C++ CHECK WENT VACUOUS IF A CONSTANT CHANGED.**
+`tests/cpp/test_injectinput.cpp` mirrors the injector's `RELEASE_MS` as a local
+100, with a comment claiming the duplicate was safe because it "only ever chooses
+between PASS and INCONCLUSIVE". False: it also set the pump horizon, so a real
+`RELEASE_MS` above 250 stopped the loop BEFORE the real deadline. Demonstrated —
+with the OPEN-16 fix DELETED and `RELEASE_MS` raised to 300, the file reported
+`pass=21 fail=0` and "all green". The mirror is now a FLOOR; the check takes the
+larger of it and the window this process actually MEASURED a moment earlier, so
+load lengthens both together and waiting longer only makes the bug more certain
+to fire. Same mutation now gives `pass=20 fail=1`.
+
+*If you mutate `injectinput.cpp`: `g_inject.release_until = 0;` appears TWICE.
+Line 193 is the fix; line 325 is the release path. A count-blind replace mutates
+both and measures nothing (§10.10).*
+
+**THE PATCH DIVERGENCE LIST WAS GUARDED BY COUNT, NOT COVERAGE.** See the OPEN-11
+entry — replacing a row rather than deleting it kept the count at five and left a
+patched file compared against nothing.
+
+**HARNESS CLEANUPS RESTORED STALE DEFAULTS.** Every A/B flips a `graph_walk` flag
+and restores it in a `finally`, and every one restored a LITERAL — what the
+default was on the day that script was written. Two had already rotted:
+`ab_leg_speed` restored `LEG_SPEED_BY_LEG = {}` after leg 1 shipped an override,
+and `ab_stall` restored `STALL_CHANGE = 2.5` after it became 6.0. In-process
+only, so nothing on disk was damaged — but a cleanup that reinstates a stale
+default looks like tidiness and installs an arm. All four now capture the flag at
+import. `tests/harness/test_harness_restores_shipped_value.py` enforces it, and
+exempts subprocess harnesses for a reason worth keeping: they set the arm inside
+the `run_trial` child, which then exits, so process death IS the restore and it
+cannot be written wrong. That is a second reason to prefer that pattern.
+
+**`profile_trial.py` MEASURED THE WRONG THING THREE WAYS.** It wrapped
+`walk_steps.walk_forward`/`turn_to`, which a LEG NEVER CALLS (legs go through
+`slow_traverse`); it profiled `reset` plus two legs rather than the §8(a) route;
+and it summed NESTED timers, so its "65% unaccounted" was an artefact of the
+arithmetic. It now profiles the route through `follow_verified` and records
+INCLUSIVE and EXCLUSIVE seconds, so the exclusive column sums to elapsed time and
+the residual is real. **Read the exclusive column.** Pinned offline against a
+synthetic call tree by `tests/harness/test_profile_exclusive_time.py`.
+
+**A NOTE ON WHERE THE STAIRS POSE LIVES.** `STAIRS_APPROACH.md` holds the
+hand-measured doorway approach — bearing, pitch, and three pitch constants that
+contradict each other — derived live with the user watching the stream. Nothing
+in this file referenced it, which is how a measured document becomes invisible.
+Read it before touching leg 2 or anything about pitch.
+
 ---
 
 ## §11 OPEN
@@ -1242,14 +1362,25 @@ costing the route, and it is UNMEASURED. Run it FIRST, before the other open
 A/Bs: if arrival moves, several of those experiments are asking the wrong
 question. 10 trials, scored on verified arrivals, reported by failure class.
 
-**Two things to fix in the harness before starting it**, both established
-2026-09-05 and both cheap. `overnight/ab_jukebox_leg.py` walks the leg under test
-with `gw.walk_link`, which publishes no leg-end frame, so as written it collects
-NO evidence about the leg (see OPEN-1) — point it at
-`go_to_node_verified(TARGET, shots=...)`. And it resets twice per trial, because
-it calls `go_to_node_verified` directly without `start_hint=gw.SPAWN` (see
-OPEN-8) — one word, worth ~24s a trial. Make both changes BEFORE the first
-trial, never between arms.
+**THE HARNESS IS NOW READY (2026-09-06). Both blockers are fixed; do not
+re-apply them.** `ab_jukebox_leg.py` walked the leg under test with
+`gw.walk_link`, which publishes no leg-end frame, so as written it collected NO
+evidence about the leg it exists to test (OPEN-1); and it reset twice a trial
+for want of `start_hint`. Both are fixed, in `overnight/_harness.py` rather than
+in the script, so the next harness cannot re-copy them:
+
+`_harness.walk_leg_under_test()` runs ONE attempt through `follow_verified` —
+one attempt, because the retrying primitive is a different quantity (OPEN-4,
+10/10) and retries would hide exactly the difference this A/B looks for. It
+returns the census SPLIT BY PROVENANCE, and counts recovery-fan rescues
+separately from arrivals, because a rescued trial travelled ~7x the leg's
+distance and is not evidence the leg arrives. `_harness.report_leg_arm()` prints
+both censuses so a shrinking denominator is visible rather than silent.
+`ab_stall_on_restored.py` had the identical defect and now shares the same path.
+
+Pinned by `tests/harness/test_leg_under_test_collects_evidence.py`, which
+asserts on CALLS through a stub rather than on source text — the older
+substring-matching guard passes when the bug is re-introduced.
 
 **OPEN-13 — Does nulling the yaw before aligning improve ARRIVAL?**
 `graph_walk.NULL_YAW_BEFORE_ALIGN` ships **True**, because the old behaviour
@@ -1280,12 +1411,23 @@ behind when the key gained `REFERENCE_POSE`. Fixed in the main checkout, and
 mutation-tested by replacing that `log(...)` with `pass` (file size 100550 ->
 100374, so no stale bytecode) — the check then fails, and only that one.
 
-**OPEN-4 — Is arrival at `bar_pool_room` really ~55%, and does
-`go_to_node_verified` really approach 100%?** 11/20 for a single walk vs 4/4 at
-~75s for the 3-attempt primitive. Different quantities; the second is the one
-that matters. Everything downstream needs a verified start pose, and one
-re-record attempt reached its start node **0 of 20** and another **4 of 20**.
-**Measure the primitive, n>=10, one leg not a full route.**
+**OPEN-4 — ANSWERED 2026-09-06. `go_to_node_verified` arrives 10/10.**
+`overnight/measure_primitive.py`, n=10, target `bar_pool_room`, attempts=3:
+**10 valid, 0 invalid, 10 arrived, median 52.9s**, and `locate()` agreed with
+the primitive on every trial (zero disagreements). Config as shipped:
+`TRUST_RESET_SPAWN` True, `RECOVER_MISSED` True, `NULL_YAW_BEFORE_ALIGN` True,
+`REFERENCE_POSE` "bot". Result in `overnight/primitive_open4.json`.
+
+So the two quantities really are different, and the one that matters is the good
+one. The ~55% figure is a SINGLE WALK; the retrying primitive is what everything
+downstream should use, and it is not the bottleneck. The earlier "4/4 at ~75s"
+is superseded — 52.9s is the median now that the spawn hint removes the wasted
+sweep and second reset (OPEN-8 cut 1).
+
+**What this does NOT say.** It is one leg from a reset, not a route, and it was
+measured in one session — §10.5 warns that route performance has a large
+session-to-session component. It does not license quoting 100% for a full
+route: §8(a) still measures 6/10 there.
 
 **OPEN-5 — Is `attempts=9` better than `attempts=3`?** Run 1 was inconclusive
 and contaminated: attempts_9 2/3 valid (3 of 6 trials invalid on a 420s
@@ -1423,13 +1565,16 @@ shortened, because `walk_leg` would then capture mid-motion and inflate `best`,
 which is the input to `STALL_CHANGE` — a blocked step would read as walked. Four
 percent is not worth breaking a gate.
 
-**REMAINS.** (a) The ~24s is removed ONLY for `consecutive_arrivals`. Every
-harness under `overnight/` — `ab_leg_speed`, `ab_jukebox_leg`, `ab_stall*`,
-`ab_local_recovery`, `ab_attempts`, `profile_trial` — calls
-`go_to_node_verified` directly and still resets twice. One word each,
-`start_hint=gw.SPAWN`; make the change BETWEEN experiments, never during one.
-Re-profiling `profile_trial.py` unchanged will show NO improvement, so the
-"85.6s -> ~61s" figure describes a build nobody has made yet. (b) About 26% of a
+**(a) IS DONE, 2026-09-06.** Every harness that resets and then navigates now
+passes `start_hint=gw.SPAWN` — seven call sites. Pinned by
+`tests/harness/test_overnight_start_hint.py`, an AST scan that fires only where
+a reset and a navigation call share a scope, so a call with no reset is never
+forced to claim one. It carries a floor so it cannot pass by scanning nothing.
+`profile_trial.py` was rewritten at the same time (see below), so the
+"85.6s -> ~61s" figure still describes a build nobody has made — but it now
+describes the wrong quantity as well, and should not be quoted at all.
+
+**REMAINS.** (b) About 26% of a
 338.4s streak trial (~89s) is still unexplained with every modelled component at
 its floor — one push per turn, no compass retries, no ladder repeats. Cut 2 was
 the strongest candidate; re-run one streak trial and see whether the residual
@@ -1501,8 +1646,21 @@ be read from the test; guessing it would put a threshold inside one population.
 Two standing costs. `chiaki-ng-src/` is gitignored, so this file HARD-FAILS on a
 machine without it — deliberate, since an unverifiable claim is not a passing
 one, but it means a fresh clone has one failing test until that tree is present.
-And `tests/cpp/probe_release_window.cpp`, the only evidence for OPEN-16, is
-compiled by nothing automatically and can rot silently.
+(An earlier version of this paragraph said `tests/cpp/probe_release_window.cpp`
+was "the only evidence for OPEN-16" and could rot. That file no longer exists
+anywhere on disk or in git history — it BECAME two checks inside
+`tests/cpp/test_injectinput.cpp` that the suite now runs every time, as the
+OPEN-16 entry below already records. The sentence contradicted its own ticket
+and pointed at nothing.)
+
+**One hole found on re-verification 2026-09-06 and CLOSED.** The file list was
+guarded by COUNT (`len(PATCH_FILES) >= 5`), which catches a deleted row but not
+a REPLACED one: swapping the `main.cpp` row for a second copy of the
+`injectinput.h` row keeps the count at five, leaves `main.cpp` compared against
+nothing, and prints "all green" with a drifted patched file. `len(set(...))` is
+defeated too, by a near-duplicate (`"./injectinput.h"`) that is a distinct tuple
+naming the same file. The list is now asserted to COVER exactly the contents of
+`chiaki-patch/` minus README.md. All three attacks fail by name.
 
 **OPEN-12 — CLOSED 2026-09-05.** `ocr_glyphs` gained a word mode
 (`image_to_text(image, psm, whitelist)`) sharing the existing persistent
@@ -1806,9 +1964,19 @@ common exact RGB value, over 800 archived frames from `demos/` and
     game frames   p50 0.0300   p90 0.0598   p99 0.1121   MAX 0.6556
     host list, standby                                       0.6262
 
-The populations OVERLAP — the flattest game frames (loading/black screens) are
-flatter than the host list. A threshold here would sit inside one population,
-which is §10.4 exactly. **Do not rebuild this one.**
+**THE REASON ABOVE IS WRONG, AND THE CONCLUSION SURVIVES ANYWAY (2026-09-06).**
+The table scores the WRONG POPULATION. Flatness is a discriminator applied only
+AFTER `find_bar` has already fired; a frame `find_bar` returns None on never
+reaches it. Conditioned on `find_bar` firing, the game side tops out at 0.5024
+(400-frame tail) and 0.1153 (random 800) against the host list's 0.6262 — a gap,
+not an overlap. Every one of the 17 frames at or above 0.6262 is a PURE BLACK
+fade frame, mean 0.0, on which `find_bar` returns None.
+
+So the populations do not overlap. **Do not rebuild this one anyway**, for the
+honest reason: the NEGATIVE side is a single observation and that frame is not
+on disk, so §10.4's "between two MEASURED populations" is unmet in the other
+direction. The candidate is UNEVALUABLE, not refuted. Capturing one host-list
+frame would settle it.
 
 **NO FREE WINDOW-TITLE DISCRIMINATOR.** `kCGWindowName` is empty for both of
 chiaki's windows, so the pixel-independent route that `game_window_rect()` almost
@@ -1841,6 +2009,36 @@ populations (§10.4). Next step is the centring test above with a real host-list
 population behind it; the peer's suggestion of the literal text `State: standby`
 remains the fallback.
 
+**CONFIRMED ON AN INDEPENDENT CORPUS, AND IT COST THE USER AN HOUR (2026-09-06).**
+`find_bar` is not weakly discriminating, it is barely discriminating at all:
+9 of 13 of chiaki's OWN Qt documentation screenshots, 5 of 6 arbitrary
+photographs, and a SYNTHETIC dark window with one light horizontal toolbar all
+return non-None. Only a flat image — solid colour or pure noise — returns None.
+On 2026-09-06 every failed reconnect announced `[stream] up via find_bar` first
+while chiaki was NOT RUNNING and the console was OFF, and an hour went into
+diagnosing the compass instead of the rig.
+
+`streaming()`'s docstring asserted the opposite — *"It is None only in the state
+this function exists to detect"* — which is why nobody looked. That sentence is
+deleted and the measurement is pinned by
+`tests/rig/test_find_bar_is_not_a_stream_check.py`, whose fixtures are
+SYNTHESISED so it does not depend on the gitignored `chiaki-ng-src/`, and which
+carries a positive control (40/40 real game frames still located) so it cannot
+pass with the detector broken the other way.
+
+**THE VERDICT LOGIC IS DELIBERATELY UNCHANGED, and that is a decision for the
+user, not a gap to be closed quietly.** Deleting the `find_bar` branch trades a
+known false positive for an UNMEASURED false negative, and a false negative here
+ENDS an unattended run — which is the failure that put the branch there in the
+first place (bright scenes killed two runs on 2026-09-01).
+
+**One lead, recorded and NOT asserted.** On every synthetic and UI image tried,
+the located strip spans the FULL frame width (0..W-1); on 40 of 40 real game
+frames it is bounded well inside (e.g. 460..937 of 1400). That is 2/2 against
+0/40 — a perfect separation on what exists, and still only ONE measured
+population, because the host-list frame is not on disk. **Capture one host-list
+frame and this ticket closes.** That is the cheapest open item in this file.
+
 **OPEN-19 — Did the OLD `clear` corrupt §6's walking table?** Raised 2026-09-05
 and deliberately left open rather than inherited.
 
@@ -1872,8 +2070,8 @@ the very table it is being run to check. It is the fix's own test case. (The fix
 IS on the rig as of 2026-09-05, so this no longer blocks.)
 
 **DOWNGRADED 2026-09-05 — LOW VALUE, and the user was right to ask.**
-`LEG_SPEED_MAX` has exactly ONE production consumer, `graph_walk.py:1308`, which
-is leg-speed scaling — and §8(h) already measured that lever: *"a 32% cut in
+`LEG_SPEED_MAX` (defined `graph_walk.py:1379`) has exactly ONE production
+consumer, `_scaled` at `graph_walk.py:1530`, which is leg-speed scaling — and §8(h) already measured that lever: *"a 32% cut in
 walking bought 5% and a worse mean."* So this table feeds one thing and that thing
 is known not to pay. `walk_curve.py` also drives `left_y` ONLY (`walk_forward`
 with the default `strafe=0`), so it cannot speak to the question that actually
@@ -1895,7 +2093,7 @@ then turning right and walking forward."* Nothing was ever built.
 
 **The executor cannot steer with the left stick, by construction:**
 
-    graph_walk.py:623   st.walk_leg(0.0, -abs(speed), dur, ...)
+    graph_walk.py:687   st.walk_leg(0.0, -abs(speed), dur, ...)
                                     ^^^ lx is a hardcoded literal zero
 
 So every step of every leg is: turn the CAMERA to the step's bearing, then push

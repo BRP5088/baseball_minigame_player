@@ -34,14 +34,22 @@ import compass
 import input_controller as ic
 
 fails = []
-SCALE = compass._SCALE_CACHE_FILE
-VIEW = ic._VIEW_CACHE_FILE
-saved = {p: (open(p).read() if os.path.exists(p) else None) for p in (SCALE, VIEW)}
+
+# TEMP PATHS, NOT THE REAL ONES. This file used to point SCALE/VIEW at the
+# project's own compass_scale.json and view_bounds.json, delete them, write test
+# geometry into them, and restore from a string held in memory. Those files are
+# read back by LIVE runs — the scale cache sets degrees-per-pixel on the compass
+# strip — so the whole offline suite was mutating the rig's calibration, and any
+# crash between the delete and the restore lost it outright. It also defeated
+# _save_*_cache's BASEBALL_TEST_RUN guard by being the one caller that genuinely
+# needed to write, which is why those functions now take force=.
+import tempfile as _tf
+_D = _tf.mkdtemp()
+SCALE = compass._SCALE_CACHE_FILE = os.path.join(_D, "compass_scale.json")
+VIEW = ic._VIEW_CACHE_FILE = os.path.join(_D, "view_bounds.json")
+saved = {}
 
 try:
-    for p in (SCALE, VIEW):
-        if os.path.exists(p):
-            os.remove(p)
 
     real = ic.machine_id()
     if not real or "|" not in real:
@@ -50,10 +58,10 @@ try:
     # --- machine A writes some geometry ------------------------------------
     compass._SCALE_CACHE.clear()
     compass._SCALE_CACHE[(2000, 1292, 166, 15)] = 295.0
-    compass._save_scale_cache()
+    compass._save_scale_cache(force=True)
     ic._VIEW_CACHE.clear()
     ic._VIEW_CACHE[(2000, 1292)] = (0, 1942, 103, 1291)
-    ic._save_view_cache()
+    ic._save_view_cache(force=True)
 
     # --- machine B is a DIFFERENT computer ---------------------------------
     ic._MACHINE_ID = "other-laptop|arm64|3840x2160"
@@ -67,10 +75,10 @@ try:
     # machine B measures its own, and must not destroy machine A's
     compass._SCALE_CACHE.clear()
     compass._SCALE_CACHE[(3840, 2160, 320, 30)] = 560.0
-    compass._save_scale_cache()
+    compass._save_scale_cache(force=True)
     ic._VIEW_CACHE.clear()
     ic._VIEW_CACHE[(3840, 2160)] = (0, 3800, 200, 2100)
-    ic._save_view_cache()
+    ic._save_view_cache(force=True)
 
     for path, label in ((SCALE, "scale"), (VIEW, "view")):
         with open(path) as fh:
@@ -115,7 +123,7 @@ def _atomic_write_check():
     d = tempfile.mkdtemp()
     compass._SCALE_CACHE_FILE = os.path.join(d, "scale.json")
     compass._SCALE_CACHE = {(1728, 1117): 0.148}
-    compass._save_scale_cache()
+    compass._save_scale_cache(force=True)
     first = json.load(open(compass._SCALE_CACHE_FILE))
 
     # simulate the mount dying partway through the NEXT save
@@ -126,7 +134,7 @@ def _atomic_write_check():
     json.dump = dying_dump
     try:
         compass._SCALE_CACHE = {(1728, 1117): 0.999}
-        compass._save_scale_cache()       # swallowed by the except: pass
+        compass._save_scale_cache(force=True)       # swallowed by the except: pass
     finally:
         json.dump = real_dump
 

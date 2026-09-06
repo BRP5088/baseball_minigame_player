@@ -119,7 +119,7 @@ try:
     id_a = ic.machine_id()
     A_KEY, A_BOUNDS = (1728, 1117), (0, 1727, 67, 1116)
     ic._VIEW_CACHE[A_KEY] = A_BOUNDS
-    ic._save_view_cache()
+    ic._save_view_cache(force=True)
 
     _screen["now"] = DISPLAY_B
     _real_err, sys.stderr = sys.stderr, io.StringIO()
@@ -134,7 +134,7 @@ try:
     # B now measures its own and saves. A's entry must not ride along.
     B_KEY, B_BOUNDS = (3840, 2160), (0, 3839, 120, 2159)
     ic._VIEW_CACHE[B_KEY] = B_BOUNDS
-    ic._save_view_cache()
+    ic._save_view_cache(force=True)
     on_disk = json.load(open(ic._VIEW_CACHE_FILE))
     b_bucket = on_disk.get(id_b, {})
     a_bucket = on_disk.get(id_a, {})
@@ -203,7 +203,7 @@ try:
     ic.machine_id = _boom
     try:
         for name, call in (("_load_view_cache", lambda: ic._load_view_cache()),
-                           ("_save_view_cache", lambda: ic._save_view_cache()),
+                           ("_save_view_cache", lambda: ic._save_view_cache(force=True)),
                            ("_load_window_reference",
                             lambda: ic._load_window_reference()),
                            ("save_window_reference",

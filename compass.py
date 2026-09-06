@@ -288,7 +288,7 @@ def _load_scale_cache():
         return {}
 
 
-def _save_scale_cache():
+def _save_scale_cache(force=False):
     # OFFLINE TESTS MUST NOT WRITE A PRODUCTION CALIBRATION FILE.
     #
     # This is read back by live runs, so a test that writes it changes what the
@@ -301,7 +301,11 @@ def _save_scale_cache():
     #
     # The IN-MEMORY cache is untouched, so behaviour inside a test run is
     # exactly what it would be live. Only the persistence is suppressed.
-    if _os_env.environ.get("BASEBALL_TEST_RUN"):
+    # `force` is for the two tests that exist to exercise PERSISTENCE itself.
+    # They must redirect the file path to a temp directory first; forcing a
+    # write at the real path is the exact pollution this guard prevents, so the
+    # opt-in is a visible argument at the call site rather than an env twiddle.
+    if not force and _os_env.environ.get("BASEBALL_TEST_RUN"):
         return
     try:
         import json
