@@ -1363,6 +1363,45 @@ caller's step line never can (an executed turn also ends inside tolerance, which
 is precisely why this was invisible). **Let it ride along on whatever A/B runs
 next.**
 
+**EVERY LEG ENDS BY WALKING INTO SOMETHING, AND THE LOGS HAVE SAID SO ALL
+ALONG (2026-09-06).** Tallied over every archived `overnight/*.log`, no console
+time spent:
+
+    blocked on the LAST step of its leg        14
+    blocked on the second-to-last step          2
+    blocked anywhere else                       1
+
+    portrait_room -> bar_pool_room   step 4/4   x8
+    bar_pool_room -> bar_jukebox     step 5/5   x5
+    bar_pool_room -> bar_jukebox     step 4/5   x2
+    office_corridor -> office_door   step 7/7   x1
+
+Sixteen of seventeen blockages are at or immediately before a leg's end. That is
+not diffuse bad luck, it is one repeatable event happening in five different
+places.
+
+**WHY, AND IT IS VISIBLE IN THE MAP ITSELF.** Every leg's FINAL step is short —
+0.14s, 0.23s, 0.36s, 0.40s, 0.42s — against 0.78-0.80s for the steps before it.
+That is a HUMAN DECELERATING: they walked up to a door, a table or a wall,
+made one small adjustment, and stopped. The executor does not decelerate. It
+replays that tail as a fresh fixed-magnitude push from whatever speed it is
+already carrying, and §7(j) records that a push under ~0.10s does not move the
+character at all while short pushes are mostly acceleration. So the least
+faithful part of every leg is its last step, and that is exactly where the
+blockages are.
+
+It corroborates two other things measured the same day. `office_door`'s arrival
+frame is a DOOR PANEL filling the view at 7-16 keypoints, on BOTH the merged and
+the original leg 1 — the recorded destination is already pressed against
+geometry. And 8 of 10 admissible failure frames at `bar_pool_room` classify
+OVERSHOT.
+
+**WHAT THIS DOES NOT LICENSE.** Shortening the final step MOVES the character,
+and GRAVEYARD's own summary is that every change which moved the character
+failed while both survivors moved nothing. The finding is a diagnosis, not a
+prescription, and it is cheap to test precisely because the blockage is
+localised: one leg, one step, and the log already reports the event by name.
+
 **THE LOCALISER'S GATE SITS INSIDE THE OVERLAP, MEASURED (2026-09-06).**
 `portrait_room` abstains about half the time on frames where the character IS
 there, and §8(b)'s per-leg rates inherit that. The cause is not the leg.
