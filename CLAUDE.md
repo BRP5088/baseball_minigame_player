@@ -1015,6 +1015,62 @@ the template.
 
 ---
 
+## SAVING A FRAME CAN MAKE THE COMPASS READ 90 DEGREES WRONG (2026-09-05)
+
+`read_bearing`'s docstring promises it "returns None rather than guessing — a
+wrong bearing would turn the player to face the wrong way and the walk would end
+somewhere arbitrary, which is worse than not turning at all." **It does guess.**
+
+Measured on 120 archived demo frames, 80 of which read on the original. Each was
+re-encoded as JPEG and re-read — nothing else changed:
+
+    quality 75   ABSTAINED 5 (6.2%)   WRONG BY >5 deg 2 (2.5%)   errors [90.0, 15.2]
+    quality 88   ABSTAINED 1 (1.2%)   WRONG BY >5 deg 3 (3.8%)   errors [90.0, 90.0, 74.9]
+
+Same scene, same code, two encodings, two different CONFIDENT answers. At least
+one of each pair is wrong.
+
+**THE ERRORS ARE EXACTLY 90.0, WHICH NAMES THE MECHANISM.** N/E/S/W are 90 apart,
+so this is CARDINAL LETTER CONFUSION — one glyph misidentified as another — not
+gradual degradation of a good read. That is the single failure two agreeing
+letters cannot make, which is why this is direct evidence for the
+`REQUIRE_TWO_LETTERS` work in OPEN-15 rather than an argument against its
+coverage cost.
+
+**QUALITY 88 PRODUCED MORE WRONG ANSWERS THAN 75.** Non-monotonic, so this is a
+chaotic threshold flip and not something a higher quality setting buys safety
+from. 88 is what `places.py:185` and `play_now.py:39` save at; 82-88 is the range
+used across the project.
+
+### What this costs, in order of how sure it is
+
+- **CERTAIN: §10.15's KEEP A FRAME is unsafe FOR THE COMPASS.** A kept frame can
+  answer 90 degrees differently from the live capture it came from, so no compass
+  threshold may be tuned or validated on a saved JPEG. The rule stands for
+  everything else — a kept frame is what settled the wedge diagnosis the same day
+  — but not for this detector.
+- **CERTAIN: any bearing pinned in a test from a `.jpg` fixture pins what the
+  COMPRESSED frame says.** It is still a valid regression guard on the code; it is
+  not evidence about live behaviour.
+- **NOT ESTABLISHED, AND THE REASON TO CARE: the live path is also lossy.** The
+  stream is H.264 with varying quantization, and chiaki logs
+  `StreamConnection reporting corrupt frame(s)` during normal play. Nobody has
+  shown this fires live. But the old assumption — that the live path is immune
+  because no JPEG is involved — is not available any more, and a wrong bearing
+  live is the failure the docstring says is worse than not turning at all.
+- **A HYPOTHESIS, EXPLICITLY NOT ESTABLISHED.** §8(k) is the user's unexplained
+  observation, *"when you make the turn, you actually walk right out of the
+  bar"* — seen on the stream the first day, never captured. A 90-degree bearing
+  error is exactly the mechanism that produces it, and nothing else in this file
+  explains it. **If `REQUIRE_TWO_LETTERS` lands and §8(k) stops happening, that is
+  the strongest signal available.** Do not treat the coincidence as evidence
+  before then.
+
+Reproduce: re-encode any frame `read_bearing` reads, at quality 75 and 88, and
+compare. No rig, no console, ~2 minutes.
+
+---
+
 ## §11 OPEN
 
 Nothing outside this section may claim to be open.
@@ -1773,15 +1829,12 @@ this file keeps being caught by. Collecting more host-list frames requires takin
 the stream DOWN, so it was not done: OPEN-16's verification and the rig work
 needed the stream up.
 
-**AN UNRESOLVED INCONSISTENCY, RECORDED RATHER THAN EXPLAINED.** Live, on the PS5
-Control Center overlay, `read_bearing` returned **43.7** — that is what made this
-session's own "WORLD IS UP" check believe a frame with no world in it. Re-measured
-on the JPEG saved from that same capture it returns **None**. Same moment, two
-answers. Either the lossy save changed the pixels the letter reader depends on, or
-`compass._SCALE_CACHE` was primed differently in the two processes. **This matters
-beyond one detector**: §10.15 says KEEP A FRAME, and a kept frame that answers
-differently from the live capture is not evidence about the live capture. Settle
-it before using saved frames to tune any compass threshold.
+**THE LIVE-VS-SAVED INCONSISTENCY IS RESOLVED, AND THE ANSWER IS ITS OWN
+FINDING — see the section below §10.** Live, on the PS5 Control Center overlay,
+`read_bearing` returned **43.7**; on the JPEG saved from that same capture it
+returns **None**. The cache is exonerated by direct test (same file, cache
+as-loaded / cleared / restored — None all three times). It is the lossy save, and
+saving is not a harmless record.
 
 **Not fixed:** the replacement predicate still has to sit between two measured
 populations (§10.4). Next step is the centring test above with a real host-list
@@ -1868,6 +1921,26 @@ error into position error, while this is open-loop with the camera FIXED; and
 turn-then-walk pair into one diagonal push REMOVES a turn and an acceleration per
 step. Both survivors in the graveyard move nothing; this moves less than what it
 replaces.
+
+**IT IS A REGRESSION, NOT A NEW FEATURE.** `route_follow.py:184` already replays
+`leg["lx"]`/`leg["ly"]`. An earlier generation of this code steered with the left
+stick and `graph_walk` dropped the term. That is a much easier thing to argue for
+than a new capability, and it means the shape has been run here before.
+
+**LEAD WITH TIME, NOT ACCURACY — the accuracy argument does not survive its own
+data.** Per-leg lateral loss from the discarded term is
+`office_door->portrait_room` **-0.260** units, `portrait_room->bar_pool_room`
++0.099, `bar_pool_room->bar_jukebox` -0.038, `dealer_table` -0.010,
+`office_door` +0.020. **The leg with the LARGEST loss is the one that arrives
+20/20.** So loss does not predict arrival, and this is NOT a clean explanation of
+the two bad legs — an earlier draft of this entry let it read as though it might
+be. What survives on accuracy is narrower: `portrait_room->bar_pool_room` has the
+highest median angle of any leg at 5.9 deg, a consistent BIAS rather than
+cancelling wobble.
+
+The time argument is the strong one. Replaying the vector means one camera turn
+per LEG instead of one per STEP — **5 turns instead of 40** — against `turn_to`'s
+11.4s of an 85.6s trial (§8(h)).
 
 **What it would take.** `route3_steps.json` already stores `cam` per step, so the
 inputs exist. Hold the camera at `cam`, drive `left_x`/`left_y` as the recorded
