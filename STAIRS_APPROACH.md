@@ -62,3 +62,47 @@ clean arrivals of 500-700.
   five steps rotate toward 8.57 — the heading the character already needs
   immediately. That is the signature of an opening that duplicates ground leg 1
   now covers.
+
+## The compass abstains at the bar doorway, and why (2026-09-06)
+
+`test_fixtures/compass/bar_doorway_abstains_1920.png` is a LOSSLESS capture of
+the exact pose where the route must turn toward Wanda. `read_bearing` returns
+None on it, and the turn toward Wanda therefore cannot execute at all: turn_to
+is a closed loop, so with no heading it computes no error and sends nothing.
+Five sweep targets in a row produced an identical frame.
+
+**IT IS NOT THE RECOGNISER.** Traced exit by exit:
+
+    find_bar            (64, 608, 1325)      strip located
+    blobs               5 at thr 110, 3 at 120, 2 at 130-155
+    letters recognised  W and N, correctly, at thresholds 130/140/155
+    spacing_consistent  both survive, pitch 291.9
+    TICK SNAP           REJECTED
+
+The pooled loop breaks at the FIRST threshold yielding two letters, and that is
+the noisiest one — it admits the most blobs, so neighbouring ink pulls a
+letter's centroid off:
+
+    threshold 110 (first to give two)   W at 702, N at 985
+    threshold 140                       W at 692, N at 983
+
+Ten pixels at 291.9 px per 90 degrees is 3.1 degrees, and TICK_SNAP_MAX_DEG is
+3.0. Snap errors are [3.40, 0.66] at 110 against [0.32, 0.04] at 140, and the
+frame reads 352.8 from the cleaner centroids. So a perfectly readable frame is
+discarded for having searched too little.
+
+**A FIX WAS TRIED AND REVERTED, and the reason is the useful part.** Sweeping
+two thresholds FURTHER before breaking made the doorway frame readable and one
+other, but LOST `explore/20260904_152521_bar_area/00068.jpg`, whose old read of
+117.6 was CORRECT — 0.7 deg from the 45-degree sweep arithmetic, an oracle that
+knows nothing about OCR. Net +2/-1 on 161 frames.
+
+Pooling MORE thresholds accumulates blobs and moves the centroids for frames
+that were already fine, so it cannot be the answer. The diagnosis stands and the
+design does not: evaluate each threshold's reading INDEPENDENTLY and keep the
+one the tick lattice agrees with most closely. The lattice is fitted to 0.2px
+and knows nothing about which threshold produced a centroid, so it is a fair
+judge between them. Not implemented.
+
+**Until then the turn at the doorway must be OPEN-LOOP**, driven by
+turn_curve's measured rate rather than by turn_to's closed loop.
