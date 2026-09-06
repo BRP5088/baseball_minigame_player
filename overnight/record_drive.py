@@ -31,12 +31,22 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import _harness
 import compass
 
-NAME = sys.argv[1] if len(sys.argv) > 1 else "drive"
+# ONE ROOM PER DRIVE. The name is not decoration: it is the only GROUND TRUTH
+# in this whole pipeline. Nothing else can say where a frame was taken -- the
+# localiser is exactly what is being repaired, so it cannot be the label -- and
+# a human who can see the screen can. Every frame in this directory is labelled
+# by the person who drove it.
+#
+# It also bounds the damage: a break costs one room, not the session. And Snoopy
+# can reconstruct room one while room two is still being driven.
+NAME = sys.argv[1] if len(sys.argv) > 1 else ""
+PLACEHOLDERS = {"", "drive", "test", "tmp", "temp", "x", "asdf", "run"}
 SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 300.0
 HZ = 5.0
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drives",
                    f"{time.strftime('%Y%m%d_%H%M%S')}_{NAME}")
+META = os.path.join(OUT, "meta.json")
 
 
 def _feedback_setup():
@@ -85,6 +95,13 @@ def _novelty(img, refs, seen):
 
 
 def main():
+    if NAME.strip().lower() in PLACEHOLDERS:
+        raise SystemExit(
+            "name the ROOM you are about to drive, e.g. bar, office, stairs, "
+            "portrait_room.\n"
+            "It is the only ground truth this pipeline has: nothing else can "
+            "say where these frames were taken.\n"
+            "  .venv/bin/python overnight/record_drive.py bar 300")
     os.makedirs(OUT, exist_ok=True)
     refs = _feedback_setup()
     seen = []
@@ -116,6 +133,14 @@ def main():
                 dark_run = 0
             meta.append({"t": round(t, 2), "frame": fn, "bearing": b})
             n += 1
+            # FLUSH AS WE GO. Written once at the end, a drive killed at 4:30 of
+            # 5:00 leaves 1350 jpegs and NO headings -- and a heading is what
+            # makes a frame placeable, so the whole session would be unusable
+            # while looking like a full directory. Ten seconds is the most that
+            # can now be lost.
+            if n % (int(HZ) * 10) == 0:
+                _harness.save_result(META, {"room": NAME, "hz": HZ,
+                                            "complete": False, "frames": meta})
             if n % 5 == 0:                      # about once a second
                 room, score, verdict = _novelty(img, refs, seen)
                 tally[verdict] = tally.get(verdict, 0) + 1
@@ -128,15 +153,20 @@ def main():
             time.sleep(max(0.0, 1.0 / HZ - (time.time() - tick)))
     except KeyboardInterrupt:
         print("\n  stopped by hand")
-    _harness.save_result(os.path.join(OUT, "meta.json"), meta)
+    # `complete` distinguishes a finished drive from an interrupted one on
+    # disk. Without it a directory that lost its last minute is indistinguishable
+    # from one that ran to the end, and the reconstruction would treat both the
+    # same.
+    _harness.save_result(META, {"room": NAME, "hz": HZ, "complete": True,
+                                "frames": meta})
     print(f"\n  {n} frames, {n-unreadable} with a heading "
           f"({100*(n-unreadable)/max(n,1):.0f}%)")
     if tally:
         print("  coverage seen: " + ", ".join(f"{k}={v}" for k, v in
                                               sorted(tally.items())))
     print(f"  -> {OUT}")
-    print(f"\n  ship it with:  scp -r -i ~/.ssh/id_ed25519_snoopy "
-          f"{OUT} Brett@snoopy:C:/baseball/data/drives/")
+    print(f"\n  ship it to Snoopy with:")
+    print(f"    tools/ship_drive.sh {os.path.relpath(OUT)}")
 
 
 main()
