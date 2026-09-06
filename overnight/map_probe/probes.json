@@ -1,0 +1,128 @@
+[
+ {
+  "stamp": 1788725284178,
+  "frame": "p1788725284178.jpg",
+  "bearing": 87.02327691921678,
+  "probes": [
+   {
+    "dir": 0,
+    "want": 87.02327691921678,
+    "delta": 22.69,
+    "inliers": 802,
+    "verdict": "free"
+   },
+   {
+    "dir": 1,
+    "want": 132.02327691921678,
+    "delta": 25.89,
+    "inliers": 47,
+    "verdict": "free"
+   },
+   {
+    "dir": 2,
+    "want": 177.02327691921678,
+    "delta": 10.49,
+    "inliers": 91,
+    "verdict": "free"
+   },
+   {
+    "dir": 3,
+    "want": 222.02327691921678,
+    "delta": 5.62,
+    "inliers": 0,
+    "verdict": "blocked"
+   },
+   {
+    "dir": 4,
+    "want": 267.02327691921676,
+    "delta": 8.55,
+    "inliers": 0,
+    "verdict": "free"
+   },
+   {
+    "dir": 5,
+    "want": 312.02327691921676,
+    "delta": 9.06,
+    "inliers": 0,
+    "verdict": "free"
+   },
+   {
+    "dir": 6,
+    "want": 357.02327691921676,
+    "delta": 22.65,
+    "inliers": 18,
+    "verdict": "free"
+   },
+   {
+    "dir": 7,
+    "want": 42.023276919216755,
+    "delta": 29.91,
+    "inliers": 104,
+    "verdict": "free"
+   }
+  ]
+ },
+ {
+  "stamp": 1788725308591,
+  "frame": "p1788725308591.jpg",
+  "bearing": 46.571621711714585,
+  "probes": [
+   {
+    "dir": 0,
+    "want": 46.571621711714585,
+    "delta": 30.14,
+    "inliers": 95,
+    "verdict": "free"
+   },
+   {
+    "dir": 1,
+    "want": 91.57162171171458,
+    "delta": 6.63,
+    "inliers": 707,
+    "verdict": "free"
+   },
+   {
+    "dir": 2,
+    "want": 136.57162171171458,
+    "delta": 12.65,
+    "inliers": 100,
+    "verdict": "free"
+   },
+   {
+    "dir": 3,
+    "want": 181.57162171171458,
+    "delta": 11.9,
+    "inliers": 15,
+    "verdict": "free"
+   },
+   {
+    "dir": 4,
+    "want": 226.57162171171458,
+    "delta": 10.75,
+    "inliers": 4,
+    "verdict": "free"
+   },
+   {
+    "dir": 5,
+    "want": 271.57162171171456,
+    "delta": 12.9,
+    "inliers": 0,
+    "verdict": "free"
+   },
+   {
+    "dir": 6,
+    "want": 316.57162171171456,
+    "delta": 17.32,
+    "inliers": 12,
+    "verdict": "free"
+   },
+   {
+    "dir": 7,
+    "want": 1.5716217117145561,
+    "delta": 8.45,
+    "inliers": 73,
+    "verdict": "free"
+   }
+  ]
+ }
+]

@@ -1363,6 +1363,38 @@ caller's step line never can (an executed turn also ends inside tolerance, which
 is precisely why this was invisible). **Let it ride along on whatever A/B runs
 next.**
 
+**A WORKING "DID I MOVE" SIGNAL, AT LAST — AND IT IS A PAIRED RATIO (2026-09-06).**
+Section 10.4 records that scene change CANNOT answer this: `STALL_CHANGE` cuts
+through a unimodal 3.1-7.9, one population. Measured again directly, by taking
+the SAME capture pair twice at each heading — once with no push at all, once
+with a real one:
+
+    signal          null range        push range        verdict
+    frame delta     1 - 12            7 - 24            OVERLAP, unusable
+    ORB inliers     353 - 1366        35 - 908          OVERLAP, unusable
+
+Neither works as an absolute gate. But PAIRED at the same heading, dividing the
+push's inlier count by that heading's own null:
+
+    0.10  0.11  0.26  0.30  0.34   |   0.82
+    <------------ moved ---------->     blocked
+
+A gap of 0.49 between two measured populations. The pairing is what makes it
+work and an absolute count cannot: one heading's NULL read 353 while another's
+PUSH read 407, so the same number means "blocked" in one place and "moved" in
+another. The ratio divides out local scene animation, which is also what makes
+it robust to an NPC wandering through the shot.
+
+n = 6 headings from one spot. The MECHANISM is sound and the gap is wide; the
+rate is not established. `overnight/probe_calib.py` re-measures it anywhere in
+about two minutes, and `overnight/collect_map.py` is the collector built on it.
+
+**WHY THIS MATTERS MORE THAN IT LOOKS.** Every navigation failure this project
+has is downstream of not knowing whether a push worked. The stall gate guesses,
+the escape ladder fires blind, and a blocked leg is indistinguishable from a
+walked one until the localiser disagrees two legs later. A probe that costs two
+seconds and answers directly is the missing instrument.
+
 **EVERY LEG ENDS BY WALKING INTO SOMETHING, AND THE LOGS HAVE SAID SO ALL
 ALONG (2026-09-06).** Tallied over every archived `overnight/*.log`, no console
 time spent:
