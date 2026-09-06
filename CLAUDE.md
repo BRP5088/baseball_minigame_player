@@ -993,10 +993,16 @@ frames; it returned nothing, and the transcript holds its tool calls but not its
 conclusion. Re-running costs the same tokens again.
 
 So any prompt that dispatches a subagent must tell it to write to
-`agent_progress/<label>.md` **as it goes** — every few tool calls, not at the
-end. A file written on completion is lost in exactly the case it exists for.
-**This is the DISPATCHER's job**: the agent has no way to know the convention,
-so an instruction missing from the prompt means no notes get written at all.
+`agent_progress/<label>/progress.md` **as it goes** — every few tool calls, not
+at the end. A file written on completion is lost in exactly the case it exists
+for. **This is the DISPATCHER's job**: the agent has no way to know the
+convention, so an instruction missing from the prompt means no notes get written
+at all.
+
+A DIRECTORY per agent, not a single file, because the script that produced a
+number belongs next to the number — and CLAUDE.md forbids findings in `/tmp`,
+which on this machine was once found as 825 empty directories with every file
+gone. Scripts, extracted data and plots go in the same directory as the notes.
 
 The file separates **Established** (verified, with the command or file that
 verified it) from **Assumed** (working from, not checked). A half-finished
@@ -1013,17 +1019,79 @@ the template.
 
 Nothing outside this section may claim to be open.
 
-**OPEN-1 — Cause B is undiagnosed and NO ADMISSIBLE FAILURE FRAME EXISTS.**
-Two successive attempts to capture one both failed, in opposite directions:
-the first eight frames were taken AFTER `recover_to_node` and describe the
-fan's own displacement (six sit at bearing 98-106 against the leg's commanded
-2.1 — the fan's signature); the next four were taken BEFORE the whole attempt
-and are photographs of the PREVIOUS node's successful arrival (all four identify
-as `bar_pool_room` at 506-734 matches, bearing 284.8-288.3, the inbound heading
-of the previous leg). `follow()` already saves at the right moment — before the fan, not after it — and `shots` is now threaded down through
-`go_to_node_verified` so that path is used. **Unverified live.** The old frames
-are in `overnight/failframes_prerecovery/`; they remain valid as classifier
-appearance data and invalid as evidence about the leg.
+Six tickets were worked offline on 2026-09-05, each in an isolated worktree and
+each re-checked by a second agent that ran its own mutants rather than trusting
+the first. **Where a checker downgraded a claim, the downgrade is what stands
+here.** Two closed on evidence, one was CANCELLED rather than run (OPEN-3 — that
+is the most valuable result of the day), and three are partially closed with the
+remaining half named.
+
+**Numbering note for whoever merges those worktrees.** Two of them independently
+filed a NEW ticket as "OPEN-15", and a third produced the compass work. The
+numbers here are the authority: **OPEN-15 is the compass reader**, **OPEN-16 is
+the injector release window** (the `tests/cpp/` worktree calls it OPEN-15), and
+**OPEN-17 is the arrival heading** (the OPEN-3 worktree calls it OPEN-15). The
+worktrees' own copies of this file are superseded by this one — take THIS §11 and
+discard theirs rather than merging five conflicting versions.
+
+**OPEN-1 — the leg-end frame path is BUILT AND PINNED; there are still ZERO
+admissible frames.** `follow()` publishes at the right moment: it sets
+`_LAST_LEG_END[node]` immediately after `img = capture()` and BEFORE the
+`recover_to_node` branch, and the local reassignment after a successful fan does
+NOT overwrite the published frame. `follow_verified` clears the stale entry per
+node and pops it for classification, and classification sits OUTSIDE `if shots:`
+so a run that saves no jpegs still produces a census. With `shots=` a live run
+writes `at_<node>_<epoch_ms>.jpg` at the moment the leg's last push finished and
+the character settled — before `confirm()`, before the fan. **A frame written by
+that path IS admissible.**
+
+Pinned BEHAVIOURALLY by `tests/routing/test_failure_census_provenance.py`, which
+drives `follow()` with a stubbed `walk_link`, asserts `recover_to_node` actually
+ran, and then checks the published frame is the pre-fan one. The older
+`test_failure_frame_is_the_leg.py` checked this with a SOURCE SUBSTRING and does
+not catch a second assignment added after the fan — re-introducing exactly that
+bug passes it and fails the new one.
+
+**All fifteen candidate frames on disk are excluded, and none is a near miss.**
+`overnight/failframes_prerecovery/` (8) are POST-FAN — six sit at bearing
+98.1-105.8 against a leg commanded 2.1, the fan's signature, and 4 wedged /
+2 overshot / 2 regressed by class. `overnight/failframes/` (4) are PRE-ATTEMPT:
+all 1500 keypoints, all identifying `bar_pool_room` at 506-734 matches, bearings
+284.8-288.3 — the inbound heading of the PREVIOUS leg, i.e. photographs of the
+previous node's successful arrival. `overnight/jukebox_failframes/` (3) use
+FIXED names, so each is the last write and its outcome is unknown. They remain
+valid as classifier appearance data and invalid as evidence about a leg.
+
+**And the OPEN-14 harness collects nothing.** `overnight/ab_jukebox_leg.py`
+reaches its start node with `go_to_node_verified(..., shots=SHOTS)` but walks the
+leg UNDER TEST with `gw.walk_link`, which publishes no leg-end frame — so that
+A/B produced ZERO frames of the leg it was testing, and there is no
+`at_bar_jukebox.jpg` anywhere. `ab_stall_on_restored.py` is the same shape. Fix
+that before spending console time on the census.
+
+**No live run has ever recorded a class census at all**: zero "failures by
+signature" and zero "failure kind:" lines across every `overnight/*.log`, and no
+`overnight/*.json` carries the key.
+
+One silent spoiler is FIXED. When no leg into a node ever completed, the
+classifier was handed `before` or a post-fan `capture()` — the two inadmissible
+frames this ticket is about — and `failures_by_kind` counted them identically.
+`graph_walk._LAST_FAILURE_SOURCES` and `LEG_END_SOURCE` now split the result into
+`failures_by_kind_leg_end` and `failures_from_fallback_frame`, so no denominator
+goes missing. Three spoilers remain and are not fixable in a few lines: the
+published frame is the last attempt in which the leg actually RAN, not
+necessarily the third; `walk_link`'s in-leg escape ladder can jump or strafe
+before the frame is taken; and for the GOAL node the frame follows
+`reach_table()`'s aim sweep, so its heading is post-sweep.
+
+**REMAINS, and it needs the console.** Not one `at_<node>_<epoch_ms>.jpg` or
+`success/ok_*.jpg` exists — the path has never executed live. **And read the
+right key**: `failures_by_kind` still exists, still mixes fallback frames in, and
+is still what every harness surfaces, while NOTHING reads
+`failures_by_kind_leg_end`. A correct number nobody looks at is this project's
+own signature failure wearing a different hat. Acceptance test unchanged: a real
+jukebox-leg failure frame must NOT read bearing ~286 and must NOT identify as
+`bar_pool_room`.
 
 **OPEN-2 — CLOSED 2026-09-04.** `chiaki-patch/` now holds all five edits:
 `gui/CMakeLists.txt` and `gui/src/main.cpp` were copied in (they had existed
@@ -1032,33 +1100,84 @@ the authority. The stale half-size twin `chiaki_patch/` (underscore — its
 `injectinput.cpp` was 4,100 bytes against the real 9,684, one keystroke away on
 tab-complete) is in `_obsolete/`.
 
-**OPEN-3 — `LEG_TURN_TOLERANCE` is unresolved, and is the highest-value
-navigation experiment available.** Ships `None` (unchanged). The MECHANISM is
-verified: `slow_traverse.TURN_TOLERANCE = 4.0` against per-leg curvature of
-0.28 / 8.71 / 6.59 / 0.00 / 13.85, so most mid-leg turns are NO-OPS and a ±4 deg
-band neither executes a commanded change under 4 deg nor corrects drift under
-it. A leg is therefore walked straight at whatever heading it arrived on. The
-deceptive log line reads `step 2/4 bearing 292.2 (got 289.1) 0.79s -> walked
-0.79s`, which looks exactly like a turn that happened. Run 1 (`[2,1,2]` vs
-`[2,3,3]`) is **p = 0.298, power 0.00, never evidence**; run 2 was contaminated
-by the console falling asleep. **Needs 10 per arm, interleaved, verified
-positions.** Note `None` must never reach `st.turn_to` — `abs(err) <= None`
-raises.
+**OPEN-3 — CLOSED 2026-09-05, DROPPED WITHOUT RUNNING IT.** `LEG_TURN_TOLERANCE`
+ships `None` — unchanged, i.e. `slow_traverse.TURN_TOLERANCE = 4.0` — and the
+20-trial A/B this file called "the highest-value navigation experiment available"
+is CANCELLED. Settled offline from the recordings, as the `cam` section above
+demanded. (`None` must still never reach `st.turn_to`: `abs(err) <= None`
+raises.)
 
-**OPEN-3 NOW HAS AN INSTRUMENT (2026-09-04).** `slow_traverse.turn_to` logs
-every exit, and the two that matter are paired:
+**The mechanism is REAL. It is also worth a few percent of a leg.** Both halves
+are measured, and the second is why this is dropped rather than run. Scored the
+one non-vacuous way (§10.12 — the spread of ACHIEVED headings, never
+`|want - got|`), the two live traces `graph_walk` recorded for
+`portrait_room -> bar_pool_room` in one run read: commanded 286.57 / 292.18 /
+285.59 / 287.59, spread 6.59 deg; the FAILED attempt achieved 289.1 four times,
+spread **0.00**; the SUCCEEDED attempt 286.2 / 290.1 / 288.1 / 288.1, spread
+3.90. So the tolerance really does flatten the recorded curve to nothing. But
+integrated at the recorded speeds and durations those two traces end **0.0021
+walk-units apart on a 0.7203-unit leg**, and the FLAT, never-turned trace was the
+MORE faithful to the recording's own endpoint (0.0011 against 0.0022). Whatever
+separated those two attempts, it was not the heading.
+
+**The premise was also wrong about what the curve IS.** `graph_walk.walk_link`
+calls `st.walk_leg(0.0, -abs(speed), ...)` — `lx` hard-coded to zero — so the
+executor CANNOT strafe mid-leg, and it reproduces the human's travel direction by
+turning the CAMERA to a heading the human never held. Over all 64 inter-step
+transitions in both recordings, `|delta cam|` exceeds 4 deg on **1**, while
+`|delta bearing|` exceeds it on **23**. Twenty-two of the twenty-three "curves"
+are the human's left thumb. Tightening the tolerance makes the executor chase
+thumb jitter: on `bar_jukebox -> dealer_table` it would sweep the camera 25.6 deg
+over 4.07s of walking, where the human held `cam` at 86.8 ± 0.14.
+
+**COST, priced the honest way — quote 6.79% and 0.258 units, never 2.63%.** The
+first pass under-priced this 2.6x by seeding each leg exactly on its first
+commanded bearing. `turn_to` compares against the MEASURED heading, so a leg also
+STARTS up to `tolerance` off and is walked there until some step exceeds the
+band — which is the second half of this ticket's own stated mechanism, and it is
+the case the single real trace shows (commanded 286.57, character at 289.1, entry
+turn a NO-OP). Swept adversarially over the permitted entry offset, discarding
+sub-4-degree turns costs **6.79% on the worst leg**, and tightening 4.0 -> 1.0
+buys **0.258 walk-units over the whole route**. For scale, the leg-distance pin
+accepts 15%, and the shortfall that genuinely broke the jukebox leg was 0.703 of
+1.031 units — **68%**.
+
+**The arithmetic that ends it.** At the §8(a) baseline of 0.60 and 338 s/trial,
+detecting +2 percentage points at 80% power needs ~9,300 trials per arm, about
+1,750 console hours; +5 points ~1,470 per arm; +10 points ~360. Ten per arm can
+only see an effect of about +30 points. There is no version of this experiment
+that fits in the time available and could detect the effect the mechanism allows.
+
+A hard floor nobody had noticed, worth keeping: `turn_curve.plan_turn` returns
+`(0.0, 0.0)` under 0.5 deg, so `turn_to` can never satisfy `abs(err) <=
+tolerance` below that — it breaks out and files an UNDERTURNED hazard on every
+step of every leg. Against a perfect simulated console, tolerance 0.40 filed 297
+of 2800 and 0.0 filed all 2800. **The usable range is (0.5, 4.0].**
+
+Pinned by `tests/routing/test_leg_curve_is_stick_not_camera.py`, which re-derives
+the whole argument from `route3_steps.json`, `route2_steps.json` and
+`world_map.json` rather than restating it — including that each map leg IS the
+corresponding route3 slice, since everything else attributes route3's `cam` to
+the map's legs.
+
+**THIS CLOSURE ORPHANS A USER OBSERVATION.** `graph_walk`'s own
+`LEG_TURN_TOLERANCE` comment claims this mechanism explains §8(k) — "you actually
+walk right out of the bar". A few percent of a leg's displacement cannot do that,
+so §8(k) is back to having NO candidate explanation, and that comment now asserts
+something this closure disproves.
+
+**The NO-OP/TURNED instrument (2026-09-04) has never actually run.**
+`slow_traverse.turn_to` logs every exit, paired:
 
     turn to 292.2: NO-OP, already inside 4.0 deg (at 289.1, err +3.1) —
                    nothing was sent, the recorded curve was discarded
     turn to 292.2: TURNED to 292.0 (err +0.2) in 1 push(es)
 
-`grep -c NO-OP` against `grep -c TURNED` over a run's log gives the numerator
-AND the denominator, which is the mechanism question OPEN-3 has been unable to
-answer. The caller's own step line can never separate them, because an executed
-turn also ends inside tolerance — that is precisely why this was invisible.
-
-**This applies only to logs written FROM NOW ON.** Everything already on disk
-came from the silent version and cannot be re-scored; do not try.
+but no log, transcript or json on disk contains either string, so nothing can be
+re-scored — do not try. It costs nothing and answers the mechanism question a
+caller's step line never can (an executed turn also ends inside tolerance, which
+is precisely why this was invisible). **Let it ride along on whatever A/B runs
+next.**
 
 **OPEN-14 — Does the RESTORED jukebox leg move arrival?** The leg was 4.3x too
 short and could not reach its destination; it is now back to its recorded
@@ -1066,6 +1185,15 @@ short and could not reach its destination; it is now back to its recorded
 costing the route, and it is UNMEASURED. Run it FIRST, before the other open
 A/Bs: if arrival moves, several of those experiments are asking the wrong
 question. 10 trials, scored on verified arrivals, reported by failure class.
+
+**Two things to fix in the harness before starting it**, both established
+2026-09-05 and both cheap. `overnight/ab_jukebox_leg.py` walks the leg under test
+with `gw.walk_link`, which publishes no leg-end frame, so as written it collects
+NO evidence about the leg (see OPEN-1) — point it at
+`go_to_node_verified(TARGET, shots=...)`. And it resets twice per trial, because
+it calls `go_to_node_verified` directly without `start_hint=gw.SPAWN` (see
+OPEN-8) — one word, worth ~24s a trial. Make both changes BEFORE the first
+trial, never between arms.
 
 **OPEN-13 — Does nulling the yaw before aligning improve ARRIVAL?**
 `graph_walk.NULL_YAW_BEFORE_ALIGN` ships **True**, because the old behaviour
@@ -1085,6 +1213,17 @@ The A/B: `NULL_YAW_BEFORE_ALIGN` True vs False, 10 trials per arm, interleaved,
 scored on VERIFIED arrivals, on a quiet machine. Report by failure class, not
 just the total.
 
+**Its own guard was DEAD until 2026-09-05, and the failure looked like a broken
+feature.** `tests/routing/test_yaw_nulled_before_align.py` simulated an
+unreadable reference by poking `gw._REF_HEADING["portrait_room"] = None`, but
+`reference_heading()` keys that cache on `(REFERENCE_POSE, node)` — deliberately,
+so an in-process A/B cannot serve one arm's heading to the other. The bare-node
+poke therefore missed the key entirely, the heading recomputed to 1.39, and the
+UNREADABLE branch the check exists to guard was UNREACHABLE. The stub was left
+behind when the key gained `REFERENCE_POSE`. Fixed in the main checkout, and
+mutation-tested by replacing that `log(...)` with `pass` (file size 100550 ->
+100374, so no stale bytecode) — the check then fails, and only that one.
+
 **OPEN-4 — Is arrival at `bar_pool_room` really ~55%, and does
 `go_to_node_verified` really approach 100%?** 11/20 for a single walk vs 4/4 at
 ~75s for the 3-attempt primitive. Different quantities; the second is the one
@@ -1097,26 +1236,153 @@ and contaminated: attempts_9 2/3 valid (3 of 6 trials invalid on a 420s
 timeout), attempts_3 3/6, and both arms collapsed in the second half while
 chiaki logged 32,388 decoder-overflow lines. Retry is the only lever the
 arithmetic says can reach the target. `overnight/ab_attempts.py` is prepared at
-TRIALS=10, TIMEOUT=900, `log=log`.
+TRIALS=10, TIMEOUT=900, `log=log` — add `start_hint=gw.SPAWN` before starting it
+(OPEN-8), or every trial in both arms pays ~24s for a reset it does not need.
+**Note the interaction with §10.14**: this arm's whole mechanism is "spend
+longer", so the timeout must not censor it — the previous run lost 3 of 6
+deep-arm trials to a 420s ceiling.
 
-**OPEN-6 — Three flags have never been tested live.**
-`SPEED_FROM_RELIABILITY` and `RECORD_RELIABILITY` are both `False` deliberately
-(a harness that mutates the state it reads makes an A/B non-reproducible), and
-`SURVEY_WHILE_WALKING` is `False`. **`SURVEY_WHILE_WALKING`'s premise is now
-unsupported** — it targets "the OVERSHOT class, a quarter of failures", a figure
-derived from the frames that turned out to describe the recovery fan. Re-derive
-the class distribution from admissible frames first.
+**OPEN-6 — Three flags have never been tested live, and one of them has no
+premise left.** `SURVEY_WHILE_WALKING` is `False`, and its premise —
+"the OVERSHOT class, a quarter of failures" — is now **WITHDRAWN, not merely
+doubted**. That figure is 2 of the 8 post-fan frames, which are inadmissible as
+evidence about a leg (OPEN-1); and even taken at face value 2/8 is a 95% Wilson
+interval of **[0.07, 0.59]**, so it never distinguished "a quarter" from "a
+twentieth" or "half". **Nothing may quote a class distribution until a run
+produces `failures_by_kind_leg_end`.**
+
+`SPEED_FROM_RELIABILITY` and `RECORD_RELIABILITY` are confirmed correct at
+`False`, demonstrated rather than argued: 12 recorded arrivals make
+`leg_reliability.scale_for` return 3.0, and ONE subsequent failure returns it to
+1.0 (11/12 = 0.917, under `MIN_RATE` 0.95). With both on, `follow_verified`
+writes the outcome it is measuring and `leg_scale()` reads it back, so trial N's
+walking speed is a function of trials 1..N-1 and an interleaved A/B's two arms
+share one store. `leg_reliability.json` does not exist on disk — neither flag has
+ever run live.
+
+Audited for the same shape and reported, not changed: `compass._SCALE_CACHE`
+(`compass_scale.json`) and `input_controller._VIEW_CACHE` (`view_bounds.json`)
+are both written mid-run and read back, and the view cache is a "widest lit
+extent ever seen" ratchet that moves the view centre and hence every bearing.
+They calibrate the DISPLAY, not the outcome — no arm can move them
+differentially and they converge, so interleaving absorbs them. Two footnotes
+that will bite someone: neither write is suppressed by `BASEBALL_TEST_RUN` (an
+offline analysis pass added a live geometry's key to a worktree's copy), and
+`leg_reliability`'s `STORE` is bound into default arguments
+(`def rate(a, b, path=STORE)`), so monkeypatching `leg_reliability.STORE` to
+redirect the file silently does nothing. No caller does that today.
+
+**WHAT THE CENSUS RUN COSTS.** `follow_verified` stops at the FIRST unproven
+node, so a trial yields AT MOST ONE classified failure. At the §8(a) measured 6/10
+route arrival that is 0.4 failures a trial, and at 338 s/trial:
+
+    half-width   failures needed   full-route trials   hours
+      ±20pp          16-21               ~40            ~3.8
+      ±10pp          69-93              ~230           ~22
+      ±10pp, simultaneous over 4 classes   150   ~375  ~35
+
+A single-leg harness at ~90 s/trial reaches ±20pp in about an hour. **Take the
+±20pp run.** It is enough to kill or keep "OVERSHOT is a quarter", which is the
+only decision queued on this number, and ±10pp costs six times as much to answer
+a question nobody is asking.
 
 **OPEN-7 — Should `RECOVER_MISSED` be turned off?** The fan succeeded 0/15 in
 the streak run and 2/31 combined, while costing ~34% of the clock. Judge it on
-seconds and failures-by-class, not arrival.
+seconds and failures-by-class, not arrival. **The cost is now confirmed twice
+over, independently** (2026-09-05): `ab_local_recovery`'s local arm has a median
+trial of 155.4s against the reset arm's 76.3s, and the only difference is one
+`LOCAL_RECOVERY_FIRST` fan, so a fan is ~79s; a static model of the fan from the
+constants gives 70.0s. At the 14 misses per 10 streak trials in the archived
+logs that is ~111s a trial, **33%** — reproducing the ~34% already recorded here
+by a different route. It is the single largest item on the clock.
 
-**OPEN-8 — Where does the other ~45s of a trial go?** Walking is ~16-23s and
-reset ~9s of a ~75-85s trial; the rest is SETTLE sleeps
-(`slow_traverse.SETTLE_SEC = 0.35`), 135 captures, and turn settling. **Never
-examined.** At n=10 minimum per arm this is the binding constraint on how much
-can be learned per hour — bigger than any remaining walking-speed gain, which is
-capped at ~10%.
+**OPEN-8 — Where does the other ~45s of a trial go? MOSTLY ANSWERED 2026-09-05;
+three cuts made, ~26% of a streak trial still unexplained.**
+
+**FIRST, THE PROFILE IN §8(h) IS NOT A ROUTED TRIAL, and its rows do not sum.**
+`overnight/profile_trial.py` profiles `reset` + `go_to_node_verified(
+"portrait_room")` — two legs, not the three-node route — and it wraps
+`walk_steps.walk_forward` / `turn_to`, which a LEG NEVER CALLS: legs go through
+`slow_traverse.walk_leg` / `turn_to`. So leg walking appears NOWHERE in it, which
+is why it shows `walk_forward: 1 call`, and its `turn_to: 6 calls` is
+`_look_around_for_a_node`'s five bearings plus the turn back, not leg turning.
+The wrapped rows also nest, leaving 65% of the 85.6s unattributed — which is
+precisely what this ticket was asking about. **Do not quote §8(h) as a route
+trial**, and fix `profile_trial.py` (wrap `slow_traverse.walk_leg`/`turn_to`,
+`pose.align_lateral` and `table_prompt.at_table`, and profile the ROUTE) before
+anyone reads it again.
+
+The accounting that DOES add up, validated against `profile.json`'s own call
+counts — modelling the run from the code predicts `identify` 8, `walk_forward` 1
+and `ws.turn_to` 6, and the file records 8 / 1 / 6:
+
+    reset x2 + sleep(1.2) x2          20.3s  23.7%
+    leg turning, 23 steps             21.5s  25.2%  (only ~3.5s is stick push)
+    stick time walking                16.2s  18.9%
+    relocalise sweep, SILENT          13.9s  16.2%
+    SETTLE_SEC x 23 steps              8.1s   9.4%
+    captures inside walk_leg           1.7s   2.0%
+    align + confirm + locate + live    4.0s   4.7%
+
+**CUT 1 — 26 of 26 archived trials threw away the reset they had just paid
+for.** Every one opens with "not at portrait_room and cannot say where this is —
+reloading to a known start" IMMEDIATELY after the harness's own reset. `SPAWN =
+office_corridor` is in `UNSEEDED` BY DESIGN (§7: seeding it from a dark frame
+created false positives), so `locate()` can never name it; `go_to_node_verified`
+called that lost, ran a 13.9s sweep with nothing to find, and reset a SECOND time
+to reach the spot it was already standing on. Fixed by
+`graph_walk.TRUST_RESET_SPAWN` plus a `start_hint` threaded through
+`follow_verified` / `consecutive_arrivals`, spent on the first attempt only.
+**~24s a trial.** Pinned by `tests/routing/test_trusted_spawn_start_hint.py`,
+which asserts on CALLS not outcomes — both paths end at the same node, so only
+the sweep and reset counts can tell them apart — and which now also pins that a
+hint must NOT override a `locate()` that named a routable node. It did not, at
+first: the hint was consumed inside the `start is None` branch, so it survived any
+attempt that DID locate, and a mutant that let the caller's claim beat the
+screen's evidence passed the whole file.
+
+**CUT 2 — `read_bearing` re-asked tesseract a question it had already
+answered.** The pytesseract fallback fired whenever `ocr_glyphs` returned
+nothing, including when it RAN and abstained — an identical question through a
+~50x slower invocation, at a median 12 subprocess calls per unreadable frame,
+times four `read_heading` retries. It now runs only when `ocr_glyphs` could not
+RUN. Pinned by `tests/routing/test_compass_no_duplicate_ocr.py`, which carries
+the control (when the fast reader genuinely cannot run, the full ladder still
+sweeps) and an anti-vacuity check that the real reader still reads every frame.
+Residual risk: `ocr_glyphs` caches a per-thread `PyTessBaseAPI`, so a handle that
+goes bad WITHOUT raising now returns `None`s with nothing behind it.
+
+**CUT 3 — the scale cache is written once per geometry, not on most reads.**
+Worth ~0.4s of an 85.6s trial, under 1%: the first measurement put the
+read-modify-write at ~120ms, and re-measurement on a quiet machine gave a median
+of **9.0ms (n=60)**, with the multi-second outliers traced to whole-process
+stalls under load rather than to the I/O. A tidy-up, not a saving. It also
+silently freezes the disk value at whatever the first process to see that
+geometry wrote.
+
+**REFUSED, with the measurement.** The escape ladder must NOT be truncated: 82
+invocations across four logs, 19 cleared, and **14 of those 19 cleared on a rung
+AFTER the first**. And `SETTLE_SEC` (13.4s of a streak trial, 4%) must NOT be
+shortened, because `walk_leg` would then capture mid-motion and inflate `best`,
+which is the input to `STALL_CHANGE` — a blocked step would read as walked. Four
+percent is not worth breaking a gate.
+
+**REMAINS.** (a) The ~24s is removed ONLY for `consecutive_arrivals`. Every
+harness under `overnight/` — `ab_leg_speed`, `ab_jukebox_leg`, `ab_stall*`,
+`ab_local_recovery`, `ab_attempts`, `profile_trial` — calls
+`go_to_node_verified` directly and still resets twice. One word each,
+`start_hint=gw.SPAWN`; make the change BETWEEN experiments, never during one.
+Re-profiling `profile_trial.py` unchanged will show NO improvement, so the
+"85.6s -> ~61s" figure describes a build nobody has made yet. (b) About 26% of a
+338.4s streak trial (~89s) is still unexplained with every modelled component at
+its floor — one push per turn, no compass retries, no ladder repeats. Cut 2 was
+the strongest candidate; re-run one streak trial and see whether the residual
+closes. (c) All three cuts are UNMEASURED against arrival. Two cannot plausibly
+move it, but the spawn hint has one real mechanism: the route now starts ~24s
+earlier after the load, so the NPCs have wandered 24s less.
+`TRUST_RESET_SPAWN = False` is the control arm, and the A/B is cheap precisely
+because the True arm is faster. (d) The recovery fan, ~79s each and ~33% of the
+clock, is OPEN-7's and is not decided here.
 
 **OPEN-9 — Can a recovery REPLACE the reset rather than precede it?** Local
 recovery failed because its cost was ADDITIVE — when the fan failed, the reset
@@ -1130,11 +1396,232 @@ block also took `SLIP_STRAFE`, `SLIP_STRAFE_SEC`, `SLIP_PUSH_SEC`, `SLIP_JUMPS`,
 `GEOMETRY_MAX_KEYPOINTS` and `SKIP_LADDER_ON_GEOMETRY` with it, which would have
 raised `NameError` on the first blockage. The lint caught it in minutes.
 
-**OPEN-11 — `tests/cpp/` is not wired into `run_tests.sh`.** 13 checks that only
-run if someone remembers the `clang++` line.
+**OPEN-11 — CLOSED 2026-09-05.** `tests/cpp/` is wired in by being a
+`tests/**/test_*.py` file, which is exactly what `run_tests.sh`'s own `find`
+discovers — so **`run_tests.sh` itself needed no edit**: no special case, no
+second list to keep in sync, and the runner's kill ceiling, live progress line
+and `BASEBALL_TEST_RUN` all apply for free. A driver compiles and runs the C++
+and scores its output. **It never skips**: absent `clang++`, absent
+`chiaki-ng-src`, a compile error, a binary that prints nothing, a missing SUMMARY
+line, a stub run, or a timing check that could not be sampled are each a FAIL
+naming the fix, because a check that silently declines is worth less than none.
 
-**OPEN-12 — `orchestrator.py` uses `pytesseract` in 6 places and `ocr_glyphs` in
-0.** All match-play OCR still shells out (193ms vs 79ms measured). Not a
-drop-in: `ocr_glyphs.recognise` is single-char mode (`PSM.SINGLE_CHAR`) and ban
-names are words, so it needs a word mode. Not on the navigation path — do it
-when match farming is the focus.
+Three things it now guards that the remembered `clang++` line never did.
+**DIVERGENCE**: all five patched files are compared BYTE FOR BYTE against the
+sources the application actually builds — `tests/cpp/` had been compiling
+`chiaki-patch/injectinput.cpp` while the app builds
+`chiaki-ng-src/gui/src/injectinput.cpp`, with nothing keeping them equal, and the
+failure names both paths and points at `cd chiaki-ng-src && git diff` as the
+authority. The file list has a guard on the guard: trimming it below five pairs
+fails, so deleting a row cannot quietly disable the check. **TIMING**: the old
+assertions were "sleep, then assert still held", with 20-70ms of margin against
+150-200ms deadlines — a threshold sitting inside one population (§10.4). Every
+timing assertion is now bounded by a clock this process measures, so load can
+only make a check INCONCLUSIVE, never a false pass, and the sleeps that waited
+for a FIFO line to land are replaced by marker barriers (lines are parsed in
+order, so a marker written after a line proves that line was parsed).
+**LIFETIME**: one writer `FILE*` is held open for the whole run. Per-line
+open/close gave 3 bad runs in 20 (one `SIGPIPE`, exit -13) because the injector's
+reader is fopen / fgets-to-EOF / fclose / repeat, so a line written into the
+re-open gap is lost — which is also why `analog_replay.open_stream()` holds one
+handle.
+
+The result worth keeping: reintroducing the historical 1.4s-turn bug — an untimed
+sibling axis cancelling a timed hold — fails a CORRECTNESS check while its timing
+half passes. That is the point of the split. Load cannot turn that regression
+into a shrug. **No check count is quoted here**; the test prints its own, and the
+"13 checks" this entry used to claim was already stale by four.
+
+**Caveat found on review, and it is the project's own signature failure.** One of
+the three timing checks has NO load-proof correctness twin: `clear` setting
+`active = false` — the exact regression the release window exists to prevent —
+produces zero correctness failures and only an INCONCLUSIVE. The run still exits
+non-zero, so it is a misdiagnosis rather than a silent pass, and the message now
+names both possible causes and asserts neither. **Do not restore the wording that
+blamed the machine.** Separating "the window never opened" from "no tick landed
+inside it" needs `RELEASE_MS`, which lives in an anonymous namespace and cannot
+be read from the test; guessing it would put a threshold inside one population.
+
+Two standing costs. `chiaki-ng-src/` is gitignored, so this file HARD-FAILS on a
+machine without it — deliberate, since an unverifiable claim is not a passing
+one, but it means a fresh clone has one failing test until that tree is present.
+And `tests/cpp/probe_release_window.cpp`, the only evidence for OPEN-16, is
+compiled by nothing automatically and can rot silently.
+
+**OPEN-12 — CLOSED 2026-09-05.** `ocr_glyphs` gained a word mode
+(`image_to_text(image, psm, whitelist)`) sharing the existing persistent
+per-thread `PyTessBaseAPI`, and orchestrator's four local OCR call sites now go
+through one `orchestrator._ocr_text`: `ocr_ban_card_name`, `ocr_scoreboard` and
+`ocr_runner_card` at PSM 6, `read_ban_counter` at PSM 7 with the `0123456789/`
+whitelist. `ocr_glyphs.tesseract_config` is the ONE definition of the config
+string, so the fast path and the pytesseract fallback cannot drift into asking
+different questions; it reproduces the pre-migration literals exactly. A
+warn-once fallback stays behind it, and it says WHY the run got slower, because
+nothing else does.
+
+**THE HAZARD WAS THE HANDLE CACHE, not the recognition.** `_api()` was keyed on
+the WHITELIST ALONE, from when the module only ever asked PSM 10 — so a
+word-mode call would be handed back a SINGLE_CHAR handle and return ONE
+CHARACTER of a player's name, correctly, forever. It is now keyed on
+`(psm, whitelist)` with a bounded LRU, because the ban screen alternates PSM 6
+and PSM 7 and a re-`Init` costs ~134ms against ~23ms warm.
+
+**Evidence, and it is function-level rather than string-level**: 137 answers
+computed from LIVE IN-MEMORY crops in both the migrated tree and a baseline
+worktree at HEAD — 110 ban card names over 11 real ban frames, 11 ban counters,
+4 scoreboards, 12 runner names, 71 of them non-null — **zero differences**.
+Corroborated in aggregate: `test_ban_ocr_confusion`'s 110-cell corpus gives
+**63 correct / 0 wrong / 47 abstained in BOTH arms**, the same numbers this
+project already recorded from the pytesseract era, in 229.8s against 4.8s on the
+same machine — with the baseline getting eight threads and the migrated path
+one. Ground truth for the new fixture was recorded from the SLOW path, so the
+agreement test is not measuring itself.
+
+**A MIGRATION LIKE THIS BREAKS TEST SEAMS SILENTLY.** Two tests stubbed
+`orchestrator.pytesseract.image_to_string`, which after the migration is never
+consulted — so the code really OCR'd a blank grey probe and abstained, and every
+MUST_ABSTAIN case passed FOR THE WRONG REASON. Only the MUST_RESOLVE half, which
+exists to catch over-strictness from the other side, exposed it. Both seams now
+stub `orchestrator._ocr_text`. Reverting either one by hand reproduces
+"18/18 resolved correctly" over a blank square.
+
+**The 8-worker thread pool in that file is gone and must not come back.**
+`tesserocr` links `cysignals`, whose `sig_on`/`sig_off` is process-global and
+main-thread-only, and backend selection imports `tesserocr`, which installs a
+SIGINT handler that `signal.signal` refuses off the main thread — so a
+worker-first call silently drops the WHOLE PROCESS back to spawning subprocesses.
+Nothing in the match or navigation path drives OCR off the main thread, so this
+costs nothing real: serial and in-process beats eight threads and subprocesses on
+this machine by ~48x.
+
+Do not quote a per-read speedup from a loaded machine. The quiet-machine pair is
+still 193ms against 79ms; the 13.6s-per-read figure measured during this work is
+Sophos plus saturation deleting a temp file, caught with a `sample` stack showing
+2671 of 2671 samples inside one `unlink`. The claim worth repeating is "identical
+answers, and the fast path never touches the filesystem". Still shelling out,
+deliberately out of scope and recorded so they are not lost: `reset_env`'s
+`give_up_dialog` — **on the LIVE path**, and the best remaining candidate — and
+two sites in `landmarks.py`.
+
+**OPEN-15 — `read_bearing`'s confidently-wrong reads had ONE cause and it is
+fixed; the coverage cost is real, and the change is UNMEASURED against
+arrival.** (2026-09-05. This is the first time the reader's accuracy has been
+measured at all.)
+
+Ground truth was built for 2571 of 3628 archived world frames from three sources
+that had to agree: letters at a pitch measured from the compass's own TICK
+LATTICE; tick PHASE, which pins heading modulo 10 deg with no letter involved;
+and RIGHT-STICK STATIONARITY from `demos/*/input.json`, since only the right
+stick turns the camera (§5), so across a run where `|rx|` never left the deadzone
+the heading CANNOT have changed. 1057 frames were EXCLUDED, not guessed. The
+truth validates against an instrument that knows nothing about OCR: of 726
+letter-truth frames inside a stationary run, exactly **1** deviated from its
+run's consensus by 3 deg or more.
+
+**THE TICKS ARE THE PART THAT CANNOT BE MISREAD.** They sit at ODD MULTIPLES OF
+5 DEGREES, so a letter sits HALF a spacing off the lattice and nine spacings span
+the 90 deg between letters (1.5 + 6 + 1.5 — the ticks either side of a letter
+hide under its circle). On `explore/20260904_152521_bar_area/00001.jpg` the fit
+gives d = 32.3941 at rms 0.200px, so 9d = **291.55** against the 291.5 the
+letters measure, from marks no recogniser has to identify. A letter's OWN strokes
+arrive as tight clusters and wreck the fit unless peaks closer than half a
+spacing are dropped. **This is NOT the bar correlation that was tried and
+reverted** — that aliased because it asked the 10-degree ticks for the whole
+answer. Here the ticks supply only the sub-10-degree phase, the LETTERS choose
+the decade, and a frame with no letter still abstains.
+
+**THE CAUSE: believing a lone letter.** Every confidently-wrong read came from a
+frame where exactly ONE letter was recognised.
+
+    1 letter    268 reads   116 confidently wrong   43.3%
+    2 letters  1330 reads     0
+    3 letters   546 reads     0
+
+Two of the three worst anchors are not letters at all: a scenery blob at x=572,
+in a frame whose real letters stand at 499.5 / 711.7 / 924.0, reads as 'S' and
+the frame reports 233.0 where the truth is 84.8. **The ticks cannot catch this** —
+a letter swapped for the one opposite is 180 deg, a whole number of spacings, so
+the phase agrees with the wrong answer too. Fixed by `REQUIRE_TWO_LETTERS` plus
+`POOL_THRESHOLDS` (sweep until two LETTERS, not two BLOBS, over a ladder reaching
+down to 110, which `BLOB_THRESHOLDS` never reaches): over the truth frames,
+confidently wrong **116 -> 2** and abstain **16.6% -> 5.0%**. Both axes moved the
+right way at once, which is the thing to re-check if it regresses. Of the 149
+frames the new reader refuses where the old one answered, 70 have truth and **the
+old reader was WRONG on 62 of them**.
+
+Corroborated independently: over 343 frames of `demos/walk_20260827_214446`
+inside right-stick-quiet segments, reads that contradict their own segment's
+median go from **96** (of 166 in-segment reads) to **2** (of 230) — more coverage
+AND fewer wrong answers — and the two survivors are the two frames already known
+to be wrong.
+
+**IT IS NOT PERFECT.** 2 of 2442 reads are still wrong by 150 deg, both from two
+SPURIOUS blobs a plausible pitch apart that corroborate each other, which is the
+one thing a two-letter rule cannot see.
+
+**WHAT IT COSTS — and do NOT quote the labelled-subset figure.** Over ALL 160
+frames of `explore/20260904_152521_bar_area`, at the LIVE 1920x1080 geometry,
+abstention goes **5.6% -> 15.6%**: about 13 probably-good reads lost per 160
+against about 4 bad reads correctly refused. The "0.0% at 1920x1080" figure came
+from the truth subset, and the truth criterion (two or more letters over the full
+ladder) SELECTS precisely the frames the new rule can read — so it excludes the
+refusals by construction. Net safety is still positive; the honest sentence is
+"abstention triples at the live geometry, and that is the price".
+
+Also carry: the headline 5.41% wrong is a STRESS TEST, not today's live rate. All
+116 failures are at the demo archive's 1400x787, 0.73x the live linear
+resolution. The mechanism is resolution-independent so it CAN fire live, but the
+rate has not been observed live. Cost is 1.13-1.32x per read, under a second a
+trial.
+
+**REMAINS.** (a) UNMEASURED against route ARRIVAL — this is a sensor change, and
+this project's record is 13 well-motivated changes that moved no number. (b) Two
+holes the test does not guard: the "stop on two LETTERS not two BLOBS" rule
+survives mutation (on the current fixtures the entire gain comes from the ladder
+reaching 110, not from the stop rule the comments credit), and
+`TICK_SNAP_MAX_DEG` is asserted nowhere. (c) The scale cache is now rewritten on
+~39 of 40 reads against 14 before, because `9*d` is a continuous lstsq output —
+on a file whose own comment says it lives on a NAS. That collides directly with
+OPEN-8's cut 3, which makes the write once-per-geometry; merged together, the
+frozen value becomes the tick-derived one.
+
+**OPEN-16 — `clear` arms a release window, and a stick write that lands inside it
+is killed while the console holds the deflection.** Found 2026-09-05 by
+`tests/cpp/probe_release_window.cpp`, reproduced from a second independent build.
+12 runs per gap, `clear` then `left_y -5000 300`, scored at +800ms:
+
+    gap 400ms (outside the ~100ms window)   12/12 correctly released  [control]
+    gap  30ms (inside it)                   12/12 STILL DEFLECTED
+    gap  90ms (inside it)                    7-9/12 still deflected
+
+`clear` arms the release deadline and nothing clears it, so a write inside the
+window is later killed by the release path and the pump stops sending — **this
+recreates exactly the failure the release window was added to prevent**, and
+unlike §5's lost-release-packet hazard it is DETERMINISTIC rather than a dropped
+UDP edge. It is in the LIVE INPUT PATH and is **NOT fixed**. Live reachability is
+UNESTABLISHED: every `ar.clear()` call site checked (`teach_repeat`,
+`run_anchored`, `brett_walk`, `walk_steps`, `run_to_table`, `perform_brett_walk`,
+`follow_path`, `route_follow`, `waypoint_replay`, `go`, `macro_replay`) is
+followed by a capture or a log, not by a stick write within 100ms. It may be
+latent — but the probe is compiled by nothing automatically, so the evidence for
+it can rot.
+
+**OPEN-17 — Does the executor's ARRIVAL HEADING cost the two bad nodes?
+PARKED — do not build it before OPEN-14 reports.** The executor ends every leg
+facing `steps[-1]["bearing"]`, while the references were shot at `cam[-1]`. The
+gap, per leg:
+
+    office_door    +0.99   |  portrait_room  +1.82   (arrival 1.000)
+    bar_pool_room  +6.37   (route2 +4.08)            (arrival 0.667)
+    bar_jukebox    -3.05   (route2 +1.80)
+    dealer_table  -11.31   (route2 -2.66)
+
+At the measured 18.6-20.8 px/deg that is 118-132px at `bar_pool_room` and
+210-235px at the table, against `ALIGN_TOL_PX = 35` — and the ordering matches
+which nodes arrive worst. It is also the right SHAPE for this project: the
+intervention is ONE TURN and no translation, and GRAVEYARD's own summary is that
+every failed change MOVED the character while both survivors move nothing.
+**But the evidence is n = 2 legs and an ordering**, which is an association of
+exactly the shape that killed `STALL_CHANGE` after a Fisher p = 0.00039 (§10.2).
+`approach_goal` compounds it by aiming at `steps[-1]["bearing"]` and discarding
+the other seven, 10.6 deg off the leg's own net direction.

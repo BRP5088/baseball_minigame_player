@@ -60,7 +60,13 @@ def run(reference_heading_readable=True, turn_works=True):
         gw._recorded_reference = lambda n: REF
         pose.align_lateral = lambda *a, **k: 12.0
         if not reference_heading_readable:
-            gw._REF_HEADING["portrait_room"] = None
+            # KEYED ON (REFERENCE_POSE, node), not on the node. Poking the bare
+            # node missed the key entirely, so reference_heading() recomputed
+            # 1.39 from the frame and the UNREADABLE branch was UNREACHABLE.
+            # The check below then failed for a reason that had nothing to do
+            # with the thing it guards — a stub left behind when the cache key
+            # gained REFERENCE_POSE.
+            gw._REF_HEADING[(gw.REFERENCE_POSE, "portrait_room")] = None
 
         # RECORD THE TOLERANCE, not just the target. The first version of this
         # stub swallowed **kwargs, so align_at_node's failure to pass a

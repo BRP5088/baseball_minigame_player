@@ -54,6 +54,23 @@ class Explorer:
         import places
         import walk_steps as ws
 
+        # A SWEEP OWNS ITS OWN ID. stop_id used to be incremented only by
+        # step(), so a fan's last sweep and the next "at the node" sweep — with
+        # no step() between them, because the character was walked back — shared
+        # a stop id. In the 2026-09-04 bar run that merged TWO DIFFERENT
+        # POSITIONS under one id on 3 of 17 stops, and it merged the "at the
+        # node" sweep with a sweep three pushes away: exactly the two classes
+        # anyone analysing this data is trying to tell apart. 24 (stop, k) pairs
+        # occurred twice, so a frame could not even be addressed uniquely.
+        #
+        # Nothing errored. The index stayed valid JSON and the row count was
+        # right; only the labels were wrong, which is why it survived a whole
+        # analysis before being noticed.
+        #
+        # `pos` keeps what stop_id was meant to carry — how many pushes from the
+        # start — so "two sweeps at the same position" is still expressible,
+        # explicitly, instead of by collision.
+        self.stop_id += 1
         start = ws.read_heading()
         if start is None:
             self.log("  no compass here — sweeping blind, headings unrecorded")
@@ -70,7 +87,7 @@ class Explorer:
             self.n += 1
             f = os.path.join(self.dir, f"{self.n:05d}.jpg")
             img.save(f)
-            row = {"file": f, "stop": self.stop_id, "k": k,
+            row = {"file": f, "stop": self.stop_id, "pos": self.pos_id, "k": k,
                    "heading": compass.read_bearing(img), "keypoints": kp,
                    "identify": room, "score": score, "margin": margin,
                    "note": note}
@@ -82,7 +99,8 @@ class Explorer:
             ws.turn_to(start, log=lambda *a: None)
         return rows
 
-    stop_id = 0
+    stop_id = 0        # one per SWEEP — unique, so (stop, k) addresses a frame
+    pos_id = 0         # one per PUSH — how far the character has walked
 
     def step(self, bearing, seconds=STEP_SEC, speed=STEP_SPEED):
         """One short, deliberate push. Returns how far the view moved."""
@@ -91,7 +109,7 @@ class Explorer:
         ws.turn_to(bearing % 360.0, log=lambda *a: None)
         moved = ws.walk_forward(speed, seconds) or 0.0
         time.sleep(SETTLE)
-        self.stop_id += 1
+        self.pos_id += 1
         self.log(f"  step -> bearing {bearing % 360.0:.0f} for {seconds:.2f}s "
                  f"(view moved {moved:.1f})")
         return moved
@@ -101,4 +119,5 @@ class Explorer:
         unknown = [r for r in rows if r["identify"] is None and r["keypoints"] >= 400]
         return {"dir": self.dir, "frames": len(rows),
                 "unmapped_rich_views": len(unknown),
-                "stops": len({r["stop"] for r in rows})}
+                "stops": len({r["stop"] for r in rows}),
+                "positions": len({r.get("pos") for r in rows})}
