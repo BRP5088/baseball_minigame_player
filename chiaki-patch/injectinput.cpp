@@ -176,6 +176,21 @@ void Apply(const std::string &line)
 	else return;
 
 	g_inject.last_ms = NowMs();
+	// DISARM ANY PENDING `clear` RELEASE. Without this line a write that lands
+	// inside the 100ms release window sets active = true and leaves the
+	// deadline armed, so InjectInputActive() then runs its release path on the
+	// FRESH input: active = false, has_left = false. The pump stops sending and
+	// the console keeps the last state it received — the deflection — while the
+	// timed hold's own expiry happens inside this process and is never
+	// transmitted. Measured (`clear` then `left_y -5000 300`, scored at
+	// +800ms): 30ms gap, 12/12 still deflected; 90ms gap, 9/12 deflected and
+	// 3/12 the push dropped entirely; 400ms gap, 12/12 correct.
+	//
+	// The window is short and every clear() on the live path is followed by a
+	// capture or a log, so this was latent there — but `overnight/walk_curve.py`
+	// loops `send(["clear"])` straight back into a push about 75ms later, which
+	// is inside it.
+	g_inject.release_until = 0;
 	g_inject.active = true;
 }
 

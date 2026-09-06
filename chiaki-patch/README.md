@@ -41,6 +41,13 @@ Plus the two new files that edit 4 compiles in:
 that they existed **only as prose in CLAUDE.md**, which is why this README could
 claim the patch was two edits and nobody noticed.
 
+**All five are now compared byte for byte against `chiaki-ng-src/` by
+`tests/cpp/test_injectinput_cpp.py`**, which the offline suite runs. This README
+is prose and cannot fail; that test can. If a sixth file joins the patch, add it
+to `PATCH_FILES` there as well as to the table above — the check refuses to run
+against a trimmed list, so a missing row fails loudly rather than quietly
+guarding less.
+
 ## How the omission was found
 
 `nm -U <binary> | grep -i inject` on the shipped app showed the symbol was

@@ -1585,26 +1585,84 @@ on a file whose own comment says it lives on a NAS. That collides directly with
 OPEN-8's cut 3, which makes the write once-per-geometry; merged together, the
 frozen value becomes the tick-derived one.
 
-**OPEN-16 — `clear` arms a release window, and a stick write that lands inside it
-is killed while the console holds the deflection.** Found 2026-09-05 by
-`tests/cpp/probe_release_window.cpp`, reproduced from a second independent build.
-12 runs per gap, `clear` then `left_y -5000 300`, scored at +800ms:
+**OPEN-16 — CLOSED 2026-09-05.** Fixed, pinned by a mutation-tested check, and
+verified on the rig against a rebuilt binary.
+
+`Apply("clear")` armed `release_until = NowMs() + RELEASE_MS` (100ms) and nothing
+ever disarmed it. A later write set `active = true` and left the deadline
+standing, so when it expired `InjectInputActive()` ran its release path on the
+FRESH input: `active = false`, `has_left = false`, `has_right = false`. chiaki's
+pump is `if(InjectInputActive()) SendFeedbackState()`, so it then stops sending
+and **the console keeps the last state it received** — the deflection — while the
+hold's own deadline expires inside the injector and is never transmitted.
 
     gap 400ms (outside the ~100ms window)   12/12 correctly released  [control]
     gap  30ms (inside it)                   12/12 STILL DEFLECTED
-    gap  90ms (inside it)                    7-9/12 still deflected
+    gap  90ms (inside it)                    9/12 deflected, 3/12 push dropped
 
-`clear` arms the release deadline and nothing clears it, so a write inside the
-window is later killed by the release path and the pump stops sending — **this
-recreates exactly the failure the release window was added to prevent**, and
-unlike §5's lost-release-packet hazard it is DETERMINISTIC rather than a dropped
-UDP edge. It is in the LIVE INPUT PATH and is **NOT fixed**. Live reachability is
-UNESTABLISHED: every `ar.clear()` call site checked (`teach_repeat`,
-`run_anchored`, `brett_walk`, `walk_steps`, `run_to_table`, `perform_brett_walk`,
-`follow_path`, `route_follow`, `waypoint_replay`, `go`, `macro_replay`) is
-followed by a capture or a log, not by a stick write within 100ms. It may be
-latent — but the probe is compiled by nothing automatically, so the evidence for
-it can rot.
+**THE RUNAWAY GUARD CANNOT SAVE IT.** `INJECT_TIMEOUT_MS` is evaluated inside
+`InjectInputApply`, which the pump has stopped calling — so the 5s bound that
+exists precisely to stop a stick being held forever is unreachable in the one
+state that needs it. That is the sharpest form of this defect and is worth
+remembering as a shape: **a guard that lives downstream of the switch that
+disables it.**
+
+**The fix is one line:** `g_inject.release_until = 0;` on the non-clear path of
+`Apply()`, beside `g_inject.active = true;`. In BOTH copies
+(`chiaki-patch/injectinput.cpp` and `chiaki-ng-src/gui/src/injectinput.cpp` —
+`tests/cpp/test_injectinput_cpp.py` compares them byte for byte).
+
+**Pinned by `tests/cpp/test_injectinput.cpp`**, check *"a write inside the window
+SURVIVES the window expiring"*. Mutation-tested: deleting the one line produces
+exactly that one FAIL and ZERO inconclusives — so unlike the sibling
+release-window check, which can only report INCONCLUSIVE, this one has a
+load-proof verdict. It goes INCONCLUSIVE rather than passing when load pushes the
+write outside the window, because outside the window there is no bug to find.
+`probe_release_window.cpp` became this check and is deleted.
+
+### Verified on the rig
+
+Incremental rebuild 29s (not the 15 minutes a clean build costs).
+`restart_chiaki.sh` installed and re-signed it; `nm -U` shows
+`InjectInputStart/Apply/Active`; Circle closes the pause book and OPTIONS opens
+it. Then the defect's own scenario, using a CAMERA turn so nothing could move
+position — `clear`, wait the gap, one timed `right_x 16000 600`, compass read at
++2.0s and again at +4.0s:
+
+    gap 400ms (control)   turned 7.49 deg, then a further  0.000 deg
+    gap  30ms (the bug)   turned 7.21 deg, then a further -0.026 deg
+
+Both arms turn the same amount and both stop dead. Bearing went 86.8 -> 101.5,
+which is 7.49 + 7.21 exactly.
+
+### Live reachability: latent on the route, LIVE in one harness — FROM NOW ON
+
+Grepped every `clear` written to the FIFO (`ar.clear()`, `ar.send(["clear"])`,
+`inject_reset.clear()` — 30 sites, more than the 11 first checked).
+
+- Every site on the production route is TERMINAL: a `return`, a `raise`, a log,
+  or a harness `finally:`. The shortest gap on a live walking path is
+  `brett_walk._push` (:277), which clears inside its 0.8s chunk loop and then
+  sleeps `walk_steps.SETTLE = 0.25` plus a capture — ~290ms, outside.
+- **`overnight/walk_curve.py:52` is inside the window.** It loops
+  `ar.send(["clear"])` straight back to the top and the next stick write is two
+  `fast_capture()` calls later — ~75ms at the 37ms/capture from §8(h). The only
+  site of that shape. Note `ar.clear()` also CLOSES the FIFO, so a reopen sits
+  between it and any following write; `ar.send(["clear"])` does not, which is why
+  the reachable site is one of the latter.
+
+**THIS DOES NOT IMPLICATE §6's WALKING TABLE, AND AN EARLIER DRAFT HERE SAID IT
+DID.** `overnight/walk_curve.json` is dated 2026-09-04 13:00 and its contents ARE
+that table; the release window was added 2026-09-05, so the run predates the
+defect. The claim was made by reading the call site and never checking that the
+mechanism existed when the measurement was taken — a mechanism that makes sense
+is not evidence (§10.2). Git cannot date this for anyone: the repo's history
+begins at "Initial commit: Auto Baseball" because git was added on 2026-09-05, so
+`git log -S RELEASE_MS` returns that commit for everything and READS AS THOUGH THE
+CODE WAS ALWAYS THERE. File mtimes and the run's own JSON are the datable
+artifacts here.
+
+**The question it does open is still open — see OPEN-19.**
 
 **OPEN-17 — Does the executor's ARRIVAL HEADING cost the two bad nodes?
 PARKED — do not build it before OPEN-14 reports.** The executor ends every leg
@@ -1625,3 +1683,56 @@ every failed change MOVED the character while both survivors move nothing.
 exactly the shape that killed `STALL_CHANGE` after a Fisher p = 0.00039 (§10.2).
 `approach_goal` compounds it by aiming at `steps[-1]["bearing"]` and discarding
 the other seven, 10.6 deg off the leg's own net direction.
+
+**OPEN-18 — `ensure_stream.streaming()` REPORTS UP WHILE THE PS5 IS IN STANDBY.**
+Observed 2026-09-05 while verifying OPEN-16. `Bretts_walk.py connect` printed
+`[stream] up via find_bar (compass strip located)` and returned success; the
+capture was chiaki's HOST LIST reading **`State: standby`**. The console was
+asleep, there was no stream at all, and `connect` therefore never ran its wake
+sequence — the three `_key` presses at `ensure_stream.py:231-233`. Driving those
+by hand woke the console in 112s.
+
+This is §3's rule biting a caller that predates it. `find_bar()` locates the
+compass strip WITHOUT reading it and returns non-None on essentially every frame,
+which is why §3 says it answers "am I streaming" and NOT "am I in the world" —
+but `streaming()` uses it as the liveness test, and a standby host list is
+neither. `read_bearing()` is no better: on the PS5 Control Center overlay sitting
+on top of the paused game it returned **43.7**, a confident number for a frame
+with no world in it, which sent this session's own "WORLD IS UP" check wrong until
+the user looked at the screen and said so.
+
+Cost here was two minutes of hand-driving. Cost to an unattended run is a night
+spent pressing buttons at a sleeping console while every log line says the stream
+is up — §10.1's shape exactly, where doing nothing looks like working.
+**Not fixed:** the replacement predicate has to sit between two measured
+populations (§10.4) and no such census exists. Cheapest starting point is that the
+host-list frame carries the literal text `State: standby`.
+
+**OPEN-19 — Did the OLD `clear` corrupt §6's walking table?** Raised 2026-09-05
+and deliberately left open rather than inherited.
+
+OPEN-16 does NOT implicate that table: `overnight/walk_curve.json` is dated
+2026-09-04 13:00, the release window was added 2026-09-05. But `walk_curve.py`
+had the same clear-then-push-75ms-later loop then, and BEFORE the release window
+`clear` never transmitted a release at all — that is the defect the window was
+ADDED to fix, measured at the time as "0.4s after `clear`, the PS5 still believed
+left_y = -9830" (`chiaki-patch/injectinput.cpp`). So the question is whether the
+walk-back push at `walk_curve.py:49` stayed deflected into the next sample's own
+`before` capture and its `walk_forward`. That is unestablished, and it is not the
+same mechanism as OPEN-16.
+
+It would inflate exactly the high-magnitude rows, and those are the strange ones:
+
+    mag    median   spread   n
+    0.60     71.2       27   3
+    0.75    106.0      124   3
+    0.85    352.9      476   2      <- 3.3x the row below it
+    1.00    113.4       73   3      <- and then DOWN again
+
+A response that rises 3.3x and then falls is not a shape a monotonic
+stick-to-distance relation has. **`LEG_SPEED_MAX = 0.60` derives from these
+numbers** (§6), so this is load-bearing, not curiosity.
+
+**Do NOT re-measure with `walk_curve.py` until OPEN-16's fix is on the rig** — its
+loop is the one live site inside the release window, so the script would now
+corrupt the very table it is being run to check. It is the fix's own test case.
