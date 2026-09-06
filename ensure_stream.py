@@ -145,15 +145,42 @@ def streaming(img=None):
     the one frame it sampled happened to be one the letter reader could not
     parse. Twice in one day, each time ending an unattended run.
 
-    find_bar() locates the compass STRIP rather than reading it, and separates
-    the states cleanly:
+    find_bar() locates the compass STRIP rather than reading it:
 
         in-world, compass readable      find_bar (64, 619, 1535)   bearing 89.2
         in-world, compass unreadable    find_bar (64, 223, 1322)   bearing None
         PS5 overlay (game behind it)    find_bar (300, 47, 1429)   bearing 136.0
         chiaki host list, disconnected  find_bar None              bearing None
 
-    It is None only in the state this function exists to detect.
+    THE LINE THAT USED TO FOLLOW THAT TABLE -- "It is None only in the state
+    this function exists to detect" -- IS FALSE, and it is why nobody looked.
+    find_bar fires on almost any structured image, the game's compass strip
+    being only one of them. Measured 2026-09-06 on an independent corpus:
+    9 of 13 of chiaki's OWN Qt documentation screenshots, 5 of 6 arbitrary
+    photographs, and a SYNTHETIC dark window with one light horizontal toolbar
+    (see tests/rig/test_find_bar_is_not_a_stream_check.py, which pins this).
+    Only a flat image -- solid colour, or pure noise -- returns None.
+
+    The user watched this cost an hour: every failed reconnect announced
+    "[stream] up via find_bar (compass strip located)" first, INCLUDING while
+    chiaki was not running at all and the PS5 was switched off. That is OPEN-18.
+
+    WHY THE BRANCH IS STILL HERE. Removing it is not obviously safe. It was
+    added because requiring read_bearing conflated "frames are arriving" with
+    "a compass LETTER is legible", and bright scenes ended two unattended runs
+    in one day on 2026-09-01. The replacement discriminator that was proposed --
+    a flatness score -- is UNEVALUABLE, not merely unproven: the negative
+    population is a single frame that is not on disk, so CLAUDE.md 10.4's "a
+    threshold must sit between two MEASURED populations" cannot be satisfied
+    from what exists. Changing the verdict on that basis would trade a known
+    false positive for an unmeasured false negative, and a false negative here
+    ENDS an unattended run.
+
+    So the branch stays and the claim is corrected. One lead worth recording,
+    not yet a rule: on every synthetic and UI image tried, the located strip
+    spans the FULL frame width (0..W-1), while real game frames return a strip
+    bounded well inside it (460..937 of 1400). Nobody has measured that on the
+    host list, which is the frame that matters.
     """
     # THE CONSOLE'S OWN WORD COMES FIRST, and costs nothing. Frames have proved
     # unreliable for this question over and over: read_bearing fails on bright
