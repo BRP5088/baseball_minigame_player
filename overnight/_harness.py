@@ -314,7 +314,8 @@ def save_result(path, obj, indent=2):
         raise
 
 
-def walk_leg_under_test(gw, m, start, target, shots=None, log=print):
+def walk_leg_under_test(gw, m, start, target, shots=None, log=print,
+                        attempts=1):
     """Walk ONE leg from a PROVEN `start` and return everything measurable.
 
     The caller must already have verified the character is standing at `start`;
@@ -329,9 +330,14 @@ def walk_leg_under_test(gw, m, start, target, shots=None, log=print):
     about the leg under test. There is no at_bar_jukebox frame anywhere on disk,
     and OPEN-1 says exactly that.
 
-    ONE ATTEMPT, deliberately. The retrying primitive is a DIFFERENT quantity
-    (OPEN-4 measured it at 10/10), and retries would hide precisely the
-    difference these A/Bs exist to find. One attempt is one execution of the leg.
+    ONE ATTEMPT BY DEFAULT, deliberately. The retrying primitive is a DIFFERENT
+    quantity (OPEN-4 measured it at 10/10), and retries would hide precisely the
+    difference a leg A/B exists to find. One attempt is one execution of the leg.
+
+    `attempts` is raised only by an experiment whose SUBJECT is the retrying
+    behaviour itself -- OPEN-7 compares two recovery strategies, so it must run
+    the primitive as production runs it. Passing attempts>1 to a LEG comparison
+    would be a measurement error, which is why the default is the safe one.
 
     `start_hint=start` is EVIDENCE, not an assumption: the caller proved it.
 
@@ -354,7 +360,7 @@ def walk_leg_under_test(gw, m, start, target, shots=None, log=print):
         lines.append(str(msg))
         log(msg)
 
-    ok, _reached = gw.follow_verified(m, [target], log=tee, attempts=1,
+    ok, _reached = gw.follow_verified(m, [target], log=tee, attempts=attempts,
                                       shots=shots, start_hint=start)
 
     # INDEPENDENT CONFIRMATION. follow_verified already believes only locate(),
