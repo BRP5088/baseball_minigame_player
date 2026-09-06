@@ -33,6 +33,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import _harness   # noqa: E402  (needs the path line above)
 
+# THE SHIPPED VALUE, CAPTURED -- never a literal. This restore used to hardcode
+# what the default was ON THE DAY THE SCRIPT WAS WRITTEN, so it silently rotted
+# into a WRONG value: ab_leg_speed restored {} after leg 1 shipped an override
+# of 3.0, and ab_stall restored 2.5 after STALL_CHANGE became 6.0. A cleanup
+# that reinstates a stale default is worse than no cleanup -- it looks like
+# tidiness and installs an arm.
+import graph_walk as _gw_shipped   # noqa: E402
+_SHIPPED = {"LEG_TURN_TOLERANCE": _gw_shipped.LEG_TURN_TOLERANCE}
+
 ROUTE = ["portrait_room", "bar_pool_room", "bar_jukebox"]
 TRIALS = 10                     # per arm, interleaved => 20 route walks.
                                 # 10 is the MINIMUM that can resolve a 1.0-depth
@@ -179,7 +188,7 @@ if __name__ == "__main__":
             pass
         try:
             import graph_walk as gw
-            gw.LEG_TURN_TOLERANCE = None
+            gw.LEG_TURN_TOLERANCE = _SHIPPED["LEG_TURN_TOLERANCE"]
         except Exception:
             pass
         save()

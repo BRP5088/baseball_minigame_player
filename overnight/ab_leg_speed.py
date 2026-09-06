@@ -19,6 +19,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import _harness   # noqa: E402  (needs the path line above)
 
+# THE SHIPPED VALUE, CAPTURED -- never a literal. This restore used to hardcode
+# what the default was ON THE DAY THE SCRIPT WAS WRITTEN, so it silently rotted
+# into a WRONG value: ab_leg_speed restored {} after leg 1 shipped an override
+# of 3.0, and ab_stall restored 2.5 after STALL_CHANGE became 6.0. A cleanup
+# that reinstates a stale default is worse than no cleanup -- it looks like
+# tidiness and installs an arm.
+import graph_walk as _gw_shipped   # noqa: E402
+_SHIPPED = {"LEG_SPEED_BY_LEG": _gw_shipped.LEG_SPEED_BY_LEG}
+
 TARGET = "portrait_room"
 TRIALS = 8
 TIMEOUT = 240
@@ -85,7 +94,8 @@ if __name__ == "__main__":
     finally:
         try:
             import analog_replay as ar; ar.send(["clear"])
-            import graph_walk as gw; gw.LEG_SPEED_BY_LEG = {}
+            import graph_walk as gw
+            gw.LEG_SPEED_BY_LEG = _SHIPPED["LEG_SPEED_BY_LEG"]
         except Exception: pass
         save()
     import statistics
