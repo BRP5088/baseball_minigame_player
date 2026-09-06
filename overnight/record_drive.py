@@ -141,11 +141,22 @@ def _novelty(img, refs, seen):
     k, d = places.keypoints(img)
     if d is None or len(d) < 30:
         return None, 0, "FEATURELESS"
-    best_room, best = None, 0
-    for room, rs in refs.items():
-        v = max(places.match_count(d, r) for r in rs)
-        if v > best:
-            best_room, best = room, v
+    # NAME A ROOM ONLY IF THE LOCALISER WOULD. An argmax over four rooms always
+    # returns one, and this printed its name whatever the score -- so standing
+    # in a side room with NO reference at all, the display read
+    # "(best dealer_table 84)" and the driver reasonably read that as "it
+    # thinks I am at the dealer table". Unrelated rich frames score 100-135
+    # against ANY room on this game's art; that is the spurious-match floor,
+    # not a location.
+    #
+    # places.verdict applies both shipped gates (MIN_MATCHES 140 and MIN_RATIO
+    # 1.35) and returns None when it abstains. Using it means the feedback says
+    # exactly what the localiser concluded, and can never claim a place the
+    # localiser would refuse to name.
+    scores = {room: max(places.match_count(d, r) for r in rs)
+              for room, rs in refs.items()}
+    named, best, _ratio = places.verdict(scores)
+    best_room = named          # None when the localiser abstains
     here = max((places.match_count(d, x) for x in seen), default=0)
     if len(seen) < 40 and (here < 120):
         seen.append(d)
@@ -158,11 +169,13 @@ def _novelty(img, refs, seen):
     #   repeat  the map does NOT know it, but you already shot this angle in
     #           this drive. Move or turn; do not keep filming it.
     #   NEW     neither. This is the ground worth covering.
-    if best >= 200:
+    if best_room is not None and best >= 200:
         return best_room, best, "KNOWN"
     if here >= 300:
         return best_room, best, "repeat"
-    if best >= 140:
+    if best_room is not None:
+        # The localiser names it, but under 200. "thin" is honest here: it is
+        # recognised and would benefit from another angle.
         return best_room, best, "thin"
     return best_room, best, "NEW"
 
@@ -349,8 +362,10 @@ def main():
                 note = ""
                 if dark_run >= 10:
                     note = "   <-- no compass for 2s+, this stretch cannot be placed"
+                where = (f"{room} {score}" if room
+                         else f"unrecognised, best score {score}")
                 print(f"  {t:6.1f}s  hdg {bs}  {verdict:11} "
-                      f"(best {room or '-'} {score})" + speed + note, flush=True)
+                      f"({where})" + speed + note, flush=True)
             time.sleep(max(0.0, 1.0 / HZ - (time.time() - tick)))
     except KeyboardInterrupt:
         print("\n  stopped by hand")
@@ -388,4 +403,9 @@ def main():
     print(f"    tools/ship_drive.sh {os.path.relpath(OUT)}")
 
 
-main()
+# GUARDED, so the module can be IMPORTED without recording. A test that imports
+# it to check one helper otherwise starts a real capture session and writes a
+# drive directory -- which is how a test suite quietly fills a disk, and how a
+# "unit test" ends up depending on a live stream.
+if __name__ == "__main__":
+    main()
