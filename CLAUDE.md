@@ -1715,6 +1715,27 @@ not None. The one state the function exists to detect is the one its evidence
 cannot see. `read_bearing` (None) and `is_pause_screen` (False) both answered
 correctly — only `find_bar` fired, and it is the check that runs first.
 
+**AND §3 ALREADY SAID SO, TWO SECTIONS AWAY.** CLAUDE.md:229 records, as a
+measurement: *"`find_bar()` returns non-None on EVERY frame including ban and
+gameplay screens."* So the docstring census does not merely lack evidence — it
+CONTRADICTS a measured fact already written in this file, in a table laid out to
+read exactly like measurement. **That is what this entry is really about:** not a
+detector needing a better threshold, but a caller asserting the opposite of a
+known result in its own docstring, where prose cannot fail and everyone reads it.
+
+Note §3's frames are the POSITIVE population — ban screens and gameplay, every one
+a state where the stream IS up. They establish that `find_bar` firing means
+nothing; they do not help separate standby. The negative side is still n = 1.
+
+**THE PRECEDENT IS §7's `identify_edges`.** There, `descriptor()` divides by the
+vector norm, so a near-featureless frame becomes mostly the shared vignette and an
+upstairs office door scored 0.906 against `beside_dealer_table` — higher than any
+genuine match. A standby host list satisfying "thin bright band, dark above and
+below" is the same failure: **a detector answering confidently about a frame
+containing none of its subject.** §7's verdict on that one is the part to carry
+over — *no score threshold fixes it* — which is why the search below stops hunting
+for a better `find_bar` threshold and goes after a non-pixel signal instead.
+
 **WHAT IT MATCHED.** `find_bar` returns `(y, x_left, x_right)` and looks for a
 thin bright band with dark rows above and below. chiaki's own blue toolbar
 ("Create Steam Shortcut / Refresh PSN Hosts") is exactly that, at **y = 70**
