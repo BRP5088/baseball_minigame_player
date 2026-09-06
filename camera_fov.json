@@ -1,1 +1,4 @@
-/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/camera_fov.json
+{
+ "fov_degrees": 102.0,
+ "note": "measured from dealer_circle recording"
+}
