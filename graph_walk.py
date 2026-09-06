@@ -603,6 +603,10 @@ def walk_link(m, a, b, capture=None, read_heading=None, log=print,
     if MERGE_STEPS:
         steps = merge_steps(steps)
     steps = _scaled(steps, leg_scale(a, b))
+    # Aim the doorway traverse away from the door it currently clips. A no-op
+    # unless DOORWAY_CLEARANCE_DEG is set AND this is the leg it names, so it
+    # cannot quietly affect anything else.
+    steps = _doorway_biased(a, b, steps)
     travelled, hazards, stalled, blockers = 0.0, [], 0, []
     for i, s in enumerate(steps, 1):
         bearing, dur, speed = s["bearing"], s["dur"], s.get("speed", 0.25)
@@ -1329,7 +1333,79 @@ LEG_SPEED_MAX = 0.60
 #
 # Empty = every leg uses LEG_SPEED_SCALE. Populate it to speed up only the
 # legs that have earned it.
-LEG_SPEED_BY_LEG = {}
+# DOORWAY CLEARANCE. The stairs leg passes through a doorway whose open door
+# swings toward the camera, and the character walks nearer the door than the
+# jamb: measured off a labelled capture on 2026-09-05, the gap is ~455px wide
+# with 180px of clearance to the DOOR and 275px to the jamb, so the character is
+# aimed ~47-95px (2.5-5.0 deg) left of the gap's centre. The user observed the
+# bump directly before any of this was measured: "you slightly bump into the
+# door and that causes small amounts of drift which compounds."
+#
+# The drift is corroborated in the OPEN-4 run: pre-alignment dx at portrait_room
+# was +49.4 +49.7 +51.0 +86.3 +133.9 +165.9 and one -48.8 — 6 of 7 positive,
+# median +51px. A bias, with a spread far larger than the bias, which is why the
+# fix is CLEARANCE rather than a better aim: no achievable aim survives +-100px
+# of variance through a gap this tight.
+#
+# WHY IT IS A BEARING OFFSET AND NOT A STRAFE. slow_traverse.TURN_TOLERANCE is
+# 4.0 deg, so any correction under that is a NO-OP — turn_to compares the error,
+# finds it inside tolerance and sends nothing. A 2.5 deg fix is unexpressible.
+# 4.0 is the smallest offset the executor can actually perform, and it happens
+# to sit in the measured range. That is luck, not design, and it is the reason
+# this is worth trying before the larger left-stick work (OPEN-20).
+#
+# APPLIED ONLY TO THE DOORWAY TRAVERSE, steps 9-14: the sustained north run at
+# bearing ~358 and speed 0.43. The final step is left alone.
+#
+# THE RISK, STATED: this leg arrives 20/20 (n=20). Over the 2.38 walk-units
+# those steps cover, +4 deg is ~0.17 units of endpoint shift, so the leg ends
+# right of where it did. align_lateral DOES work at portrait_room (dx +0.9 to
+# +26.9, corrected in 7 of 10 OPEN-4 trials) unlike at bar_pool_room, so it
+# should absorb that — but if arrival drops, this is the first thing to revert.
+# Baseline to beat: 10/10 arrivals, median 52.9s (overnight/primitive_open4_baseline.json).
+DOORWAY_CLEARANCE_DEG = 0.0
+DOORWAY_STEPS = ("office_door", "portrait_room", range(9, 15))
+
+
+def _doorway_biased(a, b, steps):
+    """The doorway traverse aimed away from the door it currently clips."""
+    if not DOORWAY_CLEARANCE_DEG:
+        return steps
+    fa, fb, span = DOORWAY_STEPS
+    if (a, b) != (fa, fb):
+        return steps
+    out = []
+    for i, st in enumerate(steps):
+        if i in span:
+            out.append({**st,
+                        "bearing": (st["bearing"] + DOORWAY_CLEARANCE_DEG) % 360.0})
+        else:
+            out.append(st)
+    return out
+
+
+LEG_SPEED_BY_LEG = {
+    # LEG 1 AT THE CAP. office_corridor -> office_door is a straight corridor —
+    # all seven recorded steps sit at bearing 270.1-270.4, a spread of 0.33 deg —
+    # and it arrives 20/20 (n=20, CLAUDE.md 8b). At 3.0 every step reaches
+    # LEG_SPEED_MAX and the leg runs 5.13s -> 1.95s, saving 3.18s a trial with
+    # distance preserved EXACTLY (1.168 walk-units both ways, by construction:
+    # _scaled multiplies speed by k and divides dur by the same k).
+    #
+    # THIS IS NOT A NEW EXPERIMENT. GRAVEYARD measured office legs at 3x, capped
+    # at 0.60, and got 8/8 ARRIVED IN BOTH ARMS — the safety question is answered
+    # and speed x duration scaling was verified live. It was left off because the
+    # median only moved ~5% and the mean was worse on ONE 185s outlier at n=8,
+    # which is noise by this project's own standard (10.3: n=3 has power 0.00).
+    #
+    # Turned on 2026-09-05 at the user's direction, for a reason the original
+    # A/B did not weigh: a few seconds compounds across every future run. At ten
+    # trials an arm and six queued A/Bs, 3.18s is over an hour of console time.
+    # The saving is in WALL CLOCK, not arrival — do not expect it to move a rate.
+    #
+    # The stairs leg (office_door -> portrait_room) is deliberately NOT here.
+    ("office_corridor", "office_door"): 3.0,
+}
 
 # Record rich-but-unrecognised views seen while walking, as map candidates.
 #
