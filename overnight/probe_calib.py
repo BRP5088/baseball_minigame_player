@@ -17,6 +17,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
+import _harness
 import analog_replay as ar
 import compass
 import places
@@ -101,8 +102,8 @@ def main():
         print(f"  {name:12} null [{min(a):.0f}..{max(a):.0f}]  "
               f"push [{min(b):.0f}..{max(b):.0f}]   "
               f"{'SEPARATED' if sep else 'OVERLAP — unusable as a gate'}")
-    json.dump(rows, open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                      "probe_calib.json"), "w"), indent=1)
+    _harness.save_result(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      "probe_calib.json"), rows)
 
 
 main()

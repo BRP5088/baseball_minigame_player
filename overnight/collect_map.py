@@ -42,6 +42,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 from PIL import Image
 
+import _harness
 import analog_replay as ar
 import compass
 import places
@@ -140,11 +141,10 @@ def main():
             if verdict == "INVALID":
                 log("     stream is not updating — stopping rather than "
                     "recording a map of nothing")
-                json.dump(samples, open(os.path.join(OUT, "probes.json"), "w"),
-                          indent=1)
+                _harness.save_result(os.path.join(OUT, "probes.json"), samples)
                 return
         samples.append(rec)
-        json.dump(samples, open(os.path.join(OUT, "probes.json"), "w"), indent=1)
+        _harness.save_result(os.path.join(OUT, "probes.json"), samples)
     ar.send(["clear"])
     log(f"\n  {len(samples)} points -> {OUT}/probes.json")
 
