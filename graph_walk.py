@@ -374,6 +374,62 @@ MERGE_MAX_SEC = 4.0
 # are re-recorded from the executor's own poses rather than a human's.
 MERGE_STEPS = False
 
+# PER-LEG MERGING. The global flag above stays False — its A/B measured worse,
+# and although that was n=3/arm (power 0.00 by 10.3) the stated mechanism is
+# real: a merged push covers more ground than the stop-start sequence it
+# replaces, so a leg that used to stop short can run into furniture.
+#
+# That argument does not apply to office_corridor -> office_door, and the reason
+# it does not is measurable rather than hopeful: it is a straight CORRIDOR, all
+# seven recorded steps within 0.33 deg of each other, walls on both sides so a
+# distance error has little room to become a position error, no furniture and no
+# NPCs, and it arrives 20/20 (n=20).
+#
+# WHY IT MATTERS MORE NOW THAN IT DID. Running the leg at LEG_SPEED_BY_LEG
+# shortened each push to ~0.28s but left all seven SETTLE_SEC pauses at 0.35s:
+#
+#     7 pushes   1.71s of walking
+#     7 settles  2.45s of standing still      -> 59% of the leg is a pause
+#     merged     1.71s + one 0.35s settle = 2.06s
+#
+# So speeding the leg up made its overhead DOMINATE, and merging is what
+# recovers the point of it. The user saw this directly on the stream — "you walk
+# and stop a lot, kinda defeats the point of walking max speed" — before it was
+# measured. Together the two changes take leg 1 from 5.13s to 2.06s.
+#
+# Add a leg here only when it has the same three properties: constrained on both
+# sides, straight, and measured reliable. Not the bar.
+MERGE_STEPS_BY_LEG = {("office_corridor", "office_door")}
+
+# A MERGED LEG NEEDS A TIGHT TURN, and the two must be changed together.
+#
+# Seven pushes re-issue turn_to seven times, so a heading error gets another
+# chance each step (mostly NO-OPs, but the opportunity is there). ONE push does
+# not: whatever heading the single turn lands on is walked for the entire
+# distance. Merging therefore makes turn accuracy matter MORE, not less.
+#
+# Observed immediately after merging leg 1, on the first live walk:
+#
+#     turn to 270.2: TURNED to 273.9 (err -3.7) in 2 push(es)
+#     step 1/1 bearing 270.2 (got 273.9) 1.95s -> walked 1.95s
+#
+# turn_to stopped 3.7 deg out because TURN_TOLERANCE is 4.0 and 3.7 is "close
+# enough" by that rule. The user, watching, put it exactly: "the reticle wasn't
+# perfectly on the door." Over 1.168 walk-units a 3.7 deg error is ~0.075 units
+# of lateral drift carried the whole way, and the leg ends against the door
+# frame rather than square to it.
+#
+# THIS IS NOT OPEN-3. That asked whether to tighten the tolerance so mid-leg
+# turns chase the RECORDED CURVE, and the answer was no — 22 of 23 of those
+# curves are the human's left thumb, not camera movement. This tightens the
+# ONE turn that aims a merged push, so the commanded heading is actually
+# achieved. Different turn, different reason.
+#
+# 1.0 deg is achievable: the yaw-null added 2026-09-05 turns to 0.5 and the logs
+# show "TURNED to 288.0 (err +0.1) in 1 push(es)". The ~3.8 deg quantum in
+# section 6 is the floor at FULL stick; small corrections use less.
+MERGED_TURN_TOLERANCE = 1.0
+
 
 def merge_steps(steps, tol=MERGE_TOL_DEG, cap=MERGE_MAX_SEC):
     """Collapse consecutive same-bearing steps into single continuous pushes.
@@ -603,6 +659,8 @@ def walk_link(m, a, b, capture=None, read_heading=None, log=print,
     if MERGE_STEPS:
         steps = merge_steps(steps)
     steps = _scaled(steps, leg_scale(a, b))
+    if (a, b) in MERGE_STEPS_BY_LEG:
+        steps = merge_steps(steps)
     # Aim the doorway traverse away from the door it currently clips. A no-op
     # unless DOORWAY_CLEARANCE_DEG is set AND this is the leg it names, so it
     # cannot quietly affect anything else.
@@ -612,8 +670,11 @@ def walk_link(m, a, b, capture=None, read_heading=None, log=print,
         bearing, dur, speed = s["bearing"], s["dur"], s.get("speed", 0.25)
         # None must not reach turn_to: `abs(err) <= None` raises, and it would
         # raise mid-leg on the live console rather than in a test.
-        turn_kw = ({} if LEG_TURN_TOLERANCE is None
-                   else {"tolerance": LEG_TURN_TOLERANCE})
+        # A merged leg's single push inherits this turn's error for its whole
+        # length, so it is aimed tightly. See MERGED_TURN_TOLERANCE.
+        _tol = (MERGED_TURN_TOLERANCE if (a, b) in MERGE_STEPS_BY_LEG
+                else LEG_TURN_TOLERANCE)
+        turn_kw = {} if _tol is None else {"tolerance": _tol}
         got, turn_haz = st.turn_to(bearing, read_heading, capture, log=log,
                                    **turn_kw)
         hazards.extend(turn_haz)
