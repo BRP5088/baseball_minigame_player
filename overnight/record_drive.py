@@ -28,6 +28,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import numpy as np
+
 import _harness
 import compass
 
@@ -43,6 +45,29 @@ NAME = sys.argv[1] if len(sys.argv) > 1 else ""
 PLACEHOLDERS = {"", "drive", "test", "tmp", "temp", "x", "asdf", "run"}
 SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 300.0
 HZ = 5.0
+
+# A FROZEN STREAM MUST NOT BE RECORDED AS A GOOD RUN. Without this a drive that
+# froze at minute two of fifteen produced byte-identical frames, a written
+# meta.json, and a summary reading "100% with a heading" -- and the coverage
+# line said "repeat", which is documented to the driver as "you are filming the
+# same angle, turn or move". It blamed the person driving for the stream being
+# dead, and cost them thirteen minutes.
+#
+# THE THRESHOLD IS NOT A GUESS. Measured on this project's own frames:
+#     live but still (camera parked)  n=29  min 1.84  median 4.04  max 5.47
+#     frozen                          n=38  min/median/max 0.0000
+# An empty gap 1.84 wide, matching section 8(g)'s 0.91-6.41 standing-still
+# population. 0.35 sits inside it, and is the same constant collect_map.py
+# already uses for the same question.
+DEAD_DELTA = 0.35
+DEAD_RUN_ABORT = 15        # consecutive dead pairs (3s at 5 Hz) before stopping
+
+# The controller, read directly. pygame was excluded from requirements.txt, but
+# record_input.py genuinely imports it and a DualSense is visible on this Mac
+# with six axes. Reading the stick exactly beats inferring distance from vision,
+# which was measured to correlate only 0.55-0.58 with the real stick on walks
+# and 0.14 on turns.
+LOG_STICK = True
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drives",
                    f"{time.strftime('%Y%m%d_%H%M%S')}_{NAME}")
@@ -94,6 +119,47 @@ def _novelty(img, refs, seen):
     return best_room, best, "NEW"
 
 
+def _open_stick():
+    """A joystick handle, or None. Never raises: no controller is not an error."""
+    if not LOG_STICK:
+        return None
+    try:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        pygame.init()
+        pygame.joystick.init()
+        if pygame.joystick.get_count() == 0:
+            return None
+        j = pygame.joystick.Joystick(0)
+        j.init()
+        return (pygame, j)
+    except Exception:
+        return None
+
+
+def _read_stick(h):
+    """{axis: value} or None. The left stick is what carries DISTANCE."""
+    if h is None:
+        return None
+    try:
+        pygame, j = h
+        pygame.event.pump()
+        n = j.get_numaxes()
+        return {"lx": round(j.get_axis(0), 4) if n > 0 else 0.0,
+                "ly": round(j.get_axis(1), 4) if n > 1 else 0.0,
+                "rx": round(j.get_axis(2), 4) if n > 2 else 0.0,
+                "ry": round(j.get_axis(3), 4) if n > 3 else 0.0}
+    except Exception:
+        return None
+
+
+def _delta(a, b):
+    a = np.asarray(a.convert("L"), dtype=float)
+    b = np.asarray(b.convert("L"), dtype=float)
+    h = min(a.shape[0], b.shape[0]); w = min(a.shape[1], b.shape[1])
+    return float(np.abs(a[:h, :w] - b[:h, :w]).mean())
+
+
 def main():
     if NAME.strip().lower() in PLACEHOLDERS:
         raise SystemExit(
@@ -116,8 +182,15 @@ def main():
     print("     FEATURELESS pressed against something, or too dark to use")
     print("     no compass  heading unreadable; this stretch cannot be placed\n",
           flush=True)
+    stick = _open_stick()
+    print("  controller: " + ("DualSense/joystick found — logging the stick, "
+                              "so distance is exact"
+                              if stick else
+                              "NONE found — distance will have to come from "
+                              "vision, which tracks only 0.55 on walks"), flush=True)
     t0 = time.time()
     meta, n, unreadable, dark_run = [], 0, 0, 0
+    prev_img, dead_run = None, 0
     tally = {}
     try:
         while time.time() - t0 < SECONDS:
@@ -131,7 +204,26 @@ def main():
                 unreadable += 1; dark_run += 1
             else:
                 dark_run = 0
-            meta.append({"t": round(t, 2), "frame": fn, "bearing": b})
+
+            # LIVENESS, checked every frame against the previous one.
+            d = None if prev_img is None else _delta(prev_img, img)
+            if d is not None and d <= DEAD_DELTA:
+                dead_run += 1
+            elif d is not None:
+                dead_run = 0
+            prev_img = img
+
+            meta.append({"t": round(t, 2), "frame": fn, "bearing": b,
+                         "stick": _read_stick(stick), "delta": d})
+            if dead_run >= DEAD_RUN_ABORT:
+                print(f"\n  STOPPING: the picture has not changed for "
+                      f"{dead_run} frames ({dead_run/HZ:.0f}s).\n"
+                      f"  That is a FROZEN STREAM, not you standing still -- "
+                      f"standing still still measures 1.8 or more.\n"
+                      f"  Everything up to here is saved and usable. Fix the "
+                      f"stream and start a new drive for this room.",
+                      flush=True)
+                break
             n += 1
             # FLUSH AS WE GO. Written once at the end, a drive killed at 4:30 of
             # 5:00 leaves 1350 jpegs and NO headings -- and a heading is what
@@ -159,8 +251,17 @@ def main():
     # same.
     _harness.save_result(META, {"room": NAME, "hz": HZ, "complete": True,
                                 "frames": meta})
+    live = sum(1 for m in meta if m.get("delta") is not None
+               and m["delta"] > DEAD_DELTA)
+    checked = sum(1 for m in meta if m.get("delta") is not None)
+    got_stick = sum(1 for m in meta if m.get("stick"))
     print(f"\n  {n} frames, {n-unreadable} with a heading "
           f"({100*(n-unreadable)/max(n,1):.0f}%)")
+    print(f"  stream alive on {live}/{checked} frame pairs"
+          + ("" if checked and live == checked
+             else "   <-- a dead stretch is NOT usable data"))
+    print(f"  stick logged on {got_stick}/{n} frames"
+          + ("" if got_stick else "   <-- no controller seen"))
     if tally:
         print("  coverage seen: " + ", ".join(f"{k}={v}" for k, v in
                                               sorted(tally.items())))
