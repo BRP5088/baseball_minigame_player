@@ -1434,6 +1434,61 @@ failed while both survivors moved nothing. The finding is a diagnosis, not a
 prescription, and it is cheap to test precisely because the blockage is
 localised: one leg, one step, and the log already reports the event by name.
 
+**MAPPING THE WORLD IN 3D IS POSSIBLE, AND ROTATION IS WORTHLESS FOR IT
+(2026-09-06).** The single most expensive thing to relearn here.
+
+A drive was recorded by hand through the office: 1064 frames, 95% with a
+compass heading, the controller logged on every frame, the stream alive on every
+pair, and all eight approach angles filled. By every check available on this
+machine it was a perfect collection. Its reconstruction kept **3 points out of
+196,198 tracks.**
+
+    what the driver did          share of frames
+    turning                            61%
+    walking                            17%
+    standing still                     32%
+    camera translation over 3 frames   MEDIAN ZERO
+
+**Triangulation needs the camera to MOVE.** Turning on the spot moves the lens
+not at all, so the rays stay parallel and every distance fits equally well. 85%
+of that drive fell short of the baseline the reconstruction needed. The filter
+rejecting 196,195 tracks was CORRECT; the data carried no depth.
+
+**THE TWO GOALS NEED DIFFERENT DRIVING, and conflating them cost a room.** The
+instruction given was "fill the eight-sector angle bar", which optimises for the
+LOCALISER — a reference matched from the wrong approach angle does not match at
+all. Geometry needs the opposite: straight lines, turning only at the ends, like
+mowing a lawn. That drive remains excellent reference data (789 frames of
+genuinely new ground) and useless as structure.
+
+**WHAT MAKES THE RECONSTRUCTION TRACTABLE AT ALL**, since generic
+structure-from-motion breaks on this game's low-texture cartoon art: the poses
+do not have to be solved for. Yaw comes from the game's own compass, absolute,
+on 95-99% of frames, so rotational drift cannot accumulate. Pitch comes out of
+the pose decomposition and was measured sound — 0.27 deg/frame integrating to
++1.0 deg over 82 pairs, against a roll control drifting -17.1 deg over the same
+span. Distance comes from the recorded stick; the vision-only alternative was
+scored against the four archived recordings carrying both and correlates 0.55-58
+on walks and **0.14 on turns**.
+
+**FOUR FILTERS ARE NOT OPTIONAL AND THEIR ABSENCE LOOKS LIKE A MAP.** A first
+pass triangulated adjacent frames with no cheirality test, no reprojection test
+and two views per point, and produced 644,872 points that rendered as radial
+starbursts centred on the camera path — an audit found 19.6% of them lying
+between or behind the two cameras. Require: a point in FRONT of every camera,
+reprojection within a few pixels, three or more views, and positions genuinely
+apart.
+
+**THE RIG:** the Mac drives the console and Snoopy reconstructs, over SSH with
+key auth. Snoopy is 2x SLOWER at this work than the Mac (ORB is CPU-only; the
+3080 contributes nothing), so it is not a speed-up — its value is being a
+DIFFERENT machine, because heavy local load degrades sleep from ~5ms to 242ms
+and corrupts every walked leg. `tools/ask_snoopy.py` ships a drive, reconstructs
+it there and answers one question in ~2 minutes: is this ground producing
+geometry. It names the CAUSE, because "positions too close" (not translating),
+"too few views" (too fast) and "behind a camera" (the trajectory is wrong, not
+the driving) need different responses.
+
 **THE LOCALISER'S GATE SITS INSIDE THE OVERLAP, MEASURED (2026-09-06).**
 `portrait_room` abstains about half the time on frames where the character IS
 there, and §8(b)'s per-leg rates inherit that. The cause is not the leg.
