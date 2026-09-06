@@ -111,7 +111,30 @@ TRAVEL_SEC = 1.4
 MAX_MINUTES = 45.0         # a wall clock, so it can be left alone safely
 STUCK_POINTS = 3           # consecutive points with nowhere free to go
 DRY_POINTS = 4             # consecutive points that saw nothing new
-NOVEL_MIN = 140            # places.MIN_MATCHES: below this the view is unmapped
+NOVEL_MIN = 140            # see the caveat below before trusting this
+
+# THIS MEASURES "HAVE I SEEN THIS VIEW", NOT "HAVE I BEEN HERE", AND THEY ARE
+# NOT THE SAME QUESTION. The user spotted it from the running output. Measured
+# over 45 real point frames, each scored against every earlier one:
+#
+#     median 34, max 1325, and 30 of 45 called NEW
+#
+# The distribution is bimodal and 140 sits cleanly in the empty middle: two
+# frames facing the same way in the same place match at over 1000, and anything
+# else sits near 34. So the threshold is sound for the question it asks.
+#
+# But every point faces wherever its travel leg left it, so standing somewhere
+# already mapped while pointing elsewhere reads as new. It OVER-reports novelty.
+#
+# LEFT AS IS, for two reasons. The error runs in the safe direction -- it
+# explores longer rather than stopping early, and more coverage is the point.
+# And the guard is not dead: it fired on 15 of those 45 points, so the dry-stop
+# rule can genuinely trigger.
+#
+# The real fix is not a better number. It is asking whether the character has
+# been at this POSITION, which needs the trajectory rather than the frame -- and
+# that is the same trajectory the 3D reconstruction needs, so it arrives free
+# once that works.
 DEAD_DELTA = 0.35         # at or below this the STREAM is dead, not the path
 
 
