@@ -1205,7 +1205,11 @@ devastating and measured the loop's exit condition. The real version compares
 the spread of COMMANDED bearings against the spread of ACHIEVED headings.
 
 **13a. THE "NEVER RUN OFFLINE WORK DURING A LIVE RUN" RULE WAS BROADER THAN ITS
-EVIDENCE (measured 2026-09-06).** The 242ms figure below is real and it is about
+EVIDENCE (measured 2026-09-06).** **And narrower than I then treated it (2026-09-07):**
+the measurement below covers THE SUITE. It does not cover a 20-minute OCR or
+ORB sweep over 4,000 frames, even under `taskpolicy -b`; the user watched the
+stream go sluggish while two of those ran beside the goal-leg A/B and asked for
+the run to be paused. Anything CPU-bound that is not the suite waits. The 242ms figure below is real and it is about
 FOUR PARALLEL MUTATION SWEEPS at load 273-333. It was then applied to the
 ordinary suite, which is a different workload at a thirtieth of the load, and
 that cost real serialisation time.

@@ -148,7 +148,19 @@ def main():
     log(f"goal-leg A/B: {TRIALS} trials per arm, interleaved, {START} -> {TARGET}")
     log(f"  shipped: {res['shipped_config']}")
 
+    # --resume: the user paused the run (2026-09-07, the stream looked sluggish
+    # under offline CPU work). interleave() is deterministic, so continuing from
+    # the number of trials already banked keeps the same interleaved design.
+    skip = 0
+    if "--resume" in sys.argv and os.path.exists(OUT):
+        import json as _json
+        prev = _json.load(open(OUT))
+        res["runs"] = prev.get("runs", [])
+        skip = len(res["runs"])
+        log(f"  RESUMING after {skip} banked trials")
     for i, (_t, arm) in enumerate(_harness.interleave(ARMS, TRIALS), 1):
+        if i <= skip:
+            continue
         r, secs = _harness.run_trial(__file__, arm, TIMEOUT, log=log)
         if r is None:
             log(f"[{i:2d}] {arm:9s} INVALID after {secs:.0f}s "

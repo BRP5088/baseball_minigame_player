@@ -1,44 +1,22 @@
 # State at 2026-09-07 09:40 — read this first
 
-## Running now (survives this session dying)
-`overnight/ab_goal_leg.py`, detached with nohup, started 09:35. The goal-leg
-A/B: `shipped` (approach_goal's straight-line walk) against `recorded`
-(GOAL_LEG_AS_RECORDED=True: the goal leg through walk_link like every other
-leg); reach_table's sweep follows in BOTH arms. 10 trials an arm, interleaved,
-setup to bar_jukebox at attempts=9 (a setup miss is INVALID), one execution of
-the leg, scored by confirm() = at_table() on the post-sweep frame, plus an
-at_table() re-read. 1200s external ceiling per trial. Expect 2-3 hours.
-  log     overnight/ab_goal_leg.log       (per-trial lines `[ n]`)
-  result  overnight/ab_goal_leg.json      (saved after EVERY trial; Fisher p at the end)
-  frames  overnight/goal_leg_failframes/  at_dealer_table_* = PRE-sweep leg end (admissible),
-                                          at_dealer_table_postsweep_*, success/ok_*
-While it runs: the checkout is READ-ONLY for anything a trial child imports
-(graph_walk, _harness, slow_traverse, places, ...). Docs and tools/ are fine.
-The suite may run at BASEBALL_NICE=1 (§10.13a); mutation sweeps may not.
+## Running now
+**Nothing — the goal-leg A/B is PAUSED at the user's request** (stream looked
+sluggish while offline CPU sweeps ran beside it). 14 of 20 trials are banked in
+`overnight/ab_goal_leg.json` (trial 15 was in flight and is lost). Resume with:
 
-Why this experiment: OPEN-14's 37 table-leg executions all exhausted
-approach_goal's budget ("stepped 6.8s of a 6.5s budget"); the census of their
-frames (overnight/census/table_leg_ends_20260907.json) is 17 wedged, and the
-visual read is dark 12 / bar counter 8 / floor 5 / NPC 3. approach_goal predates
-the jukebox-leg restoration and was never A/B'd against the recorded leg.
+    nohup .venv/bin/python -B overnight/ab_goal_leg.py --resume >> overnight/ab_goal_leg.log 2>&1 &
 
-If the run is dead when you read this: `overnight/ab_goal_leg.json` holds
-every completed trial; do not restart from scratch without reading it, and
-read the last 40 lines of the log for the trial that was in flight.
+`--resume` continues the same interleaved order from the banked count. While it
+runs: NO CPU-bound offline work except the suite (§10.13a, corrected).
 
-## The overnight plan — status
-0. **OPEN-14 scored and recorded** (38a17af): 3 valid of 10, 7 censored at the
-   1800s ceiling, 2 "arrived" of which ONE was `identify()` naming
-   `dealer_table` — a pose, which §7 says it may never confirm. Frames +
-   contact sheets committed.
-1. **Census migration done** (f9b9c56, ad13c6e): every harness reports
-   `failures_by_kind_leg_end` split by provenance via `_harness.census_kinds`
-   / `report_kinds`; foreign and blank rows are named, not dropped.
-2. **Orphan audit done** (f0de600): 13 dead routing-generation modules and the
-   floor-map cluster, flagged in QA_AUDIT.md, nothing deleted.
-3. **Static QA on Haiku done**: one by-construction check removed from my own
-   test, `report_kinds` made loud on foreign rows (ad13c6e).
-4. **Suite certified**: 142/143 → cause fixed → **143/143 green** (752s).
+**Dashboard:** https://claude.ai/code/artifact/6f8d087b-dd3e-4b8b-b34b-ef5faaf07278
+Rebuild + push state after every trial (or on any plan change):
+
+    .venv/bin/python -B tools/dashboard.py [--paused]      -> overnight/dashboard_state.json
+    Artifact write_db  collection=dash doc_id=state  file_path=overnight/dashboard_state.json
+
+Comments on the page sent to Claude wake this session (auto-replies armed).
 
 ## Waiting for the run to end (do these first, in order)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
