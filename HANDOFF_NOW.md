@@ -1,16 +1,30 @@
-# State at 2026-09-07 08:10 — read this first
+# State at 2026-09-07 09:40 — read this first
 
-## Running now
-**Nothing.** No process on the console, no suite, no sweep.
-`console_lock.holder()` is None. The last thing to run was the certification
-suite: `overnight/suite_final_certify.log` — **143 files, all green, 752s**,
-under `BASEBALL_NICE=1`, exit 0.
+## Running now (survives this session dying)
+`overnight/ab_goal_leg.py`, detached with nohup, started 09:35. The goal-leg
+A/B: `shipped` (approach_goal's straight-line walk) against `recorded`
+(GOAL_LEG_AS_RECORDED=True: the goal leg through walk_link like every other
+leg); reach_table's sweep follows in BOTH arms. 10 trials an arm, interleaved,
+setup to bar_jukebox at attempts=9 (a setup miss is INVALID), one execution of
+the leg, scored by confirm() = at_table() on the post-sweep frame, plus an
+at_table() re-read. 1200s external ceiling per trial. Expect 2-3 hours.
+  log     overnight/ab_goal_leg.log       (per-trial lines `[ n]`)
+  result  overnight/ab_goal_leg.json      (saved after EVERY trial; Fisher p at the end)
+  frames  overnight/goal_leg_failframes/  at_dealer_table_* = PRE-sweep leg end (admissible),
+                                          at_dealer_table_postsweep_*, success/ok_*
+While it runs: the checkout is READ-ONLY for anything a trial child imports
+(graph_walk, _harness, slow_traverse, places, ...). Docs and tools/ are fine.
+The suite may run at BASEBALL_NICE=1 (§10.13a); mutation sweeps may not.
 
-The first certification (`overnight/suite_overnight_final.log`, 07:27) was
-142/143. The one failure, `test_map_admit`, was NOT a weakened gate: the test
-globbed `overnight/failframes/*.jpg` as its failure population and the streak
-run had appended 165 leg-end frames there. Fixed by naming the four fixture
-frames (7b8f918); CLAUDE.md §2 now carries the rule.
+Why this experiment: OPEN-14's 37 table-leg executions all exhausted
+approach_goal's budget ("stepped 6.8s of a 6.5s budget"); the census of their
+frames (overnight/census/table_leg_ends_20260907.json) is 17 wedged, and the
+visual read is dark 12 / bar counter 8 / floor 5 / NPC 3. approach_goal predates
+the jukebox-leg restoration and was never A/B'd against the recorded leg.
+
+If the run is dead when you read this: `overnight/ab_goal_leg.json` holds
+every completed trial; do not restart from scratch without reading it, and
+read the last 40 lines of the log for the trial that was in flight.
 
 ## The overnight plan — status
 0. **OPEN-14 scored and recorded** (38a17af): 3 valid of 10, 7 censored at the
@@ -26,10 +40,14 @@ frames (7b8f918); CLAUDE.md §2 now carries the rule.
    test, `report_kinds` made loud on foreign rows (ad13c6e).
 4. **Suite certified**: 142/143 → cause fixed → **143/143 green** (752s).
 
-## First decision for you (not done unasked)
-`graph_walk.locate()` falls through from `at_table()` to `identify()`, so the
-GOAL can be "confirmed" by the localiser. Proposed: for `GOAL`, `locate()`
-believes only `at_table()`; plus a test that pins it. One guard, no movement.
+## Done this morning (all committed)
+- `locate()` may never confirm the GOAL by appearance (dfb1b6e, 697c7ac): the
+  OPEN-14 trial-6 hole, with trial 6's own frame as a fixture.
+- Goal leg: `GOAL_LEG_AS_RECORDED` flag (ships False), the goal's leg-end frame
+  is now PRE-sweep, the success frame is the leg end and not `before` (da5b7ec).
+- Hand-walk entry points deleted at the user's request; `tools/doctor.py` and
+  `tools/calibrate_window.py` keep the two subcommands that guard the rig and
+  a money path (ab5c1fe).
 
 ## Rules in force
 No flagship sub-agents for routine work (Haiku); no drafting; never mutate the
