@@ -15,11 +15,9 @@ THE FOURTH LAUNCH IS THE FIRST VALID ONE: the third walked the leg, then
 imported tools/prompt_ocr_ab, which set BASEBALL_TEST_RUN at import and
 switched stick injection OFF -- fifty readings of one pose. Fixed (flag only in
 main(); harness asserts it is unset; AST test). ALL WEDGE VERDICTS BEFORE 59b4c04 WERE FALSE (len of a (keypoints, descriptors)
-pair is 2); the grid attempts' points were rich frames. Still unexplained: in
-the first attempt the camera did not turn for commanded headings 140-220 deg
-away (reads stayed 265.8) while an 8-deg turn in walk 1 worked -- large turns
-through walk_steps.turn_to are a question, not a finding. The star's sweeps
-are at most 80 deg.
+pair is 2); the grid attempts' points were rich frames. The camera that "did not turn" in the first attempt (reads stuck at 265.8) was
+the same import-time lockout: the first measure_point imported the offline
+scorer and every send after it was dropped. No large-turn question remains.
 TODAY'S SETUP IS BAD: reaching bar_jukebox failed 3 of 3 rows in the second
 attempt (12 geometry wedges in one row), against 9/9 in OPEN-5 -- session
 variance (§10.5/10.6); the setup frames are on disk for a census.
