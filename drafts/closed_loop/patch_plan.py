@@ -70,3 +70,9 @@ def plan_indices(wps, stride=STRIDE):
     return plan
 '''
 print("patch text ready; apply by hand against the FINAL chain_walk.py (anchors will have moved)")
+
+# ADDED after Snoopy's review (qwen2.5-coder:14b, one real gap of nine):
+# chain_record._drive_executor: after each attempt, count lines with heading
+# not None and with cam not None; log "headings h/n  cam c/n"; if BOTH are zero,
+# do not keep the chain (rename *_noheading_<n>) -- a dead compass otherwise
+# yields a chain that looks complete and a controller that never turns.
