@@ -136,7 +136,19 @@ RECORD_PERIOD_SEC = 0.25          # chain_record's default when a row has no t
 # before it starts treating the silence as a blockage and escapes. A door
 # panel or a dark wall is featureless (7-16 keypoints, CLAUDE.md §8(g)), and
 # trial 1b showed the sensor goes blind exactly where the plan needs to turn.
-BLIND_MAX = 4
+BLIND_MAX = 6
+# A weak fix (under FIX_MIN_INLIERS) still corroborates the plan when it has at
+# least this many inliers: right-but-thin fits in trials 1-3 read 17-36, junk
+# read 6-13 (n ~ 15, provisional; re-measure from overnight/chain_journals/).
+WEAK_MIN_INLIERS = 15
+# Consecutive iterations with no credible fix AFTER the blind budget is spent
+# before the walk declares itself LOST (three escape cycles). Off the route
+# nothing can match; burning the rest of the cap only delays the next trial.
+LOST_MAX = 9
+# A turn stop is verified against its own frame after the turn; if nothing
+# credible fits, the loop turns back, pushes once more along the walking
+# heading and retries, this many times, before accepting the turn unverified.
+TURN_RETRY_MAX = 3
 # |stick| at or under this is "not walking": the tap records the COMMANDED value
 # and a settle or a turn is exactly 0.0. Frames whose ly is None (no tap, or a
 # chain older than this field) count as walking, so nothing is silently skipped.
@@ -508,6 +520,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     end_iters = 0               # iterations spent standing ON the last waypoint
     pi = 0                      # the plan pointer: first target past k
     blind = 0                   # consecutive pushes made with no credible fix
+    lost = 0                    # iterations with nothing credible, budget spent
+    turn_retries = 0            # retries spent on the current turn stop
+    walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
                              None)
@@ -622,6 +637,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         if do_push:
             push(PUSH_MAG, PUSH_SEC)
             res["pushes"] += 1
+            if heading is not None:
+                walk_heading = heading
 
         img = capture()
         _save(shots, iteration, k, img, log)
@@ -643,16 +660,42 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
 
         if not do_push:
             # A turn-only target: a stationary run in the recording (a corner,
-            # a settle). Turned on the spot, reached by construction, no locate.
+            # a settle). VERIFIED against the stop's own frame: if nothing
+            # credible fits after the turn, the plan reached this stop on thin
+            # or blind pushes while the character is still short of it (trial
+            # 3 turned north into the office instead of onto the stairs), so
+            # turn back, push once more along the walking heading, and retry.
+            fix_t = chain.locate(img, target_k)
+            inl_t = 0 if fix_t is None else (getattr(fix_t, "inliers", 0) or 0)
+            verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS
+            if (not verified and turn_retries < TURN_RETRY_MAX
+                    and walk_heading is not None):
+                turn_retries += 1
+                turn_to(walk_heading)
+                last_cmd = walk_heading
+                push(PUSH_MAG, PUSH_SEC)
+                res["pushes"] += 1
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix_t), "action": "turn-retry",
+                        "lateral": None, "at_end": False,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-retry "
+                    f"{turn_retries}/{TURN_RETRY_MAX}: the stop's frame did not "
+                    f"fit ({inl_t} inliers); one more push along {walk_heading:.1f}")
+                continue
             k = target_k
             misses = 0
             stalls = 0
+            turn_retries = 0
+            action = "turned" if verified else "turned-unverified"
             record({"iteration": iteration, "k": k, "target": target_k,
-                    "fix": None, "action": "turned", "lateral": None,
+                    "fix": _fix_row(fix_t), "action": action, "lateral": None,
                     "at_end": False, "seconds": round(now() - it_t0, 2),
                     "elapsed": round(now() - t0, 2)})
-            log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turned"
-                f"{'' if turned else ' (skipped, same heading)'} to {heading}")
+            log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action}"
+                f"{'' if turned else ' (skipped, same heading)'} to {heading}"
+                f"  ({inl_t} inliers at the stop)")
             continue
 
         fix = chain.locate(img, k)
@@ -678,8 +721,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             misses = 0
             stalls = 0
             blind = 0
+            lost = 0
             action = "regressed"
-        elif weak and abs(int(fix.k) - target_k) <= WINDOW:
+        elif weak and inl >= WEAK_MIN_INLIERS:
             # WEAK BUT CONSISTENT: a thin fit that names the target (or its
             # neighbours) is corroboration, not blindness. Trial 1c spent the
             # whole blind budget on 18-23-inlier fits of the corridor that
@@ -688,7 +732,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # still do not steer on a weak dx (junk at 12 inliers: -180 px).
             misses = 0
             stalls = 0
-            blind = 0
+            lost = 0
+            # The blind budget is neither spent nor restored by a thin fit.
             k = min(target_k, n - 1)
             action = "advanced-weak"
         elif fix is None or weak:
@@ -704,6 +749,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 stalls = 0
                 action = "blind-advance"
             elif fix is None:
+                lost += 1
                 misses += 1
                 if misses >= MISS_MAX:
                     action = escape()
@@ -712,6 +758,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 else:
                     action = "miss"
             else:
+                lost += 1
                 misses = 0
                 stalls += 1
                 if stalls >= STALL_MAX:
@@ -720,9 +767,20 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     stalls = 0
                 else:
                     action = "weak"
+            if lost >= LOST_MAX:
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix), "action": "lost", "lateral": None,
+                        "at_end": at_end, "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"  chain_walk: LOST — {lost} iterations with nothing "
+                    f"credible after the blind budget at k={k} of {n - 1}")
+                return finish(f"lost at k={k} of {n - 1}: {lost} iterations "
+                              f"with no credible fix after {BLIND_MAX} blind "
+                              f"advances")
         else:
             misses = 0
             blind = 0
+            lost = 0
             # Never past the target this push was aimed at (one push, one
             # target: a wrong match must not run the plan ahead of the
             # character) and never past the last waypoint (locate() may

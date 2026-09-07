@@ -282,10 +282,10 @@ class ArrivalStopsEverything(unittest.TestCase):
         # the first walking frame after a stop always is, and so is the last.
         self.assertEqual(plan, [(1, True, 90.0), (6, False, 0.0), (7, True, 0.0),
                                 (8, True, 0.0)])
-        # Three locates: the turn-only iteration never asks the sensor, and
-        # neither does the arrival iteration.
-        ch = FakeChain(9, [Fix(k=1, scale=1.0), Fix(k=7, scale=1.0),
-                           Fix(k=8, scale=1.0)])
+        # Four locates: the turn-only iteration VERIFIES the stop against its
+        # own frame (credible here), the arrival iteration asks nothing.
+        ch = FakeChain(9, [Fix(k=1, scale=1.0), Fix(k=6, inliers=100),
+                           Fix(k=7, scale=1.0), Fix(k=8, scale=1.0)])
         ch.waypoints = wps
         rig = Rig(ch, table_at=6)
         res = rig.go()
@@ -346,10 +346,10 @@ class IndexAdvance(unittest.TestCase):
         # for a weak fix that NAMES the target).
         ch = FakeChain(8, default=Fix(k=9, scale=1.2, dx=-131.0, inliers=13))
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=9.05)
+        res = always_turning(rig.go, time_cap=11.05)
         # k follows the PLAN (dead-reckoned to the target for BLIND_MAX
         # pushes), never the weak fix's own claim of 3.
-        self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 3, 4, 4, 4, 4, 4, 4])
+        self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 3, 4, 5, 6, 6, 6, 6, 6, 6])
         self.assertNotIn(3, [f["k"] for f in res["fixes"]][4:])
         self.assertIn("weak", [f["action"] for f in res["fixes"]])
         self.assertEqual(rig.strafes(), [], "a weak dx must not steer")
@@ -373,6 +373,78 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(rig.strafes(), [], "a weak dx never steers")
         self.assertEqual(acts[2:6], ["blind-advance"] * 4,
                          "the blind budget was not spent on the weak-but-right fits")
+
+    def test_a_junk_fit_is_blindness_and_a_thin_fit_keeps_the_blind_budget(self):
+        # Trial 3: nine pushes on 6-7-inlier fits walked into an NPC. Under
+        # WEAK_MIN_INLIERS a fix is blindness (spends the budget); a thin fit
+        # at or above it advances but neither spends nor restores the budget.
+        self.assertEqual(chain_walk.WEAK_MIN_INLIERS, 15)
+        self.assertEqual(chain_walk.BLIND_MAX, 6)
+        junk = Fix(k=2, inliers=7)
+        thin = Fix(k=2, inliers=20)
+        # Every locate past k=0 that is not credible is followed by a look-
+        # back locate, which consumes the next scripted entry: main/look-back
+        # pairs, so the thin fit is the SIXTH call.
+        fixes = [junk] + [junk, junk] * 2 + [thin] + [None] * 12
+        rig = Rig(FakeChain(20, fixes, default=None), table_at=None)
+        res = always_turning(rig.go, time_cap=12.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:3], ["blind-advance"] * 3, "junk spends the budget")
+        self.assertEqual(acts[3], "advanced-weak")
+        # budget so far: 3 spent, the thin fit changed nothing -> 3 blind left
+        self.assertEqual(acts[4:7], ["blind-advance"] * 3)
+        self.assertNotIn("blind-advance", acts[7:], "the budget was 6, not 6 + 3")
+
+    def test_the_walk_declares_itself_lost_instead_of_burning_the_cap(self):
+        self.assertEqual(chain_walk.LOST_MAX, 9)
+        rig = Rig(FakeChain(30, default=None), table_at=None)
+        res = always_turning(rig.go, time_cap=400.0)
+        self.assertFalse(res["arrived"])
+        self.assertTrue(res["failure"].startswith("lost at k="), res["failure"])
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:6], ["blind-advance"] * 6)
+        self.assertEqual(acts[-1], "lost")
+        self.assertEqual(len(acts), 6 + 9, "six blind, nine lost, then out")
+        self.assertLess(res["seconds"], 60.0, "gave up long before the cap")
+
+    def test_a_turn_stop_that_does_not_match_is_retried_after_one_more_push(self):
+        # Chain: spawn, 2 walking frames east (90), a stop turning to 0, then
+        # walking north. The first time the loop reaches the stop its frame
+        # does not fit (weak): it turns BACK to 90, pushes once, then retries
+        # the stop; the second time it fits and the plan proceeds north.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, -0.35), (0.0, 0.0),
+                                     (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        self.assertEqual(chain_walk.plan_indices(wps),
+                         [(1, True, 90.0), (3, False, 0.0), (4, True, 0.0), (5, True, 0.0)])
+        # locate calls in order: it1 push -> Fix(k=1); it2 turn-verify -> weak;
+        # it3 (after the retry push) turn-verify -> credible; it4 push -> Fix(4)
+        ch = FakeChain(6, [Fix(k=1), Fix(k=3, inliers=8), Fix(k=3, inliers=90),
+                           Fix(k=4), Fix(k=5)])
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=6)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:4], ["advanced", "turn-retry", "turned", "advanced"])
+        turns = [e[1] for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns, [90.0, 0.0, 90.0, 0.0],
+                         "turn to the stop, back to the walking heading, then the stop again")
+        self.assertEqual(rig.chain.locate_calls[1:3], [3, 3],
+                         "the stop is verified against its OWN index")
+        self.assertTrue(res["arrived"])
+
+    def test_a_turn_stop_is_accepted_unverified_after_the_retries(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(4, [Fix(k=1)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=8.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
+        self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds
@@ -430,14 +502,15 @@ class Escapes(unittest.TestCase):
 
     def test_misses_escape_after_MISS_MAX(self):
         self.assertEqual(chain_walk.MISS_MAX, 3)
-        rig = Rig(FakeChain(12, default=None), table_at=15)
+        rig = Rig(FakeChain(12, default=None), table_at=None)   # no prompt: the walk ends LOST
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual([i for i, a in enumerate(acts, 1)
-                          if a.startswith("escape")], [7, 10, 13],
-                         "four blind advances first, then misses count")
-        self.assertEqual([acts[6], acts[9], acts[12]],
-                         ["escape:jump", "escape:left", "escape:right"])
+                          if a.startswith("escape")], [9, 12],
+                         "six blind advances first, then misses count; LOST "
+                         "ends the walk before a third escape")
+        self.assertEqual([acts[8], acts[11]], ["escape:jump", "escape:left"])
+        self.assertEqual(acts[-1], "lost")
         self.assertTrue(all(f["fix"] is None for f in res["fixes"]))
         self.assertEqual(rig.count("jump"), 1)
 
@@ -624,14 +697,15 @@ class ConsecutiveCounters(unittest.TestCase):
         # A blind sensor first dead-reckons BLIND_MAX pushes (the target is
         # believed reached); only then do misses count. Every miss past k=0
         # also asks a look-back, which consumes a scripted entry: the credible
-        # fix is the 12th locate call. It does not advance (scale 0.5) but it
-        # is READ, so the two misses before it and the two after never sum.
-        self.assertEqual(chain_walk.BLIND_MAX, 4)
-        rig = Rig(FakeChain(12, [None] * 11 + [Fix(k=4, scale=0.5)]),
+        # fix is the 16th locate call. It does not advance (scale 0.5) but it
+        # is READ, so the two misses before it never sum with anything after:
+        # a credible fix also restores the blind budget.
+        self.assertEqual(chain_walk.BLIND_MAX, 6)
+        rig = Rig(FakeChain(12, [None] * 15 + [Fix(k=6, scale=0.5)]),
                   table_at=None)
-        res = always_turning(rig.go, time_cap=9.05)          # exactly nine 1.0s iterations
+        res = always_turning(rig.go, time_cap=11.05)         # exactly eleven 1.0s iterations
         self.assertEqual([f["action"] for f in res["fixes"]],
-                         ["blind-advance"] * 4 + ["miss", "miss", "stalled",
+                         ["blind-advance"] * 6 + ["miss", "miss", "stalled",
                                                   "blind-advance", "blind-advance"],
                          "a READ fix resets both the miss count and the blind budget")
         self.assertEqual(rig.count("jump"), 0,
@@ -1179,10 +1253,11 @@ class DefaultConsoleWrappers(unittest.TestCase):
                          "Cross IS jump (§8(g)) and is the only button this "
                          "module may press")
         esc = [l["lx"] for l in self.legs if l["lx"] != 0.0]
-        self.assertEqual(esc, [-chain_walk.ESCAPE_STRAFE_MAG,
-                               +chain_walk.ESCAPE_STRAFE_MAG],
-                         "the sidestep escapes go LEFT then RIGHT on walk_leg's "
-                         "own lx axis")
+        # Six blind, then misses: jump at 9, LEFT at 12, and LOST_MAX (9
+        # iterations with nothing credible) ends the walk before the RIGHT.
+        self.assertEqual(esc, [-chain_walk.ESCAPE_STRAFE_MAG],
+                         "the first sidestep escape goes LEFT on walk_leg's own "
+                         "lx axis (the walk declares itself lost before the RIGHT)")
 
     def test_the_default_prompt_check_is_table_prompt_at_table(self):
         # at_table() is the arrival authority AND the $50 gate. If walk() ever
