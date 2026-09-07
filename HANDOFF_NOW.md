@@ -4,6 +4,12 @@
 
 ## Now
 
+- **CLOSED-LOOP TRIALS RUNNING** (relaunched after trial 1's lesson): `overnight/chain_trials.py --chain
+  route_user_1853 --trials 10` -> `overnight/chain_trials.json`, `.log`, frames `overnight/chain_frames/t*/`,
+  journals `overnight/chain_journals/`. Chain = the USER's own drive (`chains/route_user_1853`, 205 waypoints,
+  plan 102 pushes + 6 turn stops). Trial 1 of the first launch ran k ahead of the character on weak fits and
+  strafed into the wall; fixed (ADVANCE_MAX 1, FIX_MIN_INLIERS 29, look-back). Scored arrived / timed_out /
+  failed, 400 s cap, 580 s external ceiling.
 - **Fast (a) A/B (`overnight/ab_fast.py --experiment extend`) KILLED at trial 5 of 20 on the user's
   instruction** ("data on a potential dead method isn't useful"). Partial record kept:
   `overnight/ab_fast_extend.json` / `.log` — extended 2/2 arrived (25 s each), recorded 0/2 + 1 INVALID

@@ -25,22 +25,20 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "CLOSED LOOP: build the three modules", "state": "running",
-     "detail": "Dead reckoning is paused at your request (nothing deleted). Three builders + three skeptics are writing chain.py (the sensor), chain_record.py (the recorder) and chain_walk.py (the controller) to a fixed spec: look after every push, position from the screen, never from the stick. Spec: agent_progress/closed-loop/SPEC.md."},
-    {"title": "Go/no-go: can the sensor place a frame on the chain?", "state": "next",
-     "detail": "Offline, no console: build a chain from every 5th frame of your 1064-frame office drive, hold the rest out, ask the sensor where each is. Pass = walking frames within one chain step most of the time. A clean fail is a real result and stops the plan before console time."},
-    {"title": "Record the route chain live", "state": "next",
-     "detail": "chain_record.py --executor: reset, walk the old route once with the recorder in a thread, keep it only if the prompt is on screen at the end (3 tries). About 5 minutes of console."},
-    {"title": "Closed-loop trials vs dead reckoning's 5/10", "state": "next",
-     "detail": "overnight/chain_trials.py: 10 trials, 420 s ceiling, arrived / timed out / failed, plus where k stalled on each failure."},
+    {"title": "CLOSED-LOOP TRIALS on your drive", "state": "running",
+     "detail": "Ten trials, 400 s cap each. Chain = your drive to the dealer (205 waypoints -> 102 pushes + 6 turn stops). Trial 1 of the first launch ran the position estimate ahead of the character on weak matches and strafed into the wall; fixed: one waypoint per push, weak matches ignored, a look-back that lets the estimate step back. Relaunched."},
+    {"title": "Sensor go/no-go", "state": "done",
+     "detail": "GO. Your drive's own held-out frames, loop's own hint: 82% within one waypoint, 96% within two, 4% abstain, tracked to the end. Office drive: 96.7% within one when it answers, 16.6% abstain."},
+    {"title": "Build the three modules", "state": "done",
+     "detail": "Sensor, recorder, controller, harness: 3 builders + 3 skeptics, 18 agents, every module refuted at least once and fixed; 200 tests across the four files; mutants all caught. Snoopy's coder model reviewed all four: one real gap (heading coverage) in four reviews."},
+    {"title": "Record the route chain", "state": "done",
+     "detail": "You drove it (116 s, stick logged via pygame, compass on 94% of frames, stopped itself on the prompt). The 61 s idle head was trimmed."},
     {"title": "Fast A/B (a) extend", "state": "done",
-     "detail": "KILLED at trial 5 of 20 (extended 2/2 arrived at 25 s, recorded 0/2, one setup INVALID). Not a result at n=2; --resume can pick it up if ever wanted."},
-    {"title": "Goal-leg A/B, OCR path, prompt zone, ink gate, control frames", "state": "done",
-     "detail": "All landed and written up earlier today (OPEN-21, OPEN-22). Dead-reckoning candidates (b) and (c) and the stop-early patch sit in drafts/pending_after_ab/, unapplied."},
+     "detail": "KILLED at trial 5 of 20 at your request. Not a result at n=2; --resume can pick it up if dead reckoning ever comes back."},
 ]
 DECISIONS = [
-    {"title": "Chain source: the executor's walk or your drive?", "detail": "The executor's successful walk gives the pose the loop will servo to; your drive gives a straighter route. Default: executor first; if it cannot arrive in 3 tries, I ask you to drive with chain_record.py --user."},
-    {"title": "Ceiling for a closed-loop trial", "detail": "420 s external kill, 400 s scored as timed out, same as the fast harness you set."},
+    {"title": "If the trials stall at one spot", "detail": "The journal names the waypoint. Your diagonal camera moves (pitch) are the likely cause there; a re-drive of that stretch takes a minute."},
+    {"title": "Ceiling for a closed-loop trial", "detail": "400 s walk cap plus a 180 s setup budget, 580 s external kill; over the cap scores TIMED OUT, as you set for the fast harness."},
 ]
 
 
