@@ -1842,6 +1842,27 @@ started at load 8.0 / 15.5 / 13.7 (cancelled agents draining); §10.13a covers
 touching any leg — this is the first streak with the table leg and the prompt
 as the final check.
 
+**TRIAL 1 (03:00): INVALID at the 1800s ceiling, and the ceiling was censoring by
+construction.** It verified `portrait_room`, `bar_pool_room` and `bar_jukebox`,
+then failed the TABLE leg five times: every `reach_table` sweep reported *swept
+19 headings around 76; best ink 0.0000 at None, prompt never appeared* — not a
+weak prompt, no prompt. After each miss the localiser could not name the
+position (87 matches, ratio 1.16), so `attempts=9` on the goal leg means a FULL
+RESET AND RE-WALK OF THE ROUTE per attempt (7 resets inside one trial); six of
+those is 30 minutes. OPEN-5's 780s maximum was measured where retries are
+local, and I set the ceiling on it — §10.14, self-inflicted.
+
+The five `at_dealer_table` leg-end frames (`overnight/streak_table_trial1_table_ends.jpg`)
+show where the table leg actually ends from the restored jukebox pose: pressed
+into an NPC's coat; dark geometry; a bar-top with a bottle filling the view; and
+twice **looking DOWN at a tiled floor** — a yaw sweep with the camera on the
+floor cannot see the prompt at any heading (STAIRS_APPROACH.md: pitch is
+uncontrolled in production). So the restored jukebox leg ARRIVES, verified, and
+the table leg recorded from the human's jukebox pose then walks somewhere the
+prompt is not. n = 1 trial, 5 table attempts. That is the chain OPEN-17 names
+(arrival heading at the table -11.31 deg; `approach_goal` aims 10.6 deg off the
+leg's own direction), now with frames instead of an ordering.
+
 **Harness lessons that must not be re-copied** (fixed in `overnight/_harness.py`,
 2026-09-06): `ab_jukebox_leg.py` walked the leg under test with `gw.walk_link`,
 which publishes no leg-end frame, so it collected NO evidence about the leg it
