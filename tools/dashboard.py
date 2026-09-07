@@ -59,11 +59,23 @@ def rows_and_tallies():
     runs = j["runs"]
     legs = executed_legs()
     pre = sorted(glob.glob(os.path.join(ROOT, "overnight", "goal_leg_failframes", "at_dealer_table_[0-9]*.jpg")))
+    # Per-frame scores are CACHED by filename: re-scoring every frame on every
+    # update was ~30s of CPU beside a live run (2026-09-07, the user saw the
+    # stream go sluggish). A new frame costs ~2s; the rest cost nothing.
+    cache_p = os.path.join(ROOT, "overnight", "goal_leg_frame_scores.json")
+    try:
+        cache = json.load(open(cache_p))
+    except Exception:
+        cache = {}
     prompt = {}                                   # trial -> prompt on screen at the leg's end
     for k, (t, arm, _o) in enumerate(legs):
         if k < len(pre):
-            im = Image.open(pre[k]).convert("RGB")
-            prompt[t] = bool(tp.at_table(im)) or ocr.read(im)["words"] >= 2
+            name = os.path.basename(pre[k])
+            if name not in cache:
+                im = Image.open(pre[k]).convert("RGB")
+                cache[name] = bool(tp.at_table(im)) or ocr.read(im)["words"] >= 2
+            prompt[t] = cache[name]
+    json.dump(cache, open(cache_p, "w"), indent=1)
     rows, durations = [], []
     for i, r in enumerate(runs, 1):
         arrived = r.get("arrived")
