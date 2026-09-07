@@ -61,6 +61,56 @@ for rel in STATE + OPTIONAL:
 # for free and the guard is decorative.
 check(f"the scan actually examined something ({checked} paths)", checked >= 4)
 
+# THE LIST ABOVE CHECKS CONTAINERS, NOT CONTENTS, AND THAT IS HOW THE NEXT TWO
+# GOT IN. `places` was on it and passed, because `places` itself is a real
+# directory -- while `places/places` was a symlink to its own parent, committed
+# by the same worktree merge. It made a PHANTOM ROOM: os.listdir(root) enumerated
+# `places` as a fifth room with zero references, and shutil.copytree died with
+# ELOOP, which truncated tests/routing/test_add_non_disruption.py from 16 tests
+# to 4 and an error. `test_fixtures/test_fixtures` was the same shape.
+#
+# So this half is STRUCTURAL rather than a hand-kept list, because a list is
+# exactly what failed: it names no paths and cannot go stale as the tree grows.
+walked = 0
+for rel in STATE + OPTIONAL:
+    root = os.path.join(_ROOT, rel)
+    if not os.path.isdir(root):
+        continue
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in list(dirnames) + filenames:
+            walked += 1
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                check(f"{os.path.relpath(full, _ROOT)} is a symlink inside a "
+                      f"state directory -> {os.readlink(full)!r}", False)
+        # Do not descend INTO a symlinked directory: that is the loop itself.
+        dirnames[:] = [d for d in dirnames
+                       if not os.path.islink(os.path.join(dirpath, d))]
+check(f"walked the state directories ({walked} entries)", walked >= 8)
+
+# AND THE GENERAL CASE: git is what actually carried the damage between
+# checkouts, so ask git. A committed symlink resolving inside the repo is the
+# worktree accident and nothing else; the repo has legitimately never had one.
+try:
+    import subprocess
+    out = subprocess.run(["git", "ls-files", "-s"], cwd=_ROOT,
+                         capture_output=True, text=True, timeout=30)
+    if out.returncode != 0:
+        check(f"git ls-files ran (rc={out.returncode})", False)
+    else:
+        links = [l.split("\t", 1)[1] for l in out.stdout.splitlines()
+                 if l.startswith("120000 ")]
+        # Reported by NAME. "there are 2" sends someone hunting; naming them
+        # makes the fix a git rm.
+        check(f"no tracked symlinks in the repo (found {links})", not links)
+        check(f"git listed the tree ({len(out.stdout.splitlines())} paths)",
+              len(out.stdout.splitlines()) > 50)
+except Exception as e:                                    # noqa: BLE001
+    # FAIL rather than skip: an unverifiable claim is not a passing one, and
+    # this is the half that catches the damage before it is merged.
+    check(f"could not ask git about tracked symlinks ({type(e).__name__}: {e})",
+          False)
+
 # And the map must still PARSE -- a symlink loop shows up here as an OSError,
 # so this is the behavioural half of the same guard.
 try:

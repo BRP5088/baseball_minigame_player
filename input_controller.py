@@ -837,12 +837,20 @@ def frontmost_app() -> str:
 
 
 def has_focus() -> bool:
-    """True if keystrokes will actually reach chiaki.
+    """True if a press may be ATTEMPTED. NOT evidence that one was acted on.
 
     With background input available this is unconditionally True, because
     CGEventPostToPid reaches the process whether or not it is frontmost —
     verified live while the user worked in another app. Gating on frontmost
     there would refuse every press for a reason that no longer applies.
+
+    SO IT REDUCES TO "a chiaki process exists", and callers have read more into
+    it than that. CGEventPostToPid reports nothing back, and a modal Qt dialog
+    inside chiaki will swallow the key it delivers — so a True here is
+    compatible with no input reaching the game at all. It is deliberately left
+    this way: no delivery function consults it, so tightening it would refuse
+    presses that do land. DO NOT use it to diagnose a failed press; measure the
+    transport instead (reset_env._probe_transports).
     """
     if can_use_background_input():
         return True

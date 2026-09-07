@@ -56,6 +56,7 @@ _sys.path.insert(0, _ROOT)
 
 import os
 import sys
+import tempfile
 import types
 
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy")
@@ -130,6 +131,17 @@ class Game:
         self.menu_delay = 0.0
         self._menu_at = None
         self.probe_moves = 0.0         # brightness a look_right probe causes
+        # TWO TRANSPORTS, because the bug was invisible while the fake had one.
+        # press() models the FIFO/stick path; press_background() models the
+        # Quartz keyboard path the pause key actually uses. A fake that cannot
+        # tell them apart cannot fail on a diagnostic that confuses them.
+        self.keyboard_dead = False
+        self.bg_calls = []
+        self.pid = 4242
+        # In-world idle noise. reset_env's own comment measures it at 14-20,
+        # and the old probe's threshold was 5.0 — under it. With this at 0 a
+        # test cannot notice that, so scenarios set it deliberately.
+        self.idle_noise = 0.0
         self.load_secs = 6.0
         self.bearing = 97.4
         self.events = []               # ordered ('press', a) / ('sel', v)
@@ -154,12 +166,17 @@ class Game:
 
     def capture(self):
         self.captures += 1
-        v = self.level()
+        self.events.append(("cap", self.state))
+        # Alternating idle noise, so two consecutive captures differ by
+        # idle_noise even when nothing was pressed. That is what a NULL sample
+        # has to see.
+        v = self.level() + (self.idle_noise if self.captures % 2 else 0)
+        v = max(0, min(255, int(round(v))))
         return Image.new("RGB", (64, 64), (v, v, v))
 
     def _fresh(self, img, who):
         got = img.convert("L").getpixel((0, 0))
-        if got != self.level():
+        if abs(got - self.level()) > self.idle_noise:
             self.stale.append(f"{who} was handed a frame at level {got} while "
                               f"the screen shows {self.level()} — it is reusing "
                               f"a stale capture instead of taking a new one")
@@ -207,6 +224,26 @@ class Game:
             self.nudge += self.probe_moves
         elif action == "look_left":
             self.nudge -= self.probe_moves
+
+    def press_background(self, action, hold_seconds=0.05, post_delay=None):
+        """The Quartz keyboard transport. Returns whether it claims to have sent.
+
+        When keyboard_dead it still RETURNS TRUE while moving nothing — which
+        is the real failure mode: CGEventPostToPid reports nothing back, so a
+        swallowed key is indistinguishable from a delivered one at the call
+        site. Only the picture can tell.
+        """
+        self.bg_calls.append(action)
+        self.events.append(("bg", action))
+        if not self.keyboard_dead:
+            if action == "look_right":
+                self.nudge += self.probe_moves
+            elif action == "look_left":
+                self.nudge -= self.probe_moves
+        return True
+
+    def chiaki_pid(self, refresh=False):
+        return self.pid
 
     # --- pause_menu ------------------------------------------------------
     def is_pause_screen(self, img):
@@ -259,6 +296,19 @@ def run(label, **kw):
     ic = types.ModuleType("input_controller")
     ic.has_focus, ic.frontmost_app, ic.press = (
         game.has_focus, game.frontmost_app, game.press)
+    ic.press_background = game.press_background
+    ic.chiaki_pid = game.chiaki_pid
+    ic.press_path_counts = lambda: (0, len(game.bg_calls), 0)
+    ic.press_path_summary = lambda: "  [input] (fake)"
+
+    # The escalation imports ensure_stream lazily; record what it would do to
+    # the real machine instead of doing it.
+    es = types.ModuleType("ensure_stream")
+    game.fronted = []
+    game.crash_dismissed = []
+    es._front_chiaki = lambda: game.fronted.append(True)
+    es._dismiss_mac_crash_dialog = lambda log=print: game.crash_dismissed.append(True)
+    sys.modules["ensure_stream"] = es
     orch = types.ModuleType("orchestrator")
     orch.capture_screenshot_image = game.capture
     pmenu = types.ModuleType("pause_menu")
@@ -274,6 +324,12 @@ def run(label, **kw):
     # which is exactly what happened, and the guard in test_no_side_effects
     # caught that this file had stopped running at all.
     comp.fast_capture = game.capture
+
+    # The probe saves frames. Redirect them so an offline run never writes into
+    # the project tree (tests/harness/test_no_side_effects.py would catch it,
+    # and a diagnostic that pollutes the repo is its own defect).
+    game.frame_dir = tempfile.mkdtemp(prefix=f"resetprobe_{os.getpid()}_")
+    reset_env.PROBE_DIR = game.frame_dir
 
     sys.modules["input_controller"] = ic
     sys.modules["orchestrator"] = orch
@@ -336,21 +392,86 @@ check(g.focus_checks >= 1, "no focus: has_focus was never called at all")
 # =========================================================================
 # Both branches of _diagnose_no_pause, because telling them apart is the whole
 # reason it exists: one is fixable by the user, the other is not.
-g, res, err = run("pause dead, no input landing", pause_opens=False)
-must_raise("pause dead, no input landing", err, "no input is reaching")
+# THE PROBE MUST TOUCH THE TRANSPORT IT CONDEMNS. The old probe pressed
+# look_right, which is in STICK_AXES and not BUTTON_BITS, so it went over the
+# FIFO and never touched a key — and the message then blamed the 'o' key and
+# keyboard focus. These scenarios exist because a fake with ONE transport
+# cannot notice that; press() is the FIFO here and press_background() is the
+# keyboard.
+#
+# idle_noise is set deliberately: reset_env documents in-world idle noise at
+# 14-20 while the old gate was `moved > 5.0`, so a dead transport used to read
+# as alive. Each verdict is paired against this scene's own null.
+
+# A3 — NEITHER transport moves the picture.
+g, res, err = run("probe: neither transport", pause_opens=False,
+                  keyboard_dead=True, probe_moves=0.0, idle_noise=15.0)
+must_raise("probe: neither transport", err, "neither transport")
 check(len(g.presses("toggle_pause")) == 3,
       f"pause dead: pressed pause {len(g.presses('toggle_pause'))} times, "
       f"expected 3 (PAUSE_OPEN_ATTEMPTS) — it either gave up early or is "
       f"retrying without bound against a problem only the user can fix")
 check("cross" not in g.presses(),
       "pause dead: sent a cross even though the menu never opened")
+check(not g.fronted,
+      "neither transport: fronted chiaki anyway — escalation must be gated on "
+      "the one signature it can fix, not run on every failure")
 
-g, res, err = run("pause dead, other input fine",
-                  pause_opens=False, probe_moves=20.0)
-must_raise("pause dead, other input fine", err, "'o' key")
+# A1 — THE OBSERVED FAILURE: keyboard dead, FIFO alive.
+g, res, err = run("probe: keyboard dead", pause_opens=False,
+                  keyboard_dead=True, probe_moves=60.0, idle_noise=15.0)
+must_raise("probe: keyboard dead", err, "keyboard transport")
+check(g.bg_calls,
+      "keyboard dead: press_background was never called — the probe never "
+      "touched the transport it is about to blame, which is the whole bug")
 check(g.presses("look_right") and g.presses("look_left"),
       f"probe branch: presses were {g.presses()} — the camera probe must both "
       f"turn and turn back, or a failed reset also leaves the view rotated")
+check("look_left" in g.bg_calls,
+      "keyboard dead: the keyboard probe turned the camera and never turned it "
+      "back")
+check(g.fronted and g.crash_dismissed,
+      "keyboard dead: did not escalate — this is the one signature fronting "
+      "chiaki can fix, and the old code only ADVISED the user to do it")
+check(len(g.presses("toggle_pause")) == 4,
+      f"keyboard dead: pressed pause {len(g.presses('toggle_pause'))} times; "
+      f"expected 3 attempts plus exactly 1 retry after fronting")
+check("focus" not in err.lower().split("candidates")[0],
+      f"keyboard dead: asserted focus as the cause before listing candidates "
+      f"— {err!r}")
+
+# A2 — BOTH alive. This is the case the old code got exactly backwards: it
+# would blame the 'o' key and focus while the key was in fact being delivered.
+g, res, err = run("probe: both alive", pause_opens=False,
+                  keyboard_dead=False, probe_moves=60.0, idle_noise=15.0)
+must_raise("probe: both alive", err, "both input transports are alive")
+check("keyboard focus" not in err.lower() and "'o' key" not in err.lower(),
+      f"both alive: still blamed the keyboard/focus — {err!r}")
+check(not g.fronted,
+      "both alive: fronted chiaki even though the keyboard was delivering")
+
+# A5 — NULL DISCIPLINE. The null must be a real capture..capture pair with no
+# press between them, not the pre-press frame reused.
+first_bg = next((i for i, (k, _) in enumerate(g.events) if k == "bg"), None)
+check(first_bg is not None and first_bg >= 2
+      and [k for k, _ in g.events[first_bg - 2:first_bg]] == ["cap", "cap"],
+      f"null discipline: the two events before the keyboard probe were "
+      f"{[k for k, _ in g.events[max(0, (first_bg or 2) - 2):first_bg]]}, not a "
+      f"clean capture..capture pair — the control measured a scene that had "
+      f"already been disturbed, so the null is not a null")
+
+# A4 — POSITIVE CONTROL. A healthy reset must probe nothing, front nothing and
+# write no frames. Without this the file would pass with the diagnostic firing
+# on every reset.
+g, res, err = run("probe: healthy reset never probes")
+check(err is None, f"healthy reset raised {err!r}")
+check(not g.bg_calls and not g.presses("look_right") and not g.fronted,
+      f"healthy reset probed anyway: bg={g.bg_calls}, "
+      f"look_right={g.presses('look_right')}, fronted={g.fronted} — the "
+      f"diagnostic must cost nothing when nothing is wrong")
+check(not os.listdir(g.frame_dir),
+      f"healthy reset wrote frames into {g.frame_dir} — diagnostic output on "
+      f"the success path is noise that hides the real failures")
 
 # =========================================================================
 # 3. Highlight unreadable -> refuse, do not press blindly.

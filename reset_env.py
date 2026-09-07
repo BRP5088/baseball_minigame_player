@@ -61,6 +61,28 @@ GIVE_UP_ATTEMPTS = 3   # bounded separately: quitting a match is not a menu try
 PAUSE_OPEN_WAIT_SEC = 4.0  # poll this long for the menu before pressing again
 LATE_MENU_WAIT_SEC = 6.0   # ...and this long once more before giving up
 PAUSE_SETTLE_SEC = 2.0
+
+# PROBE THRESHOLDS. The old probe tested `moved > 5.0` while this same file
+# records, 139 lines away, that "in-world idle noise alone measures 14-20". So
+# the test was satisfied by ANY in-world frame whether or not the press did
+# anything, and the failing run's delta of 16.1 sits inside that idle band. A
+# threshold under one population (10.4), producing a confident message about a
+# press it never measured.
+#
+# The fix is not a bigger number, it is a PAIRED comparison: each trial takes
+# its own NULL sample (capture, wait, capture, no press) and a transport counts
+# as alive only when its delta beats that scene's own idle noise. PROBE_RATIO
+# does the work; PROBE_FLOOR only stops a frozen picture (null ~ 0) making any
+# flicker look like movement.
+#
+# Both are PROVISIONAL and anchored on one documented population (idle 14-20).
+# Nothing has yet measured the pressed population on this rig, so a probe that
+# lands between the two is reported AMBIGUOUS rather than guessed at.
+PROBE_RATIO = 1.8      # a real turn must beat this scene's idle noise by 1.8x
+PROBE_FLOOR = 8.0      # ...and clear this, so a frozen frame cannot qualify
+PROBE_GAP_SEC = 0.9    # the settle used for every sample, null included
+PROBE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "overnight", "resetfail")
 MENU_STEP_SEC = 0.8
 SELECTION_READ_TRIES = 4      # the menu animates; one bad frame is not ambiguity
 SELECTION_RETRY_SEC = 0.5
@@ -193,10 +215,19 @@ def reset_environment(log=print, progress_file=None):
 
     # Focus before anything else. Without it every press below vanishes and
     # each step fails for a reason that has nothing to do with the real cause.
+    # NOTE WHAT THIS CAN AND CANNOT CATCH. has_focus() is True whenever a chiaki
+    # process exists — it does NOT check frontmost while background input is
+    # available — so on this machine the only way here is chiaki being absent or
+    # pgrep failing. The message used to name only "not frontmost", which is
+    # wrong for its one reachable case. The predicate is deliberately unchanged;
+    # no delivery path consults it, so tightening it would refuse presses that
+    # do land.
     if not ic.has_focus():
-        raise ResetError(f"chiaki is not the frontmost app "
-                         f"({ic.frontmost_app()!r} is) — no input will reach "
-                         f"the game. Click the game window and retry.")
+        raise ResetError(f"no input can be sent: chiaki_pid()={ic.chiaki_pid()!r} "
+                         f"and the frontmost app is {ic.frontmost_app()!r}. "
+                         f"Either chiaki is not running, or it is not frontmost "
+                         f"and background input is unavailable. Start chiaki "
+                         f"(./restart_chiaki.sh) or click the game window.")
 
     # --- 1. open the pause menu ------------------------------------------
     # LEAVING A MATCH IS NOT AN ATTEMPT AT THE MENU, and gets its own budget.
@@ -253,7 +284,54 @@ def reset_environment(log=print, progress_file=None):
                     f"{time.time() - _t:.1f}s of extra waiting")
                 break
         else:
-            raise ResetError(_diagnose_no_pause(ic, cap))
+            # MEASURE FIRST, THEN ESCALATE, AND ONLY ON THE ONE SIGNATURE THAT
+            # ESCALATION CAN FIX. The old code raised here with a message that
+            # advised fronting chiaki -- the exact repair the code would never
+            # perform: press() reaches focus_chiaki_window only on a path that
+            # is unreachable while chiaki runs, and that function then refuses
+            # to front anyway whenever background input is available. So the
+            # human was told to do by hand the thing the program had decided
+            # not to do.
+            probe = _probe_transports(ic, cap, log=log)
+            escalated = False
+            if probe["kbd_verdict"] == "dead" and probe["fifo_verdict"] == "alive":
+                # This is the signature that a window is swallowing keys while
+                # the stream stays healthy. Fronting is RUDE -- it takes the
+                # keyboard from whoever is at the desk, which is the whole
+                # reason background input exists -- so it happens only here, on
+                # the terminal failure path, and only against this evidence.
+                log("  the keyboard transport is dead while the stream is "
+                    "alive — fronting chiaki once and retrying")
+                import ensure_stream as es
+                es._dismiss_mac_crash_dialog(log=log)
+                try:
+                    es._front_chiaki()
+                except Exception as exc:
+                    log(f"  could not front chiaki: {exc!r}")
+                # osascript leaves Script Editor frontmost (section 5), so
+                # CONFIRM chiaki actually came forward rather than assuming it.
+                now_front = ic.frontmost_app()
+                log(f"  frontmost app is now {now_front!r}")
+                escalated = True
+                # Deliberately NOT _clear_blocking_ui(): its later rungs press
+                # Return (cross, which is JUMP in-world) and the PS button (a
+                # Control Center TOGGLE). If the game is actually in-world those
+                # move the character and open a console overlay, turning a
+                # diagnosis into a new problem.
+                ic.press("toggle_pause", post_delay=0.4)
+                _t2 = time.time()
+                while time.time() - _t2 < PAUSE_OPEN_WAIT_SEC:
+                    time.sleep(0.5)
+                    if pm.is_pause_screen(cap()):
+                        log("  the pause key was being swallowed; fronting "
+                            "chiaki cleared it")
+                        break
+                else:
+                    raise ResetError(_diagnose_no_pause(
+                        ic, cap, probe=probe, escalated=True, log=log))
+            else:
+                raise ResetError(_diagnose_no_pause(
+                    ic, cap, probe=probe, escalated=escalated, log=log))
     log(f"  pause menu open (selected {pm.selected_item(cap())!r})")
 
     # --- 2. navigate to Load Last Save, verifying each step --------------
@@ -363,32 +441,142 @@ def reset_environment(log=print, progress_file=None):
                      "this does not recognise")
 
 
-def _diagnose_no_pause(ic, cap):
-    """Distinguish 'no input reaches the game' from 'the o key specifically'.
+def _probe_transports(ic, cap, log=print):
+    """Measure BOTH input transports against this scene's own idle noise.
 
-    Live on 2026-08-26 the pause key stopped landing while other keys still
-    worked, and the fix was on the user's side. Retrying would never have
-    surfaced that; naming which case it is does.
+    WHY BOTH. Buttons and sticks travel different paths (section 5), and the old
+    probe used `press("look_right")`, which is in STICK_AXES and not in
+    BUTTON_BITS -- so it exits inside `_inject_press` on the FIFO and never
+    touches a key. The pause key is in BUTTON_BITS with INJECT_BUTTONS False, so
+    it cannot take that path. The diagnostic therefore measured the FIFO and drew
+    a conclusion about the keyboard: "other input IS reaching the game ... the
+    'o' key specifically is not landing -- check that the chiaki window has
+    keyboard focus." Nothing in the run supported any of that.
+
+    `press_background` is the missing control: it ignores STICK_AXES and posts
+    KEYMAP['look_right'] = '=' straight to chiaki's pid over Quartz -- the SAME
+    transport the pause key uses, with the same observable (the camera turns)
+    and the same undo. It already existed with zero callers.
+
+    WHY A NULL SAMPLE. See PROBE_RATIO. Absolute deltas cannot answer this: the
+    old 5.0 gate sits under the 14-20 idle noise this file documents, so it said
+    "input is reaching the game" about any in-world frame. Pairing each probe
+    against a null taken moments earlier divides that noise out.
+
+    Returns a dict and asserts nothing. Frames are saved as PNG -- never JPEG,
+    because re-encoding a frame can change what the compass reads (2026-09-06).
     """
-    # The reticle answers "is input reaching the game" outright, so only the
-    # ambiguous case still needs a probe press.
-    if not ic.has_focus():
-        return (f"the pause menu will not open and chiaki is not frontmost "
-                f"({ic.frontmost_app()!r} is) — click the game window.")
-    before = _grey(cap())
+    def _delta(a, b):
+        return float(np.abs(_grey(b) - _grey(a)).mean())
+
+    stamp = os.path.join(PROBE_DIR, str(int(time.time() * 1000)))
+    try:
+        os.makedirs(stamp, exist_ok=True)
+    except Exception:
+        stamp = None
+
+    def _keep(img, name):
+        if not stamp:
+            return
+        try:
+            img.convert("RGB").save(os.path.join(stamp, f"{name}.png"))
+        except Exception:
+            pass
+
+    # (1) NULL: the same two captures and the same wait, with NO press between
+    # them. This is the control, and it must come first so nothing in flight
+    # from an earlier press leaks into it.
+    a = cap()
+    time.sleep(PROBE_GAP_SEC)
+    b = cap()
+    null = _delta(a, b)
+    _keep(b, "null")
+
+    # (2) KEYBOARD, the transport that actually failed.
+    kbd_sent = False
+    try:
+        kbd_sent = bool(ic.press_background("look_right", hold_seconds=0.3,
+                                            post_delay=0.4))
+    except Exception as exc:
+        log(f"  probe: press_background raised {exc!r}")
+    time.sleep(PROBE_GAP_SEC)
+    c = cap()
+    kbd = _delta(b, c)
+    _keep(c, "kbd")
+    try:
+        ic.press_background("look_left", hold_seconds=0.3, post_delay=0.4)
+    except Exception:
+        pass
+    time.sleep(PROBE_GAP_SEC)
+    d = cap()
+
+    # (3) FIFO, unchanged from the original probe, so its answer stays
+    # comparable with every message this function has ever printed.
     ic.press("look_right", hold_seconds=0.3, post_delay=0.4)
-    time.sleep(0.9)
-    moved = float(np.abs(_grey(cap()) - before).mean())
-    # Undo the probe so a failed reset does not also leave the camera turned.
+    time.sleep(PROBE_GAP_SEC)
+    e = cap()
+    fifo = _delta(d, e)
+    _keep(e, "fifo")
     ic.press("look_left", hold_seconds=0.3, post_delay=0.4)
-    if moved > 5.0:
-        return ("the pause menu will not open, but other input IS reaching the "
-                f"game (probe turned the camera, delta {moved:.1f}). The 'o' "
-                "key specifically is not landing — check that the chiaki "
-                "window has keyboard focus.")
-    return ("the pause menu will not open and NO input is reaching the game "
-            f"(probe delta {moved:.1f}) — chiaki is probably not focused, or "
-            "the stream is not running.")
+
+    def _verdict(v):
+        """alive / dead / ambiguous, against this trial's own null."""
+        bar = max(PROBE_FLOOR, null * PROBE_RATIO)
+        if v > bar:
+            return "alive"
+        # <= not <: a transport that moved the picture by exactly this
+        # scene's own idle noise moved NOTHING. Strict < left the commonest
+        # real case -- a dead transport reading the idle floor -- classified
+        # ambiguous, which is a refusal to answer a question the data answers.
+        if v <= max(PROBE_FLOOR, null):
+            return "dead"
+        return "ambiguous"
+
+    return {"null": null, "kbd": kbd, "fifo": fifo, "kbd_sent": kbd_sent,
+            "kbd_verdict": _verdict(kbd), "fifo_verdict": _verdict(fifo),
+            "frames": stamp}
+
+
+def _diagnose_no_pause(ic, cap, probe=None, escalated=False, log=print):
+    """Say what was MEASURED, and name a cause only when the measurement has one.
+
+    This used to press one stick, compare the result against a threshold below
+    the documented noise floor, and then assert that the 'o' key specifically
+    was not landing because of keyboard focus -- a claim about a transport it
+    never touched. Two hours went into that sentence. It now reports the numbers
+    and, when they do not separate, says so instead of guessing.
+    """
+    p = probe if probe is not None else _probe_transports(ic, cap, log=log)
+    where = f"  frames: {p['frames']}" if p.get("frames") else ""
+    nums = (f"(null {p['null']:.1f}, keyboard {p['kbd']:.1f}, "
+            f"FIFO {p['fifo']:.1f}; a transport counts as alive above "
+            f"{max(PROBE_FLOOR, p['null'] * PROBE_RATIO):.1f})")
+    tail = f"\n{ic.press_path_summary()}\n{where}".rstrip()
+    if escalated:
+        tail = ("\n  chiaki was fronted and the crash dialog dismissed, and the "
+                "menu still did not open") + tail
+    k, f = p["kbd_verdict"], p["fifo_verdict"]
+
+    if k == "alive" and f == "alive":
+        return ("the pause menu will not open, and BOTH input transports are "
+                f"alive {nums}. The key reached chiaki; the GAME did not open "
+                "the book. Look at game state — a 'Give up?' dialog the OCR "
+                "missed, a PS5 overlay, or OPTIONS toggling a menu that "
+                "animated in late." + tail)
+    if k == "dead" and f == "alive":
+        return ("the pause menu will not open. The FIFO/stick path is alive but "
+                f"the KEYBOARD transport is not {nums}"
+                f"{'' if p['kbd_sent'] else ' — and press_background REFUSED to send, so the Quartz path itself is unavailable'}"
+                ". Candidates, none of them established here: a modal Qt dialog "
+                "holding chiaki's key window, chiaki not being the active app, "
+                "a stale pid, or a revoked Accessibility grant." + tail)
+    if k == "dead" and f == "dead":
+        return ("the pause menu will not open and NEITHER transport moved the "
+                f"picture {nums} — the stream or the console is the problem, "
+                "not the keys." + tail)
+    return ("the pause menu will not open, and the probes CANNOT SAY why "
+            f"{nums}: at least one landed between this scene's idle noise and "
+            "the bar, so no cause is asserted. Read the frames." + tail)
 
 
 if __name__ == "__main__":
