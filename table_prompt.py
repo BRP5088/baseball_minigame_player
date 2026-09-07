@@ -241,7 +241,17 @@ def at_table(img):
     #           at most 0.017 anywhere else, INCLUDING Wanda's prompt, which is
     #           simply shorter text. Says "a long prompt is here", not which.
     #   score — the shape of the strokes, which says which words they are.
-    if ink(img) >= INK_MIN and score(img) >= MATCH_MIN:
+    # THE INK GATE IS GONE FROM THE VERDICT (2026-09-07). It was the "long
+    # prompt is here" signal against Wanda's shorter prompt; Wanda now scores
+    # 0.10 on these references, and every negative on disk tops out at 0.176
+    # against MATCH_MIN 0.25 (693 clean-node frames 0.172, the quest-log anchor
+    # 0.176, the fixture negatives 0.10). What the gate DID reject: 21 route
+    # frames with the prompt plainly on screen (dealer_circle, ink 0.006-0.024),
+    # the recorded arm's own arrival (trial 6, score 0.311, ink 0.006), and all
+    # five readings at the prompt zone's edge (score 0.31-0.47, ink 0.011) --
+    # white text over a bright body, a light table or a grey wall keeps the
+    # correlation and loses the strokes. ink() stays as a signal for the sweep.
+    if score(img) >= MATCH_MIN:
         return True
     return ocr_says_prompt(img)
 
