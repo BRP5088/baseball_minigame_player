@@ -60,6 +60,8 @@ def executed_legs():
 
 
 RUNS = [  # (json, log, frames dir, name, arms) -- the newest json on disk is the live panel
+    ("ab_fast_trim.json", "ab_fast_trim.log", "ab_fast_trim_frames", "Fast A/B (c): jukebox leg as recorded vs trimmed 0.05u", ("recorded", "trimmed")),
+    ("ab_fast_extend.json", "ab_fast_extend.log", "ab_fast_extend_frames", "Fast A/B (a): recorded vs +0.10u", ("recorded", "extended")),
     ("ab_goal_extend.json", "ab_goal_extend.log", "goal_extend_failframes", "Goal-leg extension A/B: recorded vs +0.10u", ("recorded", "extended")),
     ("ab_goal_leg.json", "ab_goal_leg.log", "goal_leg_failframes", "Goal-leg A/B: shipped vs recorded", ("shipped", "recorded")),
 ]
@@ -107,9 +109,9 @@ def rows_and_tallies():
             outcome, secs = "invalid", r.get("seconds") or (r.get("setup_seconds") or 0)
             why = r.get("reason", "unmeasurable")
         else:
-            outcome = "arrived" if arrived else "missed"
+            outcome = r.get("outcome") or ("arrived" if arrived else "missed")   # fast harness: timed_out too
             secs = (r.get("setup_seconds") or 0) + (r.get("seconds") or 0)
-            why = ""
+            why = "" if outcome != "timed_out" else "arrived, but slower than the cap"
         durations.append(secs)
         rows.append({"trial": i, "arm": r["arm"], "outcome": outcome, "why": why,
                      "leg_s": r.get("seconds") if arrived is not None else None,
@@ -211,6 +213,7 @@ td.n{text-align:right;white-space:nowrap}
 .chip.arrived{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good);font-weight:600}
 .chip.missed{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);font-weight:600}
 .chip.invalid{color:var(--inv);border:1px dashed var(--inv);background:transparent}
+.chip.timed_out{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);font-weight:600}
 .chip.arm{background:transparent;border:1px solid var(--line);color:var(--mute)}
 .chip.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600}
 ol.q{list-style:none;margin:0;padding:0;display:grid;gap:10px}

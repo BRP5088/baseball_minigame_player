@@ -10,6 +10,13 @@ result `overnight/ab_goal_extend.json` after every trial, frames under
 neighbouring table and record its leg to the dealer; (c) the jukebox leg's
 wedge (69/106 today). NOTHING CPU-bound beside the console run.
 
+THE FAST HARNESS (overnight/ab_fast.py, user request 2026-09-07 evening: A/Bs
+took 2-4 h, the setup was 60-1110 s of it): return loop instead of reset (walk
+the leg backwards, let locate() find the node, reset only on failure), a
+TIMED OUT outcome (arrival slower than 60 s is not an arrival), 3 setup
+attempts. `--experiment trim` (c) and `--experiment extend` (a) exist; add the
+next ones to EXPERIMENTS. Expect ~45 min for 10 an arm. Board follows its json.
+
 (b) CLOSED AS A NAMED NODE (Snoopy, ten references): bar_side_table is
 confusable with bar_jukebox (ratios 1.00-1.22 vs 1.35). Run only the PATH half
 after (a): overnight/side_table_leg.py (landing recorded as 'unnamed').
