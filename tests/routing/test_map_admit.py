@@ -9,6 +9,7 @@ thing changed, opposite verdicts.
 Offline. Reads frames already on disk and writes only to a temp directory;
 nothing here touches places/, world_map.json or the console.
 """
+import atexit
 import json
 import os
 import os as _os
@@ -45,13 +46,29 @@ def _root():
 _REAL = []
 
 
+# The failure population is NAMED, never globbed. overnight/failframes is a
+# live sink — every routed run appends its leg-end frames there (165 arrived
+# during the 2026-09-06 streak run, and G5's profile below went 15 -> 9 with
+# no code change). The profile was measured over exactly these four tracked
+# frames, so these four are the fixture; the directory is not.
+FAILURE_POPULATION = (
+    "fail_bar_jukebox_1788562198.jpg",
+    "fail_bar_jukebox_1788562619.jpg",
+    "fail_bar_jukebox_1788563019.jpg",
+    "fail_bar_jukebox_1788563811.jpg",
+)
+
+
 def _real_corpus():
     """admit() over the whole bar_area run — computed once, it is slow."""
     if not _REAL:
-        here = _ROOT
-        fail = os.path.join(here, "overnight", "failframes")
-        if not os.path.isdir(fail):
-            raise AssertionError(f"fixture missing: {fail}")
+        src = os.path.join(_ROOT, "overnight", "failframes")
+        fail = tempfile.mkdtemp(prefix="admit_pop_")
+        atexit.register(shutil.rmtree, fail, ignore_errors=True)
+        for name in FAILURE_POPULATION:
+            if not os.path.isfile(os.path.join(src, name)):
+                raise AssertionError(f"fixture missing: {src}/{name}")
+            shutil.copy(os.path.join(src, name), os.path.join(fail, name))
         _REAL.append(mp.admit([_root()], [fail], failures=[fail],
                               log=lambda *a: None))
     return _REAL[0]

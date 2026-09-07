@@ -66,7 +66,7 @@ corrupts every walked leg.
 
     .venv/bin/python -B tools/overshot_census.py
     .venv/bin/python -B tools/overshot_census.py \
-        --out explore/20260904_152521_bar_area/overshot_census.json
+        --out overnight/census/overshot_census_20260904_bar_area.json
 
 The JSON is written ONLY when --out is given; the default is print-only. An
 existing --out is never overwritten -- a census is a record, not a tunable.

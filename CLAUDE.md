@@ -182,6 +182,10 @@ stale — check the screen before clearing it.
   must pass it down. **Do not quote a pass count here** — it goes stale and the
   script prints the real one.
 - Fixtures live at the PROJECT ROOT in `test_fixtures/`, never under `tests/`.
+- **A test must never glob a directory a live run writes to.** `test_map_admit`
+  fed `overnight/failframes/*.jpg` to `admit()` as its failure population; the
+  2026-09-06 streak runs appended 165 leg-end frames there and G5's pinned
+  profile went 15 -> 9 with no code change. Name the fixture files.
 - **A test that passes when the code is broken is worse than no test.** After
   writing one, break the thing it guards and confirm it fails.
 - Do not swap in convenient fixtures to make a test green.

@@ -90,7 +90,8 @@ best match of the rich-unnamed **124** against `MIN_MATCHES` 140; 36 sit within
 within the interval. **Caveat recorded, not explained away:** the corpus's own
 `index.jsonl` disagrees with today's `places.keypoints` on 42 frames (max 38
 keypoints) and on best score on 148 — a different crop or detector wrote it;
-cause not established. Result: `explore/20260904_152521_bar_area/overshot_census.json`.
+cause not established. Result: `overnight/census/overshot_census_20260904_bar_area.json`
+(moved 2026-09-07 out of the corpus directory; a corpus holds only its corpus).
 
 ## What the audit found about auditing (footguns, all recorded elsewhere)
 
