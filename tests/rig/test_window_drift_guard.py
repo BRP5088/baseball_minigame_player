@@ -80,9 +80,17 @@ check("a window that cannot be found is REJECTED", ok is False and rect is None)
 
 # --- the arming path must exist and be reachable --------------------------
 check("save_window_reference exists", callable(ic.save_window_reference))
-import Bretts_walk
-check("a subcommand arms it, so it is not just a docstring",
-      "calibrate-window" in Bretts_walk.COMMANDS)
+sys.path.insert(0, os.path.join(_ROOT, "tools"))
+import calibrate_window
+_calls = []
+_saved_srw = ic.save_window_reference
+ic.save_window_reference = lambda: _calls.append(1) or (0, 0, 100, 100)
+try:
+    rc = calibrate_window.main()
+finally:
+    ic.save_window_reference = _saved_srw
+check("tools/calibrate_window.py arms it by CALLING save_window_reference, "
+      "so it is not just a docstring", _calls == [1] and rc == 0)
 
 print("\nall green" if not FAILS else f"\n{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)

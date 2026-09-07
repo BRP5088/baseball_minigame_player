@@ -137,7 +137,8 @@ question:
    "[stream] up via find_bar (compass strip located)" first — including while
    chiaki was NOT RUNNING AT ALL. That is the peer session's OPEN-18, confirmed
    live and captured in the host-list screenshot.
-2. `Bretts_walk.py connect` is DESTRUCTIVE when the console is unreachable. It
+2. `ensure_stream.ensure_live()` (what the deleted `Bretts_walk.py connect`
+   wrapped) is DESTRUCTIVE when the console is unreachable. It
    reads a static picture as a stalled decoder, restarts chiaki by a route that
    does not work, and leaves nothing running — twice. `./restart_chiaki.sh`
    works; connect's internal restart does not. Do not run connect to diagnose;

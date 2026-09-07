@@ -104,7 +104,7 @@ source and findings are not.
 Everything runs on **`./.venv`** (Python 3.14) from `requirements.txt`, which was
 derived from the ACTUAL imports across every module and test.
 
-    .venv/bin/python Bretts_walk.py doctor
+    .venv/bin/python -B tools/doctor.py
     PATH="$PWD/.venv/bin:$PATH" ./run_tests.sh
 
 **`paddle_venv/` is NOT the project environment — but it IS a live dependency.
@@ -133,38 +133,21 @@ deleting anything on the strength of a sentence here.
 prebuilt wheel, no compiler needed. Only `pygame` is deliberately excluded
 (imported inside a function in `record_input.py`).
 
-### Bretts_walk.py — one entry point, one subcommand per task
+### The hand-walk entry points are gone (2026-09-07, at the user's request)
 
-    where        report position — MOVES NOTHING, safe any time
-    doctor       chiaki, FIFO, streaming, frozen, current frame, runaways
-    connect      bring chiaki and the stream up, restarting what is wedged
-    reset        reload the save and stand at the spawn
-    walk         the full route   (--reset --shots --start --attempts)
-    last-mile    Wanda -> corner -> jukebox -> table
-    sweep        grid-search the last-mile durations, unattended
-    record-leg   walk a leg and save it ONLY if the destination is confirmed
-    label        save the current view as a reference for a place YOU name
-    brett-walk   drive the hand-walk script
+`Bretts_walk.py`, `brett_walk.py`, `perform_brett_walk.py` and `last_mile.py`
+were deleted with their two tests and thirteen launch profiles. Two subcommands
+survive as scripts because they guard the rig and a money path:
 
-`label` and `record-leg` refuse bad input on purpose: `label` rejects a frame
-under 200 keypoints, and `record-leg` refuses a leg whose destination the
-localiser did not confirm — routing plans through a bad edge forever.
+    .venv/bin/python -B tools/doctor.py             chiaki, FIFO, streaming, frozen,
+                                                    current frame, runaways — MOVES NOTHING
+    .venv/bin/python -B tools/calibrate_window.py   arm the window-drift guard ONCE, on a
+                                                    ban screen that is reading correctly
 
-### Hand-walking: brett_walk.py
-
-The user drives; write moves in `moves(w)`:
-`turn/forward/back/right/left/jump/press/wait/look/mark`.
-
-- **It records automatically** to `world_log/<stamp>_<name>/`, so a hand-walk is
-  something `map_build.py` can turn into legs.
-- `w.mark(name)` saves the frame as a place reference and REFUSES under 200
-  keypoints — a near-blank reference matches every other blank frame.
-- `w.back()` cannot go through `walk_steps.walk_forward` — that does
-  `-abs(speed)`, so a negative magnitude still walks forward. It drives the
-  stick directly.
-- Pushes are chunked at 0.8s because chiaki drops injected input after 5s.
-- `walk()` refuses to start without a live picture: capture with no game window
-  returns the desktop.
+`connect` was `ensure_stream.ensure_live()`; `reset` is
+`reset_env.reset_environment()`; routing is `graph_walk.go_to_node_verified` /
+`follow_verified`. Anything that holds a stick is chunked or timed under
+`MAX_TIMED_HOLD`, because chiaki drops injected input after 5s (§5).
 
 ### Two progress files
 
