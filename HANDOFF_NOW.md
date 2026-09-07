@@ -10,6 +10,16 @@ result `overnight/ab_goal_extend.json` after every trial, frames under
 neighbouring table and record its leg to the dealer; (c) the jukebox leg's
 wedge (69/106 today). NOTHING CPU-bound beside the console run.
 
+(c) SHARPENED while (a) runs: the nine darkest jukebox leg-end frames of today
+are all the same picture -- the character pressed into the jukebox CABINET
+(dark surface fills the frame, no compass strip), i.e. geometry, not an NPC;
+the "MOVING -- an NPC in the passage" stalls at steps 3-4 are a separate
+mid-leg event. So (c) is the goal leg's problem in reverse: the recorded
+jukebox leg overshoots into the object it aims at. Candidate: trim the leg's
+end by ~0.05u (its last step is 0.14s at 0.32 = 0.045u), A/B'd on single-
+attempt arrival at bar_jukebox from bar_pool_room (walk_leg_under_test).
+Needs a per-leg trim flag in graph_walk -- edit only after (a) ends (10.21).
+
 ## Earlier plan (kept for the rules it carries)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
    suite caught (142/143, test_success_control_frames.py). Mutation-test it.
