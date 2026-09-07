@@ -85,6 +85,23 @@ TIME_CAP = 400.0                # the spec's "timed out" boundary; the harness
 # chain -- exactly the "reached is a routing claim, not evidence of position"
 # failure in CLAUDE.md §8(e).
 WINDOW = 3
+# ADVANCE at most this many waypoints per iteration, whatever the sensor says.
+# One push is 0.18 u and the user's drive put waypoints ~0.2 u apart, so a push
+# passes about ONE waypoint. Trial 1 (2026-09-07 19:05) advanced 3 per push on
+# fits of 13-28 inliers, ran ~6 waypoints ahead of the character in 5 pushes,
+# and then found nothing in a window the character had not reached. Lagging is
+# safe (the window still holds the truth); running ahead was fatal.
+ADVANCE_MAX = 1
+# A fix under this many RANSAC inliers neither advances k nor steers. It is the
+# 5th percentile of TRUE-position inliers on the route chain's own held-out
+# frames (overnight/census/chain_user_1853_closed.json: near p05 29, median
+# 146; far median 7) -- measured on this chain, not chosen. Trial 1's junk fixes
+# (13 and 19 inliers, dx -66 and -131) strafed the character into the wall.
+FIX_MIN_INLIERS = 29
+# On a miss or a weak fix, look BACK this many waypoints before counting it,
+# and let k REGRESS if the look-back fits. An over-advanced k was otherwise
+# permanent: the window only ever looked forward.
+LOOKBACK = 2
 
 # THE PROMPT IS CHECKED ON EVERY ITERATION (None = no tail gate). It used to be
 # asked only when the target was within 3 waypoints of the end; if the sensor's
@@ -233,11 +250,11 @@ def min_iterations(n, window=None, tail=None):
     whether the chain was arithmetically unwalkable or the navigation failed,
     and those two need different responses. Reported on every walk.
     """
-    window = WINDOW if window is None else window
+    window = ADVANCE_MAX if window is None else window
     tail = TABLE_CHECK_TAIL if tail is None else tail
     if tail is None:
         # The prompt is believed on any iteration, so the floor is just the
-        # iterations k needs to reach the last waypoint at WINDOW per step.
+        # iterations k needs to reach the last waypoint at ADVANCE_MAX per step.
         return max(1, math.ceil(max(0, n - 1) / max(1, window)))
     return 1 + math.ceil(max(0, n - tail - 1) / max(1, window))
 
@@ -294,8 +311,8 @@ def plan_indices(wps, stride=None):
 
 def plan_min_iterations(plan, window=None):
     """Fewest iterations for a plan: one per turn-only target, and the push
-    targets at WINDOW per iteration (the sensor may advance k that far)."""
-    window = WINDOW if window is None else window
+    targets at ADVANCE_MAX per iteration."""
+    window = ADVANCE_MAX if window is None else window
     turns = sum(1 for _, push, _ in plan if not push)
     pushes = len(plan) - turns
     return max(1, turns + math.ceil(pushes / max(1, window)))
@@ -444,7 +461,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     res["end_iteration_budget"] = end_budget
     log(f"  chain_walk: {n} waypoints -> plan of {len(plan)} targets "
         f"({n_push} push, {n_turn} turn-only); the prompt is checked on every "
-        f"iteration; k rises by at most {WINDOW} per iteration, so >= "
+        f"iteration; k rises by at most {ADVANCE_MAX} per iteration, so >= "
         f"{min_iters} iteration(s). The {time_cap:.0f}s cap allows "
         f"{res['iteration_budget_sec']:.2f}s each. At the last waypoint the "
         f"walk may spend {end_budget} more iteration(s) — "
@@ -610,9 +627,26 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             continue
 
         fix = chain.locate(img, k)
+        inl = None if fix is None else (getattr(fix, "inliers", 0) or 0)
+        weak = fix is not None and inl < FIX_MIN_INLIERS
+        regressed = False
+        if (fix is None or weak) and k > 0:
+            # LOOK BACK before believing a miss: the hint two behind widens the
+            # window to [k-3, k+1], which is where an over-advanced k's truth is.
+            back = chain.locate(img, max(0, k - LOOKBACK))
+            binl = None if back is None else (getattr(back, "inliers", 0) or 0)
+            if back is not None and binl >= FIX_MIN_INLIERS and (fix is None or binl > inl):
+                fix, inl, weak = back, binl, False
+                if int(back.k) < k:
+                    k = max(0, int(back.k))
+                    regressed = True
 
         escaped = False
-        if fix is None:
+        if regressed:
+            misses = 0
+            stalls = 0
+            action = "regressed"
+        elif fix is None:
             misses += 1
             if misses >= MISS_MAX:
                 action = escape()
@@ -620,13 +654,24 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
             else:
                 action = "miss"
+        elif weak:
+            # Readable but not credible: neither an advance nor a miss. It
+            # counts as a stall so a run of them still reaches the escape.
+            misses = 0
+            stalls += 1
+            if stalls >= STALL_MAX:
+                action = escape()
+                escaped = True
+                stalls = 0
+            else:
+                action = "weak"
         else:
             misses = 0
-            # Never further than WINDOW ahead (one picture may not move the
-            # plan an arbitrary distance) and never past the last waypoint
-            # (locate() may honestly answer "past the end of the chain", and
-            # that must not drive the plan off the end of the list).
-            new_k = min(int(fix.k), k + WINDOW, n - 1)
+            # Never further than ADVANCE_MAX ahead (one push passes about one
+            # waypoint; a wrong match must not run the plan ahead of the
+            # character) and never past the last waypoint (locate() may
+            # honestly answer "past the end of the chain").
+            new_k = min(int(fix.k), k + ADVANCE_MAX, n - 1)
             # AN ADVANCE IS k ACTUALLY MOVING, not `reached` returning True.
             # At the last waypoint `target_k` IS k, so an honest "I am at or
             # past it" satisfies `reached` on every iteration forever: the
@@ -653,7 +698,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         # gain, so a correction computed from the PRE-escape dx would be stale
         # and would fight the escape it just paid for.
         lateral = None
-        dx = None if fix is None else getattr(fix, "dx", None)
+        dx = None if (fix is None or weak) else getattr(fix, "dx", None)
         if dx is not None and not escaped and abs(dx) > LATERAL_TOL_PX:
             secs = min(LATERAL_CAP_SEC, abs(dx) / (LATERAL_GAIN * LATERAL_MAG))
             if secs < LATERAL_MIN_SEC:

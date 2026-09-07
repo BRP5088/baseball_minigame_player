@@ -327,11 +327,39 @@ class IndexAdvance(unittest.TestCase):
         rig = Rig(FakeChain(10, [Fix(k=9), Fix(k=9), Fix(k=9)]), table_at=5)
         res = rig.go()
         self.assertEqual(chain_walk.WINDOW, 3)
-        self.assertEqual([f["k"] for f in res["fixes"]], [3, 6, 9, 9],
-                         "k jumped further than WINDOW in one step")
-        self.assertEqual(rig.chain.locate_calls, [0, 3, 6],
+        self.assertEqual(chain_walk.ADVANCE_MAX, 1)
+        self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 3, 3],
+                         "k advanced further than ADVANCE_MAX in one step")
+        self.assertEqual(rig.chain.locate_calls, [0, 1, 2],
                          "locate must be asked from the CURRENT k each time; "
                          "the arrival iteration never asks it")
+
+    def test_a_weak_fix_neither_advances_nor_steers(self):
+        # 13 inliers and a huge dx: trial 1's junk. It must not move k and it
+        # must NOT strafe; four in a row are a stall, so the escape still fires.
+        self.assertEqual(chain_walk.FIX_MIN_INLIERS, 29)
+        ch = FakeChain(8, default=Fix(k=3, scale=1.2, dx=-131.0, inliers=13))
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=5.05)
+        self.assertEqual([f["k"] for f in res["fixes"]], [0] * len(res["fixes"]))
+        self.assertIn("weak", [f["action"] for f in res["fixes"]])
+        self.assertEqual(rig.strafes(), [], "a weak dx must not steer")
+        self.assertEqual(rig.count("jump"), 1, "four weak fixes are a stall")
+
+    def test_a_miss_looks_back_and_k_may_regress(self):
+        # k is at 6 (advanced legitimately), then the forward window finds
+        # nothing; the look-back from k-2 fits at 4 with 80 inliers -> k = 4.
+        fixes = [Fix(k=1), Fix(k=2), Fix(k=3), Fix(k=4), Fix(k=5), Fix(k=6),
+                 None, Fix(k=4, inliers=80)]
+        ch = FakeChain(12, fixes)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=7.05)
+        ks = [f["k"] for f in res["fixes"]]
+        self.assertEqual(ks[:7], [1, 2, 3, 4, 5, 6, 4])
+        self.assertEqual([f["action"] for f in res["fixes"]][6], "regressed")
+        self.assertEqual(rig.chain.locate_calls[6:8], [6, 4],
+                         "the look-back is asked from k - LOOKBACK")
+        self.assertEqual(rig.count("jump"), 0)
 
     def test_a_fix_that_has_not_reached_does_not_advance_k(self):
         rig = Rig(FakeChain(6, default=Fix(k=1, scale=0.4)), table_at=None)
@@ -498,7 +526,7 @@ class Bookkeeping(unittest.TestCase):
     """(g) every iteration is recorded; with shots= every frame is on disk."""
 
     def test_every_iteration_appends_a_row(self):
-        rig = Rig(FakeChain(4, [Fix(k=1, scale=1.0), None,
+        rig = Rig(FakeChain(4, [Fix(k=1, scale=1.0), None, None,  # the miss's look-back gets the 2nd None
                                 Fix(k=2, scale=1.0)]), table_at=5)
         res = rig.go()
         self.assertEqual(len(res["fixes"]), 4)
@@ -610,31 +638,32 @@ class IterationArithmetic(unittest.TestCase):
         # every iteration the floor is the iterations k needs to reach the
         # last waypoint at 3 per step: ceil(999 / 3) = 333. The old tail gate
         # (an integer TABLE_CHECK_TAIL) is still honoured when passed.
-        self.assertEqual(chain_walk.min_iterations(1000), 333)
-        self.assertEqual(chain_walk.min_iterations(1000, tail=3), 333)
-        self.assertEqual(chain_walk.min_iterations(10, tail=3), 3)
-        self.assertEqual(chain_walk.min_iterations(10), 3)
-        self.assertEqual(chain_walk.min_iterations(4), 1)
+        # ADVANCE_MAX is 1: every waypoint but the spawn needs an iteration.
+        self.assertEqual(chain_walk.min_iterations(1000), 999)
+        self.assertEqual(chain_walk.min_iterations(1000, window=3), 333)
+        self.assertEqual(chain_walk.min_iterations(1000, tail=3, window=3), 333)
+        self.assertEqual(chain_walk.min_iterations(10), 9)
+        self.assertEqual(chain_walk.min_iterations(4), 3)
         self.assertEqual(chain_walk.min_iterations(2), 1)
 
     def test_every_walk_reports_the_arithmetic(self):
         rig = Rig(FakeChain(10, [Fix(k=3), Fix(k=6)]), table_at=2)
         res = rig.go()
         self.assertEqual(res["waypoints"], 10)
-        self.assertEqual(res["min_iterations"], 3)
-        self.assertEqual(res["iteration_budget_sec"], 133.333)  # 400 / 3
+        self.assertEqual(res["min_iterations"], 9)
+        self.assertEqual(res["iteration_budget_sec"], 44.444)  # 400 / 9
         self.assertEqual(res["iterations"], 1,
                          "the prompt was up after push 1 and was believed")
         self.assertEqual(res["plan_targets"], 9)
         self.assertEqual(res["plan_turns"], 0)
 
     def test_a_chain_too_long_for_the_cap_is_refused_before_it_moves(self):
-        # 100 waypoints need 33 iterations; at a 1.5s floor that is 50s.
+        # 100 waypoints need 99 iterations at ADVANCE_MAX 1; at a 1.5s floor that is 148s.
         rig = Rig(FakeChain(100, default=Fix(k=0, scale=0.5)), table_at=None)
         res = rig.go(time_cap=10.0, iteration_sec_floor=1.5)
         self.assertFalse(res["arrived"])
         self.assertIn("too long for the cap", res["failure"])
-        self.assertIn("33 iterations", res["failure"])
+        self.assertIn("99 iterations", res["failure"])
         self.assertEqual(res["pushes"], 0)
         self.assertEqual(rig.events, [],
                          "the refusal must come before the first capture")
@@ -655,7 +684,7 @@ class IterationArithmetic(unittest.TestCase):
         res = long_chain.go(time_cap=5.05)
         self.assertTrue(res["timeout_diagnosis"].startswith("ARITHMETIC"),
                         res["timeout_diagnosis"])
-        self.assertIn("33 iterations", res["timeout_diagnosis"])
+        self.assertIn("99 iterations", res["timeout_diagnosis"])
 
         short_chain = Rig(FakeChain(4, default=Fix(k=0, scale=0.5)),
                           table_at=None)
@@ -925,8 +954,8 @@ class EndOfChain(unittest.TestCase):
                       "the failure must say how far past the recording it went")
         # ONE terminal push — the derived budget — and then it stops. Before
         # the fix this was 120 pushes and the whole cap.
-        self.assertEqual(res["pushes"], 2)
-        self.assertEqual(rig.count("push"), 2)
+        self.assertEqual(res["pushes"], 4)
+        self.assertEqual(rig.count("push"), 4)
         self.assertEqual(res["end_iterations"], 2)
         self.assertLess(res["seconds"], 10.0,
                         "it must stop long before the 60s cap")
@@ -934,9 +963,9 @@ class EndOfChain(unittest.TestCase):
     def test_a_frozen_k_is_never_logged_as_an_advance(self):
         _, res = self._at_end()
         self.assertEqual([r["action"] for r in res["fixes"]],
-                         ["advanced", "stalled"])
+                         ["advanced", "advanced", "advanced", "stalled"])
         ks = [r["k"] for r in res["fixes"]]
-        self.assertEqual(ks, [3, 3])
+        self.assertEqual(ks, [1, 2, 3, 3])
         for prev, row in zip(ks, res["fixes"][1:]):
             if row["k"] == prev:
                 self.assertNotEqual(row["action"], "advanced",
@@ -944,7 +973,7 @@ class EndOfChain(unittest.TestCase):
         # And the journal says WHICH stall this is: at the last waypoint no
         # push can advance k, so a terminal stall and a mid-chain one need
         # different readings.
-        self.assertEqual([r["at_end"] for r in res["fixes"]], [False, True])
+        self.assertEqual([r["at_end"] for r in res["fixes"]], [False, False, False, True])
 
     def test_the_escape_ladder_is_reachable_at_the_end_of_the_chain(self):
         # The branch that was dead code. With a larger end budget the terminal
@@ -953,8 +982,8 @@ class EndOfChain(unittest.TestCase):
         acts = [r["action"] for r in res["fixes"]]
         self.assertEqual(acts[0], "advanced")
         self.assertEqual([i for i, a in enumerate(acts)
-                          if a.startswith("escape")], [4, 8])
-        self.assertEqual([acts[4], acts[8]], ["escape:jump", "escape:left"])
+                          if a.startswith("escape")], [6, 10])
+        self.assertEqual([acts[6], acts[10]], ["escape:jump", "escape:left"])
         self.assertEqual(rig.count("jump"), 1)
         self.assertEqual(res["end_iterations"], 11)
         self.assertTrue(res["failure"].startswith("reached the last waypoint"),
@@ -965,10 +994,10 @@ class EndOfChain(unittest.TestCase):
         # to n-1 rather than indexing off the end of waypoints[].
         rig = Rig(FakeChain(4, default=Fix(k=99, scale=2.0)), table_at=None)
         res = rig.go(time_cap=60.0)
-        self.assertEqual([r["k"] for r in res["fixes"]], [3, 3])
+        self.assertEqual([r["k"] for r in res["fixes"]], [1, 2, 3, 3])
         self.assertEqual(res["k_final"], 3)
         self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
-                         [10.0, 30.0],
+                         [10.0, 20.0, 30.0],
                          "the target may never be a waypoint that does not exist")
 
     def test_the_end_budget_is_derived_from_the_measured_prompt_zone(self):
@@ -994,7 +1023,7 @@ class EndOfChain(unittest.TestCase):
         _, wide = self._at_end(end_iterations=4)
         self.assertEqual(wide["end_iteration_budget"], 4)
         self.assertEqual(wide["end_iterations"], 5)
-        self.assertEqual(wide["pushes"], 5)
+        self.assertEqual(wide["pushes"], 7)
 
 
 class DefaultConsoleWrappers(unittest.TestCase):

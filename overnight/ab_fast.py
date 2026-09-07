@@ -122,7 +122,7 @@ def one_trial(experiment, arm):
     # SETUP: locate() first -- the previous trial's return walk usually leaves
     # the character here -- and reset+route only if it cannot name the node.
     t0 = time.time()
-    where0, _ = gw.locate(m, log=lambda *a: None)
+    where0, _ = gw.locate(m, log=log)
     ok = gw.go_to_node_verified(m, start, log=log, attempts=SETUP_ATTEMPTS, shots=shots)
     setup_s = round(time.time() - t0, 1)
     if not ok:
@@ -144,7 +144,7 @@ def one_trial(experiment, arm):
         m.connect(target, start, reverse_steps(m.steps_for(start, target)), one_way=True,
                   note="return loop, in memory only")
         gw.walk_link(m, target, start, log=log)
-        back, detail = gw.locate(m, log=lambda *a: None)
+        back, detail = gw.locate(m, log=log)
         row["returned_to"] = back
         log(f"  return walk: locate() -> {back} ({detail}) in {time.time() - t2:.0f}s")
     except Exception as e:                   # the next trial simply resets
