@@ -2373,12 +2373,19 @@ external ceiling, Fisher exact. Result: `overnight/ab_goal_leg.json`, log
 (`at_dealer_table_*` = PRE-sweep leg end, admissible; `_postsweep_*` = what
 `confirm()` judged; `success/ok_*` = the leg end on arrivals).
 
-Two evidence fixes landed with the flag (da5b7ec), each behind a test that
+Two evidence changes landed with the flag (da5b7ec), each behind a test that
 drives `follow()`/`follow_verified` with stubs and four mutants caught: the
 GOAL's leg-end frame is now captured and published BEFORE `reach_table`, and
-`follow_verified`'s success frame is the published leg end — it was `before`,
-the previous node's arrival (both OPEN-14 `ok_dealer_table` frames read bearing
-0.8 and identified `bar_jukebox` at 491 and 295).
+`follow_verified`'s success frame became the published leg end instead of
+`before`. **The second was half wrong, and the suite caught it the same
+morning** (142/143, `test_success_control_frames.py`): `before` — the start
+pose, which is why both OPEN-14 `ok_dealer_table` frames identified
+`bar_jukebox` — was DELIBERATE, the control for the start-pose-variance
+question in §8(i), and its own test says so. Replacing it threw one control
+away to gain another. The fix keeps both on both outcomes
+(`success/start_<node>` + `success/ok_<node>` on arrival, `start_<node>` +
+`fail_<node>` on failure); it is written and waits in
+`drafts/pending_after_ab/` until no live run imports `graph_walk` (10.21).
 
 **RESULT: pending.** Read the json before believing anything written here
 about it. If the recorded arm wins, the next run is the full-route streak with

@@ -40,6 +40,20 @@ read the last 40 lines of the log for the trial that was in flight.
    test, `report_kinds` made loud on foreign rows (ad13c6e).
 4. **Suite certified**: 142/143 → cause fixed → **143/143 green** (752s).
 
+## Waiting for the run to end (do these first, in order)
+1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
+   suite caught (142/143, test_success_control_frames.py). Mutation-test it.
+2. `table_prompt` stroke mask: goal-leg trial 1 stood AT the table with the
+   prompt on screen and at_table() scored -0.001 — white text over the light
+   table top is invisible to the shipped mask by construction. The offline A/B
+   of local-contrast variants is `tools/prompt_mask_ab.py` ->
+   `overnight/census/prompt_mask_ab.json` (log overnight/prompt_mask_ab.log).
+   Land the winning delta ONLY with the numbers: every old positive still True,
+   zero NEG_NODES false positives, the quest-log anchor still rejected. Fixture
+   for the test: test_fixtures/table_prompt_cases/prompt_on_bright_table_goalleg_t1.jpg.
+3. Score the A/B: overnight/ab_goal_leg.json; write OPEN-21's result with n,
+   Fisher p and the pre-sweep frame classes (tools/goal_leg_sheet.py).
+
 ## Done this morning (all committed)
 - `locate()` may never confirm the GOAL by appearance (dfb1b6e, 697c7ac): the
   OPEN-14 trial-6 hole, with trial 6's own frame as a fixture.
