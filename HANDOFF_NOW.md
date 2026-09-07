@@ -1,14 +1,15 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-`overnight/ab_goal_extend.py` (detached): candidate (a) of the three the user
-ordered -- recorded goal leg vs recorded + 0.10u along its net bearing
-(GOAL_LEG_EXTRA_UNITS), 10 trials an arm interleaved, 1500s ceiling, scored by
-the corrected at_table (correlation OR OCR). Log `overnight/ab_goal_extend.log`,
-result `overnight/ab_goal_extend.json` after every trial, frames under
-`overnight/goal_extend_failframes/`. Then, in this order: (b) name the
-neighbouring table and record its leg to the dealer; (c) the jukebox leg's
-wedge (69/106 today). NOTHING CPU-bound beside the console run.
+`overnight/ab_fast.py --experiment extend` (detached): candidate (a) re-run on
+the FAST harness -- return loop instead of reset, 60 s leg cap and 400 s trial
+cap both scored TIMED OUT (a failure of the arm), 420 s external kill, 3 setup
+attempts (a setup miss is INVALID). Log `overnight/ab_fast_extend.log`, result
+`overnight/ab_fast_extend.json` after every trial, frames under
+`overnight/ab_fast_extend_frames/`. ~45 min. Then `--experiment trim` (c),
+then `overnight/side_table_leg.py` (b's path). The slow (a) run was stopped at
+14/20 by decision: recorded 2/6, extended 2/6 (`overnight/ab_goal_extend.json`).
+(c)'s trim flag LANDED (cc09ca1), ships empty.
 
 THE FAST HARNESS (overnight/ab_fast.py, user request 2026-09-07 evening: A/Bs
 took 2-4 h, the setup was 60-1110 s of it): return loop instead of reset (walk
