@@ -73,14 +73,14 @@ def one(attempts):
     ok, reached = gw.follow_verified(m, ROUTE, log=log,
                                      attempts=attempts, shots=SHOTS,
                                      start_hint=gw.SPAWN)
-    return bool(ok), len(reached), round(time.time() - t0, 1)
+    return bool(ok), len(reached), round(time.time() - t0, 1), _harness.census_kinds(gw)
 
 
 def _one_trial(attempts):
     """Run ONE trial and print its result as JSON. Invoked as a subprocess."""
     try:
-        ok, depth, secs = one(attempts)
-        print(json.dumps({"arrived": ok, "depth": depth, "seconds": secs}))
+        ok, depth, secs, census = one(attempts)
+        print(json.dumps({"arrived": ok, "depth": depth, "seconds": secs, **census}))
     except Exception as e:
         print(json.dumps({"error": f"{type(e).__name__}: {e}"}))
     finally:

@@ -82,7 +82,7 @@ def one_trial():
     return {"arrived": bool(ok), "seconds": secs,
             "located": where, "detail": str(detail)[:140],
             "agrees": bool(ok) == (where == TARGET),
-            "kinds": list(gw._LAST_FAILURE_KINDS),
+            **_harness.census_kinds(gw),
             "measurable": gw._LAST_TRIAL_MEASURABLE}
 
 

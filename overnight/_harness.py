@@ -473,6 +473,50 @@ def report_leg_arm(name, rows, n_invalid, out=print):
           f"-- not evidence about the leg]")
 
 
+def census_kinds(gw):
+    """Per-trial failure classes SPLIT BY PROVENANCE. Report from `kinds_leg_end`.
+
+    graph_walk appends `_LAST_FAILURE_KINDS` and `_LAST_FAILURE_SOURCES` in
+    lockstep (graph_walk.py:2148-2151). The plain `kinds` list mixes frames
+    taken at the leg's own end with FALLBACK frames -- `before` the attempt, or
+    after the recovery fan -- which photograph a different moment and are not
+    evidence about the leg (OPEN-1). Every harness used to record and report
+    the mixed list; consecutive_arrivals split it in 2026-09-06 and nothing
+    read the split. The honest headline is the leg-end subset, with the
+    fallback count printed beside it so a shrinking denominator is visible
+    rather than silent. `walk_leg_under_test` does the same split inline.
+
+    If the two lists are not the same length the lockstep is broken and NOTHING
+    is attributable: the leg-end list is empty and the mixed count is kept, so
+    a corrupted census reads as "unattributed", never as "no failures".
+    """
+    kinds = list(getattr(gw, "_LAST_FAILURE_KINDS", []))
+    sources = list(getattr(gw, "_LAST_FAILURE_SOURCES", []))
+    leg_end = getattr(gw, "LEG_END_SOURCE", None)
+    if len(sources) != len(kinds):
+        return {"kinds": kinds, "kinds_leg_end": [], "kinds_fallback": [],
+                "kinds_unattributed": len(kinds)}
+    return {"kinds": kinds,
+            "kinds_leg_end": [k for k, s in zip(kinds, sources) if s == leg_end],
+            "kinds_fallback": [k for k, s in zip(kinds, sources) if s != leg_end]}
+
+
+def report_kinds(rows, out=print, indent="  "):
+    """Print the census the way it must be read: leg-end classes first."""
+    le = tally_kinds(rows, "kinds_leg_end")
+    fb = tally_kinds(rows, "kinds_fallback")
+    legacy = [r for r in rows if r.get("kinds") and "kinds_leg_end" not in r]
+    unatt = sum(r.get("kinds_unattributed", 0) for r in rows)
+    out(f"{indent}failures by class, LEG-END frames only: {le or 'none'}")
+    if fb:
+        out(f"{indent}  plus {sum(fb.values())} classified from FALLBACK frames "
+            f"(not evidence about the leg): {fb}")
+    if unatt:
+        out(f"{indent}  {unatt} failure(s) UNATTRIBUTED (kinds/sources lockstep broken)")
+    if legacy:
+        out(f"{indent}  {len(legacy)} row(s) carry only the legacy mixed 'kinds' key; not counted")
+
+
 def tally_kinds(rows, key):
     """Count failure classes across trial rows. {} when there are none."""
     out = {}

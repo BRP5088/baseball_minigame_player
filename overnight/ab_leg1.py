@@ -123,7 +123,7 @@ def one_trial(arm):
     return {"arm": arm, "arrived": bool(ok), "seconds": secs,
             "located": where, "detail": str(detail)[:140],
             "agrees": bool(ok) == (where == TARGET),
-            "kinds": list(gw._LAST_FAILURE_KINDS),
+            **_harness.census_kinds(gw),
             "measurable": gw._LAST_TRIAL_MEASURABLE}
 
 
@@ -177,12 +177,7 @@ def main():
         log(f"  {arm:9s} {len(arr)}/{len(val)} arrived"
             f"  ({len(rows) - len(val)} invalid)"
             f"  median {med if med is not None else '-'}s")
-        kinds = {}
-        for r in val:
-            for k in r.get("kinds") or []:
-                kinds[k] = kinds.get(k, 0) + 1
-        if kinds:
-            log(f"            failures by class: {kinds}")
+        _harness.report_kinds(val, out=log, indent="            ")
     log(f"\n  -> {OUT}")
     log("  Report BY CLASS, not just overall: arrival averages several different")
     log("  failures, so a change that kills one class moves the total by a third")
