@@ -1,0 +1,28 @@
+{
+ "report": "agent_progress/closed-loop/sensor/validate_walk3_N5.json",
+ "dir": "demos/walk3_full_20260828_050731",
+ "buckets": {
+  "walking": {
+   "misplaced_frames_measured": 54,
+   "chosen_waypoint_is_the_SAME_POSE": 17,
+   "chosen_waypoint_is_a_DIFFERENT_POSE": 37,
+   "same_pose_px": 16.85,
+   "displacement_px": {
+    "min": 0.0,
+    "median": 27.9,
+    "max": 253.1
+   }
+  },
+  "not_walking": {
+   "misplaced_frames_measured": 303,
+   "chosen_waypoint_is_the_SAME_POSE": 258,
+   "chosen_waypoint_is_a_DIFFERENT_POSE": 45,
+   "same_pose_px": 16.85,
+   "displacement_px": {
+    "min": 0.0,
+    "median": 0.0,
+    "max": 687.5
+   }
+  }
+ }
+}

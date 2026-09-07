@@ -67,3 +67,11 @@ The module has several defects that could cause issues during unattended recordi
 | 9 | `note` used before assignment | WRONG: `note = []` opens every loop iteration |
 
 Score: 1 real gap of 9, 3 plainly wrong, 5 by design or generic.
+
+## Manager verification of the other three reviews (chain.py, chain_walk.py, chain_trials.py)
+
+Nothing real in any of them. Every item is generic ("the loop has no clear exit condition",
+"a 1-based trial counter is an off-by-one", "MIN_INLIERS None is a guard that cannot fire" --
+which is the documented off-by-default knob) or contradicted by the code (the first frame IS
+used: at_table is asked on it). Its one overlap, the end-of-chain stall, was already fixed by the
+skeptic round. Score for the night: 1 real gap in 4 reviews, at zero token cost.

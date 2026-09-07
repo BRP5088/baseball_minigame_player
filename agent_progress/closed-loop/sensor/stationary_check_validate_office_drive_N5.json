@@ -1,0 +1,28 @@
+{
+ "report": "agent_progress/closed-loop/sensor/validate_office_drive_N5.json",
+ "dir": "overnight/drives/20260906_172413_office",
+ "buckets": {
+  "walking": {
+   "misplaced_frames_measured": 35,
+   "chosen_waypoint_is_the_SAME_POSE": 2,
+   "chosen_waypoint_is_a_DIFFERENT_POSE": 33,
+   "same_pose_px": 16.85,
+   "displacement_px": {
+    "min": 1.7,
+    "median": 416.1,
+    "max": 713.3
+   }
+  },
+  "not_walking": {
+   "misplaced_frames_measured": 180,
+   "chosen_waypoint_is_the_SAME_POSE": 17,
+   "chosen_waypoint_is_a_DIFFERENT_POSE": 163,
+   "same_pose_px": 16.85,
+   "displacement_px": {
+    "min": 0.0,
+    "median": 341.5,
+    "max": 1074.2
+   }
+  }
+ }
+}
