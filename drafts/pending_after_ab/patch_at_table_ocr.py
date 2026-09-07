@@ -98,6 +98,7 @@ import table_prompt as tp
 CASES = os.path.join(_ROOT, "test_fixtures", "table_prompt_cases")
 BRIGHT_TABLE = os.path.join(CASES, "prompt_on_bright_table_goalleg_t1.jpg")
 OVER_DEALER = os.path.join(CASES, "prompt_over_dealer_dealer_circle_f0020.jpg")
+LOW_INK = os.path.join(CASES, "prompt_low_ink_recorded_goalleg_t6.jpg")
 QUEST_LOG = os.path.join(CASES, "questlog_open_no_prompt_walk2_f0049.jpg")
 CLEAN_BAR = os.path.join(_ROOT, "overnight", "failframes", "fail_bar_jukebox_1788562198.jpg")
 ANCHOR = os.path.join(_ROOT, "test_fixtures", "table_prompt", "live_arrival.jpg")
@@ -120,6 +121,16 @@ class OcrPath(unittest.TestCase):
     def test_prompt_over_the_dealer_is_seen_by_ocr_not_the_mask(self):
         img = load(OVER_DEALER)
         self.assertLess(tp.score(img), tp.MATCH_MIN, "the mask now sees it; move this case")
+        self.assertGreaterEqual(tp.ocr_words(img), 2)
+        self.assertTrue(tp.at_table(img))
+
+    def test_prompt_with_correlation_but_no_ink_is_seen_by_ocr(self):
+        # Goal-leg A/B trial 6 (recorded arm): a clean arrival, dealer ahead,
+        # prompt centred. The correlation passed (0.311) and the INK gate
+        # rejected it (0.0061 against 0.024).
+        img = load(LOW_INK)
+        self.assertGreaterEqual(tp.score(img), tp.MATCH_MIN)
+        self.assertLess(tp.ink(img), tp.INK_MIN, "the ink gate now passes it; move this case")
         self.assertGreaterEqual(tp.ocr_words(img), 2)
         self.assertTrue(tp.at_table(img))
 
