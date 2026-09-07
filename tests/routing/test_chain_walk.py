@@ -341,7 +341,10 @@ class IndexAdvance(unittest.TestCase):
         # 13 inliers and a huge dx: trial 1's junk. It must not move k and it
         # must NOT strafe; four in a row are a stall, so the escape still fires.
         self.assertEqual(chain_walk.FIX_MIN_INLIERS, 29)
-        ch = FakeChain(8, default=Fix(k=3, scale=1.2, dx=-131.0, inliers=13))
+        # k=9 is further than WINDOW from every target it will be asked about,
+        # so this weak fix is blindness, not corroboration (see the test below
+        # for a weak fix that NAMES the target).
+        ch = FakeChain(8, default=Fix(k=9, scale=1.2, dx=-131.0, inliers=13))
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=9.05)
         # k follows the PLAN (dead-reckoned to the target for BLIND_MAX
@@ -351,6 +354,25 @@ class IndexAdvance(unittest.TestCase):
         self.assertIn("weak", [f["action"] for f in res["fixes"]])
         self.assertEqual(rig.strafes(), [], "a weak dx must not steer")
         self.assertEqual(rig.count("jump"), 1, "four weak fixes are a stall")
+
+    def test_a_weak_fix_that_names_the_target_advances_and_keeps_the_blind_budget(self):
+        # Trial 1c: thin corridor fits (18-23 inliers) that were RIGHT ate the
+        # blind budget, leaving none for the featureless door. A weak fix
+        # within WINDOW of the target advances k to the TARGET and resets the
+        # budget; it still never steers.
+        fixes = [Fix(k=1, inliers=20, dx=-180.0),     # weak, names target 1
+                 Fix(k=3, inliers=15, dx=150.0),      # weak, names 3 (target 2, within WINDOW)
+                 None, None, None, None,              # four blind advances (budget intact)
+                 None]                                # the fifth is a miss
+        rig = Rig(FakeChain(12, fixes, default=None), table_at=None)
+        res = always_turning(rig.go, time_cap=7.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced-weak", "advanced-weak"])
+        self.assertEqual([f["k"] for f in res["fixes"]][:2], [1, 2],
+                         "advance is to the TARGET, not to the weak fix's own k")
+        self.assertEqual(rig.strafes(), [], "a weak dx never steers")
+        self.assertEqual(acts[2:6], ["blind-advance"] * 4,
+                         "the blind budget was not spent on the weak-but-right fits")
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds

@@ -679,6 +679,18 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             stalls = 0
             blind = 0
             action = "regressed"
+        elif weak and abs(int(fix.k) - target_k) <= WINDOW:
+            # WEAK BUT CONSISTENT: a thin fit that names the target (or its
+            # neighbours) is corroboration, not blindness. Trial 1c spent the
+            # whole blind budget on 18-23-inlier fits of the corridor that
+            # were RIGHT, and had none left for the featureless door where it
+            # was needed. Advance to the target, keep the blind budget, and
+            # still do not steer on a weak dx (junk at 12 inliers: -180 px).
+            misses = 0
+            stalls = 0
+            blind = 0
+            k = min(target_k, n - 1)
+            action = "advanced-weak"
         elif fix is None or weak:
             # THE SENSOR IS BLIND (nothing fit, or nothing credible). Dead-
             # reckon: the push most likely reached its target, so believe that
