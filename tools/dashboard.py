@@ -25,8 +25,8 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "CLOSED-LOOP BATCH 2 on your drive", "state": "running",
-     "detail": "Ten trials, 400 s cap. Batch 1: trials 1 and 2 ARRIVED in 98 s and 121 s (dead reckoning took 240-340 s), trials 3 and 4 timed out after turning at the door before reaching it (your call from the stream). Stopped at 4 of 10 and fixed: each turn stop is now checked against its own picture and retried after one more push; a blind sensor gives up after nine empty iterations instead of pushing into a wall for 400 s."},
+    {"title": "CLOSED-LOOP BATCH 4 on your drive", "state": "running",
+     "detail": "Ten trials, 400 s cap. So far 4 of 4 ARRIVED in 90-113 s. Batches 2 and 3 (two trials each) were stopped early: both lost at the street crossing, where the shop facade looks the same from the doorway and from halfway across; fixed by a wide forward search from the first blind push, gated on a strong match. Batch 1: 2 arrived, 2 turned at the door before reaching it (your call); fixed by verifying each turn stop against its own picture."},
     {"title": "Sensor go/no-go", "state": "done",
      "detail": "GO. Your drive's own held-out frames, loop's own hint: 82% within one waypoint, 96% within two, 4% abstain, tracked to the end. Office drive: 96.7% within one when it answers, 16.6% abstain."},
     {"title": "Build the three modules", "state": "done",
