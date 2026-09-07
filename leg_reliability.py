@@ -33,6 +33,23 @@ import os
 STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                      "leg_reliability.json")
 
+
+def _store(path):
+    """The record to use: an explicit path, else STORE AS IT IS RIGHT NOW.
+
+    Resolved at CALL time on purpose. Every public function used to declare
+    `path=STORE`, which captures the STRING when the def runs at import — so
+    `leg_reliability.STORE = "arm_A.json"`, the natural way for an A/B harness
+    or a test to give one arm its own record, changed nothing: every call still
+    read and wrote the import-time file, and nothing said so. CLAUDE.md OPEN-6
+    names this shape ("monkeypatching leg_reliability.STORE ... silently does
+    nothing"). Enabling SPEED_FROM_RELIABILITY for an interleaved A/B needs the
+    two arms on two stores, and this is the seam that lets a caller do it.
+    Pinned by tests/routing/test_leg_reliability.py, which fails on the bound
+    default without touching the real store.
+    """
+    return STORE if path is None else path
+
 # Set by _load() when the store was PRESENT but unusable, so "the record is
 # empty" can be told apart from "the record was lost". A corrupt record must
 # not stop a walk — and note that raising could not make it visible anyway,
@@ -60,7 +77,7 @@ def _warn(msg):
     print(f"WARNING: {msg}")
 
 
-def _load(path=STORE):
+def _load(path=None):
     """The record, or {} — and SAY SO when {} means the record was LOST.
 
     A corrupt record still degrades to {}, because bookkeeping must never stop
@@ -77,6 +94,7 @@ def _load(path=STORE):
     """
     global LAST_CORRUPTION
     LAST_CORRUPTION = None
+    path = _store(path)
     if not os.path.exists(path):
         return {}                       # no record yet is NOT corruption
     try:
@@ -155,7 +173,7 @@ def _atomic_write_json(path, data):
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, path)
-    except BaseException:
+    except BaseException as exc:
         # The real guarantee (a reader never sees a partial file) holds without
         # this — os.replace simply never runs. But a crash mid-write otherwise
         # ORPHANS the .tmp, and a stale one sitting beside the record invites
@@ -164,6 +182,14 @@ def _atomic_write_json(path, data):
             os.remove(tmp)
         except OSError:
             pass
+        # SAY SO before propagating. graph_walk's record() call site is
+        # `except Exception: pass` — the swallow is right (bookkeeping must
+        # never end a run) but it writes nothing, so without this line an
+        # attempt that was never recorded looks exactly like one that was.
+        # The raise itself stays: a caller must not be told "recorded" when it
+        # was not (pinned by test_reliability_store_durability.py).
+        _warn(f"could not write {path} ({exc!r}); this attempt was "
+              f"NOT recorded.")
         raise
 
 
@@ -171,8 +197,9 @@ def _key(a, b):
     return f"{a}->{b}"
 
 
-def record(a, b, arrived, path=STORE):
+def record(a, b, arrived, path=None):
     """Note one attempt at a leg."""
+    path = _store(path)
     d = _load(path)
     if LAST_CORRUPTION is not None:
         _quarantine(path)
@@ -184,7 +211,7 @@ def record(a, b, arrived, path=STORE):
     return e
 
 
-def rate(a, b, path=STORE):
+def rate(a, b, path=None):
     """(arrival rate, attempts) — (None, n) when there is not enough to judge."""
     e = _load(path).get(_key(a, b))
     if not e or not e["attempts"]:
@@ -192,7 +219,7 @@ def rate(a, b, path=STORE):
     return e["arrived"] / e["attempts"], e["attempts"]
 
 
-def scale_for(a, b, path=STORE):
+def scale_for(a, b, path=None):
     """The speed scale this leg has EARNED. Unproven ground stays slow."""
     r, n = rate(a, b, path)
     if r is None or n < MIN_ATTEMPTS or r < MIN_RATE:
@@ -200,7 +227,7 @@ def scale_for(a, b, path=STORE):
     return FAST_SCALE
 
 
-def report(path=STORE):
+def report(path=None):
     out = []
     for k, e in sorted(_load(path).items()):
         r = e["arrived"] / e["attempts"] if e["attempts"] else 0.0

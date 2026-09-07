@@ -1822,9 +1822,13 @@ They calibrate the DISPLAY, not the outcome — no arm can move them
 differentially and they converge, so interleaving absorbs them. Two footnotes
 that will bite someone: neither write is suppressed by `BASEBALL_TEST_RUN` (an
 offline analysis pass added a live geometry's key to a worktree's copy), and
-`leg_reliability`'s `STORE` is bound into default arguments
+`leg_reliability`'s `STORE` USED TO BE bound into default arguments
 (`def rate(a, b, path=STORE)`), so monkeypatching `leg_reliability.STORE` to
-redirect the file silently does nothing. No caller does that today.
+redirect the file silently did nothing. **Fixed 2026-09-07**: every public
+function defaults `path=None` and resolves `STORE` at call time through
+`_store()`, pinned by `tests/routing/test_leg_reliability.py` with a check that
+fails on the bound default. That is the seam an interleaved A/B needs to give
+each arm its own store — set `STORE` inside the trial CHILD, never the parent.
 
 **WHAT THE CENSUS RUN COSTS.** `follow_verified` stops at the FIRST unproven
 node, so a trial yields AT MOST ONE classified failure. At the §8(a) measured 6/10
