@@ -1,0 +1,226 @@
+{
+  "question": "Did the leg-1 speed+merge changes cost route arrival?",
+  "target": "bar_pool_room",
+  "attempts": 3,
+  "trials": 10,
+  "baseline": {
+    "when": "2026-09-05 23:12",
+    "arrived": "10/10",
+    "median_s": 52.9,
+    "leg1": "original"
+  },
+  "shipped_config": {
+    "LEG_SPEED_BY_LEG": {
+      "('office_corridor', 'office_door')": 3.0
+    },
+    "MERGE_STEPS_BY_LEG": [
+      "('office_corridor', 'office_door')"
+    ],
+    "MERGED_TURN_TOLERANCE": 1.0,
+    "TRUST_RESET_SPAWN": true,
+    "RECOVER_MISSED": true,
+    "NULL_YAW_BEFORE_ALIGN": true
+  },
+  "runs": [
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 259.4,
+      "located": null,
+      "detail": "unrecognised (51.000/1.890)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 55.3,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 421.000/3.400",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 329.2,
+      "located": null,
+      "detail": "unrecognised (41.000/1.280)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 51.1,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 555.000/4.590",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 323.7,
+      "located": null,
+      "detail": "unrecognised (166.000/1.300)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 50.9,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 581.000/4.690",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": true,
+      "seconds": 212.9,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 399.000/2.830",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 52.1,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 562.000/4.970",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 276.0,
+      "located": null,
+      "detail": "unrecognised (112.000/1.220)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 52.0,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 551.000/4.410",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 320.5,
+      "located": null,
+      "detail": "unrecognised (26.000/1.130)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 55.3,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 374.000/2.830",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 329.0,
+      "located": null,
+      "detail": "unrecognised (94.000/1.180)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 51.6,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 348.000/2.640",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 330.0,
+      "located": null,
+      "detail": "unrecognised (30.000/1.150)",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 50.3,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 693.000/5.540",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": true,
+      "seconds": 206.3,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 205.000/1.640",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 50.8,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 809.000/6.910",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 371.9,
+      "located": "portrait_room",
+      "detail": "portrait_room 178.000/1.840",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    },
+    {
+      "arm": "original",
+      "arrived": true,
+      "seconds": 50.5,
+      "located": "bar_pool_room",
+      "detail": "bar_pool_room 455.000/3.250",
+      "agrees": true,
+      "kinds": [],
+      "measurable": true
+    }
+  ]
+}

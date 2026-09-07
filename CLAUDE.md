@@ -1581,6 +1581,39 @@ recorded since day one as never captured. It is now captured. Whether it is the
 same event the user saw is NOT established; what is established is that a leg
 into the bar can end outdoors and off the mapped route.
 
+**SOLVED 2026-09-06, AND IT WAS OUR OWN CHANGE, NOT THE CONSOLE.** The
+regression below was attributed to the power cycle. That was an association and
+it was wrong. Measured interleaved, 10 trials an arm, verified arrivals at
+`bar_pool_room` (`overnight/ab_leg1.py`, `overnight/ab_leg1.json`):
+
+    leg 1 AS RECORDED           10/10 arrived   median  51.6s   [50..55]
+    leg 1 at speed 3.0, MERGED   2/10 arrived   median 323.7s   [206..371]
+    Fisher exact p = 0.000714, zero invalid trials
+
+The restored arm reproduces the lost baseline exactly — 51.6s against the 52.9s
+measured before the flags landed — and its ten times span five seconds.
+
+**THE TIMELINE IS THE LESSON.** The 10/10 was measured at 23:12 on 2026-09-05.
+The commit that RECORDED it, at 23:33, is titled "OPEN-4 answered 10/10; leg 1
+to max speed" — it enabled the first flag. `MERGE_STEPS_BY_LEG` followed at
+00:20. So the result and the change that invalidates it share a commit message,
+which is section 10.7 violated inside the artifact that reports the
+measurement. It stayed invisible for a day and cost an afternoon of runs.
+
+`tests/routing/test_leg_speed_scale.py` then pinned the override and justified
+it in a comment as shipping "on a measured 10/10 arrival" — crediting the flag
+with a result measured before it was switched on, written where it reads as
+evidence. Both flags are reverted (`backups/restore_leg1.py`) and the test now
+pins their absence against the A/B above.
+
+**GRAVEYARD HAD ALREADY MEASURED BOTH HALVES AS FAILURES.** Step merging is a
+graveyard row whose stated mechanism is "a merged push covers more ground than
+the stop-start sequence it replaces, so legs that used to stop short now run
+into furniture" — and the failing log says *BLOCKED on step 4, the view is
+featureless, this is geometry*. Leg speed at 3x is another row, mean WORSE. Both
+rows' "State today" columns had gone stale and said the flags were off. **A
+stale graveyard is worse than none: it is how a measured failure comes back.**
+
 **THE START NODE REGRESSED THE SAME DAY, AND THAT IS WHY OPEN-14 DID NOT RUN.**
 This morning `go_to_node_verified("bar_pool_room")` measured 10/10 at a 52.9s
 median (OPEN-4). This afternoon, after the console was power-cycled, it reached
@@ -1599,8 +1632,9 @@ rather than a dark frame. Alongside it the leg into the bar reports "BLOCKED on
 step 4" and the escape ladder fired five times, consistent with NPC traffic the
 user had already noticed near that path.
 
-**Fix the start node before re-running OPEN-14.** Measuring a leg you reach 0 of
-3 times spends an hour per arm to record INVALID.
+**The start node is fixed (see above), so OPEN-14 is unblocked.** Measuring a leg
+you reach 0 of 3 times spends an hour per arm to record INVALID; at the restored
+leg 1 the start node is reached 10/10 at a 51.6s median.
 
 **OPEN-14 — Does the RESTORED jukebox leg move arrival?** The leg was 4.3x too
 short and could not reach its destination; it is now back to its recorded

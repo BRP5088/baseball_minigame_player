@@ -143,16 +143,34 @@ finally:
     gw.LEG_SPEED_BY_LEG = old_by_leg
     gw.LEG_SPEED_SCALE = old_scale
 
-# Pinned by CONTENTS, not by emptiness. The guard exists to catch an override
-# that arrives WITHOUT a measurement behind it -- but `== {}` cannot express
-# that, so landing the first legitimate override forced the check to be deleted,
-# which would have taken the guard with it. This form survives: a second entry
-# fails, and so does the silent loss of this one.
+# NO LEG HAS A SPEED OVERRIDE, AND ONE DID, AND IT COST 8 OF 10 ARRIVALS.
 #
-# office_corridor -> office_door at 3.0 ships deliberately, on a measured 10/10
-# arrival (OPEN-4 harness, 2026-09-06). It is the ONE leg with an override.
-check("exactly the measured overrides ship",
-      gw.LEG_SPEED_BY_LEG == {("office_corridor", "office_door"): 3.0})
+# This check used to pin {("office_corridor","office_door"): 3.0} and justified
+# it in a comment as shipping "on a measured 10/10 arrival (OPEN-4 harness,
+# 2026-09-06)". That attribution was wrong, and wrong in the way section 10.7
+# exists to prevent: the 10/10 was measured 2026-09-05 at 23:12, and the
+# override was enabled at 23:33 -- in the very commit that RECORDED the 10/10.
+# The flag was credited with a result measured without it, and the credit was
+# then written into a test, where it read as evidence.
+#
+# Measured properly, interleaved, 10 trials an arm, scored on verified arrival
+# at bar_pool_room (overnight/ab_leg1.py, overnight/ab_leg1.json):
+#
+#     leg 1 as recorded          10/10 arrived   median  51.6s
+#     leg 1 at speed 3.0, merged  2/10 arrived   median 323.7s
+#     Fisher exact p = 0.000714
+#
+# The "original" arm reproduces the lost baseline exactly (51.6s against 52.9s).
+# GRAVEYARD had already measured both halves as failures and its rows had gone
+# stale, which is how they came back.
+#
+# SO: a future override must arrive with an INTERVENTIONAL A/B, not a plausible
+# mechanism and not a measurement taken before it was switched on. Adding one
+# means editing this check, which is the point -- it forces whoever adds it to
+# read the paragraph above first.
+check("no leg ships a speed override", gw.LEG_SPEED_BY_LEG == {})
+check("no leg ships step merging", gw.MERGE_STEPS_BY_LEG == set())
+check("global step merging stays off", gw.MERGE_STEPS is False)
 
 print(f"\n{len(FAILS)} FAIL" if FAILS else "\nall green")
 sys.exit(1 if FAILS else 0)

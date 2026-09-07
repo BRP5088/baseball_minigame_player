@@ -399,7 +399,7 @@ MERGE_STEPS = False
 #
 # Add a leg here only when it has the same three properties: constrained on both
 # sides, straight, and measured reliable. Not the bar.
-MERGE_STEPS_BY_LEG = {("office_corridor", "office_door")}
+MERGE_STEPS_BY_LEG = set()
 
 # A MERGED LEG NEEDS A TIGHT TURN, and the two must be changed together.
 #
@@ -1445,28 +1445,7 @@ def _doorway_biased(a, b, steps):
     return out
 
 
-LEG_SPEED_BY_LEG = {
-    # LEG 1 AT THE CAP. office_corridor -> office_door is a straight corridor —
-    # all seven recorded steps sit at bearing 270.1-270.4, a spread of 0.33 deg —
-    # and it arrives 20/20 (n=20, CLAUDE.md 8b). At 3.0 every step reaches
-    # LEG_SPEED_MAX and the leg runs 5.13s -> 1.95s, saving 3.18s a trial with
-    # distance preserved EXACTLY (1.168 walk-units both ways, by construction:
-    # _scaled multiplies speed by k and divides dur by the same k).
-    #
-    # THIS IS NOT A NEW EXPERIMENT. GRAVEYARD measured office legs at 3x, capped
-    # at 0.60, and got 8/8 ARRIVED IN BOTH ARMS — the safety question is answered
-    # and speed x duration scaling was verified live. It was left off because the
-    # median only moved ~5% and the mean was worse on ONE 185s outlier at n=8,
-    # which is noise by this project's own standard (10.3: n=3 has power 0.00).
-    #
-    # Turned on 2026-09-05 at the user's direction, for a reason the original
-    # A/B did not weigh: a few seconds compounds across every future run. At ten
-    # trials an arm and six queued A/Bs, 3.18s is over an hour of console time.
-    # The saving is in WALL CLOCK, not arrival — do not expect it to move a rate.
-    #
-    # The stairs leg (office_door -> portrait_room) is deliberately NOT here.
-    ("office_corridor", "office_door"): 3.0,
-}
+LEG_SPEED_BY_LEG = {}
 
 # Record rich-but-unrecognised views seen while walking, as map candidates.
 #

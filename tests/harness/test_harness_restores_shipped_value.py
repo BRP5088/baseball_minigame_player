@@ -144,15 +144,33 @@ check(f"rule 2 actually examined {in_process} in-process harness(es)",
       in_process >= 1)
 
 # --- the positive control ----------------------------------------------------
+# THE PLANTS ARE DERIVED FROM WHAT SHIPS, NEVER WRITTEN AS LITERALS.
+#
+# This control used to plant `gw.LEG_SPEED_BY_LEG = {}`, which was a genuinely
+# stale default while an override shipped. On 2026-09-06 that override was
+# reverted on measured evidence (overnight/ab_leg1.py: 2/10 against 10/10,
+# p = 0.000714) -- and `{}` instantly stopped being stale. The control then
+# found 1 of 2 planted and the scanner's own proof of life had degraded, with
+# nothing failing to say so. A positive control written as a literal decays the
+# moment the thing it describes is corrected, which is precisely when the
+# scanner matters most.
+#
+# Derived plants cannot rot: each is asserted different from the shipped value
+# at runtime, so this control is correct whatever graph_walk ships tomorrow.
+_PLANT = {"STALL_CHANGE": 2.5 if gw.STALL_CHANGE != 2.5 else 9.75,
+          "MERGE_STEPS": not gw.MERGE_STEPS}
+for _f, _v in _PLANT.items():
+    assert _v != getattr(gw, _f), (
+        f"the positive control planted {_f}={_v!r}, which is what graph_walk "
+        f"actually ships — the plant is not stale and proves nothing")
 BAD = ("import graph_walk as gw\n"
-       "gw.STALL_CHANGE = 2.5\n"          # graph_walk ships 6.0
-       "gw.LEG_SPEED_BY_LEG = {}\n")      # graph_walk ships one override
+       + "".join(f"gw.{f} = {v!r}\n" for f, v in _PLANT.items()))
 stale, _, _ = scan(BAD, "<synthetic>")
 check("the scanner CAN detect a stale hardcoded default "
-      f"(found {len(stale)} of 2 planted)", len(stale) == 2)
+      f"(found {len(stale)} of {len(_PLANT)} planted)", len(stale) == len(_PLANT))
 check("and it names both the written value and the shipped one",
-      any(w == 2.5 and l == gw.STALL_CHANGE for _, f, w, l in stale
-          if f == "STALL_CHANGE"))
+      any(w == _PLANT["STALL_CHANGE"] and l == gw.STALL_CHANGE
+          for _, f, w, l in stale if f == "STALL_CHANGE"))
 
 GOOD = ('import graph_walk as gw\n'
         '_SHIPPED = {"STALL_CHANGE": gw.STALL_CHANGE}\n'
