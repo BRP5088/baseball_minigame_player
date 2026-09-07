@@ -1,0 +1,95 @@
+{
+  "question": "full-route streak to the dealer table at attempts=9",
+  "route": [
+    "portrait_room",
+    "bar_pool_room",
+    "bar_jukebox",
+    "dealer_table"
+  ],
+  "attempts": 9,
+  "trials": 10,
+  "config": {
+    "TRUST_RESET_SPAWN": true,
+    "RECOVER_MISSED": true,
+    "NULL_YAW_BEFORE_ALIGN": true,
+    "LEG_SPEED_BY_LEG": {},
+    "MERGE_STEPS_BY_LEG": []
+  },
+  "runs": [
+    {
+      "trial": 1,
+      "arrived": null,
+      "seconds": 1800.2,
+      "reason": "unmeasurable"
+    },
+    {
+      "arrived": true,
+      "depth": 4,
+      "seconds": 1200.8,
+      "at_table_recheck": true,
+      "agrees": true,
+      "kinds": [],
+      "measurable": true,
+      "trial": 2
+    },
+    {
+      "trial": 3,
+      "arrived": null,
+      "seconds": 1800.2,
+      "reason": "unmeasurable"
+    },
+    {
+      "trial": 4,
+      "arrived": null,
+      "seconds": 1800.2,
+      "reason": "unmeasurable"
+    },
+    {
+      "trial": 5,
+      "arrived": null,
+      "seconds": 1800.1,
+      "reason": "unmeasurable"
+    },
+    {
+      "arrived": true,
+      "depth": 4,
+      "seconds": 485.6,
+      "at_table_recheck": false,
+      "agrees": false,
+      "kinds": [],
+      "measurable": true,
+      "trial": 6
+    },
+    {
+      "trial": 7,
+      "arrived": null,
+      "seconds": 1800.4,
+      "reason": "unmeasurable"
+    },
+    {
+      "arrived": false,
+      "depth": 2,
+      "seconds": 1049.3,
+      "at_table_recheck": false,
+      "agrees": true,
+      "kinds": [
+        "wedged"
+      ],
+      "measurable": true,
+      "trial": 8
+    },
+    {
+      "trial": 9,
+      "arrived": null,
+      "seconds": 1800.1,
+      "reason": "unmeasurable"
+    },
+    {
+      "trial": 10,
+      "arrived": null,
+      "seconds": 1800.5,
+      "reason": "unmeasurable"
+    }
+  ],
+  "best_streak": 2
+}

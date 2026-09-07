@@ -1840,7 +1840,70 @@ user had already noticed near that path.
 you reach 0 of 3 times spends an hour per arm to record INVALID; at the restored
 leg 1 the start node is reached 10/10 at a 51.6s median.
 
-**OPEN-14 — The restored jukebox leg is IN FLIGHT as a full-route streak
+**OPEN-14 — MEASURED 2026-09-07 (02:26-06:45): the full-route streak to the
+table at attempts=9 arrived 1 of 3 valid trials; 7 of 10 were CENSORED by the
+ceiling; and the one other "arrival" was `identify()` naming a pose it must not.**
+`overnight/streak_table.py`, 10 trials, route `portrait_room -> bar_pool_room ->
+bar_jukebox -> dealer_table`, `attempts=9`, `start_hint=SPAWN`, `shots=`, 1800s
+external ceiling (`overnight/streak_table.json`, `.log`, `streak_table_arrivals.jpg`,
+`streak_table_table_ends.jpg`):
+
+    trial   outcome    depth   seconds   at_table recheck
+      1     INVALID      -       1800    ceiling; dealer_table attempted 6x, 19 sweeps, ink max 0.0415, 7 resets
+      2     ARRIVED     4/4      1201    True  — the prompt, twice, 0.8s apart
+      3     INVALID      -       1800    ceiling; 6 table attempts, 26 sweeps, ink max 0.0253
+      4     INVALID      -       1800    ceiling; 7 table attempts, 15 sweeps
+      5     INVALID      -       1800    ceiling; 6 table attempts, 19 sweeps, ink max 0.0370
+      6     "ARRIVED"   4/4       486    FALSE — verified by identify() at 194/1.53, one sweep at ink 0.0105
+      7     INVALID      -       1800    ceiling; 5 table attempts, 15 sweeps
+      8     missed      2/4      1049    wedged on the jukebox leg, all 9 attempts
+      9     INVALID      -       1800    ceiling; 5 table attempts, 14 sweeps
+     10     INVALID      -       1800    ceiling; 5 table attempts, 17 sweeps
+
+**Honest tally: 1 arrived of 3 valid, best streak 1.** The harness printed 2/3
+and streak 2; both count trial 6, which does not count.
+
+**TRIAL 6 IS A HOLE IN THE VERIFIED PATH, AND IT IS THE FIRST ITEM FOR THE
+MORNING.** `locate()` (graph_walk.py:260-292) tries `at_table()` and, when that
+is False, falls through to `places.identify()` and returns whatever room it
+names. `places/dealer_table/` holds three references, so `identify()` CAN name
+the table — from a distance where no prompt exists, because the references are
+the table VIEW. `go_to_node_verified` then logged `verified at dealer_table
+(dealer_table 194.000/1.530)` and counted it, while the independent `at_table()`
+re-read 0.8s later said False and the trial's only sweep peaked at ink 0.0105
+(`INK_MIN` 0.024). §7's rule — the table is a POSE, confirmed by `at_table()`,
+never `identify()` — is enforced in `confirm()` (node == GOAL) and NOT in
+`locate()`. The two "verified" frames make it plain: trial 2 stands close with
+the dealer group ahead; trial 6 is the same scene from further back. NOT FIXED
+here — it is a production guard and the overnight brief was refactor-and-audit
+only. The fix is one guard in `locate()`: for `GOAL`, `identify()` may never
+confirm; and one test that hands `locate()` a frame `identify()` names
+`dealer_table` while `at_table()` is False and asserts None.
+
+**THE CEILING CENSORED 7 OF 10 BY CONSTRUCTION.** Every censored trial reached
+`bar_jukebox` and then spent the rest of its 1800s on the table leg, 5-7
+attempts each — and after each miss `locate()` could not name the position, so
+an `attempts=9` retry on the goal leg is a FULL RESET AND ROUTE RE-WALK (6-7
+resets per trial). The 780s maximum that sized the ceiling came from OPEN-5,
+where retries are local. §10.14, self-inflicted. A streak to the table is not
+measurable at this ceiling; it needs either local retries on the goal leg or a
+ceiling of `attempts x route-time`.
+
+**WHAT THE 37 TABLE-LEG END FRAMES SAY.** The leg ends in the dark, against an
+NPC, against the bar-top, or looking at the floor — including in both trials
+that then "arrived": the arrival happens only after `reach_table` turns the
+camera. The sweeps DO see the prompt at times (ink max 0.042, 0.037, 0.030,
+0.025 across trials, above `INK_MIN` 0.024) without satisfying `at_table()`'s
+score gate, so the character is near the prompt's edge, not far from it. That
+is OPEN-17's arrival-heading gap with frames instead of an ordering.
+
+**What did NOT fail:** `portrait_room` and `bar_pool_room` arrived by attempt 2
+in all ten trials; `bar_jukebox` arrived in 9 of 10 (2-7 attempts; trial 8
+exhausted nine). The restored jukebox leg is not the problem it was.
+
+The original ticket text, for the harness lessons, follows.
+
+**OPEN-14 (original) — The restored jukebox leg as a full-route streak
 (started 2026-09-07 02:26).** The leg was 4.3x too short and could not reach its
 destination; it is back to its recorded 1.031 units over 3.30s. The short-vs-
 restored A/B this ticket originally asked for is superseded: the short leg is
