@@ -48,8 +48,12 @@ read the last 40 lines of the log for the trial that was in flight.
    over the dealer's body; OCR reads both with 0 false positives on every
    negative on disk (overnight/census/prompt_ocr_ab.json). Local-contrast masks
    were measured and refused (prompt_mask_ab.json).
-3. Score the A/B: overnight/ab_goal_leg.json; write OPEN-21's result with n,
-   Fisher p and the pre-sweep frame classes (tools/goal_leg_sheet.py).
+3. Score the A/B TWICE: (a) as the harness scored it (overnight/ab_goal_leg.json,
+   at_table() after the sweep, Fisher p); (b) post hoc with
+   `tools/goal_leg_sheet.py`, which re-reads every PRE-sweep frame with the mask
+   AND OCR and reports "prompt on screen at the leg's end" per arm -- the
+   leg-level criterion the shipped detector cannot see (5 legs in: shipped 1/3,
+   recorded 1/2, harness 0/5). Write OPEN-21 with both and say which is which.
 
 ## Done this morning (all committed)
 - `locate()` may never confirm the GOAL by appearance (dfb1b6e, 697c7ac): the
