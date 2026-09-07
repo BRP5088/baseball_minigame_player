@@ -131,3 +131,127 @@ t = rep(t, '''    def test_a_miss_looks_back_and_k_may_regress(self):''', '''   
 
     def test_a_miss_looks_back_and_k_may_regress(self):''')
 open(p, "w").write(t); print("tests added")
+
+# ---- 4. TURN STOPS ARE VERIFIED (the user's correction, 2026-09-07 19:35: no NPC blocked the stairs).
+# Trial 3 took the plan's turn stop at the door on thin/blind pushes while the character was still short of
+# the door, so turning north faced the office, not the staircase. A turn stop's own chain frame is a picture:
+# after turning, match it; if nothing credible fits, turn back to the walking heading, push once more, and
+# retry the turn (up to TURN_RETRY_MAX). Diagnosis "an NPC on the stairs" was WRONG and is withdrawn.
+s = open("chain_walk.py").read()
+s = rep(s, "LOST_MAX = 9\n", '''LOST_MAX = 9
+# A turn stop is verified against its own frame after the turn; if nothing
+# credible fits, the loop turns back, pushes once more along the walking
+# heading and retries, this many times, before accepting the turn unverified.
+TURN_RETRY_MAX = 3
+''')
+s = rep(s, '''    lost = 0                    # iterations with nothing credible, budget spent
+''', '''    lost = 0                    # iterations with nothing credible, budget spent
+    turn_retries = 0            # retries spent on the current turn stop
+    walk_heading = None         # the last heading a push was made along
+''')
+s = rep(s, '''        if do_push:
+            push(PUSH_MAG, PUSH_SEC)
+            res["pushes"] += 1
+''', '''        if do_push:
+            push(PUSH_MAG, PUSH_SEC)
+            res["pushes"] += 1
+            if heading is not None:
+                walk_heading = heading
+''')
+s = rep(s, '''        if not do_push:
+            # A turn-only target: a stationary run in the recording (a corner,
+            # a settle). Turned on the spot, reached by construction, no locate.
+            k = target_k
+            misses = 0
+            stalls = 0
+            record({"iteration": iteration, "k": k, "target": target_k,
+                    "fix": None, "action": "turned", "lateral": None,
+                    "at_end": False, "seconds": round(now() - it_t0, 2),
+                    "elapsed": round(now() - t0, 2)})
+            log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turned"
+                f"{'' if turned else ' (skipped, same heading)'} to {heading}")
+            continue
+''', '''        if not do_push:
+            # A turn-only target: a stationary run in the recording (a corner,
+            # a settle). VERIFIED against the stop's own frame: if nothing
+            # credible fits after the turn, the plan reached this stop on thin
+            # or blind pushes while the character is still short of it (trial
+            # 3 turned north into the office instead of onto the stairs), so
+            # turn back, push once more along the walking heading, and retry.
+            fix_t = chain.locate(img, target_k)
+            inl_t = 0 if fix_t is None else (getattr(fix_t, "inliers", 0) or 0)
+            verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS
+            if (not verified and turn_retries < TURN_RETRY_MAX
+                    and walk_heading is not None):
+                turn_retries += 1
+                turn_to(walk_heading)
+                last_cmd = walk_heading
+                push(PUSH_MAG, PUSH_SEC)
+                res["pushes"] += 1
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix_t), "action": "turn-retry",
+                        "lateral": None, "at_end": False,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-retry "
+                    f"{turn_retries}/{TURN_RETRY_MAX}: the stop's frame did not "
+                    f"fit ({inl_t} inliers); one more push along {walk_heading:.1f}")
+                continue
+            k = target_k
+            misses = 0
+            stalls = 0
+            turn_retries = 0
+            action = "turned" if verified else "turned-unverified"
+            record({"iteration": iteration, "k": k, "target": target_k,
+                    "fix": _fix_row(fix_t), "action": action, "lateral": None,
+                    "at_end": False, "seconds": round(now() - it_t0, 2),
+                    "elapsed": round(now() - t0, 2)})
+            log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action}"
+                f"{'' if turned else ' (skipped, same heading)'} to {heading}"
+                f"  ({inl_t} inliers at the stop)")
+            continue
+''')
+open("chain_walk.py", "w").write(s); print("turn-stop verification patched")
+
+t = open("tests/routing/test_chain_walk.py").read()
+t = rep(t, '''    def test_a_miss_looks_back_and_k_may_regress(self):''', '''    def test_a_turn_stop_that_does_not_match_is_retried_after_one_more_push(self):
+        # Chain: spawn, 2 walking frames east (90), a stop turning to 0, then
+        # walking north. The first time the loop reaches the stop its frame
+        # does not fit (weak): it turns BACK to 90, pushes once, then retries
+        # the stop; the second time it fits and the plan proceeds north.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, -0.35), (0.0, 0.0),
+                                     (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        self.assertEqual(chain_walk.plan_indices(wps),
+                         [(1, True, 90.0), (3, False, 0.0), (4, True, 0.0), (5, True, 0.0)])
+        # locate calls in order: it1 push -> Fix(k=1); it2 turn-verify -> weak;
+        # it3 (after the retry push) turn-verify -> credible; it4 push -> Fix(4)
+        ch = FakeChain(6, [Fix(k=1), Fix(k=3, inliers=8), Fix(k=3, inliers=90),
+                           Fix(k=4), Fix(k=5)])
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=6)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:4], ["advanced", "turn-retry", "turned", "advanced"])
+        turns = [e[1] for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns, [90.0, 0.0, 90.0, 0.0],
+                         "turn to the stop, back to the walking heading, then the stop again")
+        self.assertEqual(rig.chain.locate_calls[1:3], [3, 3],
+                         "the stop is verified against its OWN index")
+        self.assertTrue(res["arrived"])
+
+    def test_a_turn_stop_is_accepted_unverified_after_the_retries(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(4, [Fix(k=1)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=8.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
+        self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
+
+    def test_a_miss_looks_back_and_k_may_regress(self):''')
+open("tests/routing/test_chain_walk.py", "w").write(t); print("turn-stop tests added")
