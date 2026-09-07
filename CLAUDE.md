@@ -2528,6 +2528,17 @@ that is why reaching `bar_jukebox` took 2-8 attempts and up to 1065s today
 where OPEN-5 had 9/9. Unmeasured whether it is session variance or the
 restored leg's own endpoint; the frames are on disk.
 
+**(b) IS CLOSED AS DESIGNED (measured on Snoopy, 2026-09-07 evening):** the
+neighbouring table cannot be a localiser-confirmed node. Ten references at the
+landing pose (five headings x two walks) fail leave-one-out at ratios 1.00-1.22
+against `MIN_RATIO` 1.35, with `bar_jukebox` the runner-up every time and one
+frame naming it outright; non-disruption (333 frames) and discrimination from
+the dealer's table both pass (`overnight/census/side_table_refs.json`,
+`tools/side_table_refs.py`). It is the office corridor/door shape: a table
+apart looks the same to ORB. What survives of (b) is the PATH from that landing
+to the prompt, measurable without naming (`overnight/side_table_leg.py`), and a
+correction that fires on "no prompt after the extension".
+
 **Candidates, each an A/B, none built:** (a) extend the recorded goal leg by
 ~0.10u — the edge is at +0.05, walk 3's +0.05 point was not wedged; (b) give
 the neighbouring table a place name from these frames and record the short leg

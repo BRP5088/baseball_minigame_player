@@ -10,6 +10,10 @@ result `overnight/ab_goal_extend.json` after every trial, frames under
 neighbouring table and record its leg to the dealer; (c) the jukebox leg's
 wedge (69/106 today). NOTHING CPU-bound beside the console run.
 
+(b) CLOSED AS A NAMED NODE (Snoopy, ten references): bar_side_table is
+confusable with bar_jukebox (ratios 1.00-1.22 vs 1.35). Run only the PATH half
+after (a): overnight/side_table_leg.py (landing recorded as 'unnamed').
+
 (c) SHARPENED while (a) runs: the nine darkest jukebox leg-end frames of today
 are all the same picture -- the character pressed into the jukebox CABINET
 (dark surface fills the frame, no compass strip), i.e. geometry, not an NPC;

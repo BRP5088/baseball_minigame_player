@@ -1,0 +1,115 @@
+{
+ "name": "bar_side_table",
+ "candidates": [
+  "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h0_1788804265269.jpg",
+  "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h1_1788804267176.jpg",
+  "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h2_1788804269350.jpg",
+  "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h3_1788804270881.jpg",
+  "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h4_1788804272689.jpg",
+  "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h0_1788804786897.jpg",
+  "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h1_1788804788610.jpg",
+  "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h2_1788804790255.jpg",
+  "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h3_1788804791800.jpg",
+  "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h4_1788804794465.jpg"
+ ],
+ "A": [
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h0_1788804265269.jpg",
+   "room": null,
+   "score": 132,
+   "margin": 1.0,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h1_1788804267176.jpg",
+   "room": null,
+   "score": 140,
+   "margin": 1.08,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h2_1788804269350.jpg",
+   "room": null,
+   "score": 115,
+   "margin": 1.06,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h3_1788804270881.jpg",
+   "room": null,
+   "score": 76,
+   "margin": 1.01,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h4_1788804272689.jpg",
+   "room": null,
+   "score": 3,
+   "margin": 1.0,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h0_1788804786897.jpg",
+   "room": null,
+   "score": 207,
+   "margin": 1.02,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h1_1788804788610.jpg",
+   "room": null,
+   "score": 286,
+   "margin": 1.22,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h2_1788804790255.jpg",
+   "room": "bar_jukebox",
+   "score": 228,
+   "margin": 1.87,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h3_1788804791800.jpg",
+   "room": null,
+   "score": 118,
+   "margin": 1.03,
+   "ok": false
+  },
+  {
+   "frame": "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h4_1788804794465.jpg",
+   "room": null,
+   "score": 11,
+   "margin": 1.38,
+   "ok": false
+  }
+ ],
+ "B": {
+  "checked": 333,
+  "named": []
+ },
+ "C": [
+  {
+   "frame": "test_fixtures/table_prompt_cases/prompt_low_ink_recorded_goalleg_t6.jpg",
+   "room": "dealer_table",
+   "score": 152,
+   "margin": 2.2,
+   "ok": true
+  },
+  {
+   "frame": "test_fixtures/table_prompt_cases/prompt_on_bright_table_goalleg_t1.jpg",
+   "room": null,
+   "score": 31,
+   "margin": 1.0,
+   "ok": true
+  },
+  {
+   "frame": "test_fixtures/table_prompt_cases/prompt_over_dealer_dealer_circle_f0020.jpg",
+   "room": "dealer_table",
+   "score": 446,
+   "margin": 3.75,
+   "ok": true
+  }
+ ],
+ "ok": false
+}
