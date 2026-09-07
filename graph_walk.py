@@ -981,6 +981,16 @@ def home_to_table(capture=None, read_heading=None, log=print):
 APPROACH_STEP_SEC = 0.4
 APPROACH_OVERSHOOT = 1.6      # of the recorded duration, then give up
 APPROACH_AIM_EVERY = 3        # steps between aim sweeps
+# WALK THE GOAL LEG AS RECORDED instead of approach_goal()'s straight line.
+# approach_goal predates the jukebox-leg restoration (2026-09-05): it was built
+# when the table leg started 0.7 units early, and it walks steps[-1]["bearing"]
+# (10.6 deg off the leg's net direction) in 0.4s chunks for 1.6x the recorded
+# time. In OPEN-14 it exhausted that budget 37 of 37 times ("stepped 6.8s of a
+# 6.5s budget without finding the prompt") and left the character pressed into
+# the bar 17 of 37 times. Under this flag the goal leg goes through walk_link
+# like every leg that arrives, and reach_table's sweep still follows. The flag
+# ships False until overnight/ab_goal_leg.py has measured it (CLAUDE.md 10.2).
+GOAL_LEG_AS_RECORDED = False
 
 
 def approach_goal(steps, capture=None, read_heading=None, log=print):
@@ -1832,6 +1842,19 @@ def align_at_node(node, capture=None, read_heading=None, log=print):
 _LAST_LEG_END = {}
 
 
+def _save_shot(shots, stem, img):
+    """Write one jpeg, STAMPED — `{stem}_{epoch_ms}.jpg`, never `{stem}.jpg`.
+
+    A fixed name is overwritten by every attempt and every trial, so a 10-trial
+    A/B once ended with ONE frame per node — the last one — and the failures
+    it was collected to explain had already been overwritten by later
+    successes.
+    """
+    os.makedirs(shots, exist_ok=True)
+    img.convert("RGB").save(
+        os.path.join(shots, f"{stem}_{int(time.time() * 1000)}.jpg"), quality=85)
+
+
 def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
            shots=None):
     """Walk from `start` to `goal` over the recorded graph.
@@ -1862,7 +1885,7 @@ def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
     legs, at, unverified = [], start, []
     for a, b in zip(path, path[1:]):
         log(f"    leg {a} -> {b}")
-        if b == GOAL:
+        if b == GOAL and not GOAL_LEG_AS_RECORDED:
             # The recorded push is replaced by a checked approach; see
             # approach_goal(). Everything upstream still replays as recorded.
             _reached = approach_goal(m.steps_for(a, b), capture,
@@ -1885,24 +1908,26 @@ def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
         # leaves the character at the table but facing a heading that varies
         # with where it came to rest, and the prompt only shows over a narrow
         # arc — so sweep for it before calling the leg failed.
-        if b == GOAL:
-            _at_table = reach_table(capture, read_heading, log=log)
-            log(f"      reach_table: {'at the table' if _at_table else 'GAVE UP'}")
         img = capture()
         # THIS IS THE FRAME THAT CAN DIAGNOSE THE LEG: the leg has ended and
-        # recover_to_node (below) has not run yet. Publish it so follow_verified
-        # can classify the leg rather than the frame it happens to hold — see
-        # _LAST_LEG_END.
+        # neither recover_to_node (below) nor reach_table has run yet. Publish
+        # it so follow_verified can classify the leg rather than the frame it
+        # happens to hold — see _LAST_LEG_END.
         _LAST_LEG_END[b] = img
         if shots:
-            os.makedirs(shots, exist_ok=True)
-            # STAMPED, NOT `at_{b}.jpg`. A fixed name is overwritten by every
-            # attempt and every trial, so a 10-trial A/B ended with ONE frame
-            # per node — the last one — and the failures it was collected to
-            # explain had already been overwritten by later successes.
-            img.convert("RGB").save(
-                os.path.join(shots, f"at_{b}_{int(time.time() * 1000)}.jpg"),
-                quality=85)
+            _save_shot(shots, f"at_{b}", img)
+        if b == GOAL:
+            # THE SWEEP IS A RECOVERY AND THE FRAME ABOVE PRECEDES IT. Until
+            # 2026-09-07 the goal's frame was taken AFTER reach_table, so all 37
+            # OPEN-14 table-leg frames describe where the sweep left the camera
+            # (six of them at 253-258, the far end of a 19-heading circle), not
+            # where the leg ended. The post-sweep frame is still kept, under
+            # its own name, because it is the one confirm() judges.
+            _at_table = reach_table(capture, read_heading, log=log)
+            log(f"      reach_table: {'at the table' if _at_table else 'GAVE UP'}")
+            img = capture()
+            if shots:
+                _save_shot(shots, f"at_{b}_postsweep", img)
         verdict, detail = confirm(m, b, img, log=log)
         # A leg that did not land is worth a short hunt BEFORE walking the next
         # one from an unknown spot. Only for nodes the localiser can confirm —
@@ -2085,12 +2110,16 @@ def follow_verified(m, route, capture=None, read_heading=None, log=print,
         # successes never were. So "the 4 failures cluster within 27-87px" had
         # nothing to compare against — a spread means nothing without the
         # spread of the arrivals. One jpeg per arrival buys the comparison.
-        if shots and ok and before is not None:
+        # ...and it must be the frame follow() published at the leg's END. It
+        # was `before` until 2026-09-07 — the capture taken before the whole
+        # attempt, i.e. the PREVIOUS node's arrival: both ok_dealer_table
+        # frames from OPEN-14 read bearing 0.8 and identified bar_jukebox at
+        # 491 and 295 matches. The comment eight lines up already names that
+        # trap for failures; the success path had walked into it anyway.
+        end = _LAST_LEG_END.get(node)
+        if shots and ok and end is not None:
             try:
-                import os as _os
-                _d = _os.path.join(shots, "success")
-                _os.makedirs(_d, exist_ok=True)
-                before.save(_os.path.join(_d, f"ok_{node}_{int(time.time())}.jpg"))
+                _save_shot(os.path.join(shots, "success"), f"ok_{node}", end)
             except Exception:
                 pass                        # bookkeeping must never end a run
         if not ok:
