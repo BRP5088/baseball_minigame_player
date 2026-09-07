@@ -1,39 +1,4 @@
-"""(c) LEG_TRIM_UNITS_BY_LEG: trim the END of a recorded leg by N walk-units. APPLY ONLY WHEN NO LIVE RUN IMPORTS graph_walk."""
-p = "graph_walk.py"; s = open(p).read()
-def rep(old, new):
-    global s
-    assert s.count(old) == 1, (s.count(old), old[:60]); s = s.replace(old, new)
-rep("LEG_SPEED_BY_LEG = {}\n", '''LEG_SPEED_BY_LEG = {}
-# TRIM THE END OF A RECORDED LEG by this many walk-units (dur x speed), taken
-# off its last step(s). Every leg ends by walking into something (§11): the
-# human decelerated into the destination, the executor replays the tail as a
-# fresh push. 2026-09-07 the jukebox leg ended WEDGED in 69 of 106 executions,
-# pressed into the jukebox cabinet itself (dark frame, no compass strip). Its
-# last step is 0.14s at 0.319 = 0.045u. Ships EMPTY; flips only on an A/B
-# (overnight/ab_jukebox_trim.py). Keyed like LEG_SPEED_BY_LEG.
-LEG_TRIM_UNITS_BY_LEG = {}
-
-
-def _trimmed(steps, units):
-    """Remove `units` of dur x speed from the END of `steps`; never below zero."""
-    if not units or units <= 0:
-        return steps
-    out = [dict(st) for st in steps]
-    left = float(units)
-    while out and left > 1e-9:
-        st = out[-1]
-        sp = st.get("speed", 0.2)
-        have = st["dur"] * sp
-        if have <= left + 1e-9:
-            out.pop(); left -= have
-        else:
-            st["dur"] = round((have - left) / sp, 4); left = 0.0
-    return out
-''')
-rep("    steps = _scaled(steps, leg_scale(a, b))\n", "    steps = _scaled(steps, leg_scale(a, b))\n    steps = _trimmed(steps, LEG_TRIM_UNITS_BY_LEG.get((a, b), 0.0))\n")
-open(p, "w").write(s); print("patched graph_walk.py (leg trim)")
-
-open("tests/routing/test_leg_trim.py", "w").write('''"""LEG_TRIM_UNITS_BY_LEG takes walk-units off the END of a recorded leg, in walk_link.
+"""LEG_TRIM_UNITS_BY_LEG takes walk-units off the END of a recorded leg, in walk_link.
 
 Pinned against the recorded jukebox leg (five steps north, last 0.14s at 0.319 =
 0.045u): a 0.045u trim removes exactly the last step, 0.10u removes it and
@@ -118,5 +83,3 @@ class Trim(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-''')
-print("wrote tests/routing/test_leg_trim.py")

@@ -671,6 +671,7 @@ def walk_link(m, a, b, capture=None, read_heading=None, log=print,
     if MERGE_STEPS:
         steps = merge_steps(steps)
     steps = _scaled(steps, leg_scale(a, b))
+    steps = _trimmed(steps, LEG_TRIM_UNITS_BY_LEG.get((a, b), 0.0))
     if (a, b) in MERGE_STEPS_BY_LEG:
         steps = merge_steps(steps)
     # Aim the doorway traverse away from the door it currently clips. A no-op
@@ -1499,6 +1500,31 @@ def _doorway_biased(a, b, steps):
 
 
 LEG_SPEED_BY_LEG = {}
+# TRIM THE END OF A RECORDED LEG by this many walk-units (dur x speed), taken
+# off its last step(s). Every leg ends by walking into something (§11): the
+# human decelerated into the destination, the executor replays the tail as a
+# fresh push. 2026-09-07 the jukebox leg ended WEDGED in 69 of 106 executions,
+# pressed into the jukebox cabinet itself (dark frame, no compass strip). Its
+# last step is 0.14s at 0.319 = 0.045u. Ships EMPTY; flips only on an A/B
+# (overnight/ab_jukebox_trim.py). Keyed like LEG_SPEED_BY_LEG.
+LEG_TRIM_UNITS_BY_LEG = {}
+
+
+def _trimmed(steps, units):
+    """Remove `units` of dur x speed from the END of `steps`; never below zero."""
+    if not units or units <= 0:
+        return steps
+    out = [dict(st) for st in steps]
+    left = float(units)
+    while out and left > 1e-9:
+        st = out[-1]
+        sp = st.get("speed", 0.2)
+        have = st["dur"] * sp
+        if have <= left + 1e-9:
+            out.pop(); left -= have
+        else:
+            st["dur"] = round((have - left) / sp, 4); left = 0.0
+    return out
 
 # Record rich-but-unrecognised views seen while walking, as map candidates.
 #
