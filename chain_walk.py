@@ -149,6 +149,22 @@ LOST_MAX = 9
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
 TURN_RETRY_MAX = 3
+# WIDE RE-LOCALISATION once the blind budget is spent: search this many chain
+# indices AHEAD of k for a STRONG fix before counting misses. Batch 2 trials 1
+# and 2 (2026-09-07 19:4x): at the office exit the scene is a distant facade
+# that looks the same from the doorway and from halfway across the street, the
+# loop crossed in two pushes and stood at the portraits inside the building
+# while the estimate still said "doorway"; nothing within [k-1, k+3] could
+# ever match again. Sixty indices spans the street crossing and the
+# portrait room beyond it (chain 64 -> 126).
+WIDE_AHEAD = 60
+# A wide-search fix is believed only when it is STRONG: at least this many
+# inliers AND at least twice the runner-up. On this chain wrong-place matches
+# reach p95 117 / max 152 inliers (chain_user_1853_closed.json FAR), so a count
+# alone cannot gate a wide window; the margin over the runner-up is what a
+# wrong-place match lacks. Provisional; logged per use.
+STRONG_MIN_INLIERS = 60
+STRONG_MARGIN = 2.0
 # |stick| at or under this is "not walking": the tap records the COMMANDED value
 # and a settle or a turn is exactly 0.0. Frames whose ly is None (no tap, or a
 # chain older than this field) count as walking, so nothing is silently skipped.
@@ -742,7 +758,26 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # for up to BLIND_MAX pushes -- a featureless door panel is exactly
             # where the plan has to keep moving -- and only then treat the
             # silence as a blockage.
-            if blind < BLIND_MAX and not at_end:
+            wide = None
+            if blind >= BLIND_MAX and not at_end and k < n - 1:
+                # The budget is spent: before counting this as a miss, look
+                # far AHEAD for a strong fix (see WIDE_AHEAD above).
+                wide = chain.locate(img, k + 1, window=WIDE_AHEAD)
+                w_inl = 0 if wide is None else (getattr(wide, "inliers", 0) or 0)
+                w_sec = 0 if wide is None else (getattr(wide, "second", 0) or 0)
+                if not (wide is not None and w_inl >= STRONG_MIN_INLIERS
+                        and w_inl >= STRONG_MARGIN * max(1, w_sec)
+                        and int(wide.k) > k):
+                    wide = None
+            if wide is not None:
+                k = min(int(wide.k), n - 1)
+                fix = wide
+                blind = 0
+                lost = 0
+                misses = 0
+                stalls = 0
+                action = "relocalised"
+            elif blind < BLIND_MAX and not at_end:
                 blind += 1
                 k = target_k
                 misses = 0
