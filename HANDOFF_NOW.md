@@ -14,6 +14,14 @@ wedge (69/106 today). NOTHING CPU-bound beside the console run.
 confusable with bar_jukebox (ratios 1.00-1.22 vs 1.35). Run only the PATH half
 after (a): overnight/side_table_leg.py (landing recorded as 'unnamed').
 
+REFUTED (Snoopy, 38 landing frames, tools/landing_signature.py): "identify()
+names bar_jukebox after a side-table landing and dealer_table/None after a
+dealer-table one". Most landings of BOTH kinds read None at 60-136 (walk 1 side:
+75-115 None; walk 3 dealer: 59-104 None); only walk 2's side landings named the
+jukebox (3 of 4). identify() is not a landing classifier. A (b) correction can
+only fire unconditionally on "no prompt after the extension" and be A/B'd as
+such; the path itself is still worth measuring (side_table_leg.py).
+
 (c) SHARPENED while (a) runs: the nine darkest jukebox leg-end frames of today
 are all the same picture -- the character pressed into the jukebox CABINET
 (dark surface fills the frame, no compass strip), i.e. geometry, not an NPC;
