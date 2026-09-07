@@ -17,6 +17,11 @@ Rebuild + push state after every trial (or on any plan change):
     Artifact write_db  collection=dash doc_id=state  file_path=overnight/dashboard_state.json
 
 Comments on the page sent to Claude wake this session (auto-replies armed).
+The page also has an INBOX: at every board update, `Artifact read_db
+collection=dash doc_id=inbox` (messages: [{ts, when, text}]); answer by
+appending {ts, when, to, text} to `overnight/dashboard_replies.json`, rebuild,
+write_db. "Ask the board" on the page is the viewer's own Claude with only the
+board's data -- not this session.
 
 ## Waiting for the run to end (do these first, in order)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
