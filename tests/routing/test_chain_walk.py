@@ -277,23 +277,26 @@ class ArrivalStopsEverything(unittest.TestCase):
                                      (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
         plan = chain_walk.plan_indices(wps)
-        self.assertEqual(plan, [(1, True, 90.0), (2, True, 90.0),
-                                (6, False, 0.0), (7, True, 0.0), (8, True, 0.0)])
-        # Four locates: the turn-only iteration never asks the sensor, and
+        # Push targets are one PUSH apart by the recorded stick (0.35 x 0.25 s
+        # = 0.0875 u a frame against 0.18 u a push), so frame 2 is not a target;
+        # the first walking frame after a stop always is, and so is the last.
+        self.assertEqual(plan, [(1, True, 90.0), (6, False, 0.0), (7, True, 0.0),
+                                (8, True, 0.0)])
+        # Three locates: the turn-only iteration never asks the sensor, and
         # neither does the arrival iteration.
-        ch = FakeChain(9, [Fix(k=1, scale=1.0), Fix(k=2, scale=1.0),
-                           Fix(k=7, scale=1.0), Fix(k=8, scale=1.0)])
+        ch = FakeChain(9, [Fix(k=1, scale=1.0), Fix(k=7, scale=1.0),
+                           Fix(k=8, scale=1.0)])
         ch.waypoints = wps
-        rig = Rig(ch, table_at=7)
+        rig = Rig(ch, table_at=6)
         res = rig.go()
         self.assertTrue(res["arrived"])
         actions = [f["action"] for f in res["fixes"]]
-        self.assertEqual(actions, ["advanced", "advanced", "turned",
-                                   "advanced", "advanced", "arrived"])
+        self.assertEqual(actions, ["advanced", "turned", "advanced",
+                                   "advanced", "arrived"])
         self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
                          [90.0, 0.0], "one turn per heading change, none per frame")
         pushes = [e for e in rig.events if e[0] == "push"]
-        self.assertEqual(len(pushes), 5, "no push during the stationary run")
+        self.assertEqual(len(pushes), 4, "no push during the stationary run")
 
     def test_an_unknown_stick_is_walked_not_collapsed(self):
         # No controller on the Mac: the recorder writes lx=ly=0.0 and says so
@@ -340,8 +343,11 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(chain_walk.FIX_MIN_INLIERS, 29)
         ch = FakeChain(8, default=Fix(k=3, scale=1.2, dx=-131.0, inliers=13))
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=5.05)
-        self.assertEqual([f["k"] for f in res["fixes"]], [0] * len(res["fixes"]))
+        res = always_turning(rig.go, time_cap=9.05)
+        # k follows the PLAN (dead-reckoned to the target for BLIND_MAX
+        # pushes), never the weak fix's own claim of 3.
+        self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 3, 4, 4, 4, 4, 4, 4])
+        self.assertNotIn(3, [f["k"] for f in res["fixes"]][4:])
         self.assertIn("weak", [f["action"] for f in res["fixes"]])
         self.assertEqual(rig.strafes(), [], "a weak dx must not steer")
         self.assertEqual(rig.count("jump"), 1, "four weak fixes are a stall")
@@ -402,18 +408,19 @@ class Escapes(unittest.TestCase):
 
     def test_misses_escape_after_MISS_MAX(self):
         self.assertEqual(chain_walk.MISS_MAX, 3)
-        rig = Rig(FakeChain(4, default=None), table_at=11)
+        rig = Rig(FakeChain(12, default=None), table_at=15)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual([i for i, a in enumerate(acts, 1)
-                          if a.startswith("escape")], [3, 6, 9])
-        self.assertEqual([acts[2], acts[5], acts[8]],
+                          if a.startswith("escape")], [7, 10, 13],
+                         "four blind advances first, then misses count")
+        self.assertEqual([acts[6], acts[9], acts[12]],
                          ["escape:jump", "escape:left", "escape:right"])
         self.assertTrue(all(f["fix"] is None for f in res["fixes"]))
         self.assertEqual(rig.count("jump"), 1)
 
     def test_never_two_escapes_without_a_push_between(self):
-        rig = Rig(FakeChain(4, default=None), table_at=11)
+        rig = Rig(FakeChain(12, default=None), table_at=15)
         rig.go()
         pushed = True
         for e in rig.events:
@@ -592,11 +599,19 @@ class ConsecutiveCounters(unittest.TestCase):
         # miss, miss, a fix that is READ but does not advance, miss, miss.
         # Consecutively that is never 3, so nothing escapes. Cumulatively it is
         # 4, and the escape fires on the fourth iteration.
-        rig = Rig(FakeChain(4, [None, None, Fix(k=0, scale=0.5), None, None]),
+        # A blind sensor first dead-reckons BLIND_MAX pushes (the target is
+        # believed reached); only then do misses count. Every miss past k=0
+        # also asks a look-back, which consumes a scripted entry: the credible
+        # fix is the 12th locate call. It does not advance (scale 0.5) but it
+        # is READ, so the two misses before it and the two after never sum.
+        self.assertEqual(chain_walk.BLIND_MAX, 4)
+        rig = Rig(FakeChain(12, [None] * 11 + [Fix(k=4, scale=0.5)]),
                   table_at=None)
-        res = always_turning(rig.go, time_cap=5.05)          # exactly five 1.0s iterations
+        res = always_turning(rig.go, time_cap=9.05)          # exactly nine 1.0s iterations
         self.assertEqual([f["action"] for f in res["fixes"]],
-                         ["miss", "miss", "stalled", "miss", "miss"])
+                         ["blind-advance"] * 4 + ["miss", "miss", "stalled",
+                                                  "blind-advance", "blind-advance"],
+                         "a READ fix resets both the miss count and the blind budget")
         self.assertEqual(rig.count("jump"), 0,
                          "a fix that could be READ must reset the miss count")
         self.assertEqual(rig.strafes(), [])
@@ -1136,8 +1151,8 @@ class DefaultConsoleWrappers(unittest.TestCase):
         self.assertEqual(lat[0]["lx"], -pose.STRAFE_MAG)
 
     def test_the_escape_presses_CROSS_and_sidesteps_on_the_same_axis(self):
-        self.table_at = 11
-        self._walk(FakeChain(4, default=None))
+        self.table_at = 15
+        self._walk(FakeChain(12, default=None))   # long enough to be blind, then miss
         self.assertEqual(self.presses, ["cross"],
                          "Cross IS jump (§8(g)) and is the only button this "
                          "module may press")

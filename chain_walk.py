@@ -121,6 +121,22 @@ TABLE_CHECK_TAIL = None
 # heading (turn on the spot, no push, no locate). STRIDE 1 costs no extra
 # iterations because the sensor's fix.k, not the target, drives the advance.
 STRIDE = 1
+# PUSH-SPACED TARGETS. A push target is emitted once the recorded stick has
+# covered PLAN_STEP_UNITS since the last one (|ly| x dt, the same stick-seconds
+# unit as PUSH_MAG x PUSH_SEC), so one push reaches about one target whatever
+# speed the human drove at. The user's drive held ~0.29 stick at 0.25 s per
+# frame = 0.07 u per frame, four frames a push: with one target per FRAME the
+# estimate fell four waypoints behind per push (trial 1b, 2026-09-07) and the
+# plan never reached the turn at the door. Frames without stick data fall back
+# to every STRIDE frames.
+PLAN_STEP_UNITS = PUSH_MAG * PUSH_SEC
+RECORD_PERIOD_SEC = 0.25          # chain_record's default when a row has no t
+# When the sensor is BLIND (no credible fix) the loop dead-reckons: it assumes
+# the push it just made reached its target, up to this many pushes in a row,
+# before it starts treating the silence as a blockage and escapes. A door
+# panel or a dark wall is featureless (7-16 keypoints, CLAUDE.md §8(g)), and
+# trial 1b showed the sensor goes blind exactly where the plan needs to turn.
+BLIND_MAX = 4
 # |stick| at or under this is "not walking": the tap records the COMMANDED value
 # and a settle or a turn is exactly 0.0. Frames whose ly is None (no tap, or a
 # chain older than this field) count as walking, so nothing is silently skipped.
@@ -272,8 +288,14 @@ def plan_indices(wps, stride=None):
     """
     stride = STRIDE if stride is None else max(1, int(stride))
     plan, run, last_heading, walked = [], [], None, 0
+    dist = 0.0                    # stick-seconds since the last push target
+    prev_t = None
     n = len(wps)
     for i, w in enumerate(wps):
+        t_now = getattr(w, "t", None)
+        dt = (t_now - prev_t) if (t_now is not None and prev_t is not None
+                                  and 0.0 < t_now - prev_t < 5.0) else RECORD_PERIOD_SEC
+        prev_t = t_now if t_now is not None else prev_t
         heading = getattr(w, "heading", None)
         if heading is None:
             heading = getattr(w, "cam", None)
@@ -298,9 +320,15 @@ def plan_indices(wps, stride=None):
             continue
         if run:
             plan.append((run[-1][0], False, run[-1][1]))
-            run, walked = [], 0
-        if walked % stride == 0:
+            run, walked, dist = [], 0, 0.0
+        if unknown or ly is None:
+            emit = walked % stride == 0
+        else:
+            dist += abs(ly) * dt
+            emit = walked == 0 or dist >= PLAN_STEP_UNITS
+        if emit:
             plan.append((i, True, heading))
+            dist = 0.0
         walked += 1
     if run:
         plan.append((run[-1][0], False, run[-1][1]))
@@ -479,6 +507,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     iteration = 0
     end_iters = 0               # iterations spent standing ON the last waypoint
     pi = 0                      # the plan pointer: first target past k
+    blind = 0                   # consecutive pushes made with no credible fix
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
                              None)
@@ -631,9 +660,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         weak = fix is not None and inl < FIX_MIN_INLIERS
         regressed = False
         if (fix is None or weak) and k > 0:
-            # LOOK BACK before believing a miss: the hint two behind widens the
-            # window to [k-3, k+1], which is where an over-advanced k's truth is.
-            back = chain.locate(img, max(0, k - LOOKBACK))
+            # LOOK BACK before believing a miss, as far back as the blind
+            # advances could have run ahead, and forward past the target.
+            back_hint = plan[max(0, pi - blind - 1)][0] if pi > 0 else 0
+            back_hint = max(0, min(back_hint, k - LOOKBACK))
+            back = chain.locate(img, back_hint,
+                                window=max(WINDOW, (k - back_hint) + WINDOW))
             binl = None if back is None else (getattr(back, "inliers", 0) or 0)
             if back is not None and binl >= FIX_MIN_INLIERS and (fix is None or binl > inl):
                 fix, inl, weak = back, binl, False
@@ -645,33 +677,45 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         if regressed:
             misses = 0
             stalls = 0
+            blind = 0
             action = "regressed"
-        elif fix is None:
-            misses += 1
-            if misses >= MISS_MAX:
-                action = escape()
-                escaped = True
+        elif fix is None or weak:
+            # THE SENSOR IS BLIND (nothing fit, or nothing credible). Dead-
+            # reckon: the push most likely reached its target, so believe that
+            # for up to BLIND_MAX pushes -- a featureless door panel is exactly
+            # where the plan has to keep moving -- and only then treat the
+            # silence as a blockage.
+            if blind < BLIND_MAX and not at_end:
+                blind += 1
+                k = target_k
                 misses = 0
-            else:
-                action = "miss"
-        elif weak:
-            # Readable but not credible: neither an advance nor a miss. It
-            # counts as a stall so a run of them still reaches the escape.
-            misses = 0
-            stalls += 1
-            if stalls >= STALL_MAX:
-                action = escape()
-                escaped = True
                 stalls = 0
+                action = "blind-advance"
+            elif fix is None:
+                misses += 1
+                if misses >= MISS_MAX:
+                    action = escape()
+                    escaped = True
+                    misses = 0
+                else:
+                    action = "miss"
             else:
-                action = "weak"
+                misses = 0
+                stalls += 1
+                if stalls >= STALL_MAX:
+                    action = escape()
+                    escaped = True
+                    stalls = 0
+                else:
+                    action = "weak"
         else:
             misses = 0
-            # Never further than ADVANCE_MAX ahead (one push passes about one
-            # waypoint; a wrong match must not run the plan ahead of the
+            blind = 0
+            # Never past the target this push was aimed at (one push, one
+            # target: a wrong match must not run the plan ahead of the
             # character) and never past the last waypoint (locate() may
             # honestly answer "past the end of the chain").
-            new_k = min(int(fix.k), k + ADVANCE_MAX, n - 1)
+            new_k = min(int(fix.k), max(target_k, k + ADVANCE_MAX), n - 1)
             # AN ADVANCE IS k ACTUALLY MOVING, not `reached` returning True.
             # At the last waypoint `target_k` IS k, so an honest "I am at or
             # past it" satisfies `reached` on every iteration forever: the
