@@ -84,3 +84,4 @@ tests_quarantine/__pycache__/
 # Subagent scratch notes — see agent_progress/README.md
 agent_progress/*
 !agent_progress/README.md
+.console_busy

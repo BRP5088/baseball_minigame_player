@@ -973,6 +973,34 @@ inside tolerance, so that inequality holds BY CONSTRUCTION. It looked
 devastating and measured the loop's exit condition. The real version compares
 the spread of COMMANDED bearings against the spread of ACHIEVED headings.
 
+**13a. THE "NEVER RUN OFFLINE WORK DURING A LIVE RUN" RULE WAS BROADER THAN ITS
+EVIDENCE (measured 2026-09-06).** The 242ms figure below is real and it is about
+FOUR PARALLEL MUTATION SWEEPS at load 273-333. It was then applied to the
+ordinary suite, which is a different workload at a thirtieth of the load, and
+that cost real serialisation time.
+
+Measured directly, sampling `sleep(0.005)` overrun continuously for the length
+of a suite run -- the quantity that matters, because `slow_traverse` holds the
+stick and SLEEPS OUT each push, so overrun IS leg distance error:
+
+    idle control                 median 1.21ms   p99 1.35ms   max 2.46ms
+    the suite, JOBS=4, normal    median 1.26ms   p99 2.69ms   max 9.73ms   203s
+    the suite under taskpolicy -b median 1.26ms  p99 1.35ms   max 7.79ms   636s
+
+30,787 samples during a real suite run at normal priority, and **not one sample
+exceeded 50ms**. Against a 0.79s push, the worst overrun is 1.2%. **So the SUITE
+may run during a live run.** Mutation sweeps at load 273-333 are NOT covered by
+this and stay serialised -- that load was not reproduced here.
+
+`BASEBALL_NICE=1 ./run_tests.sh` puts the suite on the Efficiency cores via
+`taskpolicy -b` and makes p99 identical to idle. **It also costs 3.1x wall
+clock, and run naively that is a trap**: the slowdown pushed `test_map_admit.py`
+(58s normally) and `test_affected_tests.py` past the 300s ceiling, and both were
+reported HUNG -- the ceiling censoring the work it had just slowed down, turning
+a green suite into two failures. That is 10.14 in a new place. The flag
+therefore raises `TEST_TIMEOUT` to 1200s itself, and an explicit
+`TEST_TIMEOUT` still wins.
+
 **13. MUTATION TESTING IS EXPENSIVE ON THIS MACHINE.** Four parallel sweeps drove
 the load average to 273-333 and the suite to ~2 files per FOUR MINUTES. The
 cause is likely I/O — this is a work machine with Sophos Anti-Virus, and

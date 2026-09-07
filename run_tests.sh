@@ -36,6 +36,41 @@ JOBS=${JOBS:-4}
 # runs that had never finished.
 TEST_TIMEOUT=${TEST_TIMEOUT:-300}
 
+# BACKGROUND QoS, for running the suite WHILE a live run drives the console.
+#
+#   BASEBALL_NICE=1 ./run_tests.sh
+#
+# macOS taskpolicy -b puts the whole process tree on the Efficiency cores and
+# yields the Performance cores. Measured on this machine (12 cores, 6P + 6E),
+# sampling sleep(0.005) overrun continuously for the length of a suite run --
+# the quantity that matters, because slow_traverse holds the stick and SLEEPS
+# OUT each push, so overrun IS leg distance error:
+#
+#     idle control            median 1.21ms   p99 1.35ms   max 2.46ms
+#     suite, normal           median 1.26ms   p99 2.69ms   max 9.73ms   203s
+#     suite, taskpolicy -b    median 1.26ms   p99 1.35ms   max 7.79ms   636s
+#
+# So it works -- p99 becomes identical to idle -- and it costs 3.1x wall clock.
+#
+# THE TIMEOUT MUST SCALE WITH IT, WHICH IS WHY THIS IS A FLAG AND NOT A NOTE.
+# Run naively, the slowdown pushed test_map_admit.py (58s normally) and
+# test_affected_tests.py past the 300s ceiling and both were reported HUNG: the
+# ceiling censored the work it had just slowed down, manufacturing two failures
+# out of a green suite. That is section 10.14 in a new place. So the flag raises
+# TEST_TIMEOUT by the same factor it costs, and an explicit TEST_TIMEOUT still
+# wins.
+if [ "${BASEBALL_NICE:-0}" = "1" ]; then
+    if command -v taskpolicy >/dev/null 2>&1; then
+        if [ -z "${TEST_TIMEOUT_EXPLICIT:-}" ] && [ "${TEST_TIMEOUT}" = "300" ]; then
+            TEST_TIMEOUT=1200
+        fi
+        echo "--- background QoS (taskpolicy -b), per-test ceiling ${TEST_TIMEOUT}s" >&2
+        exec taskpolicy -b env BASEBALL_NICE=0 TEST_TIMEOUT="$TEST_TIMEOUT" "$0" "$@"
+    else
+        echo "--- BASEBALL_NICE=1 but taskpolicy is not available; running normally" >&2
+    fi
+fi
+
 TIMEOUT_PL=$(cat <<'PERL'
 my $t = shift;
 my $pid = fork();

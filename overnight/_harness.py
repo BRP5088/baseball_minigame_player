@@ -154,6 +154,22 @@ def run_trial(script, arg, timeout, cwd=None, log=None,
     note in the body.
     """
     cwd = cwd or os.path.dirname(os.path.dirname(os.path.abspath(script)))
+
+    # DECLARE THAT WE ARE DRIVING, AND REFUSE IF SOMETHING ELSE IS.
+    #
+    # This sits here rather than in each harness's main() because every live A/B
+    # already routes through run_trial, so none of them has to remember -- and
+    # "remember to turn keep_awake off first" is precisely the guard that failed
+    # before. acquire() is idempotent for this pid, so calling it every trial
+    # costs nothing and re-asserts the claim if a nudger cleared the file.
+    #
+    # The hazard is specific: a background nudge sends `clear`, which zeroes the
+    # stick mid-leg while slow_traverse is sleeping out the push. The leg walks
+    # short and NO LOG DISTINGUISHES THAT FROM A ROUTING FAILURE, so it would be
+    # scored as an arm's failure. See console_lock.
+    import console_lock
+    console_lock.acquire(os.path.basename(script) + " (run_trial)")
+
     t0 = time.time()
 
     # THE CHILD'S OUTPUT IS STREAMED, NOT BUFFERED TO THE END.
