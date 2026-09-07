@@ -119,18 +119,46 @@ is a scratch REGULAR FILE and every input path is held off, so a no-op here is
    `test_failure_kind.py` and `test_frozen_stream_is_invalid.py` are built on
    (28 MB). Excluding them cost a re-ship on 2026-09-07.
 
-2. **Baseline** — `C:\baseball\run_baseline.py`, launched DETACHED so a dropped
-   SSH session cannot kill it (Windows OpenSSH terminates the session's job):
-
-       Start-Process -FilePath C:\baseball\venv\Scripts\python.exe `
-                     -ArgumentList "C:\baseball\run_baseline.py" -WindowStyle Hidden
+2. **Baseline** — `C:\baseball\run_baseline.py`. **RUN IT IN THE FOREGROUND OF AN
+   SSH SESSION YOU KEEP OPEN.** The first version of this file said to launch
+   it detached with `Start-Process -WindowStyle Hidden` "so a dropped SSH session
+   cannot kill it". Measured false, twice: Windows OpenSSH terminates every
+   process of a session when that session ends, and `Start-Process` does not
+   escape it. Both runner "deaths" line up exactly with the launching session
+   closing — the first wrote its 14 fast results in the seconds before, the
+   second was killed 12 s in, and a test spawned the same way died at the same
+   7 lines of output. Run in the foreground, the same runner finished the other
+   27 tests in 159 s with exit 0. From the Mac, hold the session with a
+   long-lived `ssh` (a Monitor with `persistent: true` does this); the run's
+   duration IS the session's duration. `Invoke-CimMethod Win32_Process Create`
+   is the untested alternative if a session cannot be held.
 
    It selects `tests/*/test_*.py` importing graph_walk / places / table_prompt /
    failure_kind / pose / slow_traverse / worldmap, applies the exclusions above,
-   runs each once with a 300 s ceiling, and writes PASS/FAIL/TIMEOUT per file
-   to `baseline.log`, ending with `BASELINE DONE`.
+   runs each once with a 300 s ceiling, writes PASS/FAIL/TIMEOUT/ERROR per file
+   to `baseline.log`, ends with `BASELINE DONE`, and RESUMES: files already in
+   the log are skipped, so a killed run costs one test.
 
-3. **Mutants** — `C:\baseball\run_mutants.py`, same launch. Each mutant is
+   **`venv\Scripts\python.exe` is a launcher stub**: it spawns the real
+   interpreter (`C:\Program Files\Python312\python.exe`) as a child and waits.
+   Every "python" here is a two-process tree. `p.pid` is the stub; a timeout kill
+   must be `taskkill /PID <stub> /T /F` or the interpreter survives it.
+
+   2026-09-07 baseline: **32 PASS, 9 FAIL, 0 TIMEOUT/ERROR** of 41. The FAILs,
+   all excluded from mutation and all correct to exclude:
+
+       demos/ anchors missing (gitignored, unshipped):  test_at_table_threshold,
+           test_orb_localiser, test_table_prompt, test_add_non_disruption
+       needs the real chiaki window:                    test_frozen_stream_is_invalid
+       scans the whole overnight/ tree (partly unshipped): test_harness_restores_shipped_value,
+           test_overnight_start_hint
+       NOT ESTABLISHED why (9 checks each):             test_reference_pose_flag,
+           test_yaw_nulled_before_align
+
+   So a mutant in `table_prompt.py` comes back `NO-TEST` on Snoopy; judge those
+   on the Mac when the console is idle.
+
+3. **Mutants** — `C:\baseball\run_mutants.py`, same foreground launch. Each mutant is
    `(file, line, must_contain, replacement)`: one line in, one line out, so
    nothing below moves; the line is replaced ONLY if it contains the expected
    text, otherwise `SKIP` — a shifted line number must not mutate the wrong
