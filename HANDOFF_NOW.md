@@ -1,4 +1,34 @@
-# State at 2026-09-07 09:40 — read this first
+# HANDOFF — what is running and what happens next
+
+**Updated 2026-09-07 late evening. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is being built.**
+
+## Now
+
+- **Fast (a) A/B (`overnight/ab_fast.py --experiment extend`) KILLED at trial 5 of 20 on the user's
+  instruction** ("data on a potential dead method isn't useful"). Partial record kept:
+  `overnight/ab_fast_extend.json` / `.log` — extended 2/2 arrived (25 s each), recorded 0/2 + 1 INVALID
+  (jukebox setup 356 s). Not a result; n=2. `--resume` restarts it at trial 6 if ever wanted.
+  Nothing dead-reckoning is deleted: `drafts/pending_after_ab/` holds the stop-early and
+  no-return-after-arrival patches, unapplied.
+- **Closed-loop build in flight** (workflow `wf_1a357a4f-1a7`, 3 Opus builders + 3 Opus skeptics,
+  bounded fix loop). Spec, the fixed interfaces and the rules: `agent_progress/closed-loop/SPEC.md`.
+  New files only: `chain.py` (sensor), `chain_record.py` (recorder), `chain_walk.py` (controller),
+  `overnight/chain_trials.py` (harness), `tools/chain_validate.py`, `tests/routing/test_chain_*.py`.
+  Progress notes: `agent_progress/closed-loop/<role>/progress.md`.
+- Console: idle, lock free, sticks cleared. chiaki alive as of 23:00.
+
+## Next, in order
+
+1. Read the builders' reports; run the full suite; commit the modules.
+2. **Go/no-go = the sensor's offline validation** on `overnight/drives/20260906_172413_office`
+   (walking frames placed within 1 chain step?) — `agent_progress/closed-loop/sensor/`.
+3. Record a chain live: `chain_record.py --executor` (reset, dead-reckoning route with the recorder in
+   a thread, kept only if `at_table()` at the end; up to 3 tries) → `chains/route_<stamp>/`.
+4. `overnight/chain_trials.py --chain chains/route_<stamp>` — 10 trials, 420 s ceiling, arrived /
+   timed_out / failed. Compare with dead reckoning's 5/10. Report by outcome and by where k stalled.
+5. Offline CPU sweeps while trials run go to Snoopy (`Snoopy_testing.md`), never beside the console.
+
+## Previous handoff (dead reckoning, paused)
 
 ## Running now
 `overnight/ab_fast.py --experiment extend` (detached): candidate (a) re-run on
