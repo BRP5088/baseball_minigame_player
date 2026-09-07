@@ -11,6 +11,12 @@ after every walk, every point appended to `overnight/prompt_zone_points.jsonl`
 as it is measured, frames under `overnight/prompt_zone_frames/pz_w*`. The two
 grid attempts: `overnight/prompt_zone_grid_attempt.json` (rows -2..+1 wedged or
 invalid; the zone is bounded by geometry within 0.1u right and 0.3u left/back).
+ALL WEDGE VERDICTS BEFORE 59b4c04 WERE FALSE (len of a (keypoints, descriptors)
+pair is 2); the grid attempts' points were rich frames. Still unexplained: in
+the first attempt the camera did not turn for commanded headings 140-220 deg
+away (reads stayed 265.8) while an 8-deg turn in walk 1 worked -- large turns
+through walk_steps.turn_to are a question, not a finding. The star's sweeps
+are at most 80 deg.
 TODAY'S SETUP IS BAD: reaching bar_jukebox failed 3 of 3 rows in the second
 attempt (12 geometry wedges in one row), against 9/9 in OPEN-5 -- session
 variance (§10.5/10.6); the setup frames are on disk for a census.

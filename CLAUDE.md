@@ -1119,6 +1119,12 @@ The catalogue, as a pattern to recognise:
   it never hung, it took 49.6s and its first `print` sat after all 110 cells)
 - **a fix that produces output which looks like evidence and is not** (the
   frame-capture fix: four jpegs, correctly written, of the wrong moment)
+- **a measurement that returns the same number everywhere and reads as a
+  verdict** (`len(places.keypoints(img))` is 2 — the function returns a
+  (keypoints, descriptors) pair — so every point of three prompt-zone runs on
+  2026-09-07 was "wedged" at 2 keypoints, the harness backed off every move,
+  and rich 1500-keypoint frames were filed as geometry. A count that never
+  varies is not a count.)
 
 **2. ONLY AN INTERVENTIONAL A/B COUNTS.** An association does not, however
 significant, and neither does a mechanism that makes sense. `STALL_CHANGE` is
