@@ -12,3 +12,15 @@ patch writes BOTH frames on BOTH outcomes: success/start_<node> + success/ok_<no
 on arrival, start_<node> + fail_<node> on failure. Mutation-test after
 applying (console free by then): drop the start_ write -> the START checks
 fail; write `before` as ok_ -> the LEG-END check fails.
+
+## Second item: at_table() OCR path (patch_at_table_ocr.py)
+
+    .venv/bin/python drafts/pending_after_ab/patch_at_table_ocr.py
+    BASEBALL_TEST_RUN=1 .venv/bin/python -B tests/routing/test_at_table_ocr_path.py
+    BASEBALL_TEST_RUN=1 .venv/bin/python -B tests/routing/test_at_table_threshold.py
+
+Numbers: overnight/census/prompt_ocr_ab.json (0 false positives on 693
+clean-node frames and the quest-log anchor; recall alone 341/1289, so it is
+an addition after the mask, never a replacement). Mutants to run: drop the
+`return ocr_says_prompt(img)` line -> both bright-background cases fail;
+OCR_MIN_WORDS 2 -> 1 -> re-score NEG_NODES before trusting anything.

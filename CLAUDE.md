@@ -898,11 +898,23 @@ the fix — measured over 3,937 frames, `tools/prompt_mask_ab.py` ->
 The bright-table frame never clears `MATCH_MIN` 0.25 under any delta, while
 every delta loses old positives and admits new ones: a wider mask takes wood
 grain and card edges as strokes and the letter correlation drowns. No constant
-is invented from this. The candidate under measurement instead is OCR of the
-band (`ocr_glyphs`, PSM 6 at 3x, both polarities, fuzzy match on
-baseball/cards/play) — `tools/prompt_ocr_ab.py`; it reads the line on all three
-known positives and nothing on the quest-log anchor. Read its json before
-believing anything about it.
+is invented from this. **OCR of the band IS supported by the numbers, as a SECOND path after the
+mask** (`tools/prompt_ocr_ab.py` -> `overnight/census/prompt_ocr_ab.json`, 4,002
+frames; PSM 6 at 3x, both polarities, fuzzy match on baseball/cards/play,
+two words required):
+
+    false positives on 693 frames at non-table nodes      0
+    the quest-log false-positive anchor                   0 words
+    recall alone on the 1289 frames the mask accepts    341   (scale-sensitive)
+    route frames the mask REJECTS that OCR reads         26   all dealer_circle,
+                                                              prompt over the
+                                                              dealer's white body
+    table-leg end frames (43) with a hidden prompt        1   the bright-table one
+
+Recall alone is poor, so it never replaces the mask: `at_table()` stays mask
+first, OCR only when the mask says no. Two fixtures carry the two bright
+backgrounds (`test_fixtures/table_prompt_cases/`). The patch and its test wait
+in `drafts/pending_after_ab/` until no live run imports `table_prompt`.
 
 Why this matters beyond one frame: `at_table()` is the arrival authority AND
 the $50 gate, and OPEN-14's "ink up to 0.042 without the score gate" sweeps

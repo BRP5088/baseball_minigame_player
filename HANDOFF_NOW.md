@@ -43,14 +43,11 @@ read the last 40 lines of the log for the trial that was in flight.
 ## Waiting for the run to end (do these first, in order)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
    suite caught (142/143, test_success_control_frames.py). Mutation-test it.
-2. `table_prompt` stroke mask: goal-leg trial 1 stood AT the table with the
-   prompt on screen and at_table() scored -0.001 — white text over the light
-   table top is invisible to the shipped mask by construction. The offline A/B
-   of local-contrast variants is `tools/prompt_mask_ab.py` ->
-   `overnight/census/prompt_mask_ab.json` (log overnight/prompt_mask_ab.log).
-   Land the winning delta ONLY with the numbers: every old positive still True,
-   zero NEG_NODES false positives, the quest-log anchor still rejected. Fixture
-   for the test: test_fixtures/table_prompt_cases/prompt_on_bright_table_goalleg_t1.jpg.
+2. `table_prompt` OCR path: apply `drafts/pending_after_ab/patch_at_table_ocr.py`
+   (README there). The mask cannot see the prompt over the light table top or
+   over the dealer's body; OCR reads both with 0 false positives on every
+   negative on disk (overnight/census/prompt_ocr_ab.json). Local-contrast masks
+   were measured and refused (prompt_mask_ab.json).
 3. Score the A/B: overnight/ab_goal_leg.json; write OPEN-21's result with n,
    Fisher p and the pre-sweep frame classes (tools/goal_leg_sheet.py).
 
