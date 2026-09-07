@@ -1,9 +1,9 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-`overnight/prompt_zone.py` (detached, started right after the A/B ended): the
-prompt-zone map, 5 rows x 5 columns x 5 headings around the recorded leg's
-endpoint. Log `overnight/prompt_zone.log` (row lines `[row +n]`), result
+`overnight/prompt_zone.py` (detached; relaunched after the first attempt wedged
+at a 0.30u offset): the prompt-zone map, 3 rows x 5 columns x 5 headings at
+0.10u around the recorded leg's endpoint, every push wedge-checked. Log `overnight/prompt_zone.log` (row lines `[row +n]`), result
 `overnight/prompt_zone.json` (saved after every row), frames under
 `overnight/prompt_zone_frames/`. ~1 hour if setups behave. Beside it: the
 suite under BASEBALL_NICE=1 (`overnight/suite_after_ocr.log`) certifying the
