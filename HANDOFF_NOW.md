@@ -9,6 +9,10 @@ at a 0.30u offset): the prompt-zone map, 3 rows x 5 columns x 5 headings at
 suite under BASEBALL_NICE=1 (`overnight/suite_after_ocr.log`) certifying the
 OCR path and the control-frame fix -- the one workload measured safe (10.13a).
 NOTHING ELSE CPU-bound while it runs.
+Suite after the OCR path + frame-test fixes: **144/144 green** (840s under
+BASEBALL_NICE=1, `overnight/suite_after_frame_tests.log`). Load reached 15
+with the suite beside the console run, above what 10.13a measured; the
+suite is done and nothing else runs beside the map.
 
 The goal-leg A/B is DONE: shipped 1/8, recorded 1/9, p = 1.0; the recorded leg
 is 3x cheaper. Written up under CLAUDE.md OPEN-21.
