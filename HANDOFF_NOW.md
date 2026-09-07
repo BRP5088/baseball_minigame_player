@@ -1,34 +1,12 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-`overnight/prompt_zone.py` (detached; THIRD design, launched after two grid
-attempts wedged in the furniture and measured nothing): a STAR around the
-recorded leg's endpoint -- the endpoint measured FIRST, then 0.05u left/right,
-0.10/0.20u back, 0.05u forward, stick-relative, wedge-checked -- five headings
-a point, mask + OCR verdicts; 3 walks, 1800s ceiling each. Log
-`overnight/prompt_zone.log` (`[walk n]` lines), result `overnight/prompt_zone.json`
-after every walk, every point appended to `overnight/prompt_zone_points.jsonl`
-as it is measured, frames under `overnight/prompt_zone_frames/pz_w*`. The two
-grid attempts: `overnight/prompt_zone_grid_attempt.json` (rows -2..+1 wedged or
-invalid; the zone is bounded by geometry within 0.1u right and 0.3u left/back).
-THE FOURTH LAUNCH IS THE FIRST VALID ONE: the third walked the leg, then
-imported tools/prompt_ocr_ab, which set BASEBALL_TEST_RUN at import and
-switched stick injection OFF -- fifty readings of one pose. Fixed (flag only in
-main(); harness asserts it is unset; AST test). ALL WEDGE VERDICTS BEFORE 59b4c04 WERE FALSE (len of a (keypoints, descriptors)
-pair is 2); the grid attempts' points were rich frames. The camera that "did not turn" in the first attempt (reads stuck at 265.8) was
-the same import-time lockout: the first measure_point imported the offline
-scorer and every send after it was dropped. No large-turn question remains.
-TODAY'S SETUP IS BAD: reaching bar_jukebox failed 3 of 3 rows in the second
-attempt (12 geometry wedges in one row), against 9/9 in OPEN-5 -- session
-variance (§10.5/10.6); the setup frames are on disk for a census.
-NOTHING ELSE CPU-bound while it runs.
-Suite after the OCR path + frame-test fixes: **144/144 green** (840s under
-BASEBALL_NICE=1, `overnight/suite_after_frame_tests.log`). Load reached 15
-with the suite beside the console run, above what 10.13a measured; the
-suite is done and nothing else runs beside the map.
-
-The goal-leg A/B is DONE: shipped 1/8, recorded 1/9, p = 1.0; the recorded leg
-is 3x cheaper. Written up under CLAUDE.md OPEN-21.
+**Nothing on the console.** The suite is certifying the ink-gate change
+(`overnight/suite_after_ink_gate.log`). The prompt-zone map is DONE: see
+CLAUDE.md OPEN-22 (edge +0.05u ahead of the recorded endpoint; screen-fixed
+prompt; endpoint scatter; jukebox leg wedged 69/106 today). Three candidates
+wait on the user's choice: extend the goal leg ~0.10u (A/B); name the
+neighbouring table and record its leg; the jukebox leg's wedge.
 
 ## After the prompt-zone run (in order)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the

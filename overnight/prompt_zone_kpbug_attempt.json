@@ -1,0 +1,136 @@
+{
+  "question": "where does the game offer the dealer prompt, around the recorded leg's endpoint",
+  "design": {
+    "star": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.05,
+        0.0
+      ],
+      [
+        -0.1,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.05,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -0.1
+      ],
+      [
+        0.0,
+        -0.2
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.05
+      ]
+    ],
+    "unit_speed": 0.35,
+    "heading_offsets": [
+      -40,
+      -20,
+      0,
+      20,
+      40
+    ],
+    "walks": 3
+  },
+  "walks": [
+    {
+      "walk": 1,
+      "reached": true,
+      "setup_seconds": 93.1,
+      "forward": 86.1,
+      "points": [
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": -0.05,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": -0.1,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.05,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": -0.1,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": -0.2,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": 0.0,
+          "blocked": true,
+          "turned": true
+        },
+        {
+          "walk": 1,
+          "dx": 0.0,
+          "dy": 0.05,
+          "blocked": true,
+          "turned": true
+        }
+      ]
+    }
+  ]
+}

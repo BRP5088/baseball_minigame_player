@@ -1,0 +1,46 @@
+{
+  "question": "where does the game offer the dealer prompt, around the recorded leg's endpoint",
+  "grid": {
+    "rows": [
+      -1,
+      0,
+      1
+    ],
+    "cols": [
+      -2,
+      -1,
+      0,
+      1,
+      2
+    ],
+    "step_units": 0.1,
+    "unit_speed": 0.35,
+    "heading_offsets": [
+      -40,
+      -20,
+      0,
+      20,
+      40
+    ]
+  },
+  "rows": [
+    {
+      "row": -1,
+      "reached": false,
+      "setup_seconds": 507.3
+    },
+    {
+      "row": 0,
+      "reached": null,
+      "seconds": 900.1
+    },
+    {
+      "row": 1,
+      "reached": true,
+      "setup_seconds": 84.6,
+      "forward": 86.1,
+      "blocked_at": "lateral offset",
+      "points": []
+    }
+  ]
+}

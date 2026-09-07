@@ -1,0 +1,42 @@
+{
+ "question": "leg-end frames written by today's setups (route to bar_jukebox), by node and class",
+ "date": "2026-09-07",
+ "nodes": {
+  "bar_jukebox": {
+   "frames": 106,
+   "classes": {
+    "unplaced": 26,
+    "overshot": 11,
+    "wedged": 69
+   },
+   "keypoints_median": 10,
+   "under_50": 69
+  },
+  "bar_pool": {
+   "frames": 77,
+   "classes": {
+    "unplaced": 64,
+    "overshot": 10,
+    "wedged": 3
+   },
+   "keypoints_median": 1500,
+   "under_50": 3
+  },
+  "office_door": {
+   "frames": 66,
+   "classes": {
+    "wedged": 66
+   },
+   "keypoints_median": 9,
+   "under_50": 66
+  },
+  "portrait_room": {
+   "frames": 66,
+   "classes": {
+    "unplaced": 66
+   },
+   "keypoints_median": 1500,
+   "under_50": 0
+  }
+ }
+}

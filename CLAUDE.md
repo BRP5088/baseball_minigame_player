@@ -882,6 +882,17 @@ Note `INK_MIN` cannot save this: the false-positive frame scores ink 0.027,
 comfortably above the 0.024 gate. The score is doing the discrimination.
 Pinned by `tests/routing/test_at_table_threshold.py` against both real frames.
 
+**AND THE INK GATE IS GONE FROM THE VERDICT (2026-09-07).** It had never rejected
+a negative the correlation did not already reject — every negative on disk tops
+out at 0.176 against `MATCH_MIN` 0.25, Wanda's prompt (its stated purpose)
+scores 0.10 — and it rejected 21 route frames with the prompt plainly on screen
+(all 21 adjudicated by eye), the recorded arm's own arrival in the goal-leg A/B
+(score 0.311, ink 0.006) and all five readings at the prompt zone's edge
+(0.31-0.47, ink 0.011). `at_table()` is now correlation OR OCR after the
+contrast guard; `ink()` stays as the aim sweep's ordering signal.
+`tests/routing/test_at_table_ocr_path.py` carries a fixture only the correlation
+can accept and Wanda pinned rejected; three mutants caught.
+
 ## at_table() CANNOT SEE THE PROMPT OVER THE LIGHT TABLE TOP, and a local-contrast mask does not fix it (2026-09-07)
 
 Goal-leg A/B trial 1 stood AT the dealer's table, camera pitched down onto the
@@ -2481,4 +2492,47 @@ without a prompt (the rest). The ceiling censored the shipped arm twice. If the 
 the flag on — and OPEN-14's ceiling lesson applies: a goal-leg retry is a full
 reset and route re-walk, so the ceiling must be attempts x route-time or the
 goal leg needs local retries.
+
+**OPEN-22 — THE PROMPT ZONE, MEASURED (2026-09-07): its near edge sits five
+hundredths of a walk-unit AHEAD of where the recorded goal leg stops, the
+prompt is screen-fixed and offered on proximity alone, and the leg's endpoint
+scatters by a table width.** `overnight/prompt_zone.py` — a star around the
+recorded leg's endpoint (the endpoint first, then 0.05u left/right, 0.10/0.20u
+back, 0.05u forward, stick-relative, wedge-checked), five headings a point,
+mask + OCR verdicts, three walks (`overnight/prompt_zone.json`,
+`prompt_zone_points.jsonl`, frames `overnight/prompt_zone_frames/pz_w*`):
+
+    walk 1   45 readings   no prompt   endpoint at the NEIGHBOURING table, dealer ~70 deg left
+    walk 2   50 readings   no prompt   the neighbouring table again, the waitress in the passage
+    walk 3   50 readings   endpoint: none at 5 headings; +0.05u forward: PROMPT at 4 of 5
+             headings spanning 80 deg (mask 0.31-0.47 with ink 0.011; OCR 3 of 5)
+
+The +0.05 frame shows the character facing a pillar and a grey wall with the
+prompt centred on screen: the label is a HUD element and the game offers it on
+distance to the dealer, not on facing. So heading was never the constraint of
+the last leg — `reach_table`'s 19-heading sweeps were searching the wrong axis
+— and the recorded leg, when it lands at the dealer's table, stops just short
+of the zone. When it does not (walks 1-2, A/B trial 3) it lands at the round
+table beside hers, from the pose it was given at the jukebox.
+
+**Three launches before this one measured nothing, from two instruments of
+mine:** `len(places.keypoints(img))` is 2 (a (keypoints, descriptors) pair), so
+every point read "wedged"; and `tools/prompt_ocr_ab` set `BASEBALL_TEST_RUN`
+at import, switching stick injection off inside the live harness after the
+leg (§5, §10.1). Both fixed and pinned; the fourth launch is the first valid.
+
+**Today's setup census** (`overnight/census/setup_leg_ends_20260907.json`, 315
+leg-end frames from the route walks): the JUKEBOX leg ended WEDGED in 69 of
+106 executions (median 10 keypoints) against 3 of 77 on the pool-room leg —
+that is why reaching `bar_jukebox` took 2-8 attempts and up to 1065s today
+where OPEN-5 had 9/9. Unmeasured whether it is session variance or the
+restored leg's own endpoint; the frames are on disk.
+
+**Candidates, each an A/B, none built:** (a) extend the recorded goal leg by
+~0.10u — the edge is at +0.05, walk 3's +0.05 point was not wedged; (b) give
+the neighbouring table a place name from these frames and record the short leg
+from it to the dealer, so the router finishes from wherever the leg lands;
+(c) the jukebox leg's wedge. (a) is one constant and moves the character 0.1u;
+(b) is the project's own machinery; (c) is the setup killer. The order is the
+user's call.
 
