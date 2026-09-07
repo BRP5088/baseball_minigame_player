@@ -25,32 +25,22 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "Goal-leg A/B on the console", "state": "done",
-     "detail": "Shipped 1/8 vs recorded 1/9, p = 1.0: no arrival difference; the recorded leg is 3x cheaper (65s vs 189s). Written up as OPEN-21."},
-    {"title": "Land the control-frame fix", "state": "done",
-     "detail": "Landed during the pause (24857d8): start pose and leg-end frame on both outcomes; three mutants caught from a green baseline."},
-    {"title": "Land the OCR path in at_table()", "state": "done",
-     "detail": "Landed (07cf0cc): mask first, OCR only when the mask says no; three real fixtures, three mutants caught."},
-    {"title": "Score the A/B twice and write OPEN-21", "state": "done",
-     "detail": "As the harness scored it, and post hoc from the pre-sweep frames with mask + OCR (prompt on screen at the leg's end). Recommend the flag flip if the numbers carry it; the flip is yours."},
-    {"title": "Map the prompt zone around the dealer", "state": "done",
-     "detail": "Done (OPEN-22): the zone's near edge is 0.05u AHEAD of where the recorded leg stops; the prompt is screen-fixed and offered on proximity, so heading never mattered; two of three walks ended a table away. Three earlier launches measured nothing from two instrument bugs of mine, both fixed and pinned."},
-    {"title": "at_table(): ink gate dropped from the verdict", "state": "done",
-     "detail": "Every negative on disk scores at most 0.176 against the 0.25 gate; the ink gate rejected 21 route prompts, trial 6's arrival and all five edge readings. Correlation OR OCR now (07b0647)."},
-    {"title": "Extend the recorded goal leg by ~0.10u (A/B)", "state": "running",
-     "detail": "Candidate (a): re-running on the FAST harness (return loop, timed-out outcome, 3 setup attempts). The slow run was stopped at 14 of 20: recorded 2/6, extended 2/6, two setup exhaustions over 1100s."},
-    {"title": "Name the neighbouring table; record its leg to the dealer", "state": "next",
-     "detail": "Two of three walks and A/B trial 3 ended there; a place the localiser can confirm plus a short recorded leg lets the router finish from wherever the leg lands."},
-    {"title": "The jukebox leg's wedge (setup killer)", "state": "next",
-     "detail": "Trim flag landed (cc09ca1): 0.05u off the leg's end, verified on Snoopy and here, three mutants caught. Its A/B runs next on the fast harness (--experiment trim)."},
-    {"title": "Full-route streak with the winner and the better instrument", "state": "next",
-     "detail": "Route to the table at attempts=9, ceiling sized as attempts x route time so it cannot censor 7 of 10 again."},
-    {"title": "The position failures", "state": "next",
-     "detail": "Stopped short at an NPC (trial 2), walked into the neighbouring table (trial 3). The pre-sweep frames say which dominates before anything is built."},
+    {"title": "CLOSED LOOP: build the three modules", "state": "running",
+     "detail": "Dead reckoning is paused at your request (nothing deleted). Three builders + three skeptics are writing chain.py (the sensor), chain_record.py (the recorder) and chain_walk.py (the controller) to a fixed spec: look after every push, position from the screen, never from the stick. Spec: agent_progress/closed-loop/SPEC.md."},
+    {"title": "Go/no-go: can the sensor place a frame on the chain?", "state": "next",
+     "detail": "Offline, no console: build a chain from every 5th frame of your 1064-frame office drive, hold the rest out, ask the sensor where each is. Pass = walking frames within one chain step most of the time. A clean fail is a real result and stops the plan before console time."},
+    {"title": "Record the route chain live", "state": "next",
+     "detail": "chain_record.py --executor: reset, walk the old route once with the recorder in a thread, keep it only if the prompt is on screen at the end (3 tries). About 5 minutes of console."},
+    {"title": "Closed-loop trials vs dead reckoning's 5/10", "state": "next",
+     "detail": "overnight/chain_trials.py: 10 trials, 420 s ceiling, arrived / timed out / failed, plus where k stalled on each failure."},
+    {"title": "Fast A/B (a) extend", "state": "done",
+     "detail": "KILLED at trial 5 of 20 (extended 2/2 arrived at 25 s, recorded 0/2, one setup INVALID). Not a result at n=2; --resume can pick it up if ever wanted."},
+    {"title": "Goal-leg A/B, OCR path, prompt zone, ink gate, control frames", "state": "done",
+     "detail": "All landed and written up earlier today (OPEN-21, OPEN-22). Dead-reckoning candidates (b) and (c) and the stop-early patch sit in drafts/pending_after_ab/, unapplied."},
 ]
 DECISIONS = [
-    {"title": "Flip GOAL_LEG_AS_RECORDED?", "detail": "Only after the A/B; it changes a default. I will recommend, you decide."},
-    {"title": "OCR on the $50 gate", "detail": "Zero false positives measured on 693 clean frames and the quest-log anchor; say if you want to see the json before it lands."},
+    {"title": "Chain source: the executor's walk or your drive?", "detail": "The executor's successful walk gives the pose the loop will servo to; your drive gives a straighter route. Default: executor first; if it cannot arrive in 3 tries, I ask you to drive with chain_record.py --user."},
+    {"title": "Ceiling for a closed-loop trial", "detail": "420 s external kill, 400 s scored as timed out, same as the fast harness you set."},
 ]
 
 
