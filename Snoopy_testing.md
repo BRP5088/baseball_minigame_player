@@ -155,3 +155,50 @@ scored as an arm result. See CLAUDE.md §10.17. A git worktree under the
 scratchpad is isolated from that (the first attempt on 2026-09-07 used one, and
 was stopped anyway because the I/O is the same disk); Snoopy is isolated from
 both.
+
+## FOOTGUN 3 — the runner itself dies silently, and "slow" and "hung" look identical
+
+First launch, 2026-09-07: the baseline runner recorded 14 results in 8 minutes,
+then wrote NOTHING for 40 minutes against a 300 s per-test ceiling. The log's
+last line was a normal result; the heartbeat did not exist yet; the watcher
+saw "no change" and a 300 s ceiling made "still running" plausible. When
+finally checked, there was no Python process on Snoopy at all: the runner had
+died at 00:58:03 on `test_graph_walk.py` without writing a line. §10.1's shape
+exactly, one machine over.
+
+ESTABLISHED: it died, silently, with no log line, 8 minutes after launch.
+ASSUMED (not reproduced — the rewrite removes both candidates regardless):
+
+- `subprocess.run(..., text=True)` decodes the child's output with the locale
+  codec, which is **cp1252 on Windows**. This suite prints UTF-8 arrows and
+  dashes. One byte cp1252 cannot decode raises `UnicodeDecodeError` inside the
+  runner, uncaught, and the runner exits. `test_graph_walk.py` is the first
+  chatty test in selection order.
+- `capture_output=True` uses pipes. A grandchild that inherits the pipe keeps it
+  open after the child is killed, and `communicate()` then waits past the
+  timeout forever.
+
+What the runner does now, and why each line exists:
+
+    encoding utf-8, errors=replace      cannot raise on output
+    output to a temp FILE, not a pipe   a grandchild cannot hang it
+    taskkill /PID <pid> /T /F           timeout kills the TREE, not one process
+    try/except per test -> ERROR line   a runner bug is a row, not a death
+    C:\baseball\runner.state heartbeat  "RUNNING <test> since HH:MM:SS" — the
+                                        file that makes hung and slow differ
+    resumable                           skips files already recorded, so a
+                                        crash costs the current test, not all
+    PYTHONIOENCODING=utf-8 in the child so the child does not die the same way
+
+**Check the heartbeat before believing a slow test is slow:**
+
+    ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'Get-Content C:\baseball\runner.state'
+
+If it names a test and the timestamp is older than the ceiling, the runner is
+dead, and `Get-CimInstance Win32_Process -Filter "name='python.exe'"` will show
+nothing. Relaunch; it resumes.
+
+**Re-running a test that was recorded before its inputs existed:** the runner
+skips anything already in the log, so delete that test's line from
+`baseline.log` and relaunch. (Two tests were recorded FAIL before their tracked
+frames were shipped; see FOOTGUN under "ship".)
