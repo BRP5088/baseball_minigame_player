@@ -4,7 +4,11 @@
 loaded into context automatically; it earns its keep at the one moment that
 matters, which is before you write code.
 
-13 well-motivated changes have died here. The point is not that
+13 well-motivated NAVIGATION AND RIG changes have died here — the two tables
+below. The mapping attempts at the end are counted separately, because they were
+not trying to move the character. (CLAUDE.md section 9 quotes the same 13; if
+that number ever changes, both files say it, and a number that must be hand-synced
+is a constant pretending to be evidence.) The point is not that
 they were bad ideas — several were the leading candidate, everyone agreed with
 them, and the mechanism was sound. **Plausibility is not evidence. Build the
 measurement before believing the mechanism.**
@@ -24,7 +28,7 @@ Two patterns worth internalising before reading the table:
 
 | Change | Result | n | State today |
 |---|---|---|---|
-| **Merging consecutive same-bearing steps** — 40 accelerate/decelerate cycles over the route became 15, with distance preserved exactly. The recording is a human's stick samples, so a straight 5.13s walk arrives as seven "steps". | Verified depth **[0,4,0] mean 1.3** merged vs **[3,2,4] mean 3.0** unmerged. Likely mechanism: a merged push covers more ground than the stop-start sequence it replaces, so legs that used to stop short now run into furniture. An earlier A/B said the opposite — it was scored on `follow()`'s "reached", a routing claim, not a position. | 3/arm | `MERGE_STEPS = False` |
+| **Merging consecutive same-bearing steps** — 40 accelerate/decelerate cycles over the route became 15, with distance preserved exactly. The recording is a human's stick samples, so a straight 5.13s walk arrives as seven "steps". | Verified depth **[0,4,0] mean 1.3** merged vs **[3,2,4] mean 3.0** unmerged. Likely mechanism: a merged push covers more ground than the stop-start sequence it replaces, so legs that used to stop short now run into furniture. An earlier A/B said the opposite — it was scored on `follow()`'s "reached", a routing claim, not a position. | 3/arm | `MERGE_STEPS = False` globally — **but leg 1 IS merged**, via `MERGE_STEPS_BY_LEG = {("office_corridor","office_door")}` added 2026-09-06 00:20. So the change this row records as failed is LIVE on one leg, and this row's own stated mechanism — "legs that used to stop short now run into furniture" — is what the failing log then reported: *BLOCKED on step 4, the view is featureless, this is geometry*. Under test by `overnight/ab_leg1.py`. |
 | **Walking legs at 60%**, letting the localiser close the gap. | Verified depth **[2,2,2]** vs **[3,3,3]** at full distance — perfectly consistent within each arm. The frames show why: with short legs the arrival at `bar_jukebox` still identifies as `portrait_room`. The character never left the first room. **A localiser search cannot substitute for distance.** | 3/arm | `SHORT_WALK = False` |
 | **Collision anchoring** — walk deliberately into a wall so the game's own geometry zeroes accumulated drift, giving the last leg a fixed starting pose. This was the leading candidate and everyone liked it. | Contact detected **3/3** — the stall signal works fine. Pose repeatability **56px, 246px, 302px** against a 16.85px "same pose" threshold. It reliably HITS something and reliably ends up somewhere different. | 3 | no code survives |
 | **Steering while walking** — hold the left stick, nudge the right. | A 30 deg heading lag became **METRES** of position error, and runs then tracked heading perfectly while standing in the wrong room. | — | never shipped |
@@ -33,7 +37,7 @@ Two patterns worth internalising before reading the table:
 | **`STALL_CHANGE` 6.0 -> 2.5** — the old threshold cut through a unimodal distribution (values 3.1 to 7.9) and fired on 5 of 20 as false positives, each firing the escape ladder and injecting unaccounted forward push. | 2.5 arrived **6/10**, 6.0 **8/10**, permutation **p = 0.63** — and the point estimate favours the ORIGINAL. Motivated by observational Fisher **p = 0.00039**. The low view-change was a SYMPTOM of an already-bad run, not its cause. | 10/arm | `STALL_CHANGE = 6.0` |
 | **Re-recording `bar_pool_room -> bar_jukebox`** — **ROW VOID, see below** | — the first time the map was ever updated that way. | Old (2.1 deg, 3.30s) **4/8, best streak 3**; new (2.1 deg, 0.80s) **4/8, best streak 3**. **Identical.** The search: 2.1/0.80s went 2/2, while 337.1 — favoured by an earlier search AND by a confident (later refuted) diagnosis — went 0/2 and 1/2. **The bearing was right all along; only the duration was wrong.** | 8/arm | **REVERTED 2026-09-05** — the short leg is gone; `world_map.json` holds the recorded five steps (1.031 units, 3.30s). See the correction below. |
 | **Reference pose: the bot's own arrival frames vs the human's** — swapping had left `align_at_node` pulling onto pose A while the leg was recorded from pose B, a real incoherence measured at dx -71 to -212px. | Bot `[1,1,0,1,0,0,0,1,1,0]` **5/10**, human `[0,1,0,0,1,1,1,1,0,1]` **6/10**, permutation **p = 1.0**. A flat null, zero invalid trials — the best-powered measurement on this project. The incoherence is real and is NOT what costs runs. | 10/arm | `REFERENCE_POSE = "bot"` |
-| **Office legs at 3x speed**, capped at the measured-repeatable 0.60. | **8/8 both arms** — so the safety question is answered and speed x duration scaling holds up live. But median **71.7s vs 75.4s (~5%)** and the **mean is WORSE, 80.1 vs 76.1**, on one 185s outlier. It removes 7.3s of walking from a ~75s trial, because walking was never most of a trial. | 8/arm | `LEG_SPEED_BY_LEG = {}` |
+| **Office legs at 3x speed**, capped at the measured-repeatable 0.60. | **8/8 both arms** — so the safety question is answered and speed x duration scaling holds up live. But median **71.7s vs 75.4s (~5%)** and the **mean is WORSE, 80.1 vs 76.1**, on one 185s outlier. It removes 7.3s of walking from a ~75s trial, because walking was never most of a trial. | 8/arm | **NO LONGER `{}` — turned back ON for leg 1 on 2026-09-05 at the user's direction**: `LEG_SPEED_BY_LEG = {("office_corridor","office_door"): 3.0}`. This row's own measurement says the mean was WORSE. Under test by `overnight/ab_leg1.py`. |
 | **Blind crabbing to get around an obstacle.** | Walked the character off the spot into a wall, ending with no table in view (ink 0.0). | — | removed |
 | **ORB homing on the table.** | Over six rounds the "strongest" heading jumped 322 -> 350 -> 17 -> 319 -> 354 -> 22 while prompt ink FELL 0.0224 -> 0.0093. The table scores 109-129 keypoints at that distance and pure negatives already reach 114. **It is reading noise.** | 6 rounds | removed |
 
@@ -121,3 +125,47 @@ That is a different failure from the others in this file: not "a good idea that
 did not help", but "a measurement pointed at the wrong thing". Leg restored, and
 `tests/routing/test_leg_distances_match_recording.py` now pins every leg against
 its own recording.
+
+
+## Mapping — building geometry from the frames (2026-09-06)
+
+Three attempts, all dead. The first two failed for one reason; the third failed
+for a different one that is worth more.
+
+| Attempt | Result | Why it is dead |
+|---|---|---|
+| **Triangulate a hand-driven office drive** — 1064 frames, 95% with a compass heading, all eight approach angles filled. By every check available at the time it was a perfect collection. | Kept **3 points of 196,198 tracks**. The driver spent 61% turning, 17% walking, and camera translation over three frames had a MEDIAN OF ZERO. | Triangulation needs the camera to MOVE. Turning on the spot leaves the lens still, the rays stay parallel, and every depth fits equally well. The filter that rejected 196,195 tracks was CORRECT — the data carried no depth. |
+| **Multi-view with proper filters** — cheirality, reprojection, three or more views, real parallax — on the same drive. | The same answer, honestly this time. An earlier pairwise pass with none of those filters produced 644,872 points that rendered as radial starbursts, 19.6% of them lying between or behind the two cameras. | Filters cannot manufacture a baseline nobody drove. |
+| **Stitch the frames onto the FLOOR PLANE** — the user's idea, and geometrically sound: a homography needs POSE, not parallax, so it works on exactly the frames triangulation could not use. | **The rendered map is an artifact.** Fed a single FLAT GREY value — no scene content at all — the identical pipeline reproduces the map's silhouette to the last cell: seen-cell IoU **1.000**, coverage correlation **1.000**, including the top-left room, the arc, the central corridor, both bottom rooms and the black gap. Real scene content correlates only **0.130** with the render. | The canvas is the camera path dilated by the frustum radius, arithmetically: path span 3.70 x 11.09 plus 2 x `MAX_RANGE` 3.2 predicts the measured 8.64 x 15.94. **Everything that looked like architecture was the shape of the walk.** |
+
+**The third one is not fixable by better fitting.** The ground-plane assumption
+treats every pixel below the horizon as floor at one constant height. In this
+game that region is a desk, a table top, bottles, chairs, a typewriter in
+extreme close-up, and — at t=30s of the route walk — an OUTDOOR STREET at a
+different elevation. On top of that the floor is dark, vignetted and nearly
+untextured: phase correlation on it gives peaks of 0.05-0.33 with the shift
+flipping sign between adjacent frame pairs. The walls carry this game's
+contrast; the floor does not.
+
+**Three fitting objectives were tried and each was gamed in a different
+direction.** This is the transferable part:
+
+- maximise self-agreement between frames -> chose a pitch that calls **59.7%**
+  of the floor the player physically STOOD ON an obstacle. A consistent error
+  agrees with itself perfectly.
+- minimise error against the walked path -> chose a scale that collapses the
+  whole walk into one blob where nothing can be blocked: **0.0% wrong, 0%
+  agreement**.
+- both together, as gate and score -> the same degenerate scale again.
+
+Each is a global statistic over a map whose EXTENT the fitted parameter
+controls, so the parameter can always buy a better score by shrinking the
+question. And **76.4% of frame-to-frame steps in the source recording were
+exactly zero** — the camera was standing still — which no fitting can repair.
+
+**The lesson, and it is section 10.12 in a new costume.** Both validation scores
+built for this were satisfiable with no scene information at all, and neither
+could report that. The user said "the images don't look right" and was correct
+before either number was. **A control that renders the same pipeline from a
+CONSTANT image costs two minutes and would have killed this on day one.** Run it
+before believing any result that accumulates frames into a canvas.
