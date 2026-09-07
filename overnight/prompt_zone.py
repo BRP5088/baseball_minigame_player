@@ -5,29 +5,27 @@ dropped. The last leg's failures are position and heading failures against a
 target nobody has measured: the region in which the game offers the prompt.
 This measures it directly, with the console as the only source of truth.
 
-DESIGN
+DESIGN (third version; the two grids before it are recorded at the STAR
+constant below)
   Origin   the recorded goal leg's END pose, reached the way the 'recorded'
            arm reaches it: verified bar_jukebox, then walk_link as recorded.
-  Grid     5 rows (lateral, right positive) x 5 columns (forward), spaced
-           STEP_UNITS walk-units apart, in the leg's own frame: forward is
-           the leg's net bearing (86.1 deg over 0.79 units), lateral is +90.
-  Moves    turn-then-walk only (the shape that survives GRAVEYARD): turn to
-           the world bearing, push STEP_UNITS at UNIT_SPEED, where §6 says the
-           response is linear. Positions are NOMINAL -- §6's spread is real --
-           so every point also records its bearing, keypoints and frame.
+  Star     the endpoint is measured FIRST, then small moves relative to the
+           camera facing the leg's direction (0.05u left/right, 0.10/0.20u
+           back, 0.05u forward), stick-direct so a pinned camera cannot spoil
+           the move, each wedge-checked with a back-off.
   Per point  HEADINGS around the leg's direction; at each: the mask verdict
            (score, ink, at_table), the OCR read (tools/prompt_ocr_ab.read),
-           the compass bearing, ORB keypoints (< WEDGED_MAX = pressed into
-           geometry, so "no prompt" there is not evidence), and one frame.
-  Rows     one route walk per row (reset -> jukebox -> leg -> offset to the
-           row start), so dead-reckoning drift never spans more than five
-           points. Each row is a child process under an external ceiling.
+           the compass bearing, whether the camera actually turned, ORB
+           keypoints (< WEDGED_MAX = pressed into geometry), and one frame.
+  Walks    one route walk per star, WALKS of them for consistency; each walk
+           is a child process under an external ceiling, and every point is
+           appended to prompt_zone_points.jsonl the moment it is measured.
 
 NEVER PRESSES SQUARE. A True prompt verdict is recorded, nothing else.
 
     nohup .venv/bin/python -B overnight/prompt_zone.py > overnight/prompt_zone.log 2>&1 &
-      -> overnight/prompt_zone.json (saved after every row), frames in
-         overnight/prompt_zone_frames/pz_r<row>_c<col>_h<k>_<ms>.jpg
+      -> overnight/prompt_zone.json (after every walk), prompt_zone_points.jsonl,
+         frames in overnight/prompt_zone_frames/pz_w<walk>_x<dx>_y<dy>_h<k>_<ms>.jpg
 """
 import json
 import math
