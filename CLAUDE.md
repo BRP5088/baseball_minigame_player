@@ -2537,7 +2537,11 @@ the dealer's table both pass (`overnight/census/side_table_refs.json`,
 `tools/side_table_refs.py`). It is the office corridor/door shape: a table
 apart looks the same to ORB. What survives of (b) is the PATH from that landing
 to the prompt, measurable without naming (`overnight/side_table_leg.py`), and a
-correction that fires on "no prompt after the extension".
+correction that fires on "no prompt after the extension". **Also refuted the
+same evening** (`tools/landing_signature.py`, 38 landing frames on Snoopy): the
+idea that `identify()` after the goal leg tells the two landings apart — most
+landings of BOTH kinds read None at 60-136 matches; only one walk's side-table
+frames named `bar_jukebox`. There is no cheap landing classifier.
 
 **Candidates, each an A/B, none built:** (a) extend the recorded goal leg by
 ~0.10u — the edge is at +0.05, walk 3's +0.05 point was not wedged; (b) give
