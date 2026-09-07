@@ -872,6 +872,44 @@ Note `INK_MIN` cannot save this: the false-positive frame scores ink 0.027,
 comfortably above the 0.024 gate. The score is doing the discrimination.
 Pinned by `tests/routing/test_at_table_threshold.py` against both real frames.
 
+## at_table() CANNOT SEE THE PROMPT OVER THE LIGHT TABLE TOP, and a local-contrast mask does not fix it (2026-09-07)
+
+Goal-leg A/B trial 1 stood AT the dealer's table, camera pitched down onto the
+table top after walking into it, with "Baseball Cards [] Play ($50)" plainly on
+screen inside `TEXT_BOX` — and `at_table()` scored it **-0.001, ink 0.0001**
+(`test_fixtures/table_prompt_cases/prompt_on_bright_table_goalleg_t1.jpg`). The
+stroke mask keeps a pixel only if it is > `STROKE_BRIGHT` (175) AND its 11x11
+neighbourhood averages < `STROKE_LOCAL` (140): white text over a light surface
+is invisible to it by construction. That rule exists to remove the dealer's
+white face, and it works; this is its cost.
+
+**A local-contrast rule (pixel minus neighbourhood mean above a delta) is NOT
+the fix — measured over 3,937 frames, `tools/prompt_mask_ab.py` ->
+`overnight/census/prompt_mask_ab.json`:**
+
+    variant   bright-table   old positives   NEG_NODES     route frames
+              score          still True      false pos     newly True
+    shipped     -0.002        1288/1288        0/671          0
+    delta20      0.190        1203/1288       15/671         31
+    delta30      0.119        1147/1288        0/671         32
+    delta40      0.092        1117/1288        0/671         31
+    delta60      0.044        1280/1288        0/671         23
+
+The bright-table frame never clears `MATCH_MIN` 0.25 under any delta, while
+every delta loses old positives and admits new ones: a wider mask takes wood
+grain and card edges as strokes and the letter correlation drowns. No constant
+is invented from this. The candidate under measurement instead is OCR of the
+band (`ocr_glyphs`, PSM 6 at 3x, both polarities, fuzzy match on
+baseball/cards/play) — `tools/prompt_ocr_ab.py`; it reads the line on all three
+known positives and nothing on the quest-log anchor. Read its json before
+believing anything about it.
+
+Why this matters beyond one frame: `at_table()` is the arrival authority AND
+the $50 gate, and OPEN-14's "ink up to 0.042 without the score gate" sweeps
+were reading exactly this. Every arrival rate measured through it — including
+the goal-leg A/B running today — is deflated by an unknown amount on the
+pitched-down-at-the-table pose.
+
 ## Three more guards that could not fire (all fixed 2026-09-05)
 
 - **`report_misfire` invalidated the cursor on 1 of 5 paths.** The call sat at
