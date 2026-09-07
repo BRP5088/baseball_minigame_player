@@ -24,3 +24,11 @@ clean-node frames and the quest-log anchor; recall alone 341/1289, so it is
 an addition after the mask, never a replacement). Mutants to run: drop the
 `return ocr_says_prompt(img)` line -> both bright-background cases fail;
 OCR_MIN_WORDS 2 -> 1 -> re-score NEG_NODES before trusting anything.
+
+## (c) Jukebox leg trim (patch_leg_trim.py) -- after (a) ends
+
+    .venv/bin/python drafts/pending_after_ab/patch_leg_trim.py
+    BASEBALL_TEST_RUN=1 .venv/bin/python -B tests/routing/test_leg_trim.py
+    mutants: _trimmed returns steps unchanged; walk_link skips the trim; the
+      keyed lookup uses (b, a) -- each must fail the test
+    nohup .venv/bin/python -B overnight/ab_jukebox_trim.py > overnight/ab_jukebox_trim.log 2>&1 &
