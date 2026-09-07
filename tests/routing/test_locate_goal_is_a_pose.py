@@ -93,5 +93,35 @@ class LocateGoalIsAPose(unittest.TestCase):
         self.assertIn("unrecognised", detail)
 
 
+class RealFrame(unittest.TestCase):
+    """The same guard against the REAL detectors on trial 6's own frame.
+
+    overnight/streak_table_failframes/at_dealer_table_1788771394587.jpg is the
+    post-sweep leg-end frame of OPEN-14 trial 6: places.identify() names the
+    table (182/1.42 on the saved JPEG; 194/1.53 live) and table_prompt sees no
+    prompt (ink 0.010 against INK_MIN 0.024). Both pins below are anti-vacuity
+    checks: if a reference change ever stops identify() naming the table here,
+    the guard is no longer being exercised and this test must say so.
+    """
+    FIX = os.path.join(_ROOT, "test_fixtures", "locate",
+                       "identify_names_table_no_prompt.jpg")
+
+    def test_trial_6_frame_is_not_an_arrival(self):
+        for k in ("places", "table_prompt"):
+            sys.modules.pop(k, None)               # the real modules, not a stub
+        import places
+        import table_prompt
+        from PIL import Image
+        self.assertTrue(os.path.isfile(self.FIX), f"fixture missing: {self.FIX}")
+        img = Image.open(self.FIX)
+        self.assertFalse(table_prompt.at_table(img), "the fixture must show NO prompt")
+        room, score, margin = places.identify(img)
+        self.assertEqual(room, gw.GOAL,
+                         f"fixture no longer exercises the guard: identify() -> {room} {score}/{margin}")
+        node, detail = gw.locate(_Map(), img=img, log=lambda *a: None)
+        self.assertIsNone(node, f"locate() confirmed the table by appearance: {detail!r}")
+        self.assertIn("pose", detail)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
