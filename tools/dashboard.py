@@ -37,8 +37,8 @@ QUEUE = [
      "detail": "Done (OPEN-22): the zone's near edge is 0.05u AHEAD of where the recorded leg stops; the prompt is screen-fixed and offered on proximity, so heading never mattered; two of three walks ended a table away. Three earlier launches measured nothing from two instrument bugs of mine, both fixed and pinned."},
     {"title": "at_table(): ink gate dropped from the verdict", "state": "done",
      "detail": "Every negative on disk scores at most 0.176 against the 0.25 gate; the ink gate rejected 21 route prompts, trial 6's arrival and all five edge readings. Correlation OR OCR now (07b0647)."},
-    {"title": "Extend the recorded goal leg by ~0.10u (A/B)", "state": "next",
-     "detail": "The edge is at +0.05u; one constant, moves the character 0.1u. Your call which of the three candidates goes first."},
+    {"title": "Extend the recorded goal leg by ~0.10u (A/B)", "state": "running",
+     "detail": "Candidate (a), first by your order: recorded vs recorded + 0.10u along the leg's net bearing, 10 trials an arm, interleaved, scored by the corrected detector. overnight/ab_goal_extend.py."},
     {"title": "Name the neighbouring table; record its leg to the dealer", "state": "next",
      "detail": "Two of three walks and A/B trial 3 ended there; a place the localiser can confirm plus a short recorded leg lets the router finish from wherever the leg lands."},
     {"title": "The jukebox leg's wedge (setup killer)", "state": "next",
@@ -59,15 +59,30 @@ def executed_legs():
     return _e()
 
 
+RUNS = [  # (json, log, frames dir, name, arms) -- the newest json on disk is the live panel
+    ("ab_goal_extend.json", "ab_goal_extend.log", "goal_extend_failframes", "Goal-leg extension A/B: recorded vs +0.10u", ("recorded", "extended")),
+    ("ab_goal_leg.json", "ab_goal_leg.log", "goal_leg_failframes", "Goal-leg A/B: shipped vs recorded", ("shipped", "recorded")),
+]
+
+
+def newest_run():
+    have = [(os.path.getmtime(os.path.join(ROOT, "overnight", r[0])), r) for r in RUNS
+            if os.path.exists(os.path.join(ROOT, "overnight", r[0]))]
+    return max(have)[1]
+
+
 def rows_and_tallies():
     import glob
     from PIL import Image
     import table_prompt as tp
     import prompt_ocr_ab as ocr
-    j = json.load(open(os.path.join(ROOT, "overnight", "ab_goal_leg.json")))
+    import goal_leg_sheet
+    jname, lname, fdir, name, arms = newest_run()
+    j = json.load(open(os.path.join(ROOT, "overnight", jname)))
     runs = j["runs"]
-    legs = executed_legs()
-    pre = sorted(glob.glob(os.path.join(ROOT, "overnight", "goal_leg_failframes", "at_dealer_table_[0-9]*.jpg")))
+    goal_leg_sheet.LOG = os.path.join(ROOT, "overnight", lname)
+    legs = executed_legs() if os.path.exists(goal_leg_sheet.LOG) else []
+    pre = sorted(glob.glob(os.path.join(ROOT, "overnight", fdir, "at_dealer_table_[0-9]*.jpg")))
     # Per-frame scores are CACHED by filename: re-scoring every frame on every
     # update was ~30s of CPU beside a live run (2026-09-07, the user saw the
     # stream go sluggish). A new frame costs ~2s; the rest cost nothing.
@@ -103,7 +118,7 @@ def rows_and_tallies():
                      "kinds": r.get("failure_kinds_leg_end") or [],
                      "prompt_on_screen": prompt.get(i)})
     tallies = {}
-    for arm in ("shipped", "recorded"):
+    for arm in arms:
         rs = [r for r in rows if r["arm"] == arm]
         val = [r for r in rs if r["outcome"] != "invalid"]
         tallies[arm] = {"valid": len(val), "arrived": sum(r["outcome"] == "arrived" for r in val),
@@ -119,7 +134,7 @@ def rows_and_tallies():
     eta = (f"about {fmt(remaining * med)} (from {fmt(lo)} to {fmt(hi)} if every setup exhausts itself)"
            if remaining else "finished")
     return rows, tallies, {"total": total, "done": len(rows), "remaining": remaining, "eta": eta,
-                           "median_trial_s": round(med)}
+                           "median_trial_s": round(med), "name": name, "harness": jname.replace(".json", ".py"), "arms": list(arms)}
 
 
 def done_today():
@@ -154,8 +169,7 @@ def build_state():
     return {
         "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
         "updated_epoch": int(time.time()),
-        "run": {"name": "Goal-leg A/B: shipped vs recorded", "harness": "overnight/ab_goal_leg.py",
-                "started": "2026-09-07 09:35", "paused": paused, **run, "rows": rows, "tallies": tallies},
+        "run": {"paused": paused, **run, "rows": rows, "tallies": tallies},
         "queue": queue, "decisions": DECISIONS, "done": done_today(),
         "replies": _replies(),
         "talk": "Messages land in the board's inbox; the session reads it at every update and answers here. To wake it right now, add a comment on the page and choose Send to Claude.",
@@ -283,7 +297,7 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--
       <span class="eta">trial <b>${r.done}</b> of <b>${r.total}</b>${r.remaining>0?` &middot; remaining <b>${esc(r.eta)}</b>`:""}</span>
       <span class="upd" id="upd">updated ${esc(st.updated)} (${ago(st.updated_epoch)})</span>`;
     el("runname").textContent = r.name;
-    el("tallies").innerHTML = ["shipped","recorded"].map(a => { const t = r.tallies[a] || {};
+    el("tallies").innerHTML = (r.arms || Object.keys(r.tallies)).map(a => { const t = r.tallies[a] || {};
       return `<div class="tally"><span class="arm">${a}</span><span class="big mono">${t.arrived||0}<small> / ${t.valid||0} valid</small></span><small>${t.invalid||0} invalid &middot; prompt on screen ${t.prompt_on_screen||0} of ${t.executed||0} legs</small></div>`; }).join("");
     el("rows").innerHTML = `<tr><th>#</th><th>arm</th><th>outcome</th><th>leg</th><th>setup</th><th>leg-end class</th><th>prompt on screen</th></tr>` +
       r.rows.map(x => `<tr><td class="n">${x.trial}</td><td><span class="chip arm">${esc(x.arm)}</span></td>

@@ -1,14 +1,16 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-**Nothing on the console.** The suite is certifying the ink-gate change
-(`overnight/suite_after_ink_gate.log`). The prompt-zone map is DONE: see
-CLAUDE.md OPEN-22 (edge +0.05u ahead of the recorded endpoint; screen-fixed
-prompt; endpoint scatter; jukebox leg wedged 69/106 today). Three candidates
-wait on the user's choice: extend the goal leg ~0.10u (A/B); name the
-neighbouring table and record its leg; the jukebox leg's wedge.
+`overnight/ab_goal_extend.py` (detached): candidate (a) of the three the user
+ordered -- recorded goal leg vs recorded + 0.10u along its net bearing
+(GOAL_LEG_EXTRA_UNITS), 10 trials an arm interleaved, 1500s ceiling, scored by
+the corrected at_table (correlation OR OCR). Log `overnight/ab_goal_extend.log`,
+result `overnight/ab_goal_extend.json` after every trial, frames under
+`overnight/goal_extend_failframes/`. Then, in this order: (b) name the
+neighbouring table and record its leg to the dealer; (c) the jukebox leg's
+wedge (69/106 today). NOTHING CPU-bound beside the console run.
 
-## After the prompt-zone run (in order)
+## Earlier plan (kept for the rules it carries)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
    suite caught (142/143, test_success_control_frames.py). Mutation-test it.
 2. `table_prompt` OCR path: apply `drafts/pending_after_ab/patch_at_table_ocr.py`
