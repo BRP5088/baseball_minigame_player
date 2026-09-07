@@ -1,0 +1,2744 @@
+{
+ "generated": "2026-09-07T01:58:26",
+ "git_head": "6fa7deb",
+ "corpus": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/explore/20260904_152521_bar_area",
+ "places_root": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/places",
+ "references_per_room": {
+  "bar_jukebox": 2,
+  "bar_pool_room": 2,
+  "dealer_table": 3,
+  "portrait_room": 2
+ },
+ "crosschecked_against_view_report": 3,
+ "summary": {
+  "classified": 160,
+  "unreadable": 0,
+  "by_class": {
+   "wedged": {
+    "n": 8,
+    "frac": 0.05,
+    "wilson95": [
+     0.026,
+     0.096
+    ]
+   },
+   "named": {
+    "n": 50,
+    "frac": 0.3125,
+    "wilson95": [
+     0.246,
+     0.388
+    ]
+   },
+   "rich-unnamed": {
+    "n": 102,
+    "frac": 0.6375,
+    "wilson95": [
+     0.561,
+     0.708
+    ]
+   }
+  },
+  "named_by_room": {
+   "bar_pool_room": 21,
+   "portrait_room": 25,
+   "bar_jukebox": 4
+  },
+  "rich_unnamed": {
+   "n": 102,
+   "best_min": 14,
+   "best_median": 124.0,
+   "best_max": 199,
+   "keypoints_median": 1500.0,
+   "ratio_median": 1.13,
+   "at_or_above_bar_ratio_only": 29,
+   "near_window": 20,
+   "within_near_below_bar": 36,
+   "hist_bin": 20,
+   "hist": [
+    {
+     "lo": -140,
+     "hi": -120,
+     "n": 1
+    },
+    {
+     "lo": -120,
+     "hi": -100,
+     "n": 1
+    },
+    {
+     "lo": -100,
+     "hi": -80,
+     "n": 9
+    },
+    {
+     "lo": -80,
+     "hi": -60,
+     "n": 10
+    },
+    {
+     "lo": -60,
+     "hi": -40,
+     "n": 7
+    },
+    {
+     "lo": -40,
+     "hi": -20,
+     "n": 9
+    },
+    {
+     "lo": -20,
+     "hi": 0,
+     "n": 36
+    },
+    {
+     "lo": 0,
+     "hi": 20,
+     "n": 19
+    },
+    {
+     "lo": 20,
+     "hi": 40,
+     "n": 8
+    },
+    {
+     "lo": 40,
+     "hi": 60,
+     "n": 2
+    }
+   ]
+  },
+  "gates": {
+   "MIN_MATCHES": 140,
+   "MIN_RATIO": 1.35,
+   "WEDGED_MAX_KEYPOINTS": 50
+  }
+ },
+ "index_control": {
+  "compared": 160,
+  "room_disagreements": 9,
+  "keypoint_disagreements": 42,
+  "keypoint_max_delta": 38,
+  "score_disagreements": 148,
+  "score_max_delta": 26,
+  "examples": [
+   {
+    "file": "00016.jpg",
+    "index": [
+     null,
+     180
+    ],
+    "now": [
+     "bar_pool_room",
+     181
+    ]
+   },
+   {
+    "file": "00062.jpg",
+    "index": [
+     "portrait_room",
+     149
+    ],
+    "now": [
+     null,
+     123
+    ]
+   },
+   {
+    "file": "00069.jpg",
+    "index": [
+     null,
+     148
+    ],
+    "now": [
+     "portrait_room",
+     156
+    ]
+   },
+   {
+    "file": "00083.jpg",
+    "index": [
+     "bar_jukebox",
+     195
+    ],
+    "now": [
+     null,
+     175
+    ]
+   },
+   {
+    "file": "00086.jpg",
+    "index": [
+     "portrait_room",
+     166
+    ],
+    "now": [
+     null,
+     156
+    ]
+   }
+  ]
+ },
+ "frames": [
+  {
+   "file": "00001.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 540,
+   "ratio": 4.86,
+   "scores": {
+    "bar_jukebox": 98,
+    "bar_pool_room": 540,
+    "dealer_table": 86,
+    "portrait_room": 111
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00002.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 168,
+   "ratio": 1.2,
+   "scores": {
+    "bar_jukebox": 140,
+    "bar_pool_room": 168,
+    "dealer_table": 88,
+    "portrait_room": 119
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00003.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 745,
+   "room": null,
+   "best": 123,
+   "ratio": 1.86,
+   "scores": {
+    "bar_jukebox": 66,
+    "bar_pool_room": 65,
+    "dealer_table": 62,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "745 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00004.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 466,
+   "ratio": 3.64,
+   "scores": {
+    "bar_jukebox": 126,
+    "bar_pool_room": 128,
+    "dealer_table": 97,
+    "portrait_room": 466
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00005.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1420,
+   "room": null,
+   "best": 77,
+   "ratio": 1.01,
+   "scores": {
+    "bar_jukebox": 70,
+    "bar_pool_room": 77,
+    "dealer_table": 44,
+    "portrait_room": 76
+   },
+   "kind": "overshot",
+   "detail": "1420 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00006.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 558,
+   "room": null,
+   "best": 48,
+   "ratio": 1.04,
+   "scores": {
+    "bar_jukebox": 35,
+    "bar_pool_room": 44,
+    "dealer_table": 46,
+    "portrait_room": 48
+   },
+   "kind": "overshot",
+   "detail": "558 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00007.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 122,
+   "ratio": 1.04,
+   "scores": {
+    "bar_jukebox": 104,
+    "bar_pool_room": 117,
+    "dealer_table": 107,
+    "portrait_room": 122
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00008.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 102,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 73,
+    "bar_pool_room": 102,
+    "dealer_table": 66,
+    "portrait_room": 99
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00009.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 543,
+   "room": null,
+   "best": 70,
+   "ratio": 1.17,
+   "scores": {
+    "bar_jukebox": 70,
+    "bar_pool_room": 60,
+    "dealer_table": 45,
+    "portrait_room": 60
+   },
+   "kind": "overshot",
+   "detail": "543 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00010.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 294,
+   "ratio": 2.49,
+   "scores": {
+    "bar_jukebox": 101,
+    "bar_pool_room": 118,
+    "dealer_table": 88,
+    "portrait_room": 294
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00011.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 234,
+   "ratio": 2.13,
+   "scores": {
+    "bar_jukebox": 103,
+    "bar_pool_room": 110,
+    "dealer_table": 85,
+    "portrait_room": 234
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00012.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 614,
+   "room": null,
+   "best": 61,
+   "ratio": 1.0,
+   "scores": {
+    "bar_jukebox": 51,
+    "bar_pool_room": 61,
+    "dealer_table": 40,
+    "portrait_room": 61
+   },
+   "kind": "overshot",
+   "detail": "614 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00013.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 156,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 107,
+    "bar_pool_room": 144,
+    "dealer_table": 116,
+    "portrait_room": 156
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00014.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 122,
+   "ratio": 1.1,
+   "scores": {
+    "bar_jukebox": 76,
+    "bar_pool_room": 111,
+    "dealer_table": 98,
+    "portrait_room": 122
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00015.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 446,
+   "ratio": 4.37,
+   "scores": {
+    "bar_jukebox": 99,
+    "bar_pool_room": 446,
+    "dealer_table": 93,
+    "portrait_room": 102
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00016.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 181,
+   "ratio": 1.4,
+   "scores": {
+    "bar_jukebox": 115,
+    "bar_pool_room": 181,
+    "dealer_table": 101,
+    "portrait_room": 129
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00017.jpg",
+   "class": "wedged",
+   "keypoints": 8,
+   "room": null,
+   "best": 3,
+   "ratio": 3.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 3,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "8 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00018.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 297,
+   "ratio": 2.3,
+   "scores": {
+    "bar_jukebox": 108,
+    "bar_pool_room": 129,
+    "dealer_table": 111,
+    "portrait_room": 297
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00019.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 436,
+   "ratio": 3.63,
+   "scores": {
+    "bar_jukebox": 111,
+    "bar_pool_room": 120,
+    "dealer_table": 100,
+    "portrait_room": 436
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00020.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1498,
+   "room": null,
+   "best": 62,
+   "ratio": 1.05,
+   "scores": {
+    "bar_jukebox": 42,
+    "bar_pool_room": 62,
+    "dealer_table": 55,
+    "portrait_room": 59
+   },
+   "kind": "overshot",
+   "detail": "1498 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00021.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1483,
+   "room": null,
+   "best": 139,
+   "ratio": 1.15,
+   "scores": {
+    "bar_jukebox": 84,
+    "bar_pool_room": 120,
+    "dealer_table": 121,
+    "portrait_room": 139
+   },
+   "kind": "overshot",
+   "detail": "1483 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00022.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 123,
+   "ratio": 1.21,
+   "scores": {
+    "bar_jukebox": 83,
+    "bar_pool_room": 102,
+    "dealer_table": 88,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00023.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 374,
+   "ratio": 2.92,
+   "scores": {
+    "bar_jukebox": 108,
+    "bar_pool_room": 374,
+    "dealer_table": 112,
+    "portrait_room": 128
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00024.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 138,
+   "ratio": 1.14,
+   "scores": {
+    "bar_jukebox": 98,
+    "bar_pool_room": 138,
+    "dealer_table": 102,
+    "portrait_room": 121
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00025.jpg",
+   "class": "wedged",
+   "keypoints": 10,
+   "room": null,
+   "best": 2,
+   "ratio": 2.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 2,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "10 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00026.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1387,
+   "room": null,
+   "best": 168,
+   "ratio": 1.33,
+   "scores": {
+    "bar_jukebox": 112,
+    "bar_pool_room": 126,
+    "dealer_table": 108,
+    "portrait_room": 168
+   },
+   "kind": "overshot",
+   "detail": "1387 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00027.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 423,
+   "ratio": 3.44,
+   "scores": {
+    "bar_jukebox": 112,
+    "bar_pool_room": 123,
+    "dealer_table": 108,
+    "portrait_room": 423
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00028.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 55,
+   "ratio": 1.06,
+   "scores": {
+    "bar_jukebox": 41,
+    "bar_pool_room": 55,
+    "dealer_table": 44,
+    "portrait_room": 52
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00029.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1438,
+   "room": null,
+   "best": 150,
+   "ratio": 1.23,
+   "scores": {
+    "bar_jukebox": 106,
+    "bar_pool_room": 110,
+    "dealer_table": 122,
+    "portrait_room": 150
+   },
+   "kind": "overshot",
+   "detail": "1438 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00030.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1412,
+   "room": null,
+   "best": 106,
+   "ratio": 1.02,
+   "scores": {
+    "bar_jukebox": 89,
+    "bar_pool_room": 106,
+    "dealer_table": 96,
+    "portrait_room": 104
+   },
+   "kind": "overshot",
+   "detail": "1412 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00031.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 255,
+   "ratio": 1.99,
+   "scores": {
+    "bar_jukebox": 99,
+    "bar_pool_room": 255,
+    "dealer_table": 103,
+    "portrait_room": 128
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00032.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 120,
+   "ratio": 1.22,
+   "scores": {
+    "bar_jukebox": 77,
+    "bar_pool_room": 98,
+    "dealer_table": 85,
+    "portrait_room": 120
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00033.jpg",
+   "class": "wedged",
+   "keypoints": 11,
+   "room": null,
+   "best": 2,
+   "ratio": 2.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 2,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "11 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00034.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 272,
+   "ratio": 2.03,
+   "scores": {
+    "bar_jukebox": 129,
+    "bar_pool_room": 134,
+    "dealer_table": 103,
+    "portrait_room": 272
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00035.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 338,
+   "ratio": 2.82,
+   "scores": {
+    "bar_jukebox": 111,
+    "bar_pool_room": 120,
+    "dealer_table": 106,
+    "portrait_room": 338
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00036.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 52,
+   "ratio": 1.02,
+   "scores": {
+    "bar_jukebox": 37,
+    "bar_pool_room": 51,
+    "dealer_table": 44,
+    "portrait_room": 52
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00037.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1336,
+   "room": null,
+   "best": 140,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 104,
+    "bar_pool_room": 131,
+    "dealer_table": 114,
+    "portrait_room": 140
+   },
+   "kind": "overshot",
+   "detail": "1336 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00038.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1237,
+   "room": null,
+   "best": 94,
+   "ratio": 1.16,
+   "scores": {
+    "bar_jukebox": 74,
+    "bar_pool_room": 81,
+    "dealer_table": 78,
+    "portrait_room": 94
+   },
+   "kind": "overshot",
+   "detail": "1237 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00039.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1499,
+   "room": null,
+   "best": 147,
+   "ratio": 1.11,
+   "scores": {
+    "bar_jukebox": 103,
+    "bar_pool_room": 147,
+    "dealer_table": 117,
+    "portrait_room": 132
+   },
+   "kind": "overshot",
+   "detail": "1499 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00040.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1408,
+   "room": null,
+   "best": 121,
+   "ratio": 1.13,
+   "scores": {
+    "bar_jukebox": 78,
+    "bar_pool_room": 107,
+    "dealer_table": 99,
+    "portrait_room": 121
+   },
+   "kind": "overshot",
+   "detail": "1408 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00041.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 521,
+   "ratio": 4.78,
+   "scores": {
+    "bar_jukebox": 94,
+    "bar_pool_room": 521,
+    "dealer_table": 79,
+    "portrait_room": 109
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00042.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 156,
+   "ratio": 1.2,
+   "scores": {
+    "bar_jukebox": 100,
+    "bar_pool_room": 156,
+    "dealer_table": 92,
+    "portrait_room": 130
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00043.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 575,
+   "room": null,
+   "best": 96,
+   "ratio": 1.52,
+   "scores": {
+    "bar_jukebox": 44,
+    "bar_pool_room": 62,
+    "dealer_table": 63,
+    "portrait_room": 96
+   },
+   "kind": "overshot",
+   "detail": "575 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00044.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 355,
+   "ratio": 2.8,
+   "scores": {
+    "bar_jukebox": 127,
+    "bar_pool_room": 118,
+    "dealer_table": 97,
+    "portrait_room": 355
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00045.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1449,
+   "room": null,
+   "best": 75,
+   "ratio": 1.23,
+   "scores": {
+    "bar_jukebox": 55,
+    "bar_pool_room": 61,
+    "dealer_table": 46,
+    "portrait_room": 75
+   },
+   "kind": "overshot",
+   "detail": "1449 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00046.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 830,
+   "room": null,
+   "best": 78,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 66,
+    "bar_pool_room": 72,
+    "dealer_table": 78,
+    "portrait_room": 71
+   },
+   "kind": "overshot",
+   "detail": "830 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00047.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 133,
+   "ratio": 1.16,
+   "scores": {
+    "bar_jukebox": 82,
+    "bar_pool_room": 115,
+    "dealer_table": 102,
+    "portrait_room": 133
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00048.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 117,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 96,
+    "bar_pool_room": 108,
+    "dealer_table": 89,
+    "portrait_room": 117
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00049.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 120,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 116,
+    "bar_pool_room": 111,
+    "dealer_table": 76,
+    "portrait_room": 120
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00050.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 295,
+   "room": null,
+   "best": 47,
+   "ratio": 1.0,
+   "scores": {
+    "bar_jukebox": 32,
+    "bar_pool_room": 47,
+    "dealer_table": 38,
+    "portrait_room": 47
+   },
+   "kind": "overshot",
+   "detail": "295 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00051.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 380,
+   "ratio": 3.17,
+   "scores": {
+    "bar_jukebox": 107,
+    "bar_pool_room": 120,
+    "dealer_table": 101,
+    "portrait_room": 380
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00052.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 65,
+   "ratio": 1.33,
+   "scores": {
+    "bar_jukebox": 49,
+    "bar_pool_room": 47,
+    "dealer_table": 45,
+    "portrait_room": 65
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00053.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1405,
+   "room": null,
+   "best": 137,
+   "ratio": 1.16,
+   "scores": {
+    "bar_jukebox": 100,
+    "bar_pool_room": 116,
+    "dealer_table": 118,
+    "portrait_room": 137
+   },
+   "kind": "overshot",
+   "detail": "1405 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00054.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 142,
+   "ratio": 1.15,
+   "scores": {
+    "bar_jukebox": 98,
+    "bar_pool_room": 121,
+    "dealer_table": 124,
+    "portrait_room": 142
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00055.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 215,
+   "ratio": 2.07,
+   "scores": {
+    "bar_jukebox": 97,
+    "bar_pool_room": 215,
+    "dealer_table": 75,
+    "portrait_room": 104
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00056.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 469,
+   "ratio": 3.66,
+   "scores": {
+    "bar_jukebox": 96,
+    "bar_pool_room": 469,
+    "dealer_table": 98,
+    "portrait_room": 128
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00057.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 148,
+   "ratio": 1.23,
+   "scores": {
+    "bar_jukebox": 148,
+    "bar_pool_room": 120,
+    "dealer_table": 86,
+    "portrait_room": 117
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00058.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 111,
+   "room": null,
+   "best": 22,
+   "ratio": 1.1,
+   "scores": {
+    "bar_jukebox": 20,
+    "bar_pool_room": 22,
+    "dealer_table": 19,
+    "portrait_room": 19
+   },
+   "kind": "overshot",
+   "detail": "111 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00059.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 341,
+   "ratio": 3.28,
+   "scores": {
+    "bar_jukebox": 104,
+    "bar_pool_room": 98,
+    "dealer_table": 102,
+    "portrait_room": 341
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00060.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 45,
+   "ratio": 1.1,
+   "scores": {
+    "bar_jukebox": 45,
+    "bar_pool_room": 35,
+    "dealer_table": 41,
+    "portrait_room": 38
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00061.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 142,
+   "ratio": 1.15,
+   "scores": {
+    "bar_jukebox": 109,
+    "bar_pool_room": 123,
+    "dealer_table": 121,
+    "portrait_room": 142
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00062.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 123,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 91,
+    "bar_pool_room": 119,
+    "dealer_table": 94,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00063.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 217,
+   "ratio": 2.03,
+   "scores": {
+    "bar_jukebox": 93,
+    "bar_pool_room": 217,
+    "dealer_table": 82,
+    "portrait_room": 107
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00064.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 228,
+   "ratio": 1.73,
+   "scores": {
+    "bar_jukebox": 111,
+    "bar_pool_room": 228,
+    "dealer_table": 101,
+    "portrait_room": 132
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00065.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 146,
+   "ratio": 1.14,
+   "scores": {
+    "bar_jukebox": 146,
+    "bar_pool_room": 110,
+    "dealer_table": 96,
+    "portrait_room": 128
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00066.jpg",
+   "class": "wedged",
+   "keypoints": 23,
+   "room": null,
+   "best": 7,
+   "ratio": 1.17,
+   "scores": {
+    "bar_jukebox": 7,
+    "bar_pool_room": 6,
+    "dealer_table": 6,
+    "portrait_room": 6
+   },
+   "kind": "wedged",
+   "detail": "23 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00067.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 403,
+   "ratio": 3.73,
+   "scores": {
+    "bar_jukebox": 105,
+    "bar_pool_room": 108,
+    "dealer_table": 103,
+    "portrait_room": 403
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00068.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 40,
+   "ratio": 1.11,
+   "scores": {
+    "bar_jukebox": 40,
+    "bar_pool_room": 36,
+    "dealer_table": 34,
+    "portrait_room": 36
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00069.jpg",
+   "class": "named",
+   "keypoints": 1389,
+   "room": "portrait_room",
+   "best": 156,
+   "ratio": 1.44,
+   "scores": {
+    "bar_jukebox": 87,
+    "bar_pool_room": 105,
+    "dealer_table": 108,
+    "portrait_room": 156
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00070.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1465,
+   "room": null,
+   "best": 123,
+   "ratio": 1.15,
+   "scores": {
+    "bar_jukebox": 89,
+    "bar_pool_room": 105,
+    "dealer_table": 107,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "1465 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00071.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 172,
+   "ratio": 1.38,
+   "scores": {
+    "bar_jukebox": 107,
+    "bar_pool_room": 172,
+    "dealer_table": 91,
+    "portrait_room": 125
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00072.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 147,
+   "ratio": 1.27,
+   "scores": {
+    "bar_jukebox": 89,
+    "bar_pool_room": 147,
+    "dealer_table": 92,
+    "portrait_room": 116
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00073.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 125,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 125,
+    "bar_pool_room": 94,
+    "dealer_table": 89,
+    "portrait_room": 117
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00074.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 124,
+   "ratio": 1.06,
+   "scores": {
+    "bar_jukebox": 124,
+    "bar_pool_room": 110,
+    "dealer_table": 84,
+    "portrait_room": 117
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00075.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 128,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 128,
+    "bar_pool_room": 95,
+    "dealer_table": 98,
+    "portrait_room": 120
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00076.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 115,
+   "ratio": 1.04,
+   "scores": {
+    "bar_jukebox": 115,
+    "bar_pool_room": 110,
+    "dealer_table": 91,
+    "portrait_room": 111
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00077.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 131,
+   "ratio": 1.16,
+   "scores": {
+    "bar_jukebox": 113,
+    "bar_pool_room": 96,
+    "dealer_table": 98,
+    "portrait_room": 131
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00078.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 130,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 130,
+    "bar_pool_room": 100,
+    "dealer_table": 92,
+    "portrait_room": 121
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00079.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 113,
+   "ratio": 1.02,
+   "scores": {
+    "bar_jukebox": 111,
+    "bar_pool_room": 92,
+    "dealer_table": 103,
+    "portrait_room": 113
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00080.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 124,
+   "ratio": 1.17,
+   "scores": {
+    "bar_jukebox": 106,
+    "bar_pool_room": 88,
+    "dealer_table": 96,
+    "portrait_room": 124
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00081.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 500,
+   "ratio": 4.1,
+   "scores": {
+    "bar_jukebox": 118,
+    "bar_pool_room": 500,
+    "dealer_table": 88,
+    "portrait_room": 122
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00082.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 199,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 199,
+    "bar_pool_room": 185,
+    "dealer_table": 95,
+    "portrait_room": 153
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00083.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 175,
+   "ratio": 1.25,
+   "scores": {
+    "bar_jukebox": 175,
+    "bar_pool_room": 118,
+    "dealer_table": 89,
+    "portrait_room": 140
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00084.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 460,
+   "ratio": 3.26,
+   "scores": {
+    "bar_jukebox": 122,
+    "bar_pool_room": 141,
+    "dealer_table": 114,
+    "portrait_room": 460
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00085.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 73,
+   "ratio": 1.22,
+   "scores": {
+    "bar_jukebox": 60,
+    "bar_pool_room": 48,
+    "dealer_table": 47,
+    "portrait_room": 73
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00086.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 156,
+   "ratio": 1.32,
+   "scores": {
+    "bar_jukebox": 113,
+    "bar_pool_room": 109,
+    "dealer_table": 118,
+    "portrait_room": 156
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00087.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 142,
+   "ratio": 1.18,
+   "scores": {
+    "bar_jukebox": 120,
+    "bar_pool_room": 115,
+    "dealer_table": 110,
+    "portrait_room": 142
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00088.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 123,
+   "ratio": 1.12,
+   "scores": {
+    "bar_jukebox": 108,
+    "bar_pool_room": 110,
+    "dealer_table": 77,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00089.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1456,
+   "room": null,
+   "best": 179,
+   "ratio": 1.14,
+   "scores": {
+    "bar_jukebox": 179,
+    "bar_pool_room": 123,
+    "dealer_table": 95,
+    "portrait_room": 157
+   },
+   "kind": "overshot",
+   "detail": "1456 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00090.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 501,
+   "ratio": 3.85,
+   "scores": {
+    "bar_jukebox": 117,
+    "bar_pool_room": 130,
+    "dealer_table": 102,
+    "portrait_room": 501
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00091.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 58,
+   "ratio": 1.0,
+   "scores": {
+    "bar_jukebox": 58,
+    "bar_pool_room": 46,
+    "dealer_table": 47,
+    "portrait_room": 58
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00092.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 142,
+   "ratio": 1.17,
+   "scores": {
+    "bar_jukebox": 106,
+    "bar_pool_room": 121,
+    "dealer_table": 105,
+    "portrait_room": 142
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00093.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 146,
+   "ratio": 1.28,
+   "scores": {
+    "bar_jukebox": 93,
+    "bar_pool_room": 114,
+    "dealer_table": 113,
+    "portrait_room": 146
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00094.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 131,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 123,
+    "bar_pool_room": 127,
+    "dealer_table": 88,
+    "portrait_room": 131
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00095.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 434,
+   "ratio": 3.56,
+   "scores": {
+    "bar_jukebox": 122,
+    "bar_pool_room": 434,
+    "dealer_table": 95,
+    "portrait_room": 118
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00096.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_jukebox",
+   "best": 220,
+   "ratio": 1.45,
+   "scores": {
+    "bar_jukebox": 220,
+    "bar_pool_room": 152,
+    "dealer_table": 94,
+    "portrait_room": 124
+   },
+   "kind": "unplaced",
+   "detail": "at bar_jukebox, which is not on this route"
+  },
+  {
+   "file": "00097.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 848,
+   "room": null,
+   "best": 99,
+   "ratio": 1.14,
+   "scores": {
+    "bar_jukebox": 87,
+    "bar_pool_room": 73,
+    "dealer_table": 59,
+    "portrait_room": 99
+   },
+   "kind": "overshot",
+   "detail": "848 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00098.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 388,
+   "ratio": 3.18,
+   "scores": {
+    "bar_jukebox": 122,
+    "bar_pool_room": 113,
+    "dealer_table": 114,
+    "portrait_room": 388
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00099.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 51,
+   "ratio": 1.02,
+   "scores": {
+    "bar_jukebox": 38,
+    "bar_pool_room": 50,
+    "dealer_table": 48,
+    "portrait_room": 51
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00100.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 113,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 83,
+    "bar_pool_room": 110,
+    "dealer_table": 104,
+    "portrait_room": 113
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00101.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 144,
+   "ratio": 1.3,
+   "scores": {
+    "bar_jukebox": 86,
+    "bar_pool_room": 111,
+    "dealer_table": 95,
+    "portrait_room": 144
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00102.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 284,
+   "ratio": 2.18,
+   "scores": {
+    "bar_jukebox": 113,
+    "bar_pool_room": 284,
+    "dealer_table": 94,
+    "portrait_room": 130
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00103.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 314,
+   "ratio": 2.66,
+   "scores": {
+    "bar_jukebox": 117,
+    "bar_pool_room": 314,
+    "dealer_table": 90,
+    "portrait_room": 118
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00104.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_jukebox",
+   "best": 232,
+   "ratio": 1.63,
+   "scores": {
+    "bar_jukebox": 232,
+    "bar_pool_room": 131,
+    "dealer_table": 94,
+    "portrait_room": 142
+   },
+   "kind": "unplaced",
+   "detail": "at bar_jukebox, which is not on this route"
+  },
+  {
+   "file": "00105.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 697,
+   "room": null,
+   "best": 92,
+   "ratio": 1.39,
+   "scores": {
+    "bar_jukebox": 66,
+    "bar_pool_room": 60,
+    "dealer_table": 61,
+    "portrait_room": 92
+   },
+   "kind": "overshot",
+   "detail": "697 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00106.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 315,
+   "ratio": 2.81,
+   "scores": {
+    "bar_jukebox": 102,
+    "bar_pool_room": 112,
+    "dealer_table": 101,
+    "portrait_room": 315
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00107.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 43,
+   "ratio": 1.23,
+   "scores": {
+    "bar_jukebox": 43,
+    "bar_pool_room": 34,
+    "dealer_table": 35,
+    "portrait_room": 34
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00108.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 132,
+   "ratio": 1.25,
+   "scores": {
+    "bar_jukebox": 83,
+    "bar_pool_room": 106,
+    "dealer_table": 106,
+    "portrait_room": 132
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00109.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 144,
+   "ratio": 1.2,
+   "scores": {
+    "bar_jukebox": 92,
+    "bar_pool_room": 120,
+    "dealer_table": 97,
+    "portrait_room": 144
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00110.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 165,
+   "ratio": 1.25,
+   "scores": {
+    "bar_jukebox": 113,
+    "bar_pool_room": 165,
+    "dealer_table": 105,
+    "portrait_room": 132
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00111.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 179,
+   "ratio": 1.43,
+   "scores": {
+    "bar_jukebox": 118,
+    "bar_pool_room": 179,
+    "dealer_table": 105,
+    "portrait_room": 125
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00112.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_jukebox",
+   "best": 210,
+   "ratio": 1.64,
+   "scores": {
+    "bar_jukebox": 210,
+    "bar_pool_room": 128,
+    "dealer_table": 81,
+    "portrait_room": 126
+   },
+   "kind": "unplaced",
+   "detail": "at bar_jukebox, which is not on this route"
+  },
+  {
+   "file": "00113.jpg",
+   "class": "named",
+   "keypoints": 1314,
+   "room": "bar_jukebox",
+   "best": 180,
+   "ratio": 1.71,
+   "scores": {
+    "bar_jukebox": 180,
+    "bar_pool_room": 89,
+    "dealer_table": 68,
+    "portrait_room": 105
+   },
+   "kind": "unplaced",
+   "detail": "at bar_jukebox, which is not on this route"
+  },
+  {
+   "file": "00114.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 344,
+   "ratio": 2.59,
+   "scores": {
+    "bar_jukebox": 124,
+    "bar_pool_room": 126,
+    "dealer_table": 133,
+    "portrait_room": 344
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00115.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 185,
+   "ratio": 2.1,
+   "scores": {
+    "bar_jukebox": 79,
+    "bar_pool_room": 88,
+    "dealer_table": 85,
+    "portrait_room": 185
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00116.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 111,
+   "ratio": 1.04,
+   "scores": {
+    "bar_jukebox": 86,
+    "bar_pool_room": 111,
+    "dealer_table": 104,
+    "portrait_room": 107
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00117.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 138,
+   "ratio": 1.13,
+   "scores": {
+    "bar_jukebox": 91,
+    "bar_pool_room": 122,
+    "dealer_table": 105,
+    "portrait_room": 138
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00118.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 123,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 118,
+    "bar_pool_room": 123,
+    "dealer_table": 96,
+    "portrait_room": 119
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00119.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 167,
+   "ratio": 1.4,
+   "scores": {
+    "bar_jukebox": 117,
+    "bar_pool_room": 167,
+    "dealer_table": 88,
+    "portrait_room": 119
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00120.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 136,
+   "ratio": 1.17,
+   "scores": {
+    "bar_jukebox": 136,
+    "bar_pool_room": 96,
+    "dealer_table": 72,
+    "portrait_room": 116
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00121.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 517,
+   "ratio": 4.42,
+   "scores": {
+    "bar_jukebox": 107,
+    "bar_pool_room": 517,
+    "dealer_table": 94,
+    "portrait_room": 117
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00122.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 179,
+   "ratio": 1.0,
+   "scores": {
+    "bar_jukebox": 179,
+    "bar_pool_room": 179,
+    "dealer_table": 108,
+    "portrait_room": 145
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00123.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 163,
+   "ratio": 1.16,
+   "scores": {
+    "bar_jukebox": 163,
+    "bar_pool_room": 126,
+    "dealer_table": 92,
+    "portrait_room": 141
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00124.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 482,
+   "ratio": 3.42,
+   "scores": {
+    "bar_jukebox": 125,
+    "bar_pool_room": 141,
+    "dealer_table": 112,
+    "portrait_room": 482
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00125.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 67,
+   "ratio": 1.29,
+   "scores": {
+    "bar_jukebox": 52,
+    "bar_pool_room": 50,
+    "dealer_table": 40,
+    "portrait_room": 67
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00126.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 142,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 101,
+    "bar_pool_room": 131,
+    "dealer_table": 111,
+    "portrait_room": 142
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00127.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 139,
+   "ratio": 1.06,
+   "scores": {
+    "bar_jukebox": 88,
+    "bar_pool_room": 131,
+    "dealer_table": 108,
+    "portrait_room": 139
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00128.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 129,
+   "ratio": 1.19,
+   "scores": {
+    "bar_jukebox": 87,
+    "bar_pool_room": 108,
+    "dealer_table": 93,
+    "portrait_room": 129
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00129.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 409,
+   "ratio": 3.33,
+   "scores": {
+    "bar_jukebox": 107,
+    "bar_pool_room": 123,
+    "dealer_table": 101,
+    "portrait_room": 409
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00130.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 85,
+   "ratio": 1.25,
+   "scores": {
+    "bar_jukebox": 68,
+    "bar_pool_room": 62,
+    "dealer_table": 54,
+    "portrait_room": 85
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00131.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1475,
+   "room": null,
+   "best": 141,
+   "ratio": 1.04,
+   "scores": {
+    "bar_jukebox": 108,
+    "bar_pool_room": 141,
+    "dealer_table": 111,
+    "portrait_room": 135
+   },
+   "kind": "overshot",
+   "detail": "1475 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00132.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 137,
+   "ratio": 1.13,
+   "scores": {
+    "bar_jukebox": 95,
+    "bar_pool_room": 104,
+    "dealer_table": 121,
+    "portrait_room": 137
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00133.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1444,
+   "room": null,
+   "best": 124,
+   "ratio": 1.13,
+   "scores": {
+    "bar_jukebox": 79,
+    "bar_pool_room": 110,
+    "dealer_table": 92,
+    "portrait_room": 124
+   },
+   "kind": "overshot",
+   "detail": "1444 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00134.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 507,
+   "ratio": 4.49,
+   "scores": {
+    "bar_jukebox": 101,
+    "bar_pool_room": 507,
+    "dealer_table": 104,
+    "portrait_room": 113
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00135.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 167,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 167,
+    "bar_pool_room": 156,
+    "dealer_table": 99,
+    "portrait_room": 147
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00136.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 115,
+   "ratio": 1.14,
+   "scores": {
+    "bar_jukebox": 115,
+    "bar_pool_room": 84,
+    "dealer_table": 88,
+    "portrait_room": 101
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00137.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 281,
+   "ratio": 2.42,
+   "scores": {
+    "bar_jukebox": 116,
+    "bar_pool_room": 109,
+    "dealer_table": 101,
+    "portrait_room": 281
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00138.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 216,
+   "ratio": 2.06,
+   "scores": {
+    "bar_jukebox": 99,
+    "bar_pool_room": 105,
+    "dealer_table": 85,
+    "portrait_room": 216
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00139.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1062,
+   "room": null,
+   "best": 95,
+   "ratio": 1.2,
+   "scores": {
+    "bar_jukebox": 62,
+    "bar_pool_room": 77,
+    "dealer_table": 79,
+    "portrait_room": 95
+   },
+   "kind": "overshot",
+   "detail": "1062 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00140.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 124,
+   "ratio": 1.05,
+   "scores": {
+    "bar_jukebox": 98,
+    "bar_pool_room": 109,
+    "dealer_table": 118,
+    "portrait_room": 124
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00141.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 130,
+   "ratio": 1.12,
+   "scores": {
+    "bar_jukebox": 91,
+    "bar_pool_room": 130,
+    "dealer_table": 101,
+    "portrait_room": 116
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00142.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 360,
+   "ratio": 2.55,
+   "scores": {
+    "bar_jukebox": 141,
+    "bar_pool_room": 360,
+    "dealer_table": 100,
+    "portrait_room": 124
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00143.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 128,
+   "ratio": 1.02,
+   "scores": {
+    "bar_jukebox": 114,
+    "bar_pool_room": 125,
+    "dealer_table": 96,
+    "portrait_room": 128
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00144.jpg",
+   "class": "wedged",
+   "keypoints": 10,
+   "room": null,
+   "best": 2,
+   "ratio": 2.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 2,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "10 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00145.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 189,
+   "ratio": 1.83,
+   "scores": {
+    "bar_jukebox": 100,
+    "bar_pool_room": 103,
+    "dealer_table": 99,
+    "portrait_room": 189
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00146.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 123,
+   "ratio": 1.81,
+   "scores": {
+    "bar_jukebox": 52,
+    "bar_pool_room": 62,
+    "dealer_table": 68,
+    "portrait_room": 123
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00147.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 106,
+   "ratio": 1.29,
+   "scores": {
+    "bar_jukebox": 68,
+    "bar_pool_room": 71,
+    "dealer_table": 82,
+    "portrait_room": 106
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00148.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 136,
+   "ratio": 1.05,
+   "scores": {
+    "bar_jukebox": 104,
+    "bar_pool_room": 136,
+    "dealer_table": 108,
+    "portrait_room": 129
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00149.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "bar_pool_room",
+   "best": 210,
+   "ratio": 1.67,
+   "scores": {
+    "bar_jukebox": 109,
+    "bar_pool_room": 210,
+    "dealer_table": 101,
+    "portrait_room": 126
+   },
+   "kind": "unplaced",
+   "detail": "at bar_pool_room, which is not on this route"
+  },
+  {
+   "file": "00150.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1442,
+   "room": null,
+   "best": 182,
+   "ratio": 1.33,
+   "scores": {
+    "bar_jukebox": 114,
+    "bar_pool_room": 182,
+    "dealer_table": 114,
+    "portrait_room": 137
+   },
+   "kind": "overshot",
+   "detail": "1442 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00151.jpg",
+   "class": "wedged",
+   "keypoints": 10,
+   "room": null,
+   "best": 2,
+   "ratio": 2.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 2,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "10 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00152.jpg",
+   "class": "wedged",
+   "keypoints": 39,
+   "room": null,
+   "best": 12,
+   "ratio": 1.09,
+   "scores": {
+    "bar_jukebox": 11,
+    "bar_pool_room": 11,
+    "dealer_table": 12,
+    "portrait_room": 11
+   },
+   "kind": "wedged",
+   "detail": "39 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00153.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 140,
+   "ratio": 1.09,
+   "scores": {
+    "bar_jukebox": 129,
+    "bar_pool_room": 100,
+    "dealer_table": 94,
+    "portrait_room": 140
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00154.jpg",
+   "class": "named",
+   "keypoints": 1500,
+   "room": "portrait_room",
+   "best": 145,
+   "ratio": 1.51,
+   "scores": {
+    "bar_jukebox": 96,
+    "bar_pool_room": 80,
+    "dealer_table": 86,
+    "portrait_room": 145
+   },
+   "kind": "unplaced",
+   "detail": "at portrait_room, which is not on this route"
+  },
+  {
+   "file": "00155.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1500,
+   "room": null,
+   "best": 69,
+   "ratio": 1.15,
+   "scores": {
+    "bar_jukebox": 60,
+    "bar_pool_room": 54,
+    "dealer_table": 59,
+    "portrait_room": 69
+   },
+   "kind": "overshot",
+   "detail": "1500 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00156.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1464,
+   "room": null,
+   "best": 131,
+   "ratio": 1.07,
+   "scores": {
+    "bar_jukebox": 88,
+    "bar_pool_room": 122,
+    "dealer_table": 115,
+    "portrait_room": 131
+   },
+   "kind": "overshot",
+   "detail": "1464 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00157.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 1478,
+   "room": null,
+   "best": 128,
+   "ratio": 1.03,
+   "scores": {
+    "bar_jukebox": 100,
+    "bar_pool_room": 124,
+    "dealer_table": 97,
+    "portrait_room": 128
+   },
+   "kind": "overshot",
+   "detail": "1478 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00158.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 551,
+   "room": null,
+   "best": 87,
+   "ratio": 1.34,
+   "scores": {
+    "bar_jukebox": 49,
+    "bar_pool_room": 87,
+    "dealer_table": 53,
+    "portrait_room": 65
+   },
+   "kind": "overshot",
+   "detail": "551 keypoints but unplaced \u2014 off the mapped route"
+  },
+  {
+   "file": "00159.jpg",
+   "class": "wedged",
+   "keypoints": 10,
+   "room": null,
+   "best": 1,
+   "ratio": 1.0,
+   "scores": {
+    "bar_jukebox": 0,
+    "bar_pool_room": 0,
+    "dealer_table": 1,
+    "portrait_room": 0
+   },
+   "kind": "wedged",
+   "detail": "10 keypoints \u2014 pressed against geometry"
+  },
+  {
+   "file": "00160.jpg",
+   "class": "rich-unnamed",
+   "keypoints": 61,
+   "room": null,
+   "best": 14,
+   "ratio": 1.08,
+   "scores": {
+    "bar_jukebox": 13,
+    "bar_pool_room": 13,
+    "dealer_table": 14,
+    "portrait_room": 13
+   },
+   "kind": "overshot",
+   "detail": "61 keypoints but unplaced \u2014 off the mapped route"
+  }
+ ]
+}

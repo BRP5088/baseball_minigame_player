@@ -1,0 +1,129 @@
+{
+  "route": [
+    "portrait_room",
+    "bar_pool_room",
+    "bar_jukebox"
+  ],
+  "runs": [
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 315.7
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 403.3
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 780.4
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 79.1
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 243.1
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 398.8
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 678.8
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 77.0
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 313.1
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 384.1
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 293.0
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 295.2
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 308.2
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 247.3
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 180.3
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 248.3
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 83.6
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 385.7
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": null,
+      "depth": null,
+      "seconds": 30.7
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 381.2
+    }
+  ]
+}

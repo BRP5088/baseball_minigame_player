@@ -544,6 +544,11 @@ this table with its n and date**; it predates the button fix.
 
 ### (c) Retrying is the only lever that reaches the target
 
+**MEASURED 2026-09-07 (OPEN-5): `attempts=9` arrived 9/9, `attempts=3` 5/10,
+Fisher p = 0.0325, and the deep arm's median is LOWER (308s vs 381s).** Goal
+node `bar_jukebox` — one leg BEFORE the dealer table, whose arrival is a
+different check (`at_table()`). Full entry under OPEN-5.
+
     follow() once, single attempt         ~55% per node
     go_to_node_verified (3 attempts)      10/10, median 52.9s  (OPEN-4, n=10)
 
@@ -1784,6 +1789,42 @@ sweep and second reset (OPEN-8 cut 1).
 measured in one session — §10.5 warns that route performance has a large
 session-to-session component. It does not license quoting 100% for a full
 route: §8(a) still measures 6/10 there.
+
+**OPEN-5 — ANSWERED 2026-09-07. `attempts=9` arrives 9/9; `attempts=3` 5/10.**
+Interleaved, 10 trials an arm, TIMEOUT 900 so the deep arm could not be
+censored, `start_hint=SPAWN`, scored on `follow_verified` confirming the goal
+(`overnight/ab_attempts.py`, `overnight/ab_attempts.json`):
+
+    attempts_9   9/9 valid arrived    median 308s   [83..780]    1 invalid
+    attempts_3   5/10 arrived         median 381s   [77..403]    0 invalid
+    Fisher exact p = 0.0325
+
+**WHAT "ARRIVED" MEANS HERE, EXACTLY.** The route is §8(a)'s:
+`portrait_room -> bar_pool_room -> bar_jukebox` from a reset spawn. The goal is
+`bar_jukebox` — the node ONE LEG BEFORE the dealer table. Each arrival is the
+localiser naming `bar_jukebox` with 218-1108 matches against `MIN_MATCHES` 140
+and ratio 1.74-11.66 against `MIN_RATIO` 1.35, and a photograph written at that
+moment (`overnight/failframes/success/ok_bar_jukebox_*.jpg`): 14 of them, which
+is 9 + 5 exactly, plus 5 `fail_bar_jukebox` frames, which is the 5 misses
+exactly. `overnight/open5_arrivals.jpg` is all 14, labelled by arm. **It does
+NOT say the character reached the table or that the "Baseball Cards" prompt
+was on screen** — that leg (`bar_jukebox -> dealer_table`) is confirmed by
+`table_prompt.at_table()`, never by `identify()` (§7), and is not in this
+measurement.
+
+All five `attempts_3` misses ended at depth 2/3: they reached `bar_pool_room`
+and lost the jukebox leg three times. The deep arm's median is LOWER because
+arriving is cheaper than exhausting three attempts and reloading. The one
+invalid trial was a reset that could not open the pause menu at 30.7s — the
+transport probe reported BOTH transports alive, i.e. game state, not input — and
+was recorded INVALID, never a failure (10.6). Nothing reached the 900s ceiling.
+
+This is 8(c)'s arithmetic measured: at attempts=9 the route sits at ~0.97-1.0
+per trial, n=9. **Shipping attempts=9 is a change to a default and is the
+user's call**, not made here. What would settle "25 consecutive": a streak run
+at attempts=9, with the table leg included and `at_table()` as the final check.
+
+The original ticket, for the diagnosis:
 
 **OPEN-5 — Is `attempts=9` better than `attempts=3`?** Run 1 was inconclusive
 and contaminated: attempts_9 2/3 valid (3 of 6 trials invalid on a 420s
