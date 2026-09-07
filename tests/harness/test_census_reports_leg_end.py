@@ -43,7 +43,13 @@ c = _harness.census_kinds(gw)
 check("the mixed list is kept for continuity", c["kinds"] == ["overshot", "wedged", "overshot", "regressed"])
 check("leg-end classes are exactly the LEG_END_SOURCE ones", c["kinds_leg_end"] == ["overshot", "overshot"])
 check("fallback classes are exactly the others", c["kinds_fallback"] == ["wedged", "regressed"])
-check("nothing is double-counted", len(c["kinds_leg_end"]) + len(c["kinds_fallback"]) == len(c["kinds"]))
+# NOT "len(leg_end) + len(fallback) == len(kinds)": the two comprehensions in
+# census_kinds are mutually exclusive by construction, so that sum matches
+# whatever they do -- 10.12, caught by the 2026-09-07 static pass on this very
+# file. The check below can fail: every leg-end class must sit at an index whose
+# source IS the leg end, in order.
+check("leg-end classes are the ones AT leg-end indices, in order",
+      c["kinds_leg_end"] == [k for k, s in zip(gw._LAST_FAILURE_KINDS, gw._LAST_FAILURE_SOURCES) if s == LEG])
 
 broken = types.SimpleNamespace(LEG_END_SOURCE=LEG, _LAST_FAILURE_KINDS=["overshot", "wedged"],
                                _LAST_FAILURE_SOURCES=[LEG])
@@ -65,6 +71,17 @@ check("a legacy mixed-only row is reported as not counted", any("legacy" in l an
 check("legacy mixed classes do NOT leak into the headline", not any("LEG-END" in l and "wedged" in l for l in lines))
 check("tally_kinds over kinds_leg_end ignores fallback and legacy rows",
       _harness.tally_kinds(rows, "kinds_leg_end") == {"overshot": 2})
+
+# Rows from the OTHER census path must not read as "no failures".
+foreign = [{"failure_kinds_leg_end": ["overshot"], "failure_kinds": ["overshot", "wedged"]}, {"arrived": True}]
+lines2 = []
+_harness.report_kinds(foreign, out=lines2.append)
+check("walk_leg_under_test rows are named as not read, and pointed at report_leg_arm",
+      any("walk_leg_under_test" in l and "report_leg_arm" in l for l in lines2))
+check("a row with no census keys is named, not counted as clean",
+      any("NO census keys" in l for l in lines2))
+check("the headline says how many rows were NOT counted",
+      any("LEG-END" in l and "NOT counted" in l and "2 of 2" in l for l in lines2))
 
 # --- WIRING ------------------------------------------------------------------
 HARNESSES = ["measure_primitive.py", "ab_leg1.py", "streak_table.py", "ab_attempts.py"]

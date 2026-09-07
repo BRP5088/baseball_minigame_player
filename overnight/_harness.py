@@ -507,7 +507,22 @@ def report_kinds(rows, out=print, indent="  "):
     fb = tally_kinds(rows, "kinds_fallback")
     legacy = [r for r in rows if r.get("kinds") and "kinds_leg_end" not in r]
     unatt = sum(r.get("kinds_unattributed", 0) for r in rows)
-    out(f"{indent}failures by class, LEG-END frames only: {le or 'none'}")
+    # ROWS THIS REPORTER DOES NOT UNDERSTAND ARE SAID SO, NOT COUNTED AS CLEAN.
+    # Handed walk_leg_under_test rows (keys failure_kinds_leg_end / failure_kinds)
+    # this used to print "LEG-END frames only: none", which reads as "no
+    # failures" -- a silent wrong answer (10.1), found by the 2026-09-07 static
+    # pass. Those rows belong to report_leg_arm.
+    foreign = [r for r in rows if "kinds_leg_end" not in r and "kinds" not in r
+               and any(k in r for k in ("failure_kinds_leg_end", "failure_kinds", "failure_sources"))]
+    blank = [r for r in rows if not any(k in r for k in ("kinds_leg_end", "kinds", "kinds_unattributed",
+                                                          "failure_kinds_leg_end", "failure_kinds"))]
+    out(f"{indent}failures by class, LEG-END frames only: {le or 'none'}"
+        + (f"  ({len(foreign) + len(blank)} of {len(rows)} rows NOT counted, see below)" if foreign or blank else ""))
+    if foreign:
+        out(f"{indent}  {len(foreign)} row(s) carry walk_leg_under_test keys (failure_kinds_leg_end); "
+            f"this reporter does not read them — use _harness.report_leg_arm")
+    if blank:
+        out(f"{indent}  {len(blank)} row(s) carry NO census keys at all; nothing was classified for them")
     if fb:
         out(f"{indent}  plus {sum(fb.values())} classified from FALLBACK frames "
             f"(not evidence about the leg): {fb}")
