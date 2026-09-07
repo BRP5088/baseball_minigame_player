@@ -551,6 +551,9 @@ recognition failures.
 
 - **`dealer_table` is a POSE, not a place.** Its identify() margin is the prompt
   TEXT. Confirm arrival with `table_prompt.at_table()`, never `identify()`.
+  Enforced in `confirm()` AND, since 2026-09-07, in `locate()` — it was not, and
+  OPEN-14 trial 6 was scored an arrival on `identify()` naming the table at
+  194/1.53 with no prompt (`tests/routing/test_locate_goal_is_a_pose.py`).
 - `office_corridor` and `office_door` measure 0.726 alike — the same corridor 5s
   apart. They stay separate nodes because the walk between them is real, and
   `world_map.json` records the pair under `confusable`.
@@ -1878,11 +1881,14 @@ re-read 0.8s later said False and the trial's only sweep peaked at ink 0.0105
 (`INK_MIN` 0.024). §7's rule — the table is a POSE, confirmed by `at_table()`,
 never `identify()` — is enforced in `confirm()` (node == GOAL) and NOT in
 `locate()`. The two "verified" frames make it plain: trial 2 stands close with
-the dealer group ahead; trial 6 is the same scene from further back. NOT FIXED
-here — it is a production guard and the overnight brief was refactor-and-audit
-only. The fix is one guard in `locate()`: for `GOAL`, `identify()` may never
-confirm; and one test that hands `locate()` a frame `identify()` names
-`dealer_table` while `at_table()` is False and asserts None.
+the dealer group ahead; trial 6 is the same scene from further back. FIXED
+2026-09-07 morning: `locate()` returns None when `identify()` names `GOAL` and
+the prompt is absent, with the refused evidence in its detail string. Pinned by
+`tests/routing/test_locate_goal_is_a_pose.py` (three mutants caught: guard
+deleted, guard compares to a node that never occurs, guard over-blocks every
+room). The trial-6 capture itself was never saved — the `ok_dealer_table` frame
+is the pre-sweep leg end and identifies as `bar_jukebox` 295/2.11 — so the
+test stubs the detectors with trial 6's numbers verbatim.
 
 **THE CEILING CENSORED 7 OF 10 BY CONSTRUCTION.** Every censored trial reached
 `bar_jukebox` and then spent the rest of its 1800s on the table leg, 5-7

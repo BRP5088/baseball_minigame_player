@@ -279,6 +279,18 @@ def locate(m, img=None, capture=None, log=print):
     room, score, margin = places.identify(img)
     if room is None:
         return None, f"unrecognised ({score:.3f}/{margin:.3f})"
+    if room == GOAL:
+        # THE TABLE IS A POSE, NOT A PLACE. places/dealer_table/ holds views of
+        # the table, so identify() can name it from a distance where the game
+        # offers no prompt -- and the prompt is the only thing that makes the
+        # Square press spend $50 on a match rather than on nothing. confirm()
+        # has always believed only at_table() here; locate() did not, and on
+        # 2026-09-07 (OPEN-14 trial 6) go_to_node_verified logged "verified at
+        # dealer_table (dealer_table 194.000/1.530)" while at_table() read
+        # False 0.8s later and the aim sweep peaked at ink 0.0105. The prompt
+        # was checked above; if it was not there, this is not an answer.
+        return None, (f"{GOAL} named by appearance ({score:.3f}/{margin:.3f}), "
+                      "not by the prompt -- the table is a pose")
     if room not in m.landmarks:
         # A labelled place that is not a graph node cannot be planned from.
         return None, f"{room} is labelled but not in the graph"
