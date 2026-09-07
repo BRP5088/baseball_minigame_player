@@ -32,3 +32,14 @@ OCR_MIN_WORDS 2 -> 1 -> re-score NEG_NODES before trusting anything.
     mutants: _trimmed returns steps unchanged; walk_link skips the trim; the
       keyed lookup uses (b, a) -- each must fail the test
     nohup .venv/bin/python -B overnight/ab_jukebox_trim.py > overnight/ab_jukebox_trim.log 2>&1 &
+
+## After the fast extend run (2026-09-07 late)
+
+1. Loop yield: `python -c "import json;r=json.load(open('overnight/ab_fast_extend.json'))['runs'][1:];print(sum(1 for x in r if (x.get('setup_seconds') or 999)<30),'of',len(r),'setups under 30s')"`
+   -- under half: set RETURN_LOOP = False in overnight/ab_fast.py.
+2. `patch_ab_fast_reset_after_arrival.py` (no return after an arrival).
+3. `patch_stop_early.py` -- FIRST HALF ONLY (signature); the loop-body edit and
+   follow()'s call need the anchors read at landing time (they are in the
+   walk_link step loop and the GOAL_LEG_AS_RECORDED branch). Then the test in
+   tests/routing/test_goal_leg_frames.py: stop_when True on the 3rd step ->
+   3 steps walked, extension skipped; without stop_when -> all steps.
