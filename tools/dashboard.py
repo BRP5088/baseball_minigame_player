@@ -26,15 +26,15 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "Goal-leg A/B on the console", "state": "running",
-     "detail": "Shipped (straight-line approach) vs recorded (walk the leg as recorded), 10 trials an arm, interleaved. Scored by at_table() after the aim sweep."},
+    {"title": "Goal-leg A/B on the console", "state": "done",
+     "detail": "Shipped 1/8 vs recorded 1/9, p = 1.0: no arrival difference; the recorded leg is 3x cheaper (65s vs 189s). Written up as OPEN-21."},
     {"title": "Land the control-frame fix", "state": "done",
      "detail": "Landed during the pause (24857d8): start pose and leg-end frame on both outcomes; three mutants caught from a green baseline."},
-    {"title": "Land the OCR path in at_table()", "state": "blocked", "blocked_on": "the run ending",
-     "detail": "The mask cannot see the prompt over the light table top or over the dealer; OCR reads both, 0 false positives on every negative on disk. Touches the $50 gate."},
-    {"title": "Score the A/B twice and write OPEN-21", "state": "blocked", "blocked_on": "the run ending",
+    {"title": "Land the OCR path in at_table()", "state": "done",
+     "detail": "Landed (07cf0cc): mask first, OCR only when the mask says no; three real fixtures, three mutants caught."},
+    {"title": "Score the A/B twice and write OPEN-21", "state": "done",
      "detail": "As the harness scored it, and post hoc from the pre-sweep frames with mask + OCR (prompt on screen at the leg's end). Recommend the flag flip if the numbers carry it; the flip is yours."},
-    {"title": "Map the prompt zone around the dealer", "state": "next",
+    {"title": "Map the prompt zone around the dealer", "state": "running",
      "detail": "From the verified jukebox node: a 5x5 grid of points around the recorded leg's endpoint, five headings each, recording the prompt verdict (mask + OCR), score, ink, bearing and a frame; one grid row per route walk; the push-ratio probe marks wedged points. About an hour. Agreed 2026-09-07; occupancy grid and 3D mapping dropped."},
     {"title": "Full-route streak with the winner and the better instrument", "state": "next",
      "detail": "Route to the table at attempts=9, ceiling sized as attempts x route time so it cannot censor 7 of 10 again."},

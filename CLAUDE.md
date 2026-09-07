@@ -2442,8 +2442,26 @@ away to gain another. The fix keeps both on both outcomes
 `fail_<node>` on failure); it is written and waits in
 `drafts/pending_after_ab/` until no live run imports `graph_walk` (10.21).
 
-**RESULT: pending.** Read the json before believing anything written here
-about it. If the recorded arm wins, the next run is the full-route streak with
+**RESULT (2026-09-07, 20 trials, paused once at 14 and resumed in the same
+order): NO ARRIVAL DIFFERENCE, A THREEFOLD COST DIFFERENCE.** Scored two ways
+(`overnight/ab_goal_leg.json`, `tools/goal_leg_sheet.py`):
+
+    as the harness scored it (at_table after the sweep)   shipped 1/8   recorded 1/9   Fisher p = 1.00
+    prompt ON SCREEN at the leg's end (pre-sweep frame,
+      mask + OCR; the leg-level criterion)                 shipped 2/9   recorded 1/9
+    leg time, median [range]                               189s [68..277]   65s [26..74]
+    setup to bar_jukebox, median [range] (same code)       306s [59..974]   157s [58..1019]
+    invalid                                                2 (setup miss, ceiling)   1 (setup miss)
+
+Both arms miss about nine in ten. The executor is not the lever; where the
+leg ends relative to the prompt zone is, and nobody has measured that zone —
+`overnight/prompt_zone.py` does (agreed 2026-09-07). The recorded leg costs a
+third of the approach per attempt, which matters for retry depth; that is a
+reason to flip the flag for COST, not for arrival, and it is the user's call.
+What the 18 pre-sweep frames show: the prompt on screen and missed by the
+mask (trials 1, 6 — the OCR path fixes those), stopped short at an NPC (2),
+walked into the neighbouring table (3), and a spread of near-table endings
+without a prompt (the rest). The ceiling censored the shipped arm twice. If the recorded arm wins, the next run is the full-route streak with
 the flag on — and OPEN-14's ceiling lesson applies: a goal-leg retry is a full
 reset and route re-walk, so the ceiling must be attempts x route-time or the
 goal leg needs local retries.

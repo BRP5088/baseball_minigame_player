@@ -1,29 +1,19 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-**Nothing — the goal-leg A/B is PAUSED at the user's request** (stream looked
-sluggish while offline CPU sweeps ran beside it). 14 of 20 trials are banked in
-`overnight/ab_goal_leg.json` (trial 15 was in flight and is lost). Resume with:
+`overnight/prompt_zone.py` (detached, started right after the A/B ended): the
+prompt-zone map, 5 rows x 5 columns x 5 headings around the recorded leg's
+endpoint. Log `overnight/prompt_zone.log` (row lines `[row +n]`), result
+`overnight/prompt_zone.json` (saved after every row), frames under
+`overnight/prompt_zone_frames/`. ~1 hour if setups behave. Beside it: the
+suite under BASEBALL_NICE=1 (`overnight/suite_after_ocr.log`) certifying the
+OCR path and the control-frame fix -- the one workload measured safe (10.13a).
+NOTHING ELSE CPU-bound while it runs.
 
-    nohup .venv/bin/python -B overnight/ab_goal_leg.py --resume >> overnight/ab_goal_leg.log 2>&1 &
+The goal-leg A/B is DONE: shipped 1/8, recorded 1/9, p = 1.0; the recorded leg
+is 3x cheaper. Written up under CLAUDE.md OPEN-21.
 
-`--resume` continues the same interleaved order from the banked count. While it
-runs: NO CPU-bound offline work except the suite (§10.13a, corrected).
-
-**Dashboard:** https://claude.ai/code/artifact/6f8d087b-dd3e-4b8b-b34b-ef5faaf07278
-Rebuild + push state after every trial (or on any plan change):
-
-    .venv/bin/python -B tools/dashboard.py [--paused]      -> overnight/dashboard_state.json
-    Artifact write_db  collection=dash doc_id=state  file_path=overnight/dashboard_state.json
-
-Comments on the page sent to Claude wake this session (auto-replies armed).
-The page also has an INBOX: at every board update, `Artifact read_db
-collection=dash doc_id=inbox` (messages: [{ts, when, text}]); answer by
-appending {ts, when, to, text} to `overnight/dashboard_replies.json`, rebuild,
-write_db. "Ask the board" on the page is the viewer's own Claude with only the
-board's data -- not this session.
-
-## Waiting for the run to end (do these first, in order)
+## After the prompt-zone run (in order)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
    suite caught (142/143, test_success_control_frames.py). Mutation-test it.
 2. `table_prompt` OCR path: apply `drafts/pending_after_ab/patch_at_table_ocr.py`
