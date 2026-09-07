@@ -91,9 +91,9 @@ class Trim(unittest.TestCase):
         import slow_traverse as st
         saved = (st.walk_leg, st.turn_to, gw.LEG_TRIM_UNITS_BY_LEG, gw.stream_is_live)
         try:
-            st.turn_to = lambda bearing, read_heading, capture, **kw: (bearing, None)
+            st.turn_to = lambda bearing, read_heading, capture, **kw: (bearing, [])
             def walk_leg(lx, ly, dur, *a, **kw):
-                seen.setdefault("durs", []).append(round(dur, 4)); return 0.0, 10.0, None
+                seen.setdefault("durs", []).append(round(dur, 4)); return 0.0, 10.0, []
             st.walk_leg = walk_leg
             gw.stream_is_live = lambda *a, **k: True
             gw.LEG_TRIM_UNITS_BY_LEG = {LEG: 0.0447}

@@ -8,6 +8,9 @@ ask, over a TEMPORARY copy of places/ so nothing on disk changes until
 --write, and only if every check passes:
 
   A  leave-one-out: each candidate names bar_side_table with MIN_RATIO margin
+     (the first set of four frames at four different headings FAILED this: this
+     localiser matches a pose only from its own approach angle, so each heading
+     needs a twin -- hence five headings x two walks)
   B  non-disruption: no existing reference frame and none of the route's
      leg-end frames at the four nodes newly names bar_side_table
   C  discrimination: frames known to be at the DEALER's table do not name it
@@ -27,11 +30,17 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 NAME = "bar_side_table"
-CANDIDATES = [   # frames that show the neighbouring round table from the leg's landing pose
-    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h0_1788804353295.jpg",
-    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h2_1788804359058.jpg",
-    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h2_1788804884480.jpg",
-    "overnight/goal_leg_failframes/at_dealer_table_1788788260564.jpg",       # A/B trial 3
+CANDIDATES = [   # the landing pose at the neighbouring table, five headings x two walks (OPEN-22 walks 1 and 2)
+    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h0_1788804265269.jpg",
+    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h1_1788804267176.jpg",
+    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h2_1788804269350.jpg",
+    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h3_1788804270881.jpg",
+    "overnight/prompt_zone_frames/pz_w1_x+0.00_y+0.00_h4_1788804272689.jpg",
+    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h0_1788804786897.jpg",
+    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h1_1788804788610.jpg",
+    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h2_1788804790255.jpg",
+    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h3_1788804791800.jpg",
+    "overnight/prompt_zone_frames/pz_w2_x+0.00_y+0.00_h4_1788804794465.jpg",
 ]
 DEALER_TABLE = [  # known to be at the dealer's table: must NOT name the side table
     "test_fixtures/table_prompt_cases/prompt_low_ink_recorded_goalleg_t6.jpg",
