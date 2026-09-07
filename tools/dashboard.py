@@ -28,8 +28,8 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
 QUEUE = [
     {"title": "Goal-leg A/B on the console", "state": "running",
      "detail": "Shipped (straight-line approach) vs recorded (walk the leg as recorded), 10 trials an arm, interleaved. Scored by at_table() after the aim sweep."},
-    {"title": "Land the control-frame fix", "state": "blocked", "blocked_on": "the run ending",
-     "detail": "Both control frames on both outcomes: the start pose the suite caught me dropping, and the leg-end frame. Mutants here, console free."},
+    {"title": "Land the control-frame fix", "state": "done",
+     "detail": "Landed during the pause (24857d8): start pose and leg-end frame on both outcomes; three mutants caught from a green baseline."},
     {"title": "Land the OCR path in at_table()", "state": "blocked", "blocked_on": "the run ending",
      "detail": "The mask cannot see the prompt over the light table top or over the dealer; OCR reads both, 0 false positives on every negative on disk. Touches the $50 gate."},
     {"title": "Score the A/B twice and write OPEN-21", "state": "blocked", "blocked_on": "the run ending",
