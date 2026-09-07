@@ -188,6 +188,8 @@ stale — check the screen before clearing it.
 - `world_log.py` records a mapping walk; `map_build.py` turns it into legs
   offline. Mapping frames stay out of `screenshot_log/` — all three archives
   there are match-playing runs.
+- **Mutation testing while the console is live runs on Snoopy, never here** —
+  the workflow and its two Windows footguns are in `Snoopy_testing.md`.
 
 ---
 
@@ -1073,6 +1075,26 @@ anything under Assumed is re-verified before it is built on.
 
 `agent_progress/` is gitignored and safe to delete wholesale; its README carries
 the template.
+
+**17. THE A/B RUNNER RE-IMPORTS `graph_walk.py` FROM DISK ON EVERY TRIAL, SO A
+MUTANT ON DISK FOR ONE SECOND IS THE CODE A LIVE TRIAL RUNS.** `_harness.run_trial`
+spawns `python <script> --one-trial <arm>` per trial — that is the design, so
+process death is the restore and no cleanup can reinstate a stale default. The
+cost of that design is the other direction: every child starts cold and loads
+whatever `graph_walk.py`, `places.py` or `slow_traverse.py` is on disk at that
+moment. Mutation-test a guard in the checkout while OPEN-5 is walking legs, and
+the next trial walks with the guard removed, arrives or does not, and is scored
+as an arm result. No error, no log line, nothing to distinguish it from the
+arm.
+
+Found on 2026-09-07 by reasoning, before it happened: a QA workflow was about
+to mutate `graph_walk.py` in place while `overnight/ab_attempts.py` had the
+console. Stopped. The first replacement used a git worktree, which is isolated
+from the import but shares the disk, and §10.13's I/O hazard is the disk — so
+that was stopped too. **The rule: while `console_lock` is held, the checkout is
+read-only, and mutation testing goes to Snoopy (`Snoopy_testing.md`).**
+Static analysis — reading, grepping, `ast.parse` on source text with
+`python -B` — is fine; it writes nothing.
 
 ---
 
