@@ -45,7 +45,10 @@ src = open(_os.path.join(_ROOT, "graph_walk.py"), encoding="utf-8").read()
 
 check('f"at_{b}.jpg"' not in src,
       "follow() no longer saves the leg-end frame under a fixed name")
-check(re.search(r'at_\{b\}_\{int\(time\.time\(\) \* 1000\)\}\.jpg', src) is not None,
+# The stamp moved into _save_shot on 2026-09-07 (one helper for every frame);
+# follow() hands it the stem, the helper appends the millisecond epoch.
+check('_save_shot(shots, f"at_{b}", img)' in src
+      and re.search(r'f"\{stem\}_\{int\(time\.time\(\) \* 1000\)\}\.jpg"', src) is not None,
       "follow()'s leg-end filename carries a timestamp")
 check("_LAST_LEG_END[b] = img" in src,
       "follow() publishes the leg-end frame before recovery runs")

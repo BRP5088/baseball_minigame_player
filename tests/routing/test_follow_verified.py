@@ -227,8 +227,14 @@ try:
             return self
 
         def save(self, path, **_kw):
-            frames.append(self.tag)
+            # (stem, tag): since 2026-09-07 follow_verified writes TWO frames on a
+            # failure -- start_<node> (the pose the attempt began from) and
+            # fail_<node> (the leg's end) -- so the checks below name the stem.
+            frames.append((os.path.basename(path).rsplit("_", 1)[0], self.tag))
             open(path, "wb").write(b"x")
+
+    def tagged(prefix):
+        return [t for stem, t in frames if stem.startswith(prefix)]
 
     state = {"phase": "before"}
 
@@ -252,7 +258,10 @@ try:
     gw._LAST_LEG_END.clear()
     gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
                        shots=_tf.mkdtemp())
-    check("the leg's own end frame is the one saved", frames == ["leg_end"])
+    check("the leg's own end frame is the one saved as the FAILURE frame",
+          tagged("fail_") == ["leg_end"])
+    check("...and the start pose rides beside it, as start_<node>",
+          tagged("start_") == ["before"])
 
     # CASE 2: nothing was published. `before` is weaker evidence — it shows the
     # previous node — but it is still not the post-recovery view, which is the
@@ -272,8 +281,9 @@ try:
     gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
                        shots=_tf.mkdtemp())
     check("falls back to the PRE-recovery frame, never the post-recovery one",
-          frames == ["before"])
-    check("it is not the post-recovery view", "after_recovery" not in frames)
+          tagged("fail_") == ["before"])
+    check("it is not the post-recovery view",
+          "after_recovery" not in [t for _s, t in frames])
 finally:
     gw.go_to_node_verified = real5
 

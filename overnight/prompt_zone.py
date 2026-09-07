@@ -44,9 +44,14 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import _harness
 
 START, GOAL = "bar_jukebox", "dealer_table"
-ROWS = (-2, -1, 0, 1, 2)          # lateral, right positive
+# FIRST RUN (2026-09-07): a 5x5 grid at 0.15u put the row start 0.30u off the
+# endpoint -- nearly half the leg's length -- straight into the furniture: the
+# character wedged (2 keypoints) and the camera, pinned in geometry, could not
+# turn, so every heading read the same bearing. The zone is bounded by
+# geometry within 0.3u. Smaller grid, and every push is wedge-checked.
+ROWS = (-1, 0, 1)                 # lateral, right positive
 COLS = (-2, -1, 0, 1, 2)          # forward
-STEP_UNITS = 0.15                 # walk-units between grid points
+STEP_UNITS = 0.10                 # walk-units between grid points
 UNIT_SPEED = 0.35                 # §6: linear response, spread 15px at 0.40s
 HEADING_OFFSETS = (-40, -20, 0, 20, 40)
 SETTLE = 0.5
@@ -68,14 +73,36 @@ def leg_frame(m):
     return math.degrees(math.atan2(fx, fy)) % 360, math.hypot(fx, fy)
 
 
+def _kp():
+    import compass
+    import places
+    try:
+        return len(places.keypoints(compass.fast_capture().convert("RGB")))
+    except Exception:
+        return None
+
+
 def push(ws, bearing, units, log):
-    """Turn to `bearing`, then walk `units` forward. Returns the view change."""
-    ws.turn_to(bearing, log=lambda *a: None)
+    """Turn to `bearing`, walk `units` forward; back off stick-direct if wedged.
+
+    Returns (view_change, wedged). A wedged character's camera does not turn,
+    so the back-off cannot go through turn_to: it drives left_y backwards.
+    """
+    import analog_replay as ar
+    got = ws.turn_to(bearing, log=lambda *a: None)
     time.sleep(0.2)
     change = ws.walk_forward(UNIT_SPEED, units / UNIT_SPEED)
     time.sleep(SETTLE)
-    log(f"      push {units:.2f}u at {bearing:.0f}: view change {change}")
-    return change
+    kp = _kp()
+    wedged = kp is not None and kp < WEDGED_MAX
+    log(f"      push {units:.2f}u at {bearing:.0f} (turned to {got!s:6}): view change {change:.1f}, kp {kp}"
+        f"{'  WEDGED -- backing off' if wedged else ''}")
+    if wedged:
+        ar.send([f"left_y {ar.to_axis(UNIT_SPEED)}", "left_x 0"])
+        time.sleep(units / UNIT_SPEED)
+        ar.send(["left_x 0", "left_y 0"])
+        time.sleep(SETTLE)
+    return change, wedged
 
 
 def measure_point(row, col, forward, log):
@@ -86,12 +113,17 @@ def measure_point(row, col, forward, log):
     import prompt_ocr_ab as ocr
     os.makedirs(SHOTS, exist_ok=True)
     out = []
+    kp0 = _kp()
+    if kp0 is not None and kp0 < WEDGED_MAX:
+        log(f"      r{row:+d} c{col:+d}: WEDGED ({kp0} keypoints) -- point recorded as blocked, no headings")
+        return [{"row": row, "col": col, "blocked": True, "keypoints": kp0}]
     for k, off in enumerate(HEADING_OFFSETS):
         h = (forward + off) % 360
-        ws.turn_to(h, log=lambda *a: None)
+        got = ws.turn_to(h, log=lambda *a: None)
         time.sleep(SETTLE)
         img = compass.fast_capture().convert("RGB")
         bearing = compass.read_bearing(img)
+        turned = (bearing is not None and abs((bearing - h + 180) % 360 - 180) <= 10)
         score, ink, at = float(tp.score(img)), float(tp.ink(img)), bool(tp.at_table(img))
         words = ocr.read(img)["words"]
         try:
@@ -104,10 +136,10 @@ def measure_point(row, col, forward, log):
                "mask_score": round(score, 3), "ink": round(ink, 4), "at_table_mask": at,
                "ocr_words": words, "prompt": at or words >= 2,
                "keypoints": kp, "wedged": (kp is not None and kp < WEDGED_MAX),
-               "frame": os.path.relpath(f, ROOT)}
+               "turned": turned, "frame": os.path.relpath(f, ROOT)}
         out.append(rec)
         log(f"      r{row:+d} c{col:+d} h{k} cmd {h:5.1f} read {bearing!s:6} mask {score:6.3f}/{ink:.4f} "
-            f"ocr {words} kp {kp!s:5} -> {'PROMPT' if rec['prompt'] else '-'}{' WEDGED' if rec['wedged'] else ''}")
+            f"ocr {words} kp {kp!s:5} -> {'PROMPT' if rec['prompt'] else '-'}{' WEDGED' if rec['wedged'] else ''}{'' if turned else ' CAMERA-DID-NOT-TURN'}")
     return out
 
 
@@ -132,15 +164,26 @@ def one_row(row):
     log(f"  row {row:+d}: leg frame forward {forward:.1f} (net {length:.2f}u), lateral {lateral:.1f}")
     gw.walk_link(m, START, GOAL, log=log)              # the recorded leg, as the 'recorded' arm walks it
     time.sleep(SETTLE)
-    # to the row start: lateral offset, then back to the first column
-    if row:
-        push(ws, lateral if row > 0 else (lateral + 180) % 360, abs(row) * STEP_UNITS, log)
-    if COLS[0]:
-        push(ws, (forward + 180) % 360, abs(COLS[0]) * STEP_UNITS, log)
+    # to the row start: lateral offset, then back to the first column. A wedge
+    # on the way ends the row: the points beyond are geometry, and that is data.
     points = []
+    if row:
+        _c, w = push(ws, lateral if row > 0 else (lateral + 180) % 360, abs(row) * STEP_UNITS, log)
+        if w:
+            return {"row": row, "reached": True, "setup_seconds": round(time.time() - t0, 1),
+                    "forward": round(forward, 1), "blocked_at": "lateral offset", "points": points}
+    if COLS[0]:
+        _c, w = push(ws, (forward + 180) % 360, abs(COLS[0]) * STEP_UNITS, log)
+        if w:
+            return {"row": row, "reached": True, "setup_seconds": round(time.time() - t0, 1),
+                    "forward": round(forward, 1), "blocked_at": "back to first column", "points": points}
     for i, col in enumerate(COLS):
         if i:
-            push(ws, forward, STEP_UNITS, log)
+            _c, w = push(ws, forward, STEP_UNITS, log)
+            if w:
+                points.append({"row": row, "col": col, "blocked": True})
+                log(f"      r{row:+d} c{col:+d}: geometry -- row ends here")
+                break
         points.extend(measure_point(row, col, forward, log))
     return {"row": row, "reached": True, "setup_seconds": round(time.time() - t0, 1),
             "forward": round(forward, 1), "points": points}
@@ -164,7 +207,7 @@ def main():
             log(f"[row {row:+d}] INVALID: never reached {START} (setup {r['setup_seconds']:.0f}s)")
             res["rows"].append(r)
         else:
-            n = sum(p["prompt"] for p in r["points"])
+            n = sum(p.get("prompt", False) for p in r["points"])
             log(f"[row {row:+d}] {n}/{len(r['points'])} checks saw the prompt in {secs:.0f}s")
             res["rows"].append(r)
         _harness.save_result(OUT, res)
@@ -177,9 +220,13 @@ def main():
         cells = []
         for c in COLS:
             pts = [p for p in r["points"] if p["col"] == c]
-            n = sum(p["prompt"] for p in pts)
-            w = sum(p["wedged"] for p in pts) >= 3
-            cells.append(f"{n}/5{'W' if w else ' '} ")
+            if not pts:
+                cells.append("  --   "); continue
+            if any(p.get("blocked") for p in pts):
+                cells.append("BLOCK  "); continue
+            n = sum(p.get("prompt", False) for p in pts)
+            t = sum(p.get("turned", False) for p in pts)
+            cells.append(f"{n}/5 t{t} ")
         log(f"  r{r['row']:+d}   " + "".join(cells))
     log(f"\n  -> {OUT}")
 
