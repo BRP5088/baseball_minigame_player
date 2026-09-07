@@ -241,4 +241,63 @@ def at_table(img):
     #           at most 0.017 anywhere else, INCLUDING Wanda's prompt, which is
     #           simply shorter text. Says "a long prompt is here", not which.
     #   score — the shape of the strokes, which says which words they are.
-    return ink(img) >= INK_MIN and score(img) >= MATCH_MIN
+    if ink(img) >= INK_MIN and score(img) >= MATCH_MIN:
+        return True
+    return ocr_says_prompt(img)
+
+
+# THE STROKE MASK CANNOT SEE WHITE TEXT OVER A BRIGHT BACKGROUND, BY
+# CONSTRUCTION. It keeps a pixel only if it is > STROKE_BRIGHT and its 11x11
+# neighbourhood averages < STROKE_LOCAL -- the rule that removes the dealer's
+# white face -- so the prompt over the LIGHT TABLE TOP (camera pitched down
+# after walking into the table; goal-leg A/B trial 1, 2026-09-07, score -0.001,
+# ink 0.0001) and the prompt over the DEALER'S BODY (demos/dealer_circle, 26
+# frames) both score under MATCH_MIN with the prompt plainly on screen.
+# Local-contrast masks were measured over 3,937 frames and refused: no delta
+# clears the gate on the bright-table frame, and every delta loses old
+# positives or admits new ones (tools/prompt_mask_ab.py).
+#
+# OCR is a different instrument. Measured over the same corpora plus 43
+# table-leg end frames (tools/prompt_ocr_ab.py, overnight/census/prompt_ocr_ab.json):
+#
+#     words >= 2      recall on the 1289 frames the mask accepts   341   (26%)
+#                     false positives on 693 frames at non-table nodes   0
+#                     the quest-log false-positive anchor               0 words
+#                     route frames the mask rejects                 26 hits, all
+#                       dealer_circle frames whose OCR text reads the prompt
+#
+# So it is strictly an ADDITION: the mask stays first and OCR runs only when the
+# mask says no. It is scale-sensitive (the recorded anchor reads one word at 3x
+# and four at 2x or 4x), which is why its recall alone is poor and why it must
+# never replace the mask. tesserocr is main-thread-only (CLAUDE.md §3); at_table
+# is called from the main thread everywhere in production.
+OCR_UPSCALE = 3
+OCR_PSM = 6              # block mode; PSM 7 read nothing on the anchors
+OCR_FUZZ = 0.75          # "Basehal" / "Candsy" on the bright-table frame
+OCR_MIN_WORDS = 2        # of baseball / cards / play; 0 false positives at 2
+OCR_WORDS = ("baseball", "cards", "play")
+
+
+def ocr_words(img):
+    """How many of OCR_WORDS the prompt band reads, over both polarities."""
+    import difflib
+    import re
+    from PIL import ImageOps
+    import ocr_glyphs
+    w, h = img.size
+    x0, y0, x1, y1 = TEXT_BOX
+    c = img.convert("L").crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    c = c.resize((c.width * OCR_UPSCALE, c.height * OCR_UPSCALE), Image.BICUBIC)
+    best = 0
+    for cand in (c, ImageOps.invert(c)):
+        txt = ocr_glyphs.image_to_text(cand, OCR_PSM, None) or ""
+        toks = re.sub(r"[^a-z0-9$() ]+", " ", txt.lower().replace("|", " ")).split()
+        hits = sum(1 for wanted in OCR_WORDS
+                   if any(difflib.SequenceMatcher(None, wanted, t).ratio() >= OCR_FUZZ
+                          for t in toks))
+        best = max(best, hits)
+    return best
+
+
+def ocr_says_prompt(img):
+    return ocr_words(img) >= OCR_MIN_WORDS
