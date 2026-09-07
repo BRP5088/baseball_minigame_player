@@ -4,10 +4,13 @@
 
 ## Now
 
-- **Batch 1 of closed-loop trials running** (2/2 arrived at 98 s and 121 s, trial 3 lost to an NPC on the
-  stairs). When it ends: apply `drafts/closed_loop/patch_batch2.py` (real weak gate, blind budget kept, LOST
-  early exit), run its tests + mutants, commit, relaunch batch 2 as `overnight/chain_trials.py --chain
-  route_user_1853 --trials 10`. The user is away; the run needs no supervision.
+- **Batch 2 of closed-loop trials RUNNING (launched 19:36)**: `overnight/chain_trials.py --chain route_user_1853
+  --trials 10` -> `overnight/chain_trials.json` / `.log`, frames `overnight/chain_frames/t*/`, journals
+  `overnight/chain_journals/route_user_1853_t*.jsonl`. Batch 1 (archived as `overnight/chain_trials_batch1.*`):
+  2 ARRIVED (98 s, 121 s), 2 TIMED OUT at the door turn taken short; stopped at 4 of 10, fix landed (3ae35aa):
+  verified turn stops with retry, real weak gate, LOST early exit. Review a trial with
+  `tools/turn_review.py <shots dir> <journal>` -- look at the turns first. The user is at dinner; the run needs
+  no supervision.
 - **CLOSED-LOOP TRIALS RUNNING** (relaunched after trial 1's lesson): `overnight/chain_trials.py --chain
   route_user_1853 --trials 10` -> `overnight/chain_trials.json`, `.log`, frames `overnight/chain_frames/t*/`,
   journals `overnight/chain_journals/`. Chain = the USER's own drive (`chains/route_user_1853`, 205 waypoints,
