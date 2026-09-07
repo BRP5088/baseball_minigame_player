@@ -11,6 +11,15 @@ then `overnight/side_table_leg.py` (b's path). The slow (a) run was stopped at
 14/20 by decision: recorded 2/6, extended 2/6 (`overnight/ab_goal_extend.json`).
 (c)'s trim flag LANDED (cc09ca1), ships empty.
 
+FAST RUN, FIRST ATTEMPT (2026-09-07 evening): trial 1's return walk ended
+pressed into a dark wall facing north (locate 11 matches); trial 2's reset then
+raised NoGameWindow ("no chiaki game window found") and the harness scored it
+INVALID in 14 s -- the window was back by the time the doctor looked (same
+chiaki pid, streaming, not frozen). Transient; relaunched from trial 1
+(`overnight/ab_fast_extend_attempt1.json` keeps the two trials). Watch the
+per-trial `setup_mode`: if the return walk rarely lands in the basin, the loop
+earns nothing and should be dropped.
+
 THE FAST HARNESS (overnight/ab_fast.py, user request 2026-09-07 evening: A/Bs
 took 2-4 h, the setup was 60-1110 s of it): return loop instead of reset (walk
 the leg backwards, let locate() find the node, reset only on failure), a

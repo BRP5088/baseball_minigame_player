@@ -261,7 +261,7 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--
       <h1 id="runname"></h1>
       <div class="tallies" id="tallies"></div>
       <div class="tbl"><table id="rows"></table></div>
-      <p class="note">INVALID is not a failure: the leg under test never ran, or the 1200s ceiling cut it off. "Prompt on screen" is the pre-sweep frame re-read with the mask plus OCR — the leg-level criterion the shipped detector cannot see.</p>
+      <p class="note">INVALID is not a failure: the setup never reached the start node, or the stream died. TIMED OUT is a failure: a leg over 60s or a trial over 400s, counted against the arm. "Prompt on screen" is the pre-sweep frame re-read with the mask plus OCR.</p>
     </section>
     <div style="display:grid;gap:20px;align-content:start">
       <section><h2>Queue</h2><ol class="q" id="queue"></ol></section>
