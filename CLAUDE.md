@@ -995,6 +995,20 @@ Delete `__pycache__/<module>*.pyc` between mutants. Also: `str.replace(a, b, 1)`
 on a pattern that appears twice mutates half the code — **count the occurrences
 first**.
 
+**10a. A MUTATION DRIVER'S RESTORE MUST OWN ITSELF, BECAUSE THE THING THAT
+KILLS THE DRIVER DOES NOT CARE WHICH LINE IT WAS ON.** 2026-09-07: an inline
+driver mutated `places.py:491` in the checkout, and the tool running it hit its
+600 s ceiling and killed the child between mutate and restore. `places.py` sat
+on disk with `if ratio < MIN_RATIO:  # MUTANT` and the wrong sha for eleven
+minutes, discovered only because a process listing showed the driver gone.
+Nothing was live to import it — an hour earlier OPEN-5 would have (10.17). The
+first driver on Snoopy had the same shape and captured a MUTANT as its
+baseline. So: the restore goes in a `finally`; any driver longer than a minute
+runs in the background from the start with its output flushed to a file; and
+after ANY kill, verify the sha of every file the driver touches before doing
+anything else. `git status --porcelain` on a tracked file is the one-line
+check.
+
 **11. A TEST MUST NOT ASSERT AGAINST THE CONSTANT IT IS GUARDING.** Checking
 `mag_for(x) <= USABLE_MAX` rises with `USABLE_MAX` and passes forever. Pin the
 literal.
