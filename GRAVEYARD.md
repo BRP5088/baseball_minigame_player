@@ -109,6 +109,95 @@ afternoon offline and is pinned by
 (`STALL_CHANGE`, the reference pose) would have survived that question; several
 would not.
 
+### The full OPEN-3 ticket, moved from CLAUDE.md §11 (2026-09-07)
+
+**OPEN-3 — CLOSED 2026-09-05, DROPPED WITHOUT RUNNING IT.** `LEG_TURN_TOLERANCE`
+ships `None` — unchanged, i.e. `slow_traverse.TURN_TOLERANCE = 4.0` — and the
+20-trial A/B this file called "the highest-value navigation experiment available"
+is CANCELLED. Settled offline from the recordings, as the `cam` section above
+demanded. (`None` must still never reach `st.turn_to`: `abs(err) <= None`
+raises.)
+
+**The mechanism is REAL. It is also worth a few percent of a leg.** Both halves
+are measured, and the second is why this is dropped rather than run. Scored the
+one non-vacuous way (§10.12 — the spread of ACHIEVED headings, never
+`|want - got|`), the two live traces `graph_walk` recorded for
+`portrait_room -> bar_pool_room` in one run read: commanded 286.57 / 292.18 /
+285.59 / 287.59, spread 6.59 deg; the FAILED attempt achieved 289.1 four times,
+spread **0.00**; the SUCCEEDED attempt 286.2 / 290.1 / 288.1 / 288.1, spread
+3.90. So the tolerance really does flatten the recorded curve to nothing. But
+integrated at the recorded speeds and durations those two traces end **0.0021
+walk-units apart on a 0.7203-unit leg**, and the FLAT, never-turned trace was the
+MORE faithful to the recording's own endpoint (0.0011 against 0.0022). Whatever
+separated those two attempts, it was not the heading.
+
+**The premise was also wrong about what the curve IS.** `graph_walk.walk_link`
+calls `st.walk_leg(0.0, -abs(speed), ...)` — `lx` hard-coded to zero — so the
+executor CANNOT strafe mid-leg, and it reproduces the human's travel direction by
+turning the CAMERA to a heading the human never held. Over all 64 inter-step
+transitions in both recordings, `|delta cam|` exceeds 4 deg on **1**, while
+`|delta bearing|` exceeds it on **23**. Twenty-two of the twenty-three "curves"
+are the human's left thumb. Tightening the tolerance makes the executor chase
+thumb jitter: on `bar_jukebox -> dealer_table` it would sweep the camera 25.6 deg
+over 4.07s of walking, where the human held `cam` at 86.8 ± 0.14.
+
+**COST, priced the honest way — quote 6.79% and 0.258 units, never 2.63%.** The
+first pass under-priced this 2.6x by seeding each leg exactly on its first
+commanded bearing. `turn_to` compares against the MEASURED heading, so a leg also
+STARTS up to `tolerance` off and is walked there until some step exceeds the
+band — which is the second half of this ticket's own stated mechanism, and it is
+the case the single real trace shows (commanded 286.57, character at 289.1, entry
+turn a NO-OP). Swept adversarially over the permitted entry offset, discarding
+sub-4-degree turns costs **6.79% on the worst leg**, and tightening 4.0 -> 1.0
+buys **0.258 walk-units over the whole route**. For scale, the leg-distance pin
+accepts 15%, and the shortfall that genuinely broke the jukebox leg was 0.703 of
+1.031 units — **68%**.
+
+**The arithmetic that ends it.** At the §8(a) baseline of 0.60 and 338 s/trial,
+detecting +2 percentage points at 80% power needs ~9,300 trials per arm, about
+1,750 console hours; +5 points ~1,470 per arm; +10 points ~360. Ten per arm can
+only see an effect of about +30 points. There is no version of this experiment
+that fits in the time available and could detect the effect the mechanism allows.
+
+A hard floor nobody had noticed, worth keeping: `turn_curve.plan_turn` returns
+`(0.0, 0.0)` under 0.5 deg, so `turn_to` can never satisfy `abs(err) <=
+tolerance` below that — it breaks out and files an UNDERTURNED hazard on every
+step of every leg. Against a perfect simulated console, tolerance 0.40 filed 297
+of 2800 and 0.0 filed all 2800. **The usable range is (0.5, 4.0].**
+
+Pinned by `tests/routing/test_leg_curve_is_stick_not_camera.py`, which re-derives
+the whole argument from `route3_steps.json`, `route2_steps.json` and
+`world_map.json` rather than restating it — including that each map leg IS the
+corresponding route3 slice, since everything else attributes route3's `cam` to
+the map's legs.
+
+**THIS CLOSURE ORPHANS A USER OBSERVATION.** `graph_walk`'s own
+`LEG_TURN_TOLERANCE` comment claims this mechanism explains §8(k) — "you actually
+walk right out of the bar". A few percent of a leg's displacement cannot do that,
+so §8(k) is back to having NO candidate explanation, and that comment now asserts
+something this closure disproves.
+
+**The NO-OP/TURNED instrument (2026-09-04) has never actually run.**
+`slow_traverse.turn_to` logs every exit, paired:
+
+    turn to 292.2: NO-OP, already inside 4.0 deg (at 289.1, err +3.1) —
+                   nothing was sent, the recorded curve was discarded
+    turn to 292.2: TURNED to 292.0 (err +0.2) in 1 push(es)
+
+but no log, transcript or json on disk contains either string, so nothing can be
+re-scored — do not try. It costs nothing and answers the mechanism question a
+caller's step line never can (an executed turn also ends inside tolerance, which
+is precisely why this was invisible). **Let it ride along on whatever A/B runs
+next.**
+
+
+**Update 2026-09-07 — the NO-OP/TURNED instrument the ticket below says "has
+never actually run" ran.** `overnight/ab_leg1.log`, 20 trials: **394 NO-OP
+against 379 TURNED** — roughly half of every recorded curve is discarded by the
+4.0 deg tolerance. That is the OPEN-3 mechanism measured, and it does not reopen
+the ticket: the displacement bound above is what closed it, and that bound is
+unchanged by how often the no-op fires.
+
 ---
 
 ## CORRECTION 2026-09-05 — the re-record row was not a null, it was a regression

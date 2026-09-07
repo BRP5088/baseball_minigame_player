@@ -189,7 +189,30 @@ stale — check the screen before clearing it.
   offline. Mapping frames stay out of `screenshot_log/` — all three archives
   there are match-playing runs.
 - **Mutation testing while the console is live runs on Snoopy, never here** —
-  the workflow and its two Windows footguns are in `Snoopy_testing.md`.
+  the workflow and its four Windows footguns are in `Snoopy_testing.md`.
+  **If Snoopy is unavailable, mutation testing WAITS until the live run has
+  finished.** It never falls back to this Mac while the console is live: the
+  write-and-rescan I/O spike degrades `sleep()`, walks the character into a
+  wall, and the log scores that as a routing failure (§10.13). No exception for
+  "just one mutant" — that is exactly what §10a's eleven-minute mutant was.
+- `tests/harness/test_no_undefined_names.py` scans every non-vendored module for
+  names nothing binds, with a positive control so it cannot pass by finding
+  nothing. It earned its keep the day it landed: deleting `_something_moved` as
+  a block also took six constants the escape ladder reads, which would have
+  raised `NameError` on the first blockage. (OPEN-10, closed 2026-09-04.)
+- `tests/cpp/test_injectinput_cpp.py` compiles and runs the C++ injector checks
+  and is discovered by `run_tests.sh`'s own `find`, so it needs no special case.
+  **It never skips**: absent `clang++`, absent `chiaki-ng-src/`, a compile error,
+  an empty run or an unsampleable timing check are each a FAIL naming the fix.
+  It compares all five patched files BYTE FOR BYTE against the sources the app
+  builds and asserts the list COVERS `chiaki-patch/` — a replaced row once kept
+  the count at five and compared `main.cpp` against nothing. Every timing
+  assertion is bounded by a clock the process measures, so load can only make a
+  check INCONCLUSIVE, never a false pass; one writer `FILE*` is held for the whole
+  run because per-line open/close lost lines into the injector's
+  fopen/fgets/fclose gap (3 bad runs in 20). `chiaki-ng-src/` is gitignored, so a
+  fresh clone has one failing test until that tree is present — deliberate, an
+  unverifiable claim is not a passing one. (OPEN-11, closed 2026-09-05.)
 
 ---
 
@@ -273,6 +296,59 @@ diagnosis here came from reasoning about what the game "must" have been doing
 instead of looking at the screenshot already on disk. And **check WHICH frame** —
 `go.main(n=1)` writes to `attempt01` under its `shot_root`, so two runs sharing a
 root overwrite each other.
+
+### OCR goes through one persistent handle, and never off the main thread
+
+`ocr_glyphs.image_to_text(image, psm, whitelist)` is the ONE word-mode OCR path.
+orchestrator's four local sites route through `orchestrator._ocr_text`
+(`ocr_ban_card_name`, `ocr_scoreboard`, `ocr_runner_card` at PSM 6;
+`read_ban_counter` at PSM 7 with `0123456789/`), and `ocr_glyphs.tesseract_config`
+is the single definition of the config string, so the fast path and the
+pytesseract fallback cannot ask different questions. **The handle cache is keyed
+on `(psm, whitelist)`**, bounded LRU: keyed on the whitelist alone, a word-mode
+call was handed a SINGLE_CHAR handle and returned one character of a player's
+name, correctly, forever. The evidence was function-level, not string-level:
+137 answers from live in-memory crops, migrated tree against a HEAD worktree,
+**zero differences**; the 110-cell ban corpus gives 63 correct / 0 wrong / 47
+abstained in both arms, in 4.8s against 229.8s.
+
+**Do not reintroduce a thread pool for OCR.** `tesserocr` links `cysignals`,
+whose `sig_on`/`sig_off` is process-global and main-thread-only, and its SIGINT
+handler cannot be installed off the main thread — a worker-first call silently
+drops the WHOLE PROCESS back to spawning subprocesses. Serial and in-process
+beats eight threads by ~48x here. Still shelling out, deliberately and recorded
+so they are not lost: `reset_env`'s `give_up_dialog` (on the LIVE path, the best
+remaining candidate) and two sites in `landmarks.py`. Two test seams that
+stubbed `pytesseract.image_to_string` passed every MUST_ABSTAIN case for the
+wrong reason after the migration — the code OCR'd a blank probe and abstained;
+both now stub `orchestrator._ocr_text`. (OPEN-12, closed 2026-09-05.)
+
+### `streaming()` rejects chiaki's own window
+
+`find_bar` fires on chiaki's host list (`test_fixtures/not_streaming/hostlist_standby.png`,
+the rig's own 1867x1050, `State: standby`), so `streaming()` once answered True
+in 0.0s on a console that was asleep, and `connect` never ran its wake sequence.
+It now pairs `find_bar` with `ensure_stream.looks_like_ui()`: Qt draws flat
+fills and full-width exact runs; H.264 never does, because quantisation dithers
+even a dark room. Over 848 real streaming frames against the host list and 70
+non-game images `find_bar` fires on:
+
+                              streaming p50    p99     MAX  |  host list
+        flatness                  0.0357  0.1131  0.2949  |  0.6678
+        widest exact row run      0.1208  0.3917  0.6208  |  1.0000
+
+`UI_FLAT_FRAC = 0.25` and `UI_ROW_RUN_FRAC = 0.50` sit between the populations,
+clear by 2.7x and 2.0x; held out properly, **0 false positives on 71
+non-streaming frames and 1.2% false negatives** — and a false negative is cheap,
+because rejecting the `find_bar` branch falls through to `_heartbeat_seen()`,
+the console's own word, ~0.4s. The standby host list has no session and comes
+back False after the full 25s, paid only on the path that was about to give up.
+Pinned by `tests/rig/test_streaming_rejects_chiaki_ui.py`, which carries the
+control and a ceiling on rejected real frames; three mutants each caught by a
+different check. Honest limit: the negative side is ONE distinct frame; chiaki's
+settings dialogs and its non-standby host list are unsampled — if `streaming()`
+ever reports UP on one, add it to `test_fixtures/not_streaming/` and re-score.
+(OPEN-18, closed 2026-09-06.)
 
 ---
 
@@ -363,6 +439,26 @@ hold is TWO edge packets plus ~5 keepalives, not a 125Hz stream. Those edges are
 fire-and-forget UDP. Lose the release and the stick stays at full deflection
 until the 200ms keepalive: ~39.5 deg of extra turn. Untested; a real controller
 hides it because stick LSB noise defeats the dedup.
+
+**`clear` used to arm a release window that a later write never disarmed.**
+`Apply("clear")` set `release_until = NowMs() + RELEASE_MS` (100ms) and nothing
+cleared it, so a write inside that window set `active = true`, the deadline
+expired, and `InjectInputActive()` ran its release path on the FRESH input —
+chiaki's pump then stopped sending and **the console kept the last state it
+received: the deflection**. Measured: gap 400ms 12/12 released; gap 30ms 12/12
+STILL DEFLECTED; gap 90ms 9/12 deflected, 3/12 dropped. The 5s
+`INJECT_TIMEOUT_MS` runaway guard could not save it because it lives inside the
+function the pump had stopped calling — **a guard downstream of the switch that
+disables it**, a shape worth recognising. The fix is one line,
+`g_inject.release_until = 0;` on the non-clear path of `Apply()`, in BOTH copies
+(`chiaki-patch/` and `chiaki-ng-src/gui/src/`; `tests/cpp/` compares them byte
+for byte). Pinned by a mutation-tested check that goes INCONCLUSIVE rather than
+passing when load pushes the write outside the window. Verified on the rig with
+a camera turn: gap 400ms and gap 30ms both turned ~7.4 deg and both stopped
+dead. Every production `clear` is terminal; the one live site inside the window
+was `overnight/walk_curve.py:52`. That does NOT implicate §6's walking table,
+which predates the window — OPEN-19 holds the question it does open.
+(OPEN-16, closed 2026-09-05.)
 
 ---
 
@@ -547,7 +643,38 @@ this table with its n and date**; it predates the button fix.
 **MEASURED 2026-09-07 (OPEN-5): `attempts=9` arrived 9/9, `attempts=3` 5/10,
 Fisher p = 0.0325, and the deep arm's median is LOWER (308s vs 381s).** Goal
 node `bar_jukebox` — one leg BEFORE the dealer table, whose arrival is a
-different check (`at_table()`). Full entry under OPEN-5.
+different check (`at_table()`). Both records below.
+
+**`go_to_node_verified` arrives 10/10 (OPEN-4, 2026-09-06).**
+`overnight/measure_primitive.py`, n=10, target `bar_pool_room`, attempts=3:
+10 valid, 0 invalid, 10 arrived, **median 52.9s**, and `locate()` agreed with the
+primitive on every trial (`overnight/primitive_open4.json`). Config as shipped:
+`TRUST_RESET_SPAWN`, `RECOVER_MISSED`, `NULL_YAW_BEFORE_ALIGN` all True,
+`REFERENCE_POSE` "bot". The ~55% figure is a SINGLE WALK; the retrying primitive
+is what everything downstream should use. It is one leg from a reset, in one
+session — it does not license quoting 100% for a route.
+
+**`attempts=9` arrives 9/9 against `attempts=3` at 5/10 (OPEN-5, 2026-09-07).**
+Interleaved, 10 trials an arm, TIMEOUT 900 so the deep arm could not be censored,
+`start_hint=SPAWN`, scored on `follow_verified` confirming the goal
+(`overnight/ab_attempts.py`, `overnight/ab_attempts.json`):
+
+    attempts_9   9/9 valid arrived    median 308s   [83..780]    1 invalid
+    attempts_3   5/10 arrived         median 381s   [77..403]    0 invalid
+    Fisher exact p = 0.0325
+
+"Arrived" here is the localiser naming `bar_jukebox` — one leg BEFORE the table —
+at 218-1108 matches / ratio 1.74-11.66, with a photograph written at that moment:
+14 of them, 9 + 5 exactly (`overnight/open5_arrivals.jpg`), and 5
+`fail_bar_jukebox` frames for the 5 misses. **It is NOT the table and NOT the
+prompt.** All five `attempts_3` misses died on the jukebox leg at depth 2/3. The
+deep arm's median is LOWER because arriving is cheaper than exhausting three
+attempts and reloading. The one invalid trial was a reset that could not open
+the pause menu at 30.7s, diagnosed live by the transport probe as game state
+(both transports alive) and recorded INVALID, never a failure. Nothing reached
+the 900s ceiling. **Shipping attempts=9 changes a default and is the user's
+call; the constant is untouched.** The streak at attempts=9 with the table leg
+and `at_table()` as the final check is in flight — OPEN-14.
 
     follow() once, single attempt         ~55% per node
     go_to_node_verified (3 attempts)      10/10, median 52.9s  (OPEN-4, n=10)
@@ -613,24 +740,33 @@ other.
 
 ### (h) Where a trial's time actually goes
 
-Profiled, one clean routed trial (85.6s total — NOT the same quantity as the
-338s streak trial, which includes resets and retries):
+**The 85.6s profile this section used to quote is withdrawn** (OPEN-8). It
+profiled `reset` plus two legs rather than the route, it wrapped
+`walk_steps.walk_forward` / `turn_to`, which a LEG NEVER CALLS (legs go through
+`slow_traverse`), and it summed NESTED timers, so its "65% unaccounted" was an
+artefact of the arithmetic. `overnight/profile_trial.py` now profiles the route
+through `follow_verified` and records INCLUSIVE and EXCLUSIVE seconds; **read
+the exclusive column** (`tests/harness/test_profile_exclusive_time.py`).
 
-    read_bearing            52 calls   18.1s   21.1%
-    reset                    2 calls   17.9s   20.9%
-    turn_to (incl sleeps)    6 calls   11.4s   13.3%
-    capture                135 calls    5.0s    5.8%
-    identify + keypoints                0.6s    0.8%
+The accounting that DOES add up — modelled from the code and validated against
+the old profile's own call counts (8 / 1 / 6 predicted, 8 / 1 / 6 recorded):
 
-`read_bearing` was the largest component because `ocr_glyphs` was falling back
-to shelling out to the `tesseract` binary. With `tesserocr` installed it went
-**261ms -> 31ms (8.4x)**, ~12s off a trial, with no added variance. Correctness
-was verified, not assumed: 208 glyph crops across 3 recordings match EXACTLY.
+    reset x2 + sleep(1.2) x2          20.3s  23.7%   cut: start_hint, ~24s a trial
+    leg turning, 23 steps             21.5s  25.2%   only ~3.5s of it is stick push
+    stick time walking                16.2s  18.9%
+    relocalise sweep, SILENT          13.9s  16.2%   cut: start_hint
+    SETTLE_SEC x 23 steps              8.1s   9.4%   do NOT shorten (OPEN-8)
+    captures inside walk_leg           1.7s   2.0%
+    align + confirm + locate + live    4.0s   4.7%
 
-`ocr_glyphs._api()` keeps a per-thread `PyTessBaseAPI` with the traineddata
-loaded once, so **it already IS a persistent worker** — 134ms first call, 23ms
-steady. There is no per-call spin-up left to remove; a daemon would add moving
-parts for no gain.
+About 26% of a 338s streak trial (~89s) is still unexplained with every modelled
+component at its floor; the recovery fan (~79s each, ~33% of the clock when it
+fires) is OPEN-7's. The largest single cut measured: `read_bearing` fell from
+**261ms to 31ms (8.4x)** once `tesserocr` replaced shelling out to the binary,
+~12s off a trial, correctness verified on 208 glyph crops that match EXACTLY.
+`ocr_glyphs._api()` keeps a per-thread `PyTessBaseAPI` (134ms first call, 23ms
+steady), so there is no spin-up left to remove and a daemon would add moving
+parts for nothing.
 
 **The lesson: profile before optimising.** Leg speed was the intuitive target
 and was nearly worthless — walking is only ~20s of a trial, so a 32% cut in
@@ -700,7 +836,16 @@ yaw, depth and translation all enter undifferentiated. Measured scale response:
 ### (k) A note the user made that is still unexplained
 
 *"When you make the turn, you actually walk right out of the bar."* Observed
-directly on the stream, first day. No admissible frame has yet captured it.
+directly on the stream, first day. **It has now been captured**:
+`test_fixtures/leg_failures/overshot_outdoors_1788718155150.jpg` shows the
+character on a CITY STREET — a truck, a lamppost, shop signs — at the end of a
+leg that should have ended in the bar's pool room, written by the admissible
+leg-end path (OPEN-1) during the 2026-09-06 census. What is established is that
+a leg into the bar can end outdoors and off the mapped route. Whether it is the
+same event the user saw, and the mechanism, are NOT established: the 90-degree
+compass flip that would explain it cannot be produced offline at 1920x1080 (the
+compass correction below §10), and OPEN-3's closure removed the other candidate.
+Still unexplained; no longer uncaptured.
 
 ---
 
@@ -902,7 +1047,7 @@ rediscovery unless it brings new evidence:
 still worth testing: it adds no chunks and does not steer while walking. The leg
 already contains N turn-then-walk steps; tightening the tolerance only makes
 turns that are currently NO-OPS actually execute — same structure, same
-accelerations, same distance. See OPEN-3.
+accelerations, same distance. OPEN-3 was cancelled on exactly that re-derivation — `GRAVEYARD.md`.
 
 ---
 
@@ -1095,6 +1240,15 @@ anything under Assumed is re-verified before it is built on.
 `agent_progress/` is gitignored and safe to delete wholesale; its README carries
 the template.
 
+**Model selection is the dispatcher's job too.** Any sub-agent dispatched for
+routine scouting, log parsing, static reading or coverage checking runs on a
+cheap, lightweight model (Haiku). Flagship models are reserved for complex
+architectural reasoning, and only when a cheaper model demonstrably cannot do
+the step. Measured 2026-09-07: four flagship agents drafting scripts burned
+~850k tokens in five minutes, two of them on ideas the same day's A/B data had
+already killed; the static QA audit on Haiku, ten agents, cost 1.16M for an
+evening's findings. Token bleed is a failure of the DISPATCH, not of the agent.
+
 **17. THE A/B RUNNER RE-IMPORTS `graph_walk.py` FROM DISK ON EVERY TRIAL, SO A
 MUTANT ON DISK FOR ONE SECOND IS THE CODE A LIVE TRIAL RUNS.** `_harness.run_trial`
 spawns `python <script> --one-trial <arm>` per trial — that is the design, so
@@ -1114,6 +1268,22 @@ that was stopped too. **The rule: while `console_lock` is held, the checkout is
 read-only, and mutation testing goes to Snoopy (`Snoopy_testing.md`).**
 Static analysis — reading, grepping, `ast.parse` on source text with
 `python -B` — is fine; it writes nothing.
+**18. A DEFAULT ARGUMENT IS BOUND ONCE, WHEN THE `def` RUNS, AND THAT BREAKS
+A/B ISOLATION SILENTLY.** `leg_reliability` declared every public function as
+`def rate(a, b, path=STORE)`. `STORE` is a string, captured at import — so
+`leg_reliability.STORE = "arm_A.json"`, the natural way for an A/B harness or a
+test to give one arm its own record, changed NOTHING: every call still read and
+wrote the import-time file, and nothing said so. With `SPEED_FROM_RELIABILITY`
+on, an interleaved A/B would have had both arms writing one store, trial N's
+speed a function of trials 1..N-1 across both arms, and the harness reporting a
+clean redirect. `press(post_delay=ACTION_DELAY)` is the same trap, which is why
+that parameter takes `None` (§5). Fixed 2026-09-07: `path=None`, resolved at
+call time through `_store()`, pinned by `tests/routing/test_leg_reliability.py`
+with a check that fails on the bound default. **The rule: a module-level knob a
+test or harness may redirect is read at CALL time, never captured in a
+default.** Grep for `=STORE)`, `=PATH)`, `=DELAY)` shapes before trusting any
+redirect.
+
 
 ---
 
@@ -1297,20 +1467,16 @@ Read it before touching leg 2 or anything about pitch.
 
 Nothing outside this section may claim to be open.
 
-Six tickets were worked offline on 2026-09-05, each in an isolated worktree and
-each re-checked by a second agent that ran its own mutants rather than trusting
-the first. **Where a checker downgraded a claim, the downgrade is what stands
-here.** Two closed on evidence, one was CANCELLED rather than run (OPEN-3 — that
-is the most valuable result of the day), and three are partially closed with the
-remaining half named.
+Closed, answered and dropped tickets are NOT kept here. Verified measurements
+and fixes are folded into the section they belong to — OPEN-4 and OPEN-5 into
+§8(c), OPEN-10 and OPEN-11 into §2, OPEN-12 and OPEN-18 into §3, OPEN-16 into
+§5, OPEN-2 into §1 — and dropped hypotheses go to `GRAVEYARD.md` (OPEN-3) so
+they are not retried. A ticket that stays here is unmeasured, half-measured or
+blocked, and says which.
 
-**Numbering note for whoever merges those worktrees.** Two of them independently
-filed a NEW ticket as "OPEN-15", and a third produced the compass work. The
-numbers here are the authority: **OPEN-15 is the compass reader**, **OPEN-16 is
-the injector release window** (the `tests/cpp/` worktree calls it OPEN-15), and
-**OPEN-17 is the arrival heading** (the OPEN-3 worktree calls it OPEN-15). The
-worktrees' own copies of this file are superseded by this one — take THIS §11 and
-discard theirs rather than merging five conflicting versions.
+Numbering: **OPEN-15 is the compass reader**, **OPEN-16 was the injector release
+window** (closed, §5), **OPEN-17 is the arrival heading**. Older worktree copies
+of this file used those numbers differently; this file is the authority.
 
 **OPEN-1 — the leg-end frame path is BUILT AND PINNED; there are still ZERO
 admissible frames.** `follow()` publishes at the right moment: it sets
@@ -1370,92 +1536,6 @@ is still what every harness surfaces, while NOTHING reads
 own signature failure wearing a different hat. Acceptance test unchanged: a real
 jukebox-leg failure frame must NOT read bearing ~286 and must NOT identify as
 `bar_pool_room`.
-
-**OPEN-2 — CLOSED 2026-09-04.** `chiaki-patch/` now holds all five edits:
-`gui/CMakeLists.txt` and `gui/src/main.cpp` were copied in (they had existed
-only as prose here), and the README points at `cd chiaki-ng-src && git diff` as
-the authority. The stale half-size twin `chiaki_patch/` (underscore — its
-`injectinput.cpp` was 4,100 bytes against the real 9,684, one keystroke away on
-tab-complete) is in `_obsolete/`.
-
-**OPEN-3 — CLOSED 2026-09-05, DROPPED WITHOUT RUNNING IT.** `LEG_TURN_TOLERANCE`
-ships `None` — unchanged, i.e. `slow_traverse.TURN_TOLERANCE = 4.0` — and the
-20-trial A/B this file called "the highest-value navigation experiment available"
-is CANCELLED. Settled offline from the recordings, as the `cam` section above
-demanded. (`None` must still never reach `st.turn_to`: `abs(err) <= None`
-raises.)
-
-**The mechanism is REAL. It is also worth a few percent of a leg.** Both halves
-are measured, and the second is why this is dropped rather than run. Scored the
-one non-vacuous way (§10.12 — the spread of ACHIEVED headings, never
-`|want - got|`), the two live traces `graph_walk` recorded for
-`portrait_room -> bar_pool_room` in one run read: commanded 286.57 / 292.18 /
-285.59 / 287.59, spread 6.59 deg; the FAILED attempt achieved 289.1 four times,
-spread **0.00**; the SUCCEEDED attempt 286.2 / 290.1 / 288.1 / 288.1, spread
-3.90. So the tolerance really does flatten the recorded curve to nothing. But
-integrated at the recorded speeds and durations those two traces end **0.0021
-walk-units apart on a 0.7203-unit leg**, and the FLAT, never-turned trace was the
-MORE faithful to the recording's own endpoint (0.0011 against 0.0022). Whatever
-separated those two attempts, it was not the heading.
-
-**The premise was also wrong about what the curve IS.** `graph_walk.walk_link`
-calls `st.walk_leg(0.0, -abs(speed), ...)` — `lx` hard-coded to zero — so the
-executor CANNOT strafe mid-leg, and it reproduces the human's travel direction by
-turning the CAMERA to a heading the human never held. Over all 64 inter-step
-transitions in both recordings, `|delta cam|` exceeds 4 deg on **1**, while
-`|delta bearing|` exceeds it on **23**. Twenty-two of the twenty-three "curves"
-are the human's left thumb. Tightening the tolerance makes the executor chase
-thumb jitter: on `bar_jukebox -> dealer_table` it would sweep the camera 25.6 deg
-over 4.07s of walking, where the human held `cam` at 86.8 ± 0.14.
-
-**COST, priced the honest way — quote 6.79% and 0.258 units, never 2.63%.** The
-first pass under-priced this 2.6x by seeding each leg exactly on its first
-commanded bearing. `turn_to` compares against the MEASURED heading, so a leg also
-STARTS up to `tolerance` off and is walked there until some step exceeds the
-band — which is the second half of this ticket's own stated mechanism, and it is
-the case the single real trace shows (commanded 286.57, character at 289.1, entry
-turn a NO-OP). Swept adversarially over the permitted entry offset, discarding
-sub-4-degree turns costs **6.79% on the worst leg**, and tightening 4.0 -> 1.0
-buys **0.258 walk-units over the whole route**. For scale, the leg-distance pin
-accepts 15%, and the shortfall that genuinely broke the jukebox leg was 0.703 of
-1.031 units — **68%**.
-
-**The arithmetic that ends it.** At the §8(a) baseline of 0.60 and 338 s/trial,
-detecting +2 percentage points at 80% power needs ~9,300 trials per arm, about
-1,750 console hours; +5 points ~1,470 per arm; +10 points ~360. Ten per arm can
-only see an effect of about +30 points. There is no version of this experiment
-that fits in the time available and could detect the effect the mechanism allows.
-
-A hard floor nobody had noticed, worth keeping: `turn_curve.plan_turn` returns
-`(0.0, 0.0)` under 0.5 deg, so `turn_to` can never satisfy `abs(err) <=
-tolerance` below that — it breaks out and files an UNDERTURNED hazard on every
-step of every leg. Against a perfect simulated console, tolerance 0.40 filed 297
-of 2800 and 0.0 filed all 2800. **The usable range is (0.5, 4.0].**
-
-Pinned by `tests/routing/test_leg_curve_is_stick_not_camera.py`, which re-derives
-the whole argument from `route3_steps.json`, `route2_steps.json` and
-`world_map.json` rather than restating it — including that each map leg IS the
-corresponding route3 slice, since everything else attributes route3's `cam` to
-the map's legs.
-
-**THIS CLOSURE ORPHANS A USER OBSERVATION.** `graph_walk`'s own
-`LEG_TURN_TOLERANCE` comment claims this mechanism explains §8(k) — "you actually
-walk right out of the bar". A few percent of a leg's displacement cannot do that,
-so §8(k) is back to having NO candidate explanation, and that comment now asserts
-something this closure disproves.
-
-**The NO-OP/TURNED instrument (2026-09-04) has never actually run.**
-`slow_traverse.turn_to` logs every exit, paired:
-
-    turn to 292.2: NO-OP, already inside 4.0 deg (at 289.1, err +3.1) —
-                   nothing was sent, the recorded curve was discarded
-    turn to 292.2: TURNED to 292.0 (err +0.2) in 1 push(es)
-
-but no log, transcript or json on disk contains either string, so nothing can be
-re-scored — do not try. It costs nothing and answers the mechanism question a
-caller's step line never can (an executed turn also ends inside tolerance, which
-is precisely why this was invisible). **Let it ride along on whatever A/B runs
-next.**
 
 **A WORKING "DID I MOVE" SIGNAL, AT LAST — AND IT IS A PAIRED RATIO (2026-09-06).**
 Section 10.4 records that scene change CANNOT answer this: `STALL_CHANGE` cuts
@@ -1730,32 +1810,37 @@ user had already noticed near that path.
 you reach 0 of 3 times spends an hour per arm to record INVALID; at the restored
 leg 1 the start node is reached 10/10 at a 51.6s median.
 
-**OPEN-14 — Does the RESTORED jukebox leg move arrival?** The leg was 4.3x too
-short and could not reach its destination; it is now back to its recorded
-1.031 units over 3.30s. This is the strongest candidate yet for what has been
-costing the route, and it is UNMEASURED. Run it FIRST, before the other open
-A/Bs: if arrival moves, several of those experiments are asking the wrong
-question. 10 trials, scored on verified arrivals, reported by failure class.
+**OPEN-14 — The restored jukebox leg is IN FLIGHT as a full-route streak
+(started 2026-09-07 02:26).** The leg was 4.3x too short and could not reach its
+destination; it is back to its recorded 1.031 units over 3.30s. The short-vs-
+restored A/B this ticket originally asked for is superseded: the short leg is
+gone, the arithmetic says it could not arrive from anywhere in its origin's
+basin, and console time spent measuring a leg that cannot arrive answers
+nothing. What measures the restored leg is the run on the console now:
 
-**THE HARNESS IS NOW READY (2026-09-06). Both blockers are fixed; do not
-re-apply them.** `ab_jukebox_leg.py` walked the leg under test with
-`gw.walk_link`, which publishes no leg-end frame, so as written it collected NO
-evidence about the leg it exists to test (OPEN-1); and it reset twice a trial
-for want of `start_hint`. Both are fixed, in `overnight/_harness.py` rather than
-in the script, so the next harness cannot re-copy them:
+    overnight/streak_table.py  ->  overnight/streak_table.json, streak_table.log
+    10 trials, route portrait_room -> bar_pool_room -> bar_jukebox -> dealer_table
+    attempts=9, start_hint=SPAWN, shots= (leg-end frames), 1800s external ceiling
+    goal scored by at_table() after follow()'s aim sweep (confirm(), node == GOAL)
+    reported as the LONGEST CONSECUTIVE streak; invalid trials neither extend nor break it
 
-`_harness.walk_leg_under_test()` runs ONE attempt through `follow_verified` —
-one attempt, because the retrying primitive is a different quantity (OPEN-4,
-10/10) and retries would hide exactly the difference this A/B looks for. It
-returns the census SPLIT BY PROVENANCE, and counts recovery-fan rescues
-separately from arrivals, because a rescued trial travelled ~7x the leg's
-distance and is not evidence the leg arrives. `_harness.report_leg_arm()` prints
-both censuses so a shrinking denominator is visible rather than silent.
-`ab_stall_on_restored.py` had the identical defect and now shares the same path.
+Its per-node results give the restored leg's arrival rate at attempts=9 on the
+way to the answer that matters: how many in a row reach the TABLE. Trial 1
+started at load 8.0 / 15.5 / 13.7 (cancelled agents draining); §10.13a covers
+~8-11, so treat trial 1 as suspect if it is an outlier. Read the result before
+touching any leg — this is the first streak with the table leg and the prompt
+as the final check.
 
-Pinned by `tests/harness/test_leg_under_test_collects_evidence.py`, which
-asserts on CALLS through a stub rather than on source text — the older
-substring-matching guard passes when the bug is re-introduced.
+**Harness lessons that must not be re-copied** (fixed in `overnight/_harness.py`,
+2026-09-06): `ab_jukebox_leg.py` walked the leg under test with `gw.walk_link`,
+which publishes no leg-end frame, so it collected NO evidence about the leg it
+existed to test (OPEN-1), and it reset twice a trial for want of `start_hint`.
+`_harness.walk_leg_under_test()` runs ONE attempt through `follow_verified`
+(retries would hide exactly the difference a leg A/B looks for), returns the
+census SPLIT BY PROVENANCE, and counts recovery-fan rescues separately from
+arrivals — a rescued trial travelled ~7x the leg's distance and is not evidence
+the leg arrives. Pinned by `tests/harness/test_leg_under_test_collects_evidence.py`,
+which asserts on CALLS through a stub rather than on source text.
 
 **OPEN-13 — Does nulling the yaw before aligning improve ARRIVAL?**
 `graph_walk.NULL_YAW_BEFORE_ALIGN` ships **True**, because the old behaviour
@@ -1786,118 +1871,44 @@ behind when the key gained `REFERENCE_POSE`. Fixed in the main checkout, and
 mutation-tested by replacing that `log(...)` with `pass` (file size 100550 ->
 100374, so no stale bytecode) — the check then fails, and only that one.
 
-**OPEN-4 — ANSWERED 2026-09-06. `go_to_node_verified` arrives 10/10.**
-`overnight/measure_primitive.py`, n=10, target `bar_pool_room`, attempts=3:
-**10 valid, 0 invalid, 10 arrived, median 52.9s**, and `locate()` agreed with
-the primitive on every trial (zero disagreements). Config as shipped:
-`TRUST_RESET_SPAWN` True, `RECOVER_MISSED` True, `NULL_YAW_BEFORE_ALIGN` True,
-`REFERENCE_POSE` "bot". Result in `overnight/primitive_open4.json`.
+**OPEN-6 — `SURVEY_WHILE_WALKING`, `SPEED_FROM_RELIABILITY` and
+`RECORD_RELIABILITY` have never been tested live; the first's premise is now
+MEASURED.** `SURVEY_WHILE_WALKING` was built on "the OVERSHOT class, a quarter of
+failures", a figure from 8 post-fan frames that were inadmissible as evidence
+about a leg. The admissible measurement replaced it (2026-09-06, "THE FAILURE
+CENSUS EXISTS" above): at `bar_pool_room`, from leg-end frames with the stream
+confirmed live, **OVERSHOT 8/10, Wilson [0.49, 0.94]; WEDGED 2/10, [0.06, 0.51]**.
+The interval excludes a half-and-half split, so "most failures at that node are
+overshoot" is supported at n=10; the exact fraction is not, and the first
+admissible ROUTE census (2026-09-07, §8(a), n=5) is WEDGED-heavy — wedged 4,
+overshot 1. So the premise survives for `bar_pool_room` and is unsettled for the
+route. `SURVEY_WHILE_WALKING` stays `False` until an A/B, not because its
+premise is gone.
 
-So the two quantities really are different, and the one that matters is the good
-one. The ~55% figure is a SINGLE WALK; the retrying primitive is what everything
-downstream should use, and it is not the bottleneck. The earlier "4/4 at ~75s"
-is superseded — 52.9s is the median now that the spawn hint removes the wasted
-sweep and second reset (OPEN-8 cut 1).
+`SPEED_FROM_RELIABILITY` and `RECORD_RELIABILITY` are correct at `False`,
+demonstrated: 12 recorded arrivals make `leg_reliability.scale_for` return 3.0,
+and ONE subsequent failure returns it to 1.0 (11/12 = 0.917, under `MIN_RATE`
+0.95) — pinned with literals in `tests/routing/test_leg_reliability.py`. With
+both on, `follow_verified` writes the outcome it is measuring and `leg_scale()`
+reads it back, so trial N's walking speed is a function of trials 1..N-1, and an
+interleaved A/B's two arms share one store unless each arm sets
+`leg_reliability.STORE` inside its trial CHILD — the redirect works now (§10.18).
+`leg_reliability.json` does not exist on disk; neither flag has ever run live.
 
-**What this does NOT say.** It is one leg from a reset, not a route, and it was
-measured in one session — §10.5 warns that route performance has a large
-session-to-session component. It does not license quoting 100% for a full
-route: §8(a) still measures 6/10 there.
+Audited for the same write-then-read shape and reported, not changed:
+`compass._SCALE_CACHE` (`compass_scale.json`) and `input_controller._VIEW_CACHE`
+(`view_bounds.json`) are written mid-run and read back, and the view cache is a
+"widest lit extent ever seen" ratchet that moves the view centre and hence every
+bearing. They calibrate the DISPLAY, not the outcome — no arm can move them
+differentially and they converge, so interleaving absorbs them. Their writes are
+suppressed under `BASEBALL_TEST_RUN` (`tests/harness/test_caches_not_written_in_tests.py`).
 
-**OPEN-5 — ANSWERED 2026-09-07. `attempts=9` arrives 9/9; `attempts=3` 5/10.**
-Interleaved, 10 trials an arm, TIMEOUT 900 so the deep arm could not be
-censored, `start_hint=SPAWN`, scored on `follow_verified` confirming the goal
-(`overnight/ab_attempts.py`, `overnight/ab_attempts.json`):
-
-    attempts_9   9/9 valid arrived    median 308s   [83..780]    1 invalid
-    attempts_3   5/10 arrived         median 381s   [77..403]    0 invalid
-    Fisher exact p = 0.0325
-
-**WHAT "ARRIVED" MEANS HERE, EXACTLY.** The route is §8(a)'s:
-`portrait_room -> bar_pool_room -> bar_jukebox` from a reset spawn. The goal is
-`bar_jukebox` — the node ONE LEG BEFORE the dealer table. Each arrival is the
-localiser naming `bar_jukebox` with 218-1108 matches against `MIN_MATCHES` 140
-and ratio 1.74-11.66 against `MIN_RATIO` 1.35, and a photograph written at that
-moment (`overnight/failframes/success/ok_bar_jukebox_*.jpg`): 14 of them, which
-is 9 + 5 exactly, plus 5 `fail_bar_jukebox` frames, which is the 5 misses
-exactly. `overnight/open5_arrivals.jpg` is all 14, labelled by arm. **It does
-NOT say the character reached the table or that the "Baseball Cards" prompt
-was on screen** — that leg (`bar_jukebox -> dealer_table`) is confirmed by
-`table_prompt.at_table()`, never by `identify()` (§7), and is not in this
-measurement.
-
-All five `attempts_3` misses ended at depth 2/3: they reached `bar_pool_room`
-and lost the jukebox leg three times. The deep arm's median is LOWER because
-arriving is cheaper than exhausting three attempts and reloading. The one
-invalid trial was a reset that could not open the pause menu at 30.7s — the
-transport probe reported BOTH transports alive, i.e. game state, not input — and
-was recorded INVALID, never a failure (10.6). Nothing reached the 900s ceiling.
-
-This is 8(c)'s arithmetic measured: at attempts=9 the route sits at ~0.97-1.0
-per trial, n=9. **Shipping attempts=9 is a change to a default and is the
-user's call**, not made here. What would settle "25 consecutive": a streak run
-at attempts=9, with the table leg included and `at_table()` as the final check.
-
-The original ticket, for the diagnosis:
-
-**OPEN-5 — Is `attempts=9` better than `attempts=3`?** Run 1 was inconclusive
-and contaminated: attempts_9 2/3 valid (3 of 6 trials invalid on a 420s
-timeout), attempts_3 3/6, and both arms collapsed in the second half while
-chiaki logged 32,388 decoder-overflow lines. Retry is the only lever the
-arithmetic says can reach the target. `overnight/ab_attempts.py` is prepared at
-TRIALS=10, TIMEOUT=900, `log=log` — add `start_hint=gw.SPAWN` before starting it
-(OPEN-8), or every trial in both arms pays ~24s for a reset it does not need.
-**Note the interaction with §10.14**: this arm's whole mechanism is "spend
-longer", so the timeout must not censor it — the previous run lost 3 of 6
-deep-arm trials to a 420s ceiling.
-
-**OPEN-6 — Three flags have never been tested live, and one of them has no
-premise left.** `SURVEY_WHILE_WALKING` is `False`, and its premise —
-"the OVERSHOT class, a quarter of failures" — is now **WITHDRAWN, not merely
-doubted**. That figure is 2 of the 8 post-fan frames, which are inadmissible as
-evidence about a leg (OPEN-1); and even taken at face value 2/8 is a 95% Wilson
-interval of **[0.07, 0.59]**, so it never distinguished "a quarter" from "a
-twentieth" or "half". **Nothing may quote a class distribution until a run
-produces `failures_by_kind_leg_end`.**
-
-`SPEED_FROM_RELIABILITY` and `RECORD_RELIABILITY` are confirmed correct at
-`False`, demonstrated rather than argued: 12 recorded arrivals make
-`leg_reliability.scale_for` return 3.0, and ONE subsequent failure returns it to
-1.0 (11/12 = 0.917, under `MIN_RATE` 0.95). With both on, `follow_verified`
-writes the outcome it is measuring and `leg_scale()` reads it back, so trial N's
-walking speed is a function of trials 1..N-1 and an interleaved A/B's two arms
-share one store. `leg_reliability.json` does not exist on disk — neither flag has
-ever run live.
-
-Audited for the same shape and reported, not changed: `compass._SCALE_CACHE`
-(`compass_scale.json`) and `input_controller._VIEW_CACHE` (`view_bounds.json`)
-are both written mid-run and read back, and the view cache is a "widest lit
-extent ever seen" ratchet that moves the view centre and hence every bearing.
-They calibrate the DISPLAY, not the outcome — no arm can move them
-differentially and they converge, so interleaving absorbs them. Two footnotes
-that will bite someone: neither write is suppressed by `BASEBALL_TEST_RUN` (an
-offline analysis pass added a live geometry's key to a worktree's copy), and
-`leg_reliability`'s `STORE` USED TO BE bound into default arguments
-(`def rate(a, b, path=STORE)`), so monkeypatching `leg_reliability.STORE` to
-redirect the file silently did nothing. **Fixed 2026-09-07**: every public
-function defaults `path=None` and resolves `STORE` at call time through
-`_store()`, pinned by `tests/routing/test_leg_reliability.py` with a check that
-fails on the bound default. That is the seam an interleaved A/B needs to give
-each arm its own store — set `STORE` inside the trial CHILD, never the parent.
-
-**WHAT THE CENSUS RUN COSTS.** `follow_verified` stops at the FIRST unproven
-node, so a trial yields AT MOST ONE classified failure. At the §8(a) measured 6/10
-route arrival that is 0.4 failures a trial, and at 338 s/trial:
-
-    half-width   failures needed   full-route trials   hours
-      ±20pp          16-21               ~40            ~3.8
-      ±10pp          69-93              ~230           ~22
-      ±10pp, simultaneous over 4 classes   150   ~375  ~35
-
-A single-leg harness at ~90 s/trial reaches ±20pp in about an hour. **Take the
-±20pp run.** It is enough to kill or keep "OVERSHOT is a quarter", which is the
-only decision queued on this number, and ±10pp costs six times as much to answer
-a question nobody is asking.
+**WHAT A CLASS CENSUS COSTS.** `follow_verified` stops at the FIRST unproven node,
+so a trial yields AT MOST ONE classified failure; at 5/10 route arrival that is
+0.5 failures a trial. ±20pp on one class needs 16-21 failures (~40 route trials,
+~3h); ±10pp needs 69-93 (~230 trials, ~22h); a single-leg harness at ~90 s/trial
+reaches ±20pp in about an hour. Take the ±20pp run when a decision hangs on a
+class; nothing does today.
 
 **OPEN-7 — Should `RECOVER_MISSED` be turned off?** The fan succeeded 0/15 in
 the streak run and 2/31 combined, while costing ~34% of the clock. Judge it on
@@ -2004,134 +2015,6 @@ clock, is OPEN-7's and is not decided here.
 recovery failed because its cost was ADDITIVE — when the fan failed, the reset
 still happened. The variant that skips the reset on success has not been tried.
 
-**OPEN-10 — CLOSED 2026-09-04.** `_something_moved` is deleted, and
-`tests/harness/test_no_undefined_names.py` now scans every non-vendored module
-for names nothing binds — it has a positive control, so it cannot pass by
-finding nothing. It earned itself immediately: deleting that function as a
-block also took `SLIP_STRAFE`, `SLIP_STRAFE_SEC`, `SLIP_PUSH_SEC`, `SLIP_JUMPS`,
-`GEOMETRY_MAX_KEYPOINTS` and `SKIP_LADDER_ON_GEOMETRY` with it, which would have
-raised `NameError` on the first blockage. The lint caught it in minutes.
-
-**OPEN-11 — CLOSED 2026-09-05.** `tests/cpp/` is wired in by being a
-`tests/**/test_*.py` file, which is exactly what `run_tests.sh`'s own `find`
-discovers — so **`run_tests.sh` itself needed no edit**: no special case, no
-second list to keep in sync, and the runner's kill ceiling, live progress line
-and `BASEBALL_TEST_RUN` all apply for free. A driver compiles and runs the C++
-and scores its output. **It never skips**: absent `clang++`, absent
-`chiaki-ng-src`, a compile error, a binary that prints nothing, a missing SUMMARY
-line, a stub run, or a timing check that could not be sampled are each a FAIL
-naming the fix, because a check that silently declines is worth less than none.
-
-Three things it now guards that the remembered `clang++` line never did.
-**DIVERGENCE**: all five patched files are compared BYTE FOR BYTE against the
-sources the application actually builds — `tests/cpp/` had been compiling
-`chiaki-patch/injectinput.cpp` while the app builds
-`chiaki-ng-src/gui/src/injectinput.cpp`, with nothing keeping them equal, and the
-failure names both paths and points at `cd chiaki-ng-src && git diff` as the
-authority. The file list has a guard on the guard: trimming it below five pairs
-fails, so deleting a row cannot quietly disable the check. **TIMING**: the old
-assertions were "sleep, then assert still held", with 20-70ms of margin against
-150-200ms deadlines — a threshold sitting inside one population (§10.4). Every
-timing assertion is now bounded by a clock this process measures, so load can
-only make a check INCONCLUSIVE, never a false pass, and the sleeps that waited
-for a FIFO line to land are replaced by marker barriers (lines are parsed in
-order, so a marker written after a line proves that line was parsed).
-**LIFETIME**: one writer `FILE*` is held open for the whole run. Per-line
-open/close gave 3 bad runs in 20 (one `SIGPIPE`, exit -13) because the injector's
-reader is fopen / fgets-to-EOF / fclose / repeat, so a line written into the
-re-open gap is lost — which is also why `analog_replay.open_stream()` holds one
-handle.
-
-The result worth keeping: reintroducing the historical 1.4s-turn bug — an untimed
-sibling axis cancelling a timed hold — fails a CORRECTNESS check while its timing
-half passes. That is the point of the split. Load cannot turn that regression
-into a shrug. **No check count is quoted here**; the test prints its own, and the
-"13 checks" this entry used to claim was already stale by four.
-
-**Caveat found on review, and it is the project's own signature failure.** One of
-the three timing checks has NO load-proof correctness twin: `clear` setting
-`active = false` — the exact regression the release window exists to prevent —
-produces zero correctness failures and only an INCONCLUSIVE. The run still exits
-non-zero, so it is a misdiagnosis rather than a silent pass, and the message now
-names both possible causes and asserts neither. **Do not restore the wording that
-blamed the machine.** Separating "the window never opened" from "no tick landed
-inside it" needs `RELEASE_MS`, which lives in an anonymous namespace and cannot
-be read from the test; guessing it would put a threshold inside one population.
-
-Two standing costs. `chiaki-ng-src/` is gitignored, so this file HARD-FAILS on a
-machine without it — deliberate, since an unverifiable claim is not a passing
-one, but it means a fresh clone has one failing test until that tree is present.
-(An earlier version of this paragraph said `tests/cpp/probe_release_window.cpp`
-was "the only evidence for OPEN-16" and could rot. That file no longer exists
-anywhere on disk or in git history — it BECAME two checks inside
-`tests/cpp/test_injectinput.cpp` that the suite now runs every time, as the
-OPEN-16 entry below already records. The sentence contradicted its own ticket
-and pointed at nothing.)
-
-**One hole found on re-verification 2026-09-06 and CLOSED.** The file list was
-guarded by COUNT (`len(PATCH_FILES) >= 5`), which catches a deleted row but not
-a REPLACED one: swapping the `main.cpp` row for a second copy of the
-`injectinput.h` row keeps the count at five, leaves `main.cpp` compared against
-nothing, and prints "all green" with a drifted patched file. `len(set(...))` is
-defeated too, by a near-duplicate (`"./injectinput.h"`) that is a distinct tuple
-naming the same file. The list is now asserted to COVER exactly the contents of
-`chiaki-patch/` minus README.md. All three attacks fail by name.
-
-**OPEN-12 — CLOSED 2026-09-05.** `ocr_glyphs` gained a word mode
-(`image_to_text(image, psm, whitelist)`) sharing the existing persistent
-per-thread `PyTessBaseAPI`, and orchestrator's four local OCR call sites now go
-through one `orchestrator._ocr_text`: `ocr_ban_card_name`, `ocr_scoreboard` and
-`ocr_runner_card` at PSM 6, `read_ban_counter` at PSM 7 with the `0123456789/`
-whitelist. `ocr_glyphs.tesseract_config` is the ONE definition of the config
-string, so the fast path and the pytesseract fallback cannot drift into asking
-different questions; it reproduces the pre-migration literals exactly. A
-warn-once fallback stays behind it, and it says WHY the run got slower, because
-nothing else does.
-
-**THE HAZARD WAS THE HANDLE CACHE, not the recognition.** `_api()` was keyed on
-the WHITELIST ALONE, from when the module only ever asked PSM 10 — so a
-word-mode call would be handed back a SINGLE_CHAR handle and return ONE
-CHARACTER of a player's name, correctly, forever. It is now keyed on
-`(psm, whitelist)` with a bounded LRU, because the ban screen alternates PSM 6
-and PSM 7 and a re-`Init` costs ~134ms against ~23ms warm.
-
-**Evidence, and it is function-level rather than string-level**: 137 answers
-computed from LIVE IN-MEMORY crops in both the migrated tree and a baseline
-worktree at HEAD — 110 ban card names over 11 real ban frames, 11 ban counters,
-4 scoreboards, 12 runner names, 71 of them non-null — **zero differences**.
-Corroborated in aggregate: `test_ban_ocr_confusion`'s 110-cell corpus gives
-**63 correct / 0 wrong / 47 abstained in BOTH arms**, the same numbers this
-project already recorded from the pytesseract era, in 229.8s against 4.8s on the
-same machine — with the baseline getting eight threads and the migrated path
-one. Ground truth for the new fixture was recorded from the SLOW path, so the
-agreement test is not measuring itself.
-
-**A MIGRATION LIKE THIS BREAKS TEST SEAMS SILENTLY.** Two tests stubbed
-`orchestrator.pytesseract.image_to_string`, which after the migration is never
-consulted — so the code really OCR'd a blank grey probe and abstained, and every
-MUST_ABSTAIN case passed FOR THE WRONG REASON. Only the MUST_RESOLVE half, which
-exists to catch over-strictness from the other side, exposed it. Both seams now
-stub `orchestrator._ocr_text`. Reverting either one by hand reproduces
-"18/18 resolved correctly" over a blank square.
-
-**The 8-worker thread pool in that file is gone and must not come back.**
-`tesserocr` links `cysignals`, whose `sig_on`/`sig_off` is process-global and
-main-thread-only, and backend selection imports `tesserocr`, which installs a
-SIGINT handler that `signal.signal` refuses off the main thread — so a
-worker-first call silently drops the WHOLE PROCESS back to spawning subprocesses.
-Nothing in the match or navigation path drives OCR off the main thread, so this
-costs nothing real: serial and in-process beats eight threads and subprocesses on
-this machine by ~48x.
-
-Do not quote a per-read speedup from a loaded machine. The quiet-machine pair is
-still 193ms against 79ms; the 13.6s-per-read figure measured during this work is
-Sophos plus saturation deleting a temp file, caught with a `sample` stack showing
-2671 of 2671 samples inside one `unlink`. The claim worth repeating is "identical
-answers, and the fast path never touches the filesystem". Still shelling out,
-deliberately out of scope and recorded so they are not lost: `reset_env`'s
-`give_up_dialog` — **on the LIVE path**, and the best remaining candidate — and
-two sites in `landmarks.py`.
-
 **OPEN-15 — `read_bearing`'s confidently-wrong reads had ONE cause and it is
 fixed; the coverage cost is real, and the change is UNMEASURED against
 arrival.** (2026-09-05. This is the first time the reader's accuracy has been
@@ -2214,85 +2097,6 @@ on a file whose own comment says it lives on a NAS. That collides directly with
 OPEN-8's cut 3, which makes the write once-per-geometry; merged together, the
 frozen value becomes the tick-derived one.
 
-**OPEN-16 — CLOSED 2026-09-05.** Fixed, pinned by a mutation-tested check, and
-verified on the rig against a rebuilt binary.
-
-`Apply("clear")` armed `release_until = NowMs() + RELEASE_MS` (100ms) and nothing
-ever disarmed it. A later write set `active = true` and left the deadline
-standing, so when it expired `InjectInputActive()` ran its release path on the
-FRESH input: `active = false`, `has_left = false`, `has_right = false`. chiaki's
-pump is `if(InjectInputActive()) SendFeedbackState()`, so it then stops sending
-and **the console keeps the last state it received** — the deflection — while the
-hold's own deadline expires inside the injector and is never transmitted.
-
-    gap 400ms (outside the ~100ms window)   12/12 correctly released  [control]
-    gap  30ms (inside it)                   12/12 STILL DEFLECTED
-    gap  90ms (inside it)                    9/12 deflected, 3/12 push dropped
-
-**THE RUNAWAY GUARD CANNOT SAVE IT.** `INJECT_TIMEOUT_MS` is evaluated inside
-`InjectInputApply`, which the pump has stopped calling — so the 5s bound that
-exists precisely to stop a stick being held forever is unreachable in the one
-state that needs it. That is the sharpest form of this defect and is worth
-remembering as a shape: **a guard that lives downstream of the switch that
-disables it.**
-
-**The fix is one line:** `g_inject.release_until = 0;` on the non-clear path of
-`Apply()`, beside `g_inject.active = true;`. In BOTH copies
-(`chiaki-patch/injectinput.cpp` and `chiaki-ng-src/gui/src/injectinput.cpp` —
-`tests/cpp/test_injectinput_cpp.py` compares them byte for byte).
-
-**Pinned by `tests/cpp/test_injectinput.cpp`**, check *"a write inside the window
-SURVIVES the window expiring"*. Mutation-tested: deleting the one line produces
-exactly that one FAIL and ZERO inconclusives — so unlike the sibling
-release-window check, which can only report INCONCLUSIVE, this one has a
-load-proof verdict. It goes INCONCLUSIVE rather than passing when load pushes the
-write outside the window, because outside the window there is no bug to find.
-`probe_release_window.cpp` became this check and is deleted.
-
-### Verified on the rig
-
-Incremental rebuild 29s (not the 15 minutes a clean build costs).
-`restart_chiaki.sh` installed and re-signed it; `nm -U` shows
-`InjectInputStart/Apply/Active`; Circle closes the pause book and OPTIONS opens
-it. Then the defect's own scenario, using a CAMERA turn so nothing could move
-position — `clear`, wait the gap, one timed `right_x 16000 600`, compass read at
-+2.0s and again at +4.0s:
-
-    gap 400ms (control)   turned 7.49 deg, then a further  0.000 deg
-    gap  30ms (the bug)   turned 7.21 deg, then a further -0.026 deg
-
-Both arms turn the same amount and both stop dead. Bearing went 86.8 -> 101.5,
-which is 7.49 + 7.21 exactly.
-
-### Live reachability: latent on the route, LIVE in one harness — FROM NOW ON
-
-Grepped every `clear` written to the FIFO (`ar.clear()`, `ar.send(["clear"])`,
-`inject_reset.clear()` — 30 sites, more than the 11 first checked).
-
-- Every site on the production route is TERMINAL: a `return`, a `raise`, a log,
-  or a harness `finally:`. The shortest gap on a live walking path is
-  `brett_walk._push` (:277), which clears inside its 0.8s chunk loop and then
-  sleeps `walk_steps.SETTLE = 0.25` plus a capture — ~290ms, outside.
-- **`overnight/walk_curve.py:52` is inside the window.** It loops
-  `ar.send(["clear"])` straight back to the top and the next stick write is two
-  `fast_capture()` calls later — ~75ms at the 37ms/capture from §8(h). The only
-  site of that shape. Note `ar.clear()` also CLOSES the FIFO, so a reopen sits
-  between it and any following write; `ar.send(["clear"])` does not, which is why
-  the reachable site is one of the latter.
-
-**THIS DOES NOT IMPLICATE §6's WALKING TABLE, AND AN EARLIER DRAFT HERE SAID IT
-DID.** `overnight/walk_curve.json` is dated 2026-09-04 13:00 and its contents ARE
-that table; the release window was added 2026-09-05, so the run predates the
-defect. The claim was made by reading the call site and never checking that the
-mechanism existed when the measurement was taken — a mechanism that makes sense
-is not evidence (§10.2). Git cannot date this for anyone: the repo's history
-begins at "Initial commit: Auto Baseball" because git was added on 2026-09-05, so
-`git log -S RELEASE_MS` returns that commit for everything and READS AS THOUGH THE
-CODE WAS ALWAYS THERE. File mtimes and the run's own JSON are the datable
-artifacts here.
-
-**The question it does open is still open — see OPEN-19.**
-
 **OPEN-17 — Does the executor's ARRIVAL HEADING cost the two bad nodes?
 PARKED — do not build it before OPEN-14 reports.** The executor ends every leg
 facing `steps[-1]["bearing"]`, while the references were shot at `cam[-1]`. The
@@ -2312,202 +2116,6 @@ every failed change MOVED the character while both survivors move nothing.
 exactly the shape that killed `STALL_CHANGE` after a Fisher p = 0.00039 (§10.2).
 `approach_goal` compounds it by aiming at `steps[-1]["bearing"]` and discarding
 the other seven, 10.6 deg off the leg's own net direction.
-
-**OPEN-18 — CLOSED 2026-09-06. `streaming()` no longer reports UP on chiaki's
-own window.** The whole ticket was blocked on one missing frame, and capturing it
-took thirty seconds once chiaki was running.
-
-`test_fixtures/not_streaming/hostlist_standby.png` is the live chiaki window
-showing `State: standby`, at the rig's own 1867x1050. `find_bar` fires on it;
-before today `streaming()` therefore answered **True** on it in 0.0s. It now
-answers **False**. Demonstrated as an A/B on that one frame:
-
-    without the guard   True   via find_bar          0.0s
-    with the guard      False  nothing answered     25.3s
-
-**THE DISCRIMINATOR IS NOT ABOUT THE COMPASS, deliberately.** Qt draws flat
-fills: large areas of one exact RGB value, and bands running the full width.
-H.264 never does — quantisation dithers even a dark room, so decoded video holds
-no long exact runs. A compass-shaped test would have rejected ban screens and
-gameplay, where no compass exists and the stream is perfectly healthy.
-
-Measured over 848 real streaming frames (demos, screenshot_log, explore,
-overnight, places; 65 of them pause screens) against the live host list plus the
-70 non-game images `find_bar` fires on:
-
-                              streaming: p50    p99     MAX  |  host list
-        flatness                  0.0357  0.1131  0.2949  |  0.6678
-        widest exact row run      0.1208  0.3917  0.6208  |  1.0000
-
-`UI_FLAT_FRAC = 0.25` and `UI_ROW_RUN_FRAC = 0.50` sit between the two, with the
-host list clear by 2.7x and 2.0x. **Held out properly** — thresholds fitted on
-half the streaming frames and scored on the other half — gives **0 false
-positives on 71 non-streaming frames and 1.2% false negatives**.
-
-**WHY THE FALSE NEGATIVES ARE CHEAP, which is what makes this safe.** Rejecting
-the `find_bar` branch does NOT return False. It falls through to
-`_heartbeat_seen()`, the console's own word and better evidence than pixels,
-which returns on the first heartbeat (~0.4s). So a real stream whose frame
-happens to be flat still answers True a moment later. The standby host list has
-no session, therefore no heartbeat, and comes back False after the full 25s —
-paid only on the path that was about to give up anyway.
-
-Pinned by `tests/rig/test_streaming_rejects_chiaki_ui.py`, which carries the
-control (without the guard it must still answer True via find_bar, or something
-else is producing the False) and a ceiling on how many real frames may be
-rejected. Three mutants, each caught by a different check: raising the gate,
-removing the guard, and making the check always True.
-
-**One honest limit.** Six captures 1.5s apart were BYTE-IDENTICAL, so the
-negative side is ONE distinct frame, not six. It is the frame that matters — the
-state that cost an hour — but chiaki's settings dialogs and its non-standby host
-list are still unsampled. If `streaming()` ever reports UP on one of those, add
-it to `test_fixtures/not_streaming/` and this rule can be re-scored in minutes.
-
----
-
-**The original ticket, kept for the diagnosis:**
-
-**OPEN-18 — `ensure_stream.streaming()` REPORTS UP WHILE THE PS5 IS IN STANDBY.**
-Observed 2026-09-05 while verifying OPEN-16. `Bretts_walk.py connect` printed
-`[stream] up via find_bar (compass strip located)` and returned success; the
-capture was chiaki's HOST LIST reading **`State: standby`**. The console was
-asleep, there was no stream at all, and `connect` therefore never ran its wake
-sequence — the three `_key` presses at `ensure_stream.py:231-233`. Driving those
-by hand woke the console in 112s.
-
-This is §3's rule biting a caller that predates it. `find_bar()` locates the
-compass strip WITHOUT reading it and returns non-None on essentially every frame,
-which is why §3 says it answers "am I streaming" and NOT "am I in the world" —
-but `streaming()` uses it as the liveness test, and a standby host list is
-neither. `read_bearing()` is no better: on the PS5 Control Center overlay sitting
-on top of the paused game it returned **43.7**, a confident number for a frame
-with no world in it, which sent this session's own "WORLD IS UP" check wrong until
-the user looked at the screen and said so.
-
-Cost here was two minutes of hand-driving. Cost to an unattended run is a night
-spent pressing buttons at a sleeping console while every log line says the stream
-is up — §10.1's shape exactly, where doing nothing looks like working.
-### What the diagnosis established, 2026-09-05
-
-**`streaming()`'s OWN DOCSTRING CENSUS IS WRONG.** It claims
-
-    chiaki host list, disconnected  find_bar None   bearing None
-
-Measured on the standby host-list frame: **`find_bar` returns `(70, 1089, 1810)`**,
-not None. The one state the function exists to detect is the one its evidence
-cannot see. `read_bearing` (None) and `is_pause_screen` (False) both answered
-correctly — only `find_bar` fired, and it is the check that runs first.
-
-**AND §3 ALREADY SAID SO, TWO SECTIONS AWAY.** CLAUDE.md:229 records, as a
-measurement: *"`find_bar()` returns non-None on EVERY frame including ban and
-gameplay screens."* So the docstring census does not merely lack evidence — it
-CONTRADICTS a measured fact already written in this file, in a table laid out to
-read exactly like measurement. **That is what this entry is really about:** not a
-detector needing a better threshold, but a caller asserting the opposite of a
-known result in its own docstring, where prose cannot fail and everyone reads it.
-
-Note §3's frames are the POSITIVE population — ban screens and gameplay, every one
-a state where the stream IS up. They establish that `find_bar` firing means
-nothing; they do not help separate standby. The negative side is still n = 1.
-
-**THE PRECEDENT IS §7's `identify_edges`.** There, `descriptor()` divides by the
-vector norm, so a near-featureless frame becomes mostly the shared vignette and an
-upstairs office door scored 0.906 against `beside_dealer_table` — higher than any
-genuine match. A standby host list satisfying "thin bright band, dark above and
-below" is the same failure: **a detector answering confidently about a frame
-containing none of its subject.** §7's verdict on that one is the part to carry
-over — *no score threshold fixes it* — which is why the search below stops hunting
-for a better `find_bar` threshold and goes after a non-pixel signal instead.
-
-**WHAT IT MATCHED.** `find_bar` returns `(y, x_left, x_right)` and looks for a
-thin bright band with dark rows above and below. chiaki's own blue toolbar
-("Create Steam Shortcut / Refresh PSN Hosts") is exactly that, at **y = 70**
-against the real compass strip's **y = 64**. No y-band and no thinness rule can
-separate them; the impostor is 6px away from the target.
-
-**ONE CANDIDATE REFUTED, WITH n = 800.** "Qt chrome is flat fills, a rendered game
-frame is textured" — scored as the fraction of pixels sharing the single most
-common exact RGB value, over 800 archived frames from `demos/` and
-`screenshot_log/`:
-
-    game frames   p50 0.0300   p90 0.0598   p99 0.1121   MAX 0.6556
-    host list, standby                                       0.6262
-
-**THE REASON ABOVE IS WRONG, AND THE CONCLUSION SURVIVES ANYWAY (2026-09-06).**
-The table scores the WRONG POPULATION. Flatness is a discriminator applied only
-AFTER `find_bar` has already fired; a frame `find_bar` returns None on never
-reaches it. Conditioned on `find_bar` firing, the game side tops out at 0.5024
-(400-frame tail) and 0.1153 (random 800) against the host list's 0.6262 — a gap,
-not an overlap. Every one of the 17 frames at or above 0.6262 is a PURE BLACK
-fade frame, mean 0.0, on which `find_bar` returns None.
-
-So the populations do not overlap. **Do not rebuild this one anyway**, for the
-honest reason: the NEGATIVE side is a single observation and that frame is not
-on disk, so §10.4's "between two MEASURED populations" is unmet in the other
-direction. The candidate is UNEVALUABLE, not refuted. Capturing one host-list
-frame would settle it.
-
-**NO FREE WINDOW-TITLE DISCRIMINATOR.** `kCGWindowName` is empty for both of
-chiaki's windows, so the pixel-independent route that `game_window_rect()` almost
-offers is not available; it matches on `kCGWindowOwnerName` because that is all
-macOS hands over here.
-
-**THE SURVIVING CANDIDATE, AND IT IS NOT YET A CENSUS.** The compass strip is
-CENTRED in the game frame; chiaki's toolbar is right-aligned.
-
-    world, in game        x 609..1328   centre  968   (frame 1920 -> offset  -11)
-    host list, standby    x 1089..1810  centre 1450   (offset +490)
-    pause book            x 279..1607   centre  943
-    PS5 Control Center    x 221..1636   centre  929
-
-Three game-side states cluster at the centre and the chrome sits far right. **But
-this is n = 1 on the chrome side**, and a threshold on one sample is the thing
-this file keeps being caught by. Collecting more host-list frames requires taking
-the stream DOWN, so it was not done: OPEN-16's verification and the rig work
-needed the stream up.
-
-**THE LIVE-VS-SAVED INCONSISTENCY IS RESOLVED, AND THE ANSWER IS ITS OWN
-FINDING — see the section below §10.** Live, on the PS5 Control Center overlay,
-`read_bearing` returned **43.7**; on the JPEG saved from that same capture it
-returns **None**. The cache is exonerated by direct test (same file, cache
-as-loaded / cleared / restored — None all three times). It is the lossy save, and
-saving is not a harmless record.
-
-**Not fixed:** the replacement predicate still has to sit between two measured
-populations (§10.4). Next step is the centring test above with a real host-list
-population behind it; the peer's suggestion of the literal text `State: standby`
-remains the fallback.
-
-**CONFIRMED ON AN INDEPENDENT CORPUS, AND IT COST THE USER AN HOUR (2026-09-06).**
-`find_bar` is not weakly discriminating, it is barely discriminating at all:
-9 of 13 of chiaki's OWN Qt documentation screenshots, 5 of 6 arbitrary
-photographs, and a SYNTHETIC dark window with one light horizontal toolbar all
-return non-None. Only a flat image — solid colour or pure noise — returns None.
-On 2026-09-06 every failed reconnect announced `[stream] up via find_bar` first
-while chiaki was NOT RUNNING and the console was OFF, and an hour went into
-diagnosing the compass instead of the rig.
-
-`streaming()`'s docstring asserted the opposite — *"It is None only in the state
-this function exists to detect"* — which is why nobody looked. That sentence is
-deleted and the measurement is pinned by
-`tests/rig/test_find_bar_is_not_a_stream_check.py`, whose fixtures are
-SYNTHESISED so it does not depend on the gitignored `chiaki-ng-src/`, and which
-carries a positive control (40/40 real game frames still located) so it cannot
-pass with the detector broken the other way.
-
-**THE VERDICT LOGIC IS DELIBERATELY UNCHANGED, and that is a decision for the
-user, not a gap to be closed quietly.** Deleting the `find_bar` branch trades a
-known false positive for an UNMEASURED false negative, and a false negative here
-ENDS an unattended run — which is the failure that put the branch there in the
-first place (bright scenes killed two runs on 2026-09-01).
-
-**One lead, recorded and NOT asserted.** On every synthetic and UI image tried,
-the located strip spans the FULL frame width (0..W-1); on 40 of 40 real game
-frames it is bounded well inside (e.g. 460..937 of 1400). That is 2/2 against
-0/40 — a perfect separation on what exists, and still only ONE measured
-population, because the host-list frame is not on disk. **Capture one host-list
-frame and this ticket closes.** That is the cheapest open item in this file.
 
 **OPEN-19 — Did the OLD `clear` corrupt §6's walking table?** Raised 2026-09-05
 and deliberately left open rather than inherited.
