@@ -1284,6 +1284,17 @@ test or harness may redirect is read at CALL time, never captured in a
 default.** Grep for `=STORE)`, `=PATH)`, `=DELAY)` shapes before trusting any
 redirect.
 
+**19. SAVE PATCH SCRIPTS BEFORE EXECUTING THEM.** When an agent writes a script
+to parse, slice or patch a critical project file — this file, the map, a
+harness — it saves the script to disk first (the scratchpad is fine) and gates
+the atomic write behind strict assertions on every anchor it will touch. If an
+assertion fires, the logic is preserved and the retry is a one-line fix, not a
+300-line re-send; if the write is reached, every seam has already been checked.
+2026-09-07: the eight-edit patch to this file was written inline, its GRAVEYARD
+assert was off by one, and the whole script had to be re-sent to fix one
+integer. Saved, the retry would have cost nothing. The assertion that fired
+BEFORE the write is the pattern; the re-send is the cost of not saving.
+
 
 ---
 
