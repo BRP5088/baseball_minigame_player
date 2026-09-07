@@ -1,18 +1,16 @@
-# State at 2026-09-07 07:55 — read this first
+# State at 2026-09-07 08:10 — read this first
 
 ## Running now
-`BASEBALL_NICE=1 ./run_tests.sh` — the certification re-run of the whole
-suite, log `overnight/suite_final_certify.log` (last line `--- ...`, then
-`exit N`). Started 07:52, ~22 min under taskpolicy. **Nothing is on the
-console**; `console_lock.holder()` was None when it started.
+**Nothing.** No process on the console, no suite, no sweep.
+`console_lock.holder()` is None. The last thing to run was the certification
+suite: `overnight/suite_final_certify.log` — **143 files, all green, 752s**,
+under `BASEBALL_NICE=1`, exit 0.
 
-Why a re-run: the first certification (`overnight/suite_overnight_final.log`,
-07:27) was 142/143. The one failure, `test_map_admit`, was NOT a weakened
-gate: the test globbed `overnight/failframes/*.jpg` as its failure population
-and the streak run had appended 165 leg-end frames there. Fixed by naming the
-four fixture frames (7b8f918); passes alone in 52.9s. CLAUDE.md §2 now carries
-the rule. If the re-run is anything but all-PASS, the failing file is the
-first thing to read — do not re-run it hoping.
+The first certification (`overnight/suite_overnight_final.log`, 07:27) was
+142/143. The one failure, `test_map_admit`, was NOT a weakened gate: the test
+globbed `overnight/failframes/*.jpg` as its failure population and the streak
+run had appended 165 leg-end frames there. Fixed by naming the four fixture
+frames (7b8f918); CLAUDE.md §2 now carries the rule.
 
 ## The overnight plan — status
 0. **OPEN-14 scored and recorded** (38a17af): 3 valid of 10, 7 censored at the
@@ -26,7 +24,7 @@ first thing to read — do not re-run it hoping.
    floor-map cluster, flagged in QA_AUDIT.md, nothing deleted.
 3. **Static QA on Haiku done**: one by-construction check removed from my own
    test, `report_kinds` made loud on foreign rows (ad13c6e).
-4. **Suite**: 142/143 → cause fixed → re-run in flight (above).
+4. **Suite certified**: 142/143 → cause fixed → **143/143 green** (752s).
 
 ## First decision for you (not done unasked)
 `graph_walk.locate()` falls through from `at_table()` to `identify()`, so the
