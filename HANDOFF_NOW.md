@@ -31,7 +31,14 @@ board's data -- not this session.
    over the dealer's body; OCR reads both with 0 false positives on every
    negative on disk (overnight/census/prompt_ocr_ab.json). Local-contrast masks
    were measured and refused (prompt_mask_ab.json).
-3. Score the A/B TWICE: (a) as the harness scored it (overnight/ab_goal_leg.json,
+3. Score the A/B TWICE (below), then RUN THE PROMPT-ZONE MAP -- agreed with
+   the user 2026-09-07, harness written and committed, never run:
+       nohup .venv/bin/python -B overnight/prompt_zone.py > overnight/prompt_zone.log 2>&1 &
+   5x5 grid around the recorded leg's endpoint, 5 headings a point, mask + OCR
+   verdicts, frames under overnight/prompt_zone_frames/. Needs the OCR path
+   landed first (item 2) and a free console. ~1 hour if setups behave.
+   Occupancy-grid and 3D mapping were offered and DROPPED by the user.
+3b. Score the A/B TWICE: (a) as the harness scored it (overnight/ab_goal_leg.json,
    at_table() after the sweep, Fisher p); (b) post hoc with
    `tools/goal_leg_sheet.py`, which re-reads every PRE-sweep frame with the mask
    AND OCR and reports "prompt on screen at the leg's end" per arm -- the
