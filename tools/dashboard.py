@@ -113,6 +113,17 @@ def done_today():
     return keep[:12]
 
 
+REPLIES = os.path.join(ROOT, "overnight", "dashboard_replies.json")
+
+
+def _replies():
+    """[{ts, to, text}] -- the session's answers to inbox messages; edited by hand."""
+    try:
+        return json.load(open(REPLIES))
+    except Exception:
+        return []
+
+
 def build_state():
     rows, tallies, run = rows_and_tallies()
     paused = "--paused" in sys.argv
@@ -125,7 +136,8 @@ def build_state():
         "run": {"name": "Goal-leg A/B: shipped vs recorded", "harness": "overnight/ab_goal_leg.py",
                 "started": "2026-09-07 09:35", "paused": paused, **run, "rows": rows, "tallies": tallies},
         "queue": queue, "decisions": DECISIONS, "done": done_today(),
-        "talk": "Select any text on this page and add a comment, then choose Send to Claude. This session is watching the page and answers in the thread.",
+        "replies": _replies(),
+        "talk": "Messages land in the board's inbox; the session reads it at every update and answers here. To wake it right now, add a comment on the page and choose Send to Claude.",
     }
 
 
@@ -182,6 +194,20 @@ ul.plain li b{font-weight:600}
 ul.done{list-style:none;padding:0;margin:0;display:grid;gap:6px;font-size:14px}
 ul.done code{font-family:"IBM Plex Mono",monospace;background:var(--code);padding:1px 5px;border-radius:3px;color:var(--mute)}
 .talk{border-left:5px solid var(--accent)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+.box{display:grid;gap:10px}
+textarea,input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--code);border:1px solid var(--line);border-radius:3px;padding:8px 10px;resize:vertical}
+button{font:600 14px "IBM Plex Sans",sans-serif;color:var(--accent-ink);background:var(--accent);border:0;border-radius:3px;padding:8px 14px;cursor:pointer}
+button.quiet{background:transparent;color:var(--mute);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.answer{white-space:pre-wrap;min-height:1.5em;padding:10px 12px;background:var(--code);border-radius:3px}
+.msgs{display:grid;gap:8px}
+.msg{padding:8px 12px;border-left:3px solid var(--line)}
+.msg.you{border-color:var(--accent)}.msg.me{border-color:var(--good)}
+.msg small{display:block;color:var(--mute);font-size:12px}
+[hidden]{display:none!important}
 .talk p{margin:0}
 .note{color:var(--mute);font-size:13px}
 kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;background:var(--code)}
@@ -204,7 +230,22 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--
       <section><h2>Your decisions</h2><ul class="plain" id="decisions"></ul></section>
     </div>
   </div>
-  <section class="talk"><h2>Talk to me here</h2><p id="talk"></p><p class="note">Comments sent to Claude wake the session that publishes this page; it answers in the thread and updates the board.</p></section>
+  <div class="two">
+    <section class="talk box" id="askbox" hidden>
+      <h2>Ask the board</h2>
+      <p class="note">A fresh Claude that sees only this board's data — instant answers about what is running and what is next. It is not the live session.</p>
+      <div class="answer" id="answer">Ask something like "why is trial 5 invalid?"</div>
+      <div class="row"><input type="text" id="q" placeholder="Your question" aria-label="Question for the board"><button id="ask">Ask</button><button class="quiet" id="stop" hidden>Stop</button></div>
+      <p class="note" id="asknote"></p>
+    </section>
+    <section class="talk box">
+      <h2>Message the session</h2>
+      <p class="note" id="talk"></p>
+      <div class="msgs" id="msgs"></div>
+      <div class="row"><textarea id="m" rows="2" placeholder="Anything for the session: an instruction, a question, a change of plan." aria-label="Message to the session"></textarea></div>
+      <div class="row"><button id="send">Send to the session</button><span class="note" id="sendnote">Read at the next board update. For an immediate wake, comment on the page and choose Send to Claude.</span></div>
+    </section>
+  </div>
   <section><h2>Done today</h2><ul class="done" id="done"></ul></section>
 </div>
 <script id="snapshot" type="application/json">__STATE__</script>
@@ -236,10 +277,61 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--
   }
   render(JSON.parse(document.getElementById("snapshot").textContent));
   setInterval(() => { const u = el("upd"); if (u && last) u.textContent = `updated ${last.updated} (${ago(last.updated_epoch)})`; }, 15000);
+  // ---- messages to the session: an inbox document, replies come back in the state doc
+  let inbox = [];
+  function renderMsgs(){
+    const rep = (last && last.replies) || [];
+    const items = [...inbox.map(x => ({...x, who:"you"})), ...rep.map(x => ({...x, who:"me"}))]
+      .sort((a,b) => (a.ts||0) - (b.ts||0)).slice(-12);
+    el("msgs").innerHTML = items.map(x => `<div class="msg ${x.who}"><small>${x.who==="you"?"you":"the session"} &middot; ${esc(x.when||"")}</small>${esc(x.text)}</div>`).join("");
+  }
   if (window.claude && typeof window.claude.use === "function") {
     window.claude.use("db").then(db => {
       if (!db) return;
-      db.doc("dash/state").onSnapshot(snap => { if (snap.exists) render(snap.data()); }, () => {});
+      db.doc("dash/state").onSnapshot(snap => { if (snap.exists) { render(snap.data()); renderMsgs(); } }, () => {});
+      const inboxRef = db.doc("dash/inbox");
+      inboxRef.onSnapshot(snap => { inbox = (snap.exists && snap.data().messages) || []; renderMsgs(); }, () => {});
+      el("send").onclick = async () => {
+        const text = el("m").value.trim(); if (!text) return;
+        el("send").disabled = true;
+        try {
+          const cur = await inboxRef.get();
+          const msgs = ((cur.exists && cur.data().messages) || []).slice(-40);
+          const d = new Date();
+          msgs.push({ ts: Math.floor(d.getTime()/1000), when: d.toLocaleString(), text });
+          await inboxRef.set({ messages: msgs });
+          el("m").value = ""; el("sendnote").textContent = "Sent. The session reads this at its next board update.";
+        } catch (e) { el("sendnote").textContent = "Could not send (" + (e && e.code || "error") + "). Use a comment sent to Claude instead."; }
+        finally { el("send").disabled = false; }
+      };
+    }).catch(() => {});
+    // ---- ask the board: a memory-less Claude given the board's data
+    window.claude.use("sample").then(sample => {
+      if (!sample) return;
+      el("askbox").hidden = false;
+      const turns = [];
+      let ctl = null;
+      const copy = { not_granted: "Claude is not allowed on this page for you; the message box still works.", sampling_disabled: "Claude is not available on this account.", rate_limited: "Too many questions for now; try again in a minute.", session_expired: "Sign in again to ask.", refused: "That question was declined; try phrasing it differently.", empty_completion: "No answer came back; ask something smaller.", upstream_error: "The connection dropped; ask again.", prompt_too_large: "The board is too big to send; ask a narrower question." };
+      const HIDE = new Set(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"]);
+      el("stop").onclick = () => ctl && ctl.abort();
+      el("q").addEventListener("keydown", e => { if (e.key === "Enter") el("ask").click(); });
+      el("ask").onclick = async () => {
+        const q = el("q").value.trim(); if (!q || !last) return;
+        const rules = "You are the assistant for this project dashboard (Auto Baseball: a bot that walks a character to a card dealer's table in a PS5 game; an A/B of two ways to walk the last leg is running). Answer the viewer's question from the BOARD DATA below only, briefly and plainly; INVALID trials are not failures. You are NOT the live Claude session doing the work: if the viewer wants to instruct it, tell them to use 'Message the session' or a comment sent to Claude. Board data (JSON):\n" + JSON.stringify(last).slice(0, 40000);
+        turns.push({ role: "user", content: q });
+        ctl = new AbortController();
+        el("ask").disabled = true; el("stop").hidden = false; el("answer").textContent = "Thinking..."; el("asknote").textContent = "";
+        try {
+          const { text, truncated } = await sample([{ role: "user", content: rules }, ...turns.slice(-8)], {
+            modelTier: "quick", cache: false, signal: ctl.signal, onText: ({ text }) => { el("answer").textContent = text; } });
+          turns.push({ role: "assistant", content: text });
+          if (truncated) el("asknote").textContent = "Cut short; ask for less at a time.";
+        } catch (e) {
+          if (e && e.text) el("answer").textContent = e.text; else if (!e || e.code !== "cancelled") el("answer").textContent = "";
+          if (e && HIDE.has(e.code)) { el("askbox").hidden = true; }
+          else if (e && e.code !== "cancelled") el("asknote").textContent = copy[e.code] || copy.upstream_error;
+        } finally { el("ask").disabled = false; el("stop").hidden = true; ctl = null; }
+      };
     }).catch(() => {});
   }
 })();
