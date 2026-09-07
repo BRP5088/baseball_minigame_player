@@ -81,8 +81,11 @@ def leg_frame(m):
 def _kp():
     import compass
     import places
+    # places.keypoints returns (keypoints, descriptors) -- len() of that pair is
+    # 2, which is what every "wedged" verdict in the first three runs was.
     try:
-        return len(places.keypoints(compass.fast_capture().convert("RGB")))
+        kps, _des = places.keypoints(compass.fast_capture().convert("RGB"))
+        return len(kps or ())
     except Exception:
         return None
 
@@ -133,7 +136,8 @@ def measure_point(walk, xy, forward, log):
         score, ink, at = float(tp.score(img)), float(tp.ink(img)), bool(tp.at_table(img))
         words = ocr.read(img)["words"]
         try:
-            kp = len(places.keypoints(img))
+            kps, _des = places.keypoints(img)
+            kp = len(kps or ())
         except Exception:
             kp = None
         f = os.path.join(SHOTS, f"pz_w{walk}_x{col[0]:+.2f}_y{col[1]:+.2f}_h{k}_{int(time.time() * 1000)}.jpg")
