@@ -121,6 +121,7 @@ def measure_point(walk, xy, forward, log):
     import walk_steps as ws
     import prompt_ocr_ab as ocr
     os.makedirs(SHOTS, exist_ok=True)
+    _assert_inputs_live()
     out = []
     kp0 = _kp()
     if kp0 is not None and kp0 < WEDGED_MAX:
@@ -153,7 +154,17 @@ def measure_point(walk, xy, forward, log):
     return out
 
 
+def _assert_inputs_live():
+    """A live harness must never find the offline lockout set. It happened:
+    tools/prompt_ocr_ab set BASEBALL_TEST_RUN at import, stick injection went
+    silently OFF, and fifty readings were taken of one pose (2026-09-07)."""
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        raise RuntimeError("BASEBALL_TEST_RUN is set inside a LIVE harness: every stick "
+                           "send would be dropped silently. Find the import that set it.")
+
+
 def move_rel(ws, forward, dx, dy, log):
+    _assert_inputs_live()
     """Stick-direct move of (dx right, dy forward) walk-units with the camera at `forward`.
 
     No turn for the move itself: a wedged camera cannot turn, and strafing keeps

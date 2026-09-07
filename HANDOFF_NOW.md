@@ -11,7 +11,10 @@ after every walk, every point appended to `overnight/prompt_zone_points.jsonl`
 as it is measured, frames under `overnight/prompt_zone_frames/pz_w*`. The two
 grid attempts: `overnight/prompt_zone_grid_attempt.json` (rows -2..+1 wedged or
 invalid; the zone is bounded by geometry within 0.1u right and 0.3u left/back).
-ALL WEDGE VERDICTS BEFORE 59b4c04 WERE FALSE (len of a (keypoints, descriptors)
+THE FOURTH LAUNCH IS THE FIRST VALID ONE: the third walked the leg, then
+imported tools/prompt_ocr_ab, which set BASEBALL_TEST_RUN at import and
+switched stick injection OFF -- fifty readings of one pose. Fixed (flag only in
+main(); harness asserts it is unset; AST test). ALL WEDGE VERDICTS BEFORE 59b4c04 WERE FALSE (len of a (keypoints, descriptors)
 pair is 2); the grid attempts' points were rich frames. Still unexplained: in
 the first attempt the camera did not turn for commanded headings 140-220 deg
 away (reads stayed 265.8) while an 8-deg turn in walk 1 worked -- large turns

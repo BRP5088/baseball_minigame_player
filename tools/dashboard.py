@@ -19,7 +19,6 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 STATE = os.path.join(ROOT, "overnight", "dashboard_state.json")
 HTML = os.environ.get("DASH_HTML", os.path.join(
     "/private/tmp/claude-502/-Users-bpatterson-Documents-Claude-Cowork-Personal-Auto-Baseball/e6392fcc-4b59-4ace-b5b6-76c4bf041181/scratchpad",
@@ -354,6 +353,10 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--
 
 
 def main():
+    # Offline tool: hold every input path OFF -- but only when RUN as a script.
+    # Set at import this flag disabled stick injection inside a live harness that
+    # imported this module for its read() (prompt_zone, 2026-09-07).
+    os.environ.setdefault("BASEBALL_TEST_RUN", "1")
     st = build_state()
     json.dump(st, open(STATE, "w"), indent=1)
     open(HTML, "w").write(PAGE.replace("__STATE__", json.dumps(st).replace("</", "<\\/")))

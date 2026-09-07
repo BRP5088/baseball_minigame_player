@@ -23,7 +23,6 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 FRAMES = os.path.join(ROOT, "overnight", "goal_leg_failframes")
 RESULT = os.path.join(ROOT, "overnight", "ab_goal_leg.json")
 LOG = os.path.join(ROOT, "overnight", "ab_goal_leg.log")
@@ -49,6 +48,10 @@ def executed_legs():
 
 
 def main():
+    # Offline tool: hold every input path OFF -- but only when RUN as a script.
+    # Set at import this flag disabled stick injection inside a live harness that
+    # imported this module for its read() (prompt_zone, 2026-09-07).
+    os.environ.setdefault("BASEBALL_TEST_RUN", "1")
     from PIL import Image, ImageDraw
     import table_prompt as tp
     import places

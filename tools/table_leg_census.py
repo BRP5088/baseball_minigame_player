@@ -23,7 +23,6 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 
 FRAMES = ("overnight/streak_table_failframes/at_dealer_table_*.jpg",
           "overnight/streak_table_failframes/success/ok_dealer_table_*.jpg")
@@ -39,6 +38,10 @@ def _safe(fn, *a):
 
 
 def main():
+    # Offline tool: hold every input path OFF -- but only when RUN as a script.
+    # Set at import this flag disabled stick injection inside a live harness that
+    # imported this module for its read() (prompt_zone, 2026-09-07).
+    os.environ.setdefault("BASEBALL_TEST_RUN", "1")
     from PIL import Image
     import compass, places, table_prompt, failure_kind as fk
     out = os.path.join(ROOT, OUT)

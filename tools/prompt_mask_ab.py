@@ -39,7 +39,6 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
-os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 
 import numpy as np
 from PIL import Image
@@ -77,6 +76,10 @@ def measure(img):
 
 
 def main():
+    # Offline tool: hold every input path OFF -- but only when RUN as a script.
+    # Set at import this flag disabled stick injection inside a live harness that
+    # imported this module for its read() (prompt_zone, 2026-09-07).
+    os.environ.setdefault("BASEBALL_TEST_RUN", "1")
     if os.path.exists(OUT):
         sys.exit(f"refusing to overwrite {OUT}")
     demo = sorted(glob.glob("demos/*/*.jpg"))

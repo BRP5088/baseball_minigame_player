@@ -394,6 +394,16 @@ measured while buttons were dead was measuring a broken reset, not routing.
 - Stick injection is HARD OFF under `BASEBALL_TEST_RUN` — it sits ABOVE
   `can_use_background_input()`, so it needs its own lockout or the offline suite
   drives the live console. It did, briefly.
+- **And the lockout reads the environment at CALL time, so an IMPORT can switch
+  it off mid-run.** `tools/prompt_ocr_ab.py` set the flag at module level for its
+  own offline run; `overnight/prompt_zone.py` imported it for one function AFTER
+  walking the leg, and from that import every stick send was dropped silently:
+  fifty "readings" of a camera that never turned and a character that never
+  moved (2026-09-07). The flag is set only inside `main()` or a test, never at
+  import — `tests/harness/test_no_import_time_test_run_flag.py` scans `tools/`
+  and `overnight/` by AST — and a live harness asserts it is unset before it
+  sends. Three runs of the prompt-zone map were lost to this and to a
+  keypoint count that was always 2; both looked like measurements.
 - A missing FIFO degrades to the keyboard path with a warning rather than
   killing an unattended run.
 - **A frontmost trap:** `osascript` leaves *Script Editor* frontmost, and
