@@ -127,9 +127,9 @@ about what is unused or safe to remove** — nothing exercises them until someon
 acts on them, so they rot silently while the rest stays accurate. Verify before
 deleting anything on the strength of a sentence here.
 
-`.vscode/launch.json` pins `.venv` on all 15 debug profiles.
+`.vscode/launch.json` pins `.venv` on both remaining debug profiles (Doctor, Tests).
 
-**`tesserocr` IS a requirement** (`requirements.txt:33`) — pip installs a
+**`tesserocr` IS a requirement** (`requirements.txt:45`) — pip installs a
 prebuilt wheel, no compiler needed. Only `pygame` is deliberately excluded
 (imported inside a function in `record_input.py`).
 
@@ -146,8 +146,8 @@ survive as scripts because they guard the rig and a money path:
 
 `connect` was `ensure_stream.ensure_live()`; `reset` is
 `reset_env.reset_environment()`; routing is `graph_walk.go_to_node_verified` /
-`follow_verified`. Anything that holds a stick is chunked or timed under
-`MAX_TIMED_HOLD`, because chiaki drops injected input after 5s (§5).
+`follow_verified`. Anything that holds a stick is chunked or timed under chiaki's
+`INJECT_TIMEOUT_MS` (5s), because the injector releases it after that (§5).
 
 ### Two progress files
 
@@ -270,7 +270,7 @@ was visibly highlighted it returned "Quit to Main Menu" — and the caller commi
 a `cross` on whatever it names, so an unattended run would have quit the game.
 Fixed by `WHITE_LEVEL` 200 -> **225** (unselected text peaks at 210, selected is
 255) plus `SELECTED_MARGIN = 2.0`; `SELECTED_MIN_FRAC = 0.02`
-(`pause_menu.py:121,130`). Verified: it now returns "Load Last Save" on the
+(`pause_menu.py:121`, `:235`, `:130`). Verified: it now returns "Load Last Save" on the
 frame that failed.
 
 **Capture geometry changes under you.** One session produced both 1867x1050 and
@@ -524,7 +524,7 @@ from `route3_steps.json` plus a 712-frame recorded walk.
 ### The localiser
 
 `places.identify()` is ORB-based: `MIN_MATCHES = 140`, `MIN_RATIO = 1.35`
-(`places.py:210-211`). When the character genuinely stands at a node it names it
+(`places.py:284-285`). When the character genuinely stands at a node it names it
 with a **2.6-5.3x margin** (leave-one-out: 249-698 matches). Held-out check
 after the node-set rebuild: 18 correct / 6 abstain / 0 wrong, every abstention
 ±1s from a node.
@@ -1598,12 +1598,13 @@ necessarily the third; `walk_link`'s in-leg escape ladder can jump or strafe
 before the frame is taken; and for the GOAL node the frame follows
 `reach_table()`'s aim sweep, so its heading is post-sweep.
 
-**REMAINS, and it needs the console.** Not one `at_<node>_<epoch_ms>.jpg` or
-`success/ok_*.jpg` exists — the path has never executed live. **And read the
-right key**: `failures_by_kind` still exists, still mixes fallback frames in, and
-is still what every harness surfaces, while NOTHING reads
-`failures_by_kind_leg_end`. A correct number nobody looks at is this project's
-own signature failure wearing a different hat. Acceptance test unchanged: a real
+**BOTH HALVES OF THIS ARE NOW DONE (audit 2026-09-07; the paragraph stood
+stale for a day).** The path HAS executed live: hundreds of
+`at_<node>_<epoch_ms>.jpg` frames and dozens of `success/ok_*.jpg` exist under
+`overnight/*failframes*/` from 2026-09-06 on, and "THE FAILURE CENSUS EXISTS"
+below was taken from them. And every harness now surfaces the leg-end key:
+`_harness.census_kinds` / `report_kinds` (f9b9c56, 2026-09-07) report
+`failures_by_kind_leg_end` split by provenance and name what they cannot read. Acceptance test unchanged: a real
 jukebox-leg failure frame must NOT read bearing ~286 and must NOT identify as
 `bar_pool_room`.
 
