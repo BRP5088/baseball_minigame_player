@@ -23,6 +23,10 @@ jukebox leg overshoots into the object it aims at. Candidate: trim the leg's
 end by ~0.05u (its last step is 0.14s at 0.32 = 0.045u), A/B'd on single-
 attempt arrival at bar_jukebox from bar_pool_room (walk_leg_under_test).
 Needs a per-leg trim flag in graph_walk -- edit only after (a) ends (10.21).
+VERIFIED ON SNOOPY (2026-09-07 evening): patch applies, 6/6 tests green,
+mutants A/B/C all caught, restore by sha. Land here with
+`drafts/pending_after_ab/patch_leg_trim.py` the moment (a) ends, then run
+`overnight/ab_jukebox_trim.py`.
 
 ## Earlier plan (kept for the rules it carries)
 1. Apply `drafts/pending_after_ab/` (README there): the control-frame fix the
