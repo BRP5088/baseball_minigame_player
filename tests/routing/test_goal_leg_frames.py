@@ -57,9 +57,10 @@ class Map:
     def steps_for(self, a, b): return [{"bearing": 75.5, "dur": 0.5, "speed": 0.2}] * 8
 
 
-FLAGS = ("GOAL_LEG_AS_RECORDED", "ALIGN_AT_NODES", "RECOVER_MISSED")
+FLAGS = ("GOAL_LEG_AS_RECORDED", "GOAL_LEG_EXTRA_UNITS", "ALIGN_AT_NODES", "RECOVER_MISSED")
 FUNCS = ("stream_is_live", "walk_link", "approach_goal", "reach_table",
-         "confirm", "confirmable", "recover_to_node", "go_to_node_verified")
+         "confirm", "confirmable", "recover_to_node", "go_to_node_verified",
+         "_extend_goal_leg")
 
 
 class _Stubbed(unittest.TestCase):
@@ -84,9 +85,19 @@ class _Stubbed(unittest.TestCase):
 
 class GoalLegExecutor(_Stubbed):
 
-    def _run_follow(self, as_recorded, frames):
+    def _run_follow(self, as_recorded, frames, extra=0.0):
         calls = []
         gw.GOAL_LEG_AS_RECORDED = as_recorded
+        gw.GOAL_LEG_EXTRA_UNITS = extra
+
+        def extend(steps, units, log=print):
+            calls.append(("extend", round(units, 3)))
+        gw._extend_goal_leg = extend
+        it0 = iter(list(frames))
+
+        def capture():
+            calls.append(("capture",))
+            return next(it0)
         gw.ALIGN_AT_NODES = False
         gw.RECOVER_MISSED = False
         gw.stream_is_live = lambda *a, **k: True
@@ -112,22 +123,40 @@ class GoalLegExecutor(_Stubbed):
 
         gw.walk_link, gw.approach_goal = walk_link, approach_goal
         gw.reach_table, gw.confirm = reach_table, confirm
-        it = iter(frames)
-        gw.follow(Map(), "bar_jukebox", "dealer_table", capture=lambda: next(it),
+        gw.follow(Map(), "bar_jukebox", "dealer_table", capture=capture,
                   read_heading=lambda: 75.5, log=lambda *a: None, shots=self.tmp)
         return calls, judged
 
     def test_flag_off_uses_approach_goal_then_sweeps(self):
         calls, _ = self._run_follow(False, [Frame("PRE"), Frame("POST")])
-        names = [c[0] for c in calls]
+        names = [c[0] for c in calls if c[0] != "capture"]
         self.assertEqual(names, ["approach_goal", "reach_table"], calls)
 
     def test_flag_on_walks_the_recorded_leg_then_sweeps(self):
         calls, _ = self._run_follow(True, [Frame("PRE"), Frame("POST")])
-        names = [c[0] for c in calls]
+        names = [c[0] for c in calls if c[0] != "capture"]
         self.assertEqual(names, ["walk_link", "reach_table"], calls)
         self.assertEqual(calls[0][1:], ("dealer_table", 1.0),
                          "the goal leg is walked whole, never a SHORT_WALK fraction")
+
+    def test_extension_fires_after_the_recorded_leg_and_before_the_capture(self):
+        # OPEN-22: the zone's edge is 0.05u ahead of where the recorded leg
+        # stops. The extension runs AFTER walk_link and BEFORE the leg-end
+        # capture, so the published frame shows where the extended leg ended.
+        calls, _ = self._run_follow(True, [Frame("PRE"), Frame("POST")], extra=0.10)
+        self.assertEqual(calls[:3], [("walk_link", "dealer_table", 1.0), ("extend", 0.1), ("capture",)], calls)
+
+    def test_extension_is_off_at_zero_and_never_with_approach_goal(self):
+        calls, _ = self._run_follow(True, [Frame("PRE"), Frame("POST")], extra=0.0)
+        self.assertNotIn("extend", [c[0] for c in calls], calls)
+        calls, _ = self._run_follow(False, [Frame("PRE"), Frame("POST")], extra=0.10)
+        self.assertNotIn("extend", [c[0] for c in calls], "approach_goal already overshoots; no extension there")
+
+    def test_net_bearing_of_the_recorded_goal_leg(self):
+        # Pinned against the recorded leg: eight steps, net 86.1 deg (OPEN-22).
+        import worldmap as wm
+        steps = wm.WorldMap.load().steps_for("bar_jukebox", "dealer_table")
+        self.assertAlmostEqual(gw._leg_net_bearing(steps), 86.1, delta=0.2)
 
     def test_leg_end_frame_precedes_the_sweep_and_confirm_judges_the_post_sweep_one(self):
         # Two captures: the first is taken when the leg ends, the second after
@@ -149,6 +178,7 @@ class GoalLegExecutor(_Stubbed):
     def test_shipped_default_is_off(self):
         # Pinned as a literal (CLAUDE.md 10.11): it flips only on a measured A/B.
         self.assertIs(self._orig["GOAL_LEG_AS_RECORDED"], False)
+        self.assertEqual(self._orig["GOAL_LEG_EXTRA_UNITS"], 0.0)
 
 
 class SuccessFrame(_Stubbed):

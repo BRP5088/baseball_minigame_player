@@ -991,6 +991,37 @@ APPROACH_AIM_EVERY = 3        # steps between aim sweeps
 # like every leg that arrives, and reach_table's sweep still follows. The flag
 # ships False until overnight/ab_goal_leg.py has measured it (CLAUDE.md 10.2).
 GOAL_LEG_AS_RECORDED = False
+# EXTEND THE RECORDED GOAL LEG by this many walk-units along its net direction,
+# AFTER the recorded steps and BEFORE the leg-end capture. OPEN-22 measured the
+# prompt zone's near edge 0.05u AHEAD of where the recorded leg stops (walk 3:
+# none at five headings at the endpoint, the prompt at four of five headings
+# 0.05u forward, that point not wedged). Same primitive and speed that took
+# the measurement. Ships 0.0 until overnight/ab_goal_extend.py has measured it.
+GOAL_LEG_EXTRA_UNITS = 0.0
+GOAL_LEG_EXTRA_SPEED = 0.35       # §6: linear response, small spread
+
+
+def _leg_net_bearing(steps):
+    """Bearing of the net displacement of a recorded leg's steps."""
+    import math
+    fx = fy = 0.0
+    for st in steps:
+        d = st["dur"] * st.get("speed", 0.2)
+        fx += d * math.sin(math.radians(st["bearing"]))
+        fy += d * math.cos(math.radians(st["bearing"]))
+    return math.degrees(math.atan2(fx, fy)) % 360.0
+
+
+def _extend_goal_leg(steps, units, log=print):
+    """Turn to the leg's net bearing and walk `units` more. Turn-then-walk."""
+    import walk_steps as ws
+    bearing = _leg_net_bearing(steps)
+    got = ws.turn_to(bearing, log=lambda *a: None)
+    time.sleep(0.2)
+    change = ws.walk_forward(GOAL_LEG_EXTRA_SPEED, units / GOAL_LEG_EXTRA_SPEED)
+    time.sleep(0.5)
+    log(f"      extended the goal leg {units:.2f}u at {bearing:.1f} (turned to {got!s:6}): "
+        f"view change {change:.1f}")
 
 
 def approach_goal(steps, capture=None, read_heading=None, log=print):
@@ -1908,6 +1939,8 @@ def follow(m, start, goal=GOAL, capture=None, read_heading=None, log=print,
         # leaves the character at the table but facing a heading that varies
         # with where it came to rest, and the prompt only shows over a narrow
         # arc — so sweep for it before calling the leg failed.
+        if b == GOAL and GOAL_LEG_AS_RECORDED and GOAL_LEG_EXTRA_UNITS > 0:
+            _extend_goal_leg(m.steps_for(a, b), GOAL_LEG_EXTRA_UNITS, log=log)
         img = capture()
         # THIS IS THE FRAME THAT CAN DIAGNOSE THE LEG: the leg has ended and
         # neither recover_to_node (below) nor reach_table has run yet. Publish

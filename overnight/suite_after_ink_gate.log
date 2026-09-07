@@ -1,0 +1,303 @@
+--- 145 test files, JOBS=4, 300s ceiling each
+  [  1/145] PASS   test_atomic_results.py                          0s
+  [  2/145] PASS   test_census_reports_leg_end.py                  0s
+  [  3/145] PASS   test_caches_not_written_in_tests.py             1s
+  [  4/145] PASS   test_env_loader.py                              0s
+  [  5/145] PASS   test_harness_restores_shipped_value.py          0s
+  [  6/145] PASS   test_kill_runaways.py                           0s
+  [  7/145] PASS   test_leg_under_test_collects_evidence.py        0s
+  [  8/145] PASS   test_console_exclusive.py                       1s
+  [  9/145] PASS   test_no_import_time_test_run_flag.py            0s
+  [ 10/145] PASS   test_no_undefined_names.py                      2s
+  [ 11/145] PASS   test_overnight_start_hint.py                    0s
+  [ 12/145] PASS   test_profile_exclusive_time.py                  1s
+  [ 13/145] PASS   test_injectinput_cpp.py                         4s
+  [ 14/145] PASS   test_state_files_are_real.py                    0s
+  [ 15/145] PASS   test_overnight_harness.py                       5s
+  [ 16/145] PASS   test_trial_records.py                           0s
+  [ 17/145] PASS   test_api_budget.py                              0s
+  [ 18/145] PASS   test_balance_is_not_health.py                   1s
+  [ 19/145] PASS   test_ban_grid_locked.py                         1s
+  [ 20/145] PASS   test_suite_timeout_kills.py                     5s
+  [ 21/145] PASS   test_ban_scan.py                                1s
+  [ 22/145] PASS   test_ban_ocr_confusion.py                       4s
+  [ 23/145] PASS   test_run_trial_streams.py                       8s
+  [ 24/145] PASS   test_decisions.py                               0s
+  [ 25/145] PASS   test_gameplay_regions.py                        1s
+  [ 26/145] PASS   test_image_pipeline.py                          2s
+  [ 27/145] PASS   test_known_ban_roster.py                        0s
+  [ 28/145] PASS   test_misfire_check.py                           1s
+  [ 29/145] PASS   test_ocr_ban_card.py                            2s
+  [ 30/145] PASS   test_early_result_double_debit.py               6s
+  [ 31/145] PASS   test_ocr_runner.py                              1s
+  [ 32/145] PASS   test_ocr_scoreboard.py                          2s
+  [ 33/145] PASS   test_budget_reserve_fits.py                    12s
+  [ 34/145] PASS   test_orchestrator_diagnostics.py                3s
+  [ 35/145] PASS   test_phase_from_hand.py                         1s
+  [ 36/145] PASS   test_repair_misread_cards.py                    0s
+  [ 37/145] PASS   test_reveal_three_cards.py                      1s
+  [ 38/145] PASS   test_ocr_word_mode.py                           5s
+  [ 39/145] PASS   test_reveal_trigger.py                          1s
+  [ 40/145] PASS   test_roster_matching.py                         1s
+  [ 41/145] PASS   test_run_motion_gate.py                         7s
+  [ 42/145] PASS   test_settle_regions.py                          1s
+  [ 43/145] PASS   test_state_io.py                                4s
+  [ 44/145] PASS   test_run_debit_and_scoring.py                  14s
+  [ 45/145] PASS   test_table_prompt.py                            1s
+  [ 46/145] PASS   test_tactics_effect.py                          1s
+  [ 47/145] PASS   test_validate_game_state.py                     1s
+  [ 48/145] PASS   test_analog_replay.py                           0s
+  [ 49/145] PASS   test_vlm_ban_fallback.py                        1s
+  [ 50/145] PASS   test_backoff_abandon.py                         1s
+  [ 51/145] PASS   test_button_bits_match_keymap.py                0s
+  [ 52/145] PASS   test_buttons_use_keyboard.py                    1s
+  [ 53/145] PASS   test_chiaki_pid.py                              1s
+  [ 54/145] PASS   test_doorway_pitch.py                           0s
+  [ 55/145] PASS   test_cursor_tracking.py                         0s
+  [ 56/145] PASS   test_drive_feedback_names_honestly.py           1s
+  [ 57/145] PASS   test_ensure_live_clears_ui.py                   1s
+  [ 58/145] PASS   test_run_resume_and_persist.py                 17s
+  [ 59/145] PASS   test_find_bar_is_not_a_stream_check.py          1s
+  [ 60/145] PASS   test_focus_protection.py                        0s
+  [ 61/145] PASS   test_frozen_stream.py                           1s
+  [ 62/145] PASS   test_give_up_dialog.py                          1s
+  [ 63/145] PASS   test_injected_input.py                          0s
+  [ 64/145] PASS   test_fifo_open_bound.py                         3s
+  [ 65/145] PASS   test_machine_id_display_change.py               0s
+  [ 66/145] PASS   test_misfire_invalidates_cursor.py              0s
+  [ 67/145] PASS   test_no_game_window.py                          1s
+  [ 68/145] PASS   test_pause_false_positive.py                    0s
+  [ 69/145] PASS   test_pause_menu.py                              1s
+  [ 70/145] PASS   test_pause_menu_selection.py                    0s
+  [ 71/145] PASS   test_pause_selection_safety.py                  1s
+  [ 72/145] PASS   test_press_fallback.py                          1s
+  [ 73/145] PASS   test_reset_sequence.py                          0s
+  [ 74/145] PASS   test_reticle_scaling.py                         1s
+  [ 75/145] PASS   test_rig_diagnostics.py                         1s
+  [ 76/145] PASS   test_affected_tests.py                         52s  <-- slow
+  [ 77/145] PASS   test_stream_detection.py                        1s
+  [ 78/145] PASS   test_window_drift.py                            1s
+  [ 79/145] PASS   test_window_drift_guard.py                      1s
+  [ 81/145] PASS   test_input_timing.py                           12s
+  [ 81/145] PASS   test_movement.py                               11s
+  [ 83/145] PASS   test_align_divergence_guard.py                  0s
+  [ 83/145] PASS   test_align_constants_measured.py                0s
+  [ 84/145] PASS   test_anchors.py                                 2s
+  [ 86/145] PASS   test_at_table_threshold.py                      1s
+  [ 86/145] PASS   test_at_table_ocr_path.py                       3s
+  [ 87/145] PASS   test_streaming_rejects_chiaki_ui.py             8s
+  [ 89/145] PASS   test_explore.py                                 1s
+  [ 89/145] PASS   test_add_non_disruption.py                      7s
+  [ 90/145] PASS   test_failure_census_provenance.py               0s
+  [ 91/145] PASS   test_explore_stop_ids.py                        0s
+  [ 92/145] PASS   test_failure_frame_is_the_leg.py                0s
+  [ 93/145] PASS   test_follow_verified.py                         1s
+  [ 94/145] PASS   test_compass_no_duplicate_ocr.py                2s
+  [ 95/145] PASS   test_failure_kind.py                            1s
+  [ 96/145] PASS   test_goal_leg_frames.py                         0s
+  [ 97/145] PASS   test_compass_accuracy.py                        3s
+  [ 98/145] PASS   test_landmark_check.py                          1s
+  [ 99/145] PASS   test_jukebox_match_min.py                       4s
+  [100/145] PASS   test_leg_curve_is_stick_not_camera.py           0s
+  [101/145] PASS   test_leg_distances_match_recording.py           0s
+  [102/145] PASS   test_leg_reliability.py                         0s
+  [103/145] PASS   test_leg_speed_scale.py                         0s
+  [104/145] PASS   test_leg_turn_tolerance.py                      3s
+  [105/145] PASS   test_local_recovery.py                          0s
+  [106/145] PASS   test_landmarks.py                               6s
+  [107/145] PASS   test_locate_goal_is_a_pose.py                   1s
+  [108/145] PASS   test_machine_cache.py                           1s
+  [109/145] PASS   test_map_build.py                               0s
+  [110/145] PASS   test_map_build_confidence.py                    0s
+  [111/145] PASS   test_measurements_are_logged.py                 1s
+  [112/145] PASS   test_navigation.py                              2s
+  [113/145] PASS   test_frozen_stream_is_invalid.py               17s
+  [114/145] PASS   test_orb_localiser.py                           2s
+  [115/145] PASS   test_pose.py                                    1s
+  [116/145] PASS   test_reference_cache_invalidates.py             3s
+  [117/145] PASS   test_reference_pose_flag.py                     0s
+  [118/145] PASS   test_reliability_store_durability.py            1s
+  [119/145] PASS   test_relocalise_by_turning.py                   0s
+  [120/145] PASS   test_route_data.py                              0s
+  [121/145] PASS   test_route_dense.py                             0s
+  [122/145] PASS   test_route_follow.py                            1s
+  [123/145] PASS   test_route_unstick.py                           5s
+  [124/145] PASS   test_scale_cache_writes_once.py                 2s
+  [125/145] PASS   test_skip_ladder_on_geometry.py                 1s
+  [126/145] PASS   test_stall_gate_units.py                        0s
+  [127/145] PASS   test_stall_threshold.py                         0s
+  [128/145] PASS   test_success_control_frames.py                  1s
+  [129/145] PASS   test_ocr_glyphs.py                             24s
+  [130/145] PASS   test_survey.py                                  0s
+  [131/145] PASS   test_turn_calibrated.py                         2s
+  [132/145] PASS   test_turn_control.py                            4s
+  [133/145] PASS   test_turn_curve_matches_reality.py              0s
+  [134/145] PASS   test_trusted_spawn_start_hint.py                8s
+  [135/145] PASS   test_turn_gain.py                               0s
+  [136/145] PASS   test_unreachable_resets.py                      0s
+  [137/145] PASS   test_turn_noop_is_visible.py                    1s
+  [138/145] PASS   test_world_graph.py                             0s
+  [139/145] PASS   test_world_log.py                               2s
+  [140/145] PASS   test_world_discriminator.py                     3s
+  [141/145] PASS   test_worldmap.py                                0s
+  [142/145] PASS   test_yaw_nulled_before_align.py                 1s
+  [143/145] PASS   test_map_admit.py                              56s  <-- slow
+  [144/145] PASS   test_graph_walk.py                            139s  <-- slow
+  [145/145] PASS   test_no_side_effects.py                     
+
+tests/cpp
+  test_injectinput_cpp.py                PASS
+
+tests/harness
+  test_affected_tests.py                 PASS
+  test_atomic_results.py                 PASS
+  test_caches_not_written_in_tests.py    PASS
+  test_census_reports_leg_end.py         PASS
+  test_console_exclusive.py              PASS
+  test_env_loader.py                     PASS
+  test_harness_restores_shipped_value.py PASS
+  test_kill_runaways.py                  PASS
+  test_leg_under_test_collects_evidence.py PASS
+  test_no_import_time_test_run_flag.py   PASS
+  test_no_side_effects.py                PASS
+  test_no_undefined_names.py             PASS
+  test_overnight_harness.py              PASS
+  test_overnight_start_hint.py           PASS
+  test_profile_exclusive_time.py         PASS
+  test_run_trial_streams.py              PASS
+  test_state_files_are_real.py           PASS
+  test_suite_timeout_kills.py            PASS
+  test_trial_records.py                  PASS
+
+tests/minigame
+  test_api_budget.py                     PASS
+  test_balance_is_not_health.py          PASS
+  test_ban_grid_locked.py                PASS
+  test_ban_ocr_confusion.py              PASS
+  test_ban_scan.py                       PASS
+  test_budget_reserve_fits.py            PASS
+  test_decisions.py                      PASS
+  test_early_result_double_debit.py      PASS
+  test_gameplay_regions.py               PASS
+  test_image_pipeline.py                 PASS
+  test_known_ban_roster.py               PASS
+  test_misfire_check.py                  PASS
+  test_ocr_ban_card.py                   PASS
+  test_ocr_runner.py                     PASS
+  test_ocr_scoreboard.py                 PASS
+  test_ocr_word_mode.py                  PASS
+  test_orchestrator_diagnostics.py       PASS
+  test_phase_from_hand.py                PASS
+  test_repair_misread_cards.py           PASS
+  test_reveal_three_cards.py             PASS
+  test_reveal_trigger.py                 PASS
+  test_roster_matching.py                PASS
+  test_run_debit_and_scoring.py          PASS
+  test_run_motion_gate.py                PASS
+  test_run_resume_and_persist.py         PASS
+  test_settle_regions.py                 PASS
+  test_state_io.py                       PASS
+  test_table_prompt.py                   PASS
+  test_tactics_effect.py                 PASS
+  test_validate_game_state.py            PASS
+  test_vlm_ban_fallback.py               PASS
+
+tests/rig
+  test_analog_replay.py                  PASS
+  test_backoff_abandon.py                PASS
+  test_button_bits_match_keymap.py       PASS
+  test_buttons_use_keyboard.py           PASS
+  test_chiaki_pid.py                     PASS
+  test_cursor_tracking.py                PASS
+  test_doorway_pitch.py                  PASS
+  test_drive_feedback_names_honestly.py  PASS
+  test_ensure_live_clears_ui.py          PASS
+  test_fifo_open_bound.py                PASS
+  test_find_bar_is_not_a_stream_check.py PASS
+  test_focus_protection.py               PASS
+  test_frozen_stream.py                  PASS
+  test_give_up_dialog.py                 PASS
+  test_injected_input.py                 PASS
+  test_input_timing.py                   PASS
+  test_machine_id_display_change.py      PASS
+  test_misfire_invalidates_cursor.py     PASS
+  test_movement.py                       PASS
+  test_no_game_window.py                 PASS
+  test_pause_false_positive.py           PASS
+  test_pause_menu.py                     PASS
+  test_pause_menu_selection.py           PASS
+  test_pause_selection_safety.py         PASS
+  test_press_fallback.py                 PASS
+  test_reset_sequence.py                 PASS
+  test_reticle_scaling.py                PASS
+  test_rig_diagnostics.py                PASS
+  test_stream_detection.py               PASS
+  test_streaming_rejects_chiaki_ui.py    PASS
+  test_window_drift.py                   PASS
+  test_window_drift_guard.py             PASS
+
+tests/routing
+  test_add_non_disruption.py             PASS
+  test_align_constants_measured.py       PASS
+  test_align_divergence_guard.py         PASS
+  test_anchors.py                        PASS
+  test_at_table_ocr_path.py              PASS
+  test_at_table_threshold.py             PASS
+  test_compass_accuracy.py               PASS
+  test_compass_no_duplicate_ocr.py       PASS
+  test_explore.py                        PASS
+  test_explore_stop_ids.py               PASS
+  test_failure_census_provenance.py      PASS
+  test_failure_frame_is_the_leg.py       PASS
+  test_failure_kind.py                   PASS
+  test_follow_verified.py                PASS
+  test_frozen_stream_is_invalid.py       PASS
+  test_goal_leg_frames.py                PASS
+  test_graph_walk.py                     PASS
+  test_jukebox_match_min.py              PASS
+  test_landmark_check.py                 PASS
+  test_landmarks.py                      PASS
+  test_leg_curve_is_stick_not_camera.py  PASS
+  test_leg_distances_match_recording.py  PASS
+  test_leg_reliability.py                PASS
+  test_leg_speed_scale.py                PASS
+  test_leg_turn_tolerance.py             PASS
+  test_local_recovery.py                 PASS
+  test_locate_goal_is_a_pose.py          PASS
+  test_machine_cache.py                  PASS
+  test_map_admit.py                      PASS
+  test_map_build.py                      PASS
+  test_map_build_confidence.py           PASS
+  test_measurements_are_logged.py        PASS
+  test_navigation.py                     PASS
+  test_ocr_glyphs.py                     PASS
+  test_orb_localiser.py                  PASS
+  test_pose.py                           PASS
+  test_reference_cache_invalidates.py    PASS
+  test_reference_pose_flag.py            PASS
+  test_reliability_store_durability.py   PASS
+  test_relocalise_by_turning.py          PASS
+  test_route_data.py                     PASS
+  test_route_dense.py                    PASS
+  test_route_follow.py                   PASS
+  test_route_unstick.py                  PASS
+  test_scale_cache_writes_once.py        PASS
+  test_skip_ladder_on_geometry.py        PASS
+  test_stall_gate_units.py               PASS
+  test_stall_threshold.py                PASS
+  test_success_control_frames.py         PASS
+  test_survey.py                         PASS
+  test_trusted_spawn_start_hint.py       PASS
+  test_turn_calibrated.py                PASS
+  test_turn_control.py                   PASS
+  test_turn_curve_matches_reality.py     PASS
+  test_turn_gain.py                      PASS
+  test_turn_noop_is_visible.py           PASS
+  test_unreachable_resets.py             PASS
+  test_world_discriminator.py            PASS
+  test_world_graph.py                    PASS
+  test_world_log.py                      PASS
+  test_worldmap.py                       PASS
+  test_yaw_nulled_before_align.py        PASS
+
+--- all green (145 files, JOBS=4, 204s)
