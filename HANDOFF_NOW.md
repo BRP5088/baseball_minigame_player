@@ -1,13 +1,19 @@
 # State at 2026-09-07 09:40 — read this first
 
 ## Running now
-`overnight/prompt_zone.py` (detached; relaunched after the first attempt wedged
-at a 0.30u offset): the prompt-zone map, 3 rows x 5 columns x 5 headings at
-0.10u around the recorded leg's endpoint, every push wedge-checked. Log `overnight/prompt_zone.log` (row lines `[row +n]`), result
-`overnight/prompt_zone.json` (saved after every row), frames under
-`overnight/prompt_zone_frames/`. ~1 hour if setups behave. Beside it: the
-suite under BASEBALL_NICE=1 (`overnight/suite_after_ocr.log`) certifying the
-OCR path and the control-frame fix -- the one workload measured safe (10.13a).
+`overnight/prompt_zone.py` (detached; THIRD design, launched after two grid
+attempts wedged in the furniture and measured nothing): a STAR around the
+recorded leg's endpoint -- the endpoint measured FIRST, then 0.05u left/right,
+0.10/0.20u back, 0.05u forward, stick-relative, wedge-checked -- five headings
+a point, mask + OCR verdicts; 3 walks, 1800s ceiling each. Log
+`overnight/prompt_zone.log` (`[walk n]` lines), result `overnight/prompt_zone.json`
+after every walk, every point appended to `overnight/prompt_zone_points.jsonl`
+as it is measured, frames under `overnight/prompt_zone_frames/pz_w*`. The two
+grid attempts: `overnight/prompt_zone_grid_attempt.json` (rows -2..+1 wedged or
+invalid; the zone is bounded by geometry within 0.1u right and 0.3u left/back).
+TODAY'S SETUP IS BAD: reaching bar_jukebox failed 3 of 3 rows in the second
+attempt (12 geometry wedges in one row), against 9/9 in OPEN-5 -- session
+variance (§10.5/10.6); the setup frames are on disk for a census.
 NOTHING ELSE CPU-bound while it runs.
 Suite after the OCR path + frame-test fixes: **144/144 green** (840s under
 BASEBALL_NICE=1, `overnight/suite_after_frame_tests.log`). Load reached 15

@@ -35,7 +35,7 @@ QUEUE = [
     {"title": "Score the A/B twice and write OPEN-21", "state": "done",
      "detail": "As the harness scored it, and post hoc from the pre-sweep frames with mask + OCR (prompt on screen at the leg's end). Recommend the flag flip if the numbers carry it; the flip is yours."},
     {"title": "Map the prompt zone around the dealer", "state": "running",
-     "detail": "Running: a 3x5 grid at 0.10u around the recorded leg's endpoint, five headings a point, prompt verdict by mask + OCR, every push wedge-checked. The first attempt at 0.30u wedged in the furniture: the zone is bounded by geometry within 0.3u, which is the first fact the map produced."},
+     "detail": "Running, third design: a star around the recorded endpoint -- the endpoint first, then 0.05u left/right, 0.10/0.20u back, 0.05u forward -- five headings a point, mask + OCR verdicts, three walks. Both grid attempts wedged in the furniture (right of the endpoint is the chair at 0.10u) and today's route to the jukebox fails most setups."},
     {"title": "Full-route streak with the winner and the better instrument", "state": "next",
      "detail": "Route to the table at attempts=9, ceiling sized as attempts x route time so it cannot censor 7 of 10 again."},
     {"title": "The position failures", "state": "next",
