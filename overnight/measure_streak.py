@@ -16,20 +16,33 @@ ROUTE = ["portrait_room", "bar_pool_room", "bar_jukebox"]
 TRIALS = 10
 OUT = os.path.dirname(os.path.abspath(__file__))
 
+SHOTS = os.path.join(OUT, "streak_failframes")
+
 if __name__ == "__main__":
     import graph_walk as gw, worldmap as wm
-    m = wm.WorldMap.load()
-    t0 = time.time()
-    try:
-        r = gw.consecutive_arrivals(m, ROUTE, TRIALS, log=print)
-    finally:
+    import console_lock
+
+    # THIS SCRIPT DRIVES THE CONSOLE DIRECTLY, NOT THROUGH _harness.run_trial,
+    # so it does not inherit run_trial's declaration and must make its own. A
+    # background nudge landing mid-leg ends the push early and the short leg is
+    # indistinguishable from a routing failure in every log written here.
+    with console_lock.held("measure_streak"):
+        m = wm.WorldMap.load()
+        t0 = time.time()
         try:
-            import analog_replay as ar; ar.send(["clear"])
-        except Exception:
-            pass
-    # per-node detail, so a failure says WHICH leg and how long it cost
-    r["route"] = ROUTE
-    r["seconds"] = round(time.time() - t0, 1)
-    _harness.save_result(os.path.join(OUT, "streak.json"), r)
-    print(f"\n--- STREAK ---\n  arrived {r['arrived']}/{r['valid']} valid"
-          f"\n  BEST CONSECUTIVE: {r['best_streak']}  (need 25)")
+            # shots= writes at_<node>_<epoch_ms>.jpg at the moment each leg's
+            # last push settled, which is the only admissible frame for a
+            # failure census (OPEN-1). It costs nothing on a run that is
+            # happening anyway.
+            r = gw.consecutive_arrivals(m, ROUTE, TRIALS, log=print, shots=SHOTS)
+        finally:
+            try:
+                import analog_replay as ar; ar.send(["clear"])
+            except Exception:
+                pass
+        # per-node detail, so a failure says WHICH leg and how long it cost
+        r["route"] = ROUTE
+        r["seconds"] = round(time.time() - t0, 1)
+        _harness.save_result(os.path.join(OUT, "streak.json"), r)
+        print(f"\n--- STREAK ---\n  arrived {r['arrived']}/{r['valid']} valid"
+              f"\n  BEST CONSECUTIVE: {r['best_streak']}  (need 25)")

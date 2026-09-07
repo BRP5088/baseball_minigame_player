@@ -497,6 +497,31 @@ blind at once, and that is a mapping gap, not a detector failure.
 
 ### (a) Where the route stands
 
+**RE-MEASURED 2026-09-07, AFTER the leg-1 revert. Arrival did NOT move.**
+
+    outcomes [F,T,T,F,T,F,F,T,F,T]   arrived 5/10   BEST STREAK 2
+    243.7s per trial (was 338s), 0 invalid
+    failures by class, ALL FIVE from admissible leg-end frames:
+        wedged 4, overshot 1, fallback-frame 0
+
+So the leg-1 flags were a REGRESSION I introduced and reverting them restored
+the prior state -- it did not improve on it. The start node is 10/10 again and a
+trial is 28% cheaper, but the route is where it was. Necessary repair, not
+progress toward 25.
+
+**This is the first route census taken entirely from admissible frames**
+(`failures_by_kind_leg_end` 5, `failures_from_fallback_frame` 0), which OPEN-1
+asked for. At n=5 it says nothing firm about the mix; note only that it is
+WEDGED-heavy, where the earlier single-node census at `bar_pool_room` was
+8/10 OVERSHOT.
+
+At 5/10 per route, P(25 consecutive) is ~3e-8. Retry depth (OPEN-5) is the only
+lever with the leverage to close that.
+
+The pre-revert figures below are kept because the profile in (h) refers to them.
+
+
+
 Route `portrait_room -> bar_pool_room -> bar_jukebox` from a reset spawn, using
 `follow_verified` (which never walks a leg from an unconfirmed pose):
 

@@ -1,0 +1,34 @@
+{
+  "outcomes": [
+    false,
+    true,
+    true,
+    false,
+    true,
+    false,
+    false,
+    true,
+    false,
+    true
+  ],
+  "best_streak": 2,
+  "arrived": 5,
+  "valid": 10,
+  "invalid": 0,
+  "invalid_reasons": [],
+  "failures_by_kind": {
+    "overshot": 1,
+    "wedged": 4
+  },
+  "failures_by_kind_leg_end": {
+    "overshot": 1,
+    "wedged": 4
+  },
+  "failures_from_fallback_frame": 0,
+  "route": [
+    "portrait_room",
+    "bar_pool_room",
+    "bar_jukebox"
+  ],
+  "seconds": 2436.5
+}
