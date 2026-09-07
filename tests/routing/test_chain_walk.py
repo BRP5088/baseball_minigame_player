@@ -105,14 +105,22 @@ class Wp:
 class FakeChain:
     """waypoints + a SCRIPTED locate(); reached() is the spec's rule verbatim."""
 
-    def __init__(self, n, fixes=(), default=None, headings=None):
+    def __init__(self, n, fixes=(), default=None, headings=None, wide=None):
         self.waypoints = [Wp(i, _AUTO if headings is None else headings[i])
                           for i in range(n)]
         self._fixes = list(fixes)
         self.default = default
+        self.wide = wide              # what a WIDE search (window > 3) returns
         self.locate_calls = []
+        self.wide_calls = []
 
     def locate(self, img, k_hint, window=3):
+        if window >= chain_walk.WIDE_AHEAD:
+            # A WIDE search (the sixty-wide window; a look-back is narrower) is
+            # served from `wide`, never from the script, so the scripted tests
+            # do not depend on how often the loop looks far.
+            self.wide_calls.append(k_hint)
+            return self.wide
         self.locate_calls.append(k_hint)
         return self._fixes.pop(0) if self._fixes else self.default
 
@@ -447,35 +455,47 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
 
     def test_after_the_blind_budget_a_strong_fix_far_ahead_relocalises(self):
-        # Six blind advances (k -> 6), then the wide search (hint k+1, window
-        # WIDE_AHEAD) returns a STRONG fix at 31: k jumps there, the budget
-        # resets, and the walk goes on. A wide fix that is not strong (weak
-        # margin over the runner-up) is ignored and the miss counts.
+        # One blind advance (k -> 1); from the NEXT blind iteration on the wide
+        # search runs (hint k+1, window WIDE_AHEAD) and returns a STRONG fix at
+        # 31: k jumps there and the walk goes on. Batch 3 trial 1 stood in the
+        # portrait room at 160-188 inliers while the plan said "doorway" and
+        # the old rule waited for the whole budget before looking.
         self.assertEqual(chain_walk.WIDE_AHEAD, 60)
-        strong = Fix(k=31, inliers=140, second=30)
-        # locate calls: it1 (k=0, no look-back) None; it2..it6 main None +
-        # look-back None; it7 main None + look-back None + WIDE -> strong
-        fixes = [None] + [None, None] * 5 + [None, None, strong]
-        ch = FakeChain(60, fixes, default=None)
+        strong = Fix(k=31, inliers=140, second=130)   # the runner-up is the neighbour
+        ch = FakeChain(60, default=None, wide=strong)
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=8.05)
+        res = always_turning(rig.go, time_cap=6.05)
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:7], ["blind-advance"] * 6 + ["relocalised"])
-        self.assertEqual([f["k"] for f in res["fixes"]][6], 31)
-        self.assertIn(7, ch.locate_calls, "the wide search is hinted at k+1")
-        self.assertEqual(ch.locate_calls[ch.locate_calls.index(7) + 1], 31,
-                         "and the next locate starts from the relocalised k")
-        self.assertEqual(acts[7], "blind-advance", "the budget was reset by the relocalisation")
+        self.assertEqual(acts[:2], ["blind-advance", "relocalised"])
+        self.assertEqual([f["k"] for f in res["fixes"]][1], 31)
+        self.assertEqual(ch.wide_calls[0], 2, "the wide search is hinted at k+1")
+        self.assertEqual(ch.locate_calls[3], 31, "the next locate starts from the relocalised k")
 
-    def test_a_wide_fix_without_margin_over_the_runner_up_is_not_believed(self):
-        weakwide = Fix(k=31, inliers=100, second=90)     # strong count, no margin
-        fixes = [None] + [None, None] * 5 + [None, None, weakwide]
-        ch = FakeChain(60, fixes, default=None)
+    def test_a_wide_fix_under_the_strong_count_is_not_believed(self):
+        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 120)
+        ch = FakeChain(60, default=None, wide=Fix(k=31, inliers=110, second=20))
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=8.05)
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[6], "miss")
-        self.assertEqual([f["k"] for f in res["fixes"]][6], 6)
+        self.assertNotIn("relocalised", acts)
+        self.assertEqual(acts[:6], ["blind-advance"] * 6)
+        self.assertTrue(ch.wide_calls, "the wide search WAS asked")
+
+    def test_an_unverified_turn_stop_relocalises_when_a_strong_fix_is_past_it(self):
+        # Reaching the stop at 3 the stop's frame does not fit (weak), but a
+        # strong fix sits ahead at 9: no retry push, k jumps to 9.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 8, start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(12, [Fix(k=1), Fix(k=3, inliers=8)], default=None,
+                       wide=Fix(k=9, inliers=150))
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=4.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "relocalised"])
+        self.assertEqual([f["k"] for f in res["fixes"]][1], 9)
+        self.assertNotIn("turn-retry", acts)
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds
@@ -728,11 +748,11 @@ class ConsecutiveCounters(unittest.TestCase):
         # A blind sensor first dead-reckons BLIND_MAX pushes (the target is
         # believed reached); only then do misses count. Every miss past k=0
         # also asks a look-back, which consumes a scripted entry: the credible
-        # fix is the 18th locate call (a spent budget adds a wide search per miss). It does not advance (scale 0.5) but it
+        # fix is the 16th scripted locate call (wide searches are served apart). It does not advance (scale 0.5) but it
         # is READ, so the two misses before it never sum with anything after:
         # a credible fix also restores the blind budget.
         self.assertEqual(chain_walk.BLIND_MAX, 6)
-        rig = Rig(FakeChain(12, [None] * 17 + [Fix(k=6, scale=0.5)]),   # + one None per wide search (it7, it8)
+        rig = Rig(FakeChain(12, [None] * 15 + [Fix(k=6, scale=0.5)]),   # wide searches never consume the script
                   table_at=None)
         res = always_turning(rig.go, time_cap=11.05)         # exactly eleven 1.0s iterations
         self.assertEqual([f["action"] for f in res["fixes"]],

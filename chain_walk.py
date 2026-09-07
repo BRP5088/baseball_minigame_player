@@ -159,12 +159,15 @@ TURN_RETRY_MAX = 3
 # portrait room beyond it (chain 64 -> 126).
 WIDE_AHEAD = 60
 # A wide-search fix is believed only when it is STRONG: at least this many
-# inliers AND at least twice the runner-up. On this chain wrong-place matches
-# reach p95 117 / max 152 inliers (chain_user_1853_closed.json FAR), so a count
-# alone cannot gate a wide window; the margin over the runner-up is what a
-# wrong-place match lacks. Provisional; logged per use.
-STRONG_MIN_INLIERS = 60
-STRONG_MARGIN = 2.0
+# inliers. 120 is the true-position p25 on this chain and sits above the
+# wrong-place p95 of 117 (chain_user_1853_closed.json NEAR / FAR); a margin
+# over the runner-up was tried first and was wrong -- in a window of adjacent
+# frames the runner-up is the NEIGHBOUR (batch 3 trial 1: the portrait room
+# scored 188 against a runner-up of 175, and the margin gate refused it).
+# The wide search runs from the FIRST blind push and inside turn retries, not
+# only after the budget: by then that trial was nose to nose with an NPC and
+# then against a wall, with nothing left to match. Provisional; logged.
+STRONG_MIN_INLIERS = 120
 # |stick| at or under this is "not walking": the tap records the COMMANDED value
 # and a settle or a turn is exactly 0.0. Frames whose ly is None (no tap, or a
 # chain older than this field) count as walking, so nothing is silently skipped.
@@ -221,6 +224,17 @@ ESCAPE_STRAFE_MAG = 0.45
 # So: POSITIVE lx = RIGHT, and dx > 0 -> strafe RIGHT.
 RIGHT = +1.0
 LEFT = -1.0
+
+
+def _strong_ahead(chain, img, k, n):
+    """A STRONG fix ahead of k within WIDE_AHEAD, or None."""
+    if k >= n - 1:
+        return None
+    wide = chain.locate(img, k + 1, window=WIDE_AHEAD)
+    inl = 0 if wide is None else (getattr(wide, "inliers", 0) or 0)
+    if wide is not None and inl >= STRONG_MIN_INLIERS and int(wide.k) > k:
+        return wide
+    return None
 
 
 def _fix_row(fix):
@@ -684,6 +698,25 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             fix_t = chain.locate(img, target_k)
             inl_t = 0 if fix_t is None else (getattr(fix_t, "inliers", 0) or 0)
             verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS
+            if not verified:
+                # Maybe we are already PAST this stop (batch 3 trial 1 stood
+                # in the portrait room while the plan still said "doorway").
+                wide = _strong_ahead(chain, img, target_k, n)
+                if wide is not None:
+                    k = min(int(wide.k), n - 1)
+                    blind = 0
+                    lost = 0
+                    misses = 0
+                    stalls = 0
+                    turn_retries = 0
+                    record({"iteration": iteration, "k": k, "target": target_k,
+                            "fix": _fix_row(wide), "action": "relocalised",
+                            "lateral": None, "at_end": False,
+                            "seconds": round(now() - it_t0, 2),
+                            "elapsed": round(now() - t0, 2)})
+                    log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  relocalised "
+                        f"past the stop: {wide.inliers} inliers at {wide.k}")
+                    continue
             if (not verified and turn_retries < TURN_RETRY_MAX
                     and walk_heading is not None):
                 turn_retries += 1
@@ -759,16 +792,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # where the plan has to keep moving -- and only then treat the
             # silence as a blockage.
             wide = None
-            if blind >= BLIND_MAX and not at_end and k < n - 1:
-                # The budget is spent: before counting this as a miss, look
-                # far AHEAD for a strong fix (see WIDE_AHEAD above).
-                wide = chain.locate(img, k + 1, window=WIDE_AHEAD)
-                w_inl = 0 if wide is None else (getattr(wide, "inliers", 0) or 0)
-                w_sec = 0 if wide is None else (getattr(wide, "second", 0) or 0)
-                if not (wide is not None and w_inl >= STRONG_MIN_INLIERS
-                        and w_inl >= STRONG_MARGIN * max(1, w_sec)
-                        and int(wide.k) > k):
-                    wide = None
+            if blind >= 1 and not at_end:
+                # From the first blind push on, look far AHEAD for a strong
+                # fix before dead-reckoning again (see WIDE_AHEAD above).
+                wide = _strong_ahead(chain, img, k, n)
             if wide is not None:
                 k = min(int(wide.k), n - 1)
                 fix = wide
