@@ -408,8 +408,8 @@ A stick or button line takes an OPTIONAL THIRD FIELD, a hold in milliseconds:
     buttons 8 80           hold triangle for 80ms, then release
 
 chiaki releases it on its own `steady_clock`. Omitting the field keeps the old
-meaning. Under `MAX_TIMED_HOLD` (4.5s, below `INJECT_TIMEOUT_MS`) a hold needs
-NO chunking.
+meaning. A timed hold under `INJECT_TIMEOUT_MS` (5s) needs NO chunking; the
+deleted hand-walk script capped its holds at 4.5s for that reason.
 
 **A sibling axis must not cancel a timed hold.** `right_x 32767 400` followed by
 `right_y 0` — the natural way to set a stick — had the untimed second line clear
