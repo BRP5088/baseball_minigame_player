@@ -1295,6 +1295,25 @@ assert was off by one, and the whole script had to be re-sent to fix one
 integer. Saved, the retry would have cost nothing. The assertion that fired
 BEFORE the write is the pattern; the re-send is the cost of not saving.
 
+**20. PRE-SLEEP HANDOFF INTEGRITY.** Before an agent enters an unattended
+overnight or long-running background state, it updates and COMMITS the current
+state and the execution plan to `HANDOFF_NOW.md` — what is running, where its
+artefacts land, what happens next and in what order, and the rules in force. If
+a process drops or hits a ceiling mid-night, the morning session must find the
+exact active plan and state immediately, without relying on chat history. A
+plan that lives only in the conversation is lost in precisely the case the
+handoff exists for (the same shape as 10.16, one level up).
+
+**21. SEQUENCING OVERRIDE FOR IN-FLIGHT RUNS.** Never refactor, edit or modify
+a module on disk while an active process or live console test is importing it
+fresh — a harness's trial children re-import `graph_walk.py`, `_harness.py` and
+their neighbours on every trial (10.17 is the concrete instance). Background
+refactoring, dependency audits and automated QA passes are strictly SERIALISED
+behind the live run: held in queue until every live console trial has completed
+AND its evidence is committed. Read-only work may proceed; anything that writes
+into the import path waits. "It is a small edit" is not an exception — the
+child does not know how small it was.
+
 
 ---
 
