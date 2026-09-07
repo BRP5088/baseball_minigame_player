@@ -113,3 +113,62 @@ cause not established. Result: `explore/20260904_152521_bar_area/overshot_census
 (`test_harness_restores_shipped_value`, `test_overnight_start_hint`); **not
 established** (`test_reference_pose_flag`, `test_yaw_nulled_before_align`, 9
 checks each).
+
+---
+
+## Orphan code audit — GRAVEYARD.md against the import graph (2026-09-07, overnight)
+
+Method: every `.py` outside vendored/ignored trees parsed with `ast` (290
+modules); every backticked token in GRAVEYARD.md checked for a definition and
+for references outside its own file and outside `tests/`; every root module
+checked for an importer, a module-level call (scripts run without a
+`__main__` guard), and any mention by name in `.py`, `.sh`, `.json` or `.md`.
+**Flagged, not deleted.** Nothing here was moved; the decision is the user's,
+and `git rm` is the reversible way to take it.
+
+**GRAVEYARD-named functions.** `align_at_node` and `walk_link` are named in
+graveyard rows and are LIVE — each is called inside `graph_walk.py` (the first
+pass mis-flagged them by counting only external callers). No graveyard-named
+function survives as dead code; the ones it says were removed
+(`_something_moved`, `identify_edges`'s cluster, `home_to_table`) are gone.
+
+**A dead approach that still ships as code — the floor-map cluster.**
+GRAVEYARD's mapping section records the floor mosaic as an artifact (IoU 1.000
+from a flat-grey input). Its tools form a closed cluster with no reference
+from anywhere else and no mention in any document but the graveyard:
+
+    tools/floor_mosaic.py   referenced only by floor_check / floor_calib / floor_render
+    tools/floor_calib.py    referenced only by floor_mosaic
+    tools/floor_check.py    referenced only by floor_mosaic
+    tools/floor_render.py   referenced by nothing
+    overnight/mow.py        referenced by nothing (references ask_snoopy)
+    MAX_RANGE               defined in floor_mosaic, read by nothing outside it
+
+Candidates for `_obsolete/`. The 3D pipeline (`tools/reconstruct_mv.py`,
+`tools/ask_snoopy.py`, and Snoopy's `C:\baseball` copies) is the same shape
+but is still named in CLAUDE.md's mapping section; same recommendation, the
+user's call.
+
+**Root modules: 13 orphans, all from the pre-`graph_walk` routing generation.**
+No importer, no module-level call, not named by any script, document or test:
+
+    arc_walk.py  pitch_calibrate.py  replay_demo.py  replay_direct.py
+    replay_recorded.py  replay_scaled.py  route_arcs.py  route_demo3.py
+    route_from_demo.py  route_recorded.py  teach_repeat.py  walk_seq.py
+    waypoint_replay.py
+
+Plus one documented only in `HANDOFF.md`, which CLAUDE.md marks superseded:
+`analog_replay_corrected.py`. Nine others that the naive scan flagged are
+entry points and must stay — `preflight.py` and `run_one_match.py` are
+production runners (invoked from `play_now.py` / `reset_env.py`), and
+`go_to_table.py`, `frame_worker.py`, `go_to_landmark.py`, `approach_table.py`,
+`clear_match_state.py`, `bench_route.py`, `decode_run.py` are each called or
+imported by live code. The first draft of this audit would have listed them as
+orphans; the fix was asking "is it invoked by NAME anywhere", not only "is it
+imported".
+
+**Not orphaned, worth knowing:** `pitch_calibrate.py` is dead while
+STAIRS_APPROACH.md records that pitch is uncontrolled in production and three
+pitch constants contradict — the tool that would have measured them is the
+one nobody calls. `doorway_pitch.py`, written 2026-09-07, is the live path for
+that question.
