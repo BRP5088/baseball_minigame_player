@@ -230,3 +230,19 @@ nothing. Relaunch; it resumes.
 skips anything already in the log, so delete that test's line from
 `baseline.log` and relaunch. (Two tests were recorded FAIL before their tracked
 frames were shipped; see FOOTGUN under "ship".)
+
+## FOOTGUN 4 — a text-mode write on Windows turns LF into CRLF, and the sha check calls it a bad restore
+
+The first mutant of the 2026-09-07 sweep reported `RESTORE MISMATCH`. It was
+not a bad restore. `open(p).read()` in text mode folds `\r\n` to `\n`;
+`open(p, "w").write(orig)` in text mode emits `\r\n` on Windows. The file came
+off the Mac as LF, went back as CRLF, and the byte hash changed while the
+content did not: `graph_walk.py` afterwards was 2,308 CRLF lines and 0 LF, with
+a `\r\n`-normalised sha256 of `F58E6AD109734572` — identical to Mac HEAD — and
+no `# MUTANT` marker anywhere. Every later mutant restores CRLF to CRLF and
+matches, so only the FIRST mutant on each file reports it.
+
+Python does not care about the endings, so the sweep's verdicts stand. The
+driver now reads and writes with `newline=""` so the bytes round-trip. To
+compare a Snoopy copy against Mac HEAD, hash with `\r\n` normalised to `\n`, or
+you will chase a difference that is not one.
