@@ -1882,7 +1882,11 @@ where retries are local. §10.14, self-inflicted. A streak to the table is not
 measurable at this ceiling; it needs either local retries on the goal leg or a
 ceiling of `attempts x route-time`.
 
-**WHAT THE 37 TABLE-LEG END FRAMES SAY.** The leg ends in the dark, against an
+**WHAT THE 37 TABLE-LEG END FRAMES SAY.** *(Caveat 2026-09-07: for the GOAL node
+those frames were taken AFTER approach_goal's stepping and reach_table's sweep,
+so they describe where the recovery left the camera — six read 253-258, the far
+end of the 19-heading circle — not where the leg ended. From da5b7ec the leg-end
+frame is published BEFORE the sweep; see OPEN-21.)* The leg ends in the dark, against an
 NPC, against the bar-top, or looking at the floor — including in both trials
 that then "arrived": the arrival happens only after `reach_table` turns the
 camera. The sweeps DO see the prompt at times (ink max 0.042, 0.037, 0.030,
@@ -2334,3 +2338,51 @@ trials per arm, interleaved, verified arrivals, reported by failure class (§10.
 **Note the left stick's DIAGONAL response is unmeasured.** §6's table is
 `left_y`-only, so it does not cover this — see OPEN-19, which is why that one is
 downgraded rather than closed.
+
+**OPEN-21 — THE GOAL LEG IS NOT THE RECORDED LEG; the A/B against replaying
+it is RUNNING (started 2026-09-07 09:35).** On every leg but the last,
+`follow()` replays the recorded steps through `walk_link`. On the last it does
+not: `approach_goal()` walks a straight line at `steps[-1]["bearing"]` (75.5,
+10.6 deg off the leg's net direction of ~85) in 0.4s chunks with 0.3s sleeps —
+the re-accelerating chunk shape GRAVEYARD records as walking a leg SHORT — for
+up to 1.6x the recorded 4.07s, checking for the prompt as it goes; then
+`reach_table()` sweeps. It predates the jukebox-leg restoration, when the table
+leg started 0.7 units early and an over-long straight approach was the
+workaround, and it has never been A/B'd against the recorded leg.
+
+What OPEN-14 measured about it, from `overnight/streak_table.log` and
+`overnight/census/table_leg_ends_20260907.json`: 37 executions, and in **37 of
+37** the approach exhausted its budget ("stepped 6.8s of a 6.5s budget without
+finding the prompt"); the prompt was found by stepping **0** times and by the
+sweep **once** (trial 2). Of the 37 post-sweep frames, **17 were wedged** (7-11
+keypoints); the visual census (two Haiku readers a frame, tiebreak on
+disagreement) read dark 12 / bar counter 8 / floor 5 / NPC 3 / wall 1 / dealer
+visible without prompt 4 / prompt 1 / unresolved 5. Pitch-down is a real
+minority mode; the majority is pressed into the bar or into darkness.
+
+**The arm:** `graph_walk.GOAL_LEG_AS_RECORDED` (ships **False**) routes the goal
+leg through `walk_link` like every leg that arrives; the sweep still follows in
+BOTH arms. Not a GRAVEYARD shape: it steers nothing mid-push and REMOVES a
+chunked approach rather than adding chunks. **The harness:**
+`overnight/ab_goal_leg.py` — shipped vs recorded, 10 trials an arm interleaved,
+setup to `bar_jukebox` at attempts=9 (a setup miss is INVALID), ONE execution
+of the leg through `_harness.walk_leg_under_test`, scored by `confirm()` =
+`at_table()` on the post-sweep frame plus an `at_table()` re-read, 1200s
+external ceiling, Fisher exact. Result: `overnight/ab_goal_leg.json`, log
+`overnight/ab_goal_leg.log`, frames `overnight/goal_leg_failframes/`
+(`at_dealer_table_*` = PRE-sweep leg end, admissible; `_postsweep_*` = what
+`confirm()` judged; `success/ok_*` = the leg end on arrivals).
+
+Two evidence fixes landed with the flag (da5b7ec), each behind a test that
+drives `follow()`/`follow_verified` with stubs and four mutants caught: the
+GOAL's leg-end frame is now captured and published BEFORE `reach_table`, and
+`follow_verified`'s success frame is the published leg end — it was `before`,
+the previous node's arrival (both OPEN-14 `ok_dealer_table` frames read bearing
+0.8 and identified `bar_jukebox` at 491 and 295).
+
+**RESULT: pending.** Read the json before believing anything written here
+about it. If the recorded arm wins, the next run is the full-route streak with
+the flag on — and OPEN-14's ceiling lesson applies: a goal-leg retry is a full
+reset and route re-walk, so the ceiling must be attempts x route-time or the
+goal leg needs local retries.
+
