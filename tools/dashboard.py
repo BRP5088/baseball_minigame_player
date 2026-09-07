@@ -34,6 +34,8 @@ QUEUE = [
      "detail": "The mask cannot see the prompt over the light table top or over the dealer; OCR reads both, 0 false positives on every negative on disk. Touches the $50 gate."},
     {"title": "Score the A/B twice and write OPEN-21", "state": "blocked", "blocked_on": "the run ending",
      "detail": "As the harness scored it, and post hoc from the pre-sweep frames with mask + OCR (prompt on screen at the leg's end). Recommend the flag flip if the numbers carry it; the flip is yours."},
+    {"title": "Map the prompt zone around the dealer", "state": "next",
+     "detail": "From the verified jukebox node: a 5x5 grid of points around the recorded leg's endpoint, five headings each, recording the prompt verdict (mask + OCR), score, ink, bearing and a frame; one grid row per route walk; the push-ratio probe marks wedged points. About an hour. Agreed 2026-09-07; occupancy grid and 3D mapping dropped."},
     {"title": "Full-route streak with the winner and the better instrument", "state": "next",
      "detail": "Route to the table at attempts=9, ceiling sized as attempts x route time so it cannot censor 7 of 10 again."},
     {"title": "The position failures", "state": "next",
