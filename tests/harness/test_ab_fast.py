@@ -37,14 +37,18 @@ class Pure(unittest.TestCase):
         self.assertAlmostEqual((back - 86.1) % 360, 180.0, delta=0.5)
 
     def test_classify(self):
-        self.assertEqual(ab_fast.classify(False, 10), "missed")
-        self.assertEqual(ab_fast.classify(True, 34), "arrived")
-        self.assertEqual(ab_fast.classify(True, 60), "arrived")
-        self.assertEqual(ab_fast.classify(True, 61), "timed_out")
-        self.assertEqual(ab_fast.classify(False, 999), "missed", "a slow miss is a miss, not a timeout")
+        self.assertEqual(ab_fast.classify(False, 10, 100), "missed")
+        self.assertEqual(ab_fast.classify(True, 34, 100), "arrived")
+        self.assertEqual(ab_fast.classify(True, 60, 400), "arrived")
+        self.assertEqual(ab_fast.classify(True, 61, 100), "timed_out", "a slow leg is not an arrival")
+        self.assertEqual(ab_fast.classify(True, 30, 401), "timed_out", "a slow TRIAL is a failure whatever the leg did")
+        self.assertEqual(ab_fast.classify(False, 30, 401), "timed_out")
+        self.assertEqual(ab_fast.classify(False, 999, 100), "missed", "a slow miss under the trial cap is a miss")
 
-    def test_cap_is_a_literal(self):
+    def test_caps_are_literals(self):
         self.assertEqual(ab_fast.LEG_TIME_CAP, 60)
+        self.assertEqual(ab_fast.TRIAL_TIME_CAP, 400)
+        self.assertEqual(ab_fast.TIMEOUT, 420, "the external kill sits just above the trial cap")
 
     def test_each_arm_sets_only_its_own_flags(self):
         for exp in ab_fast.EXPERIMENTS.values():

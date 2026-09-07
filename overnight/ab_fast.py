@@ -38,8 +38,10 @@ import _harness
 
 TRIALS = _harness.TRIALS          # 10 per arm
 SETUP_ATTEMPTS = 3
-TIMEOUT = 900                     # a trial that falls back to a reset+route can still take minutes
 LEG_TIME_CAP = 60                 # seconds; the recorded goal leg arrives in 21-34s
+TRIAL_TIME_CAP = 400              # seconds, setup + leg: over this a trial is a FAILURE (user, 2026-09-07:
+                                  # "letting a run go 400s+ clearly should be marked as a failure")
+TIMEOUT = TRIAL_TIME_CAP + 20     # the external kill, just above the cap; a killed trial is timed_out
 
 # ARM VALUES, NAMED (the restore-shape check cannot read intent from a literal).
 RECORDED_ARM_FLAG = True
@@ -80,11 +82,17 @@ def reverse_steps(steps):
              "speed": s.get("speed", 0.2)} for s in reversed(steps)]
 
 
-def classify(arrived, seconds, cap=LEG_TIME_CAP):
-    """arrived / timed_out / missed. An arrival slower than `cap` is timed_out."""
+def classify(arrived, leg_seconds, total_seconds=0.0, cap=LEG_TIME_CAP, trial_cap=TRIAL_TIME_CAP):
+    """arrived / timed_out / missed.
+
+    A trial over `trial_cap` (setup + leg) is timed_out whatever the leg did;
+    an arrival slower than `cap` is timed_out; a miss is a miss. timed_out is
+    a FAILURE, counted against the arm, never an invalid."""
+    if total_seconds > trial_cap:
+        return "timed_out"
     if not arrived:
         return "missed"
-    return "arrived" if seconds <= cap else "timed_out"
+    return "arrived" if leg_seconds <= cap else "timed_out"
 
 
 def fisher_two_sided(a, b, c, d):
@@ -124,7 +132,7 @@ def one_trial(experiment, arm):
     t1 = time.time()
     r = _harness.walk_leg_under_test(gw, m, start, target, shots=shots, log=log)
     secs = round(time.time() - t1, 1)
-    outcome = classify(bool(r["verified_arrived"]), secs)
+    outcome = classify(bool(r["verified_arrived"]), secs, setup_s + secs)
     row = _harness.leg_trial_row(arm, r, secs, arrived=(outcome == "arrived"))
     row.update({"outcome": outcome, "reached_start": True, "setup_seconds": setup_s,
                 "setup_mode": "returned" if where0 == start else "reset",
@@ -155,15 +163,20 @@ def main(experiment):
         raise SystemExit("the stream is not up; not starting")
     arms = tuple(exp["arms"])
     res = {"question": exp["question"], "experiment": experiment, "start": exp["start"], "target": exp["target"],
-           "trials": TRIALS, "setup_attempts": SETUP_ATTEMPTS, "timeout": TIMEOUT, "leg_time_cap": LEG_TIME_CAP,
+           "trials": TRIALS, "setup_attempts": SETUP_ATTEMPTS, "timeout": TIMEOUT, "leg_time_cap": LEG_TIME_CAP, "trial_time_cap": TRIAL_TIME_CAP,
            "arms": list(arms), "runs": []}
     log(f"FAST A/B '{experiment}': {TRIALS} trials per arm, interleaved, {exp['start']} -> {exp['target']}, cap {LEG_TIME_CAP}s")
     for i, (_t, arm) in enumerate(_harness.interleave(arms, TRIALS), 1):
         r, secs = _harness.run_trial(__file__, f"{experiment}:{arm}", TIMEOUT, log=log)
-        if r is None:
-            log(f"[{i:2d}] {arm:9s} INVALID after {secs:.0f}s (ceiling, crash, or the stream went down)")
+        if r is None and secs >= TIMEOUT - 5 and _harness.alive():
+            # killed at the ceiling with the stream alive: a FAILURE of the arm
+            log(f"[{i:2d}] {arm:9s} TIMED_OUT at the {TIMEOUT}s ceiling -- counted as a failure")
+            res["runs"].append({"arm": arm, "arrived": False, "outcome": "timed_out", "reason": "ceiling", "seconds": secs})
+        elif r is None:
+            log(f"[{i:2d}] {arm:9s} INVALID after {secs:.0f}s (crash, or the stream went down)")
             res["runs"].append({"arm": arm, "arrived": None, "outcome": "invalid", "reason": "unmeasurable", "seconds": secs})
         elif not r.get("reached_start"):
+            # the setup is shared by both arms; a setup miss says nothing about the arm
             log(f"[{i:2d}] {arm:9s} INVALID: never reached {exp['start']} (setup {r['setup_seconds']:.0f}s, {r['setup_mode']})")
             res["runs"].append({"arm": arm, "arrived": None, "outcome": "invalid", "reason": f"setup did not reach {exp['start']}", **r})
         else:
@@ -185,7 +198,7 @@ def main(experiment):
     if na and nc:
         p = fisher_two_sided(a, na - a, c, nc - c)
         res["fisher_p"] = p
-        log(f"\n  {arms[0]} {a}/{na}  {arms[1]} {c}/{nc}  Fisher exact p = {p:.4f}  (arrived within {LEG_TIME_CAP}s)")
+        log(f"\n  {arms[0]} {a}/{na}  {arms[1]} {c}/{nc}  Fisher exact p = {p:.4f}  (arrived within {LEG_TIME_CAP}s leg / {TRIAL_TIME_CAP}s trial)")
         _harness.save_result(out, res)
     log(f"\n  -> {out}")
 
