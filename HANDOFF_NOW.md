@@ -32,6 +32,13 @@ The loop for the night, in order, repeated:
    commands beside the frames): one agent ranks tonight's arrivals by walk time, tables the five fastest against
    the five slowest by region and by stop, and proposes at most three controller changes;
    `agent_progress/closed-loop/fast_runs/notes.md`. Usage at 23:58: 5-hour 39% (resets 02:02), weekly 42%.
+3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
+   why and see if you can incorporate those changes. ideally every run should teach you something new"): the
+   evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
+   74.7 — while tonight's builds arrive in 92-135 s. A RULE-COST study (sonnet, `agent_progress/closed-loop/
+   rule_costs/notes.md`) attributes the extra seconds to the rules added since 21:08 and proposes what to trim.
+   Standing rule: an arrival that beats the current record (67.9 s walk) gets a "why faster" reader against the
+   previous record; every arrival gets a one-lesson pass (Haiku) when the budget allows; every failure a reader.
 4. At the batch end: apply the verified patch(es), run the test file, mutants in the checkout (the console is
    idle), commit, `ensure_stream.ensure_live()` (the PS5 may have dozed during the build; standing permission
    to wake it), relaunch `overnight/chain_trials.py --chain route_user_1853 --trials 20 --arms off,on` while
