@@ -2,6 +2,36 @@
 
 **Updated 2026-09-08 12:27 -- THE USER IS RESTARTING THE MAC. NOTHING IS RUNNING. Read this block first.**
 
+## THE GOAL IS MET (19:20) — 40 consecutive arrivals in one batch, target 25
+
+Batch 28 (`overnight/chain_trials_batch28_goal.*`, build 2c8fea7, `--trials 40 --attempts 2`):
+40/40 ARRIVED, 40/40 passed the independent at_table re-check, first-walk 39/40 (97.5%), one
+reload (trial 13, lost at the jukebox turn with the blind-then-lost signature, recovered). Walk
+median 76 s. The arrival sheet is `overnight/goal_batch_arrivals.jpg`. Verified by
+`tools/verify_streak.py`, which requires four checks per trial and reports BOTH the trial rate and
+the first-walk rate, so a reload cannot hide a regression.
+
+**What shipped today, in order, each landed at a boundary with the suite green:** patch51 (no yaw
+at the last stop), patch52 (the reload, ATTEMPTS ships 1, `--attempts 2` used for the goal), patch53
+(config names the flags; turn_to logs the ASKED error), patch54 (in-walk settle probe), the frame
+dump (capture reads chiaki's decoded frames; immune to Mission Control), patch55 (bar early turn,
+FAILED its instrument 2.67->2.71, ships OFF, graveyard), patch56 (blind look-around, targets 77% of
+failures, ships OFF, awaits its A/B), patch57 (pitch correction on the fit's dy, which the loop read
+ZERO times, ships OFF, bang-bang first so a batch measures the gain).
+
+**Measured and recorded today:** perception is 59 ms of a 1440 ms iteration and 700 ms is two 0.35 s
+sleeps; the settle probe says the sensor abstains 3-5% at EVERY delay including zero; the sideways
+correction reduces error only 69% of the time (944 uses) while the two camera corrections work
+100%; six route bands carry a repeatable one-sided bias (pre-compensable offline); the paired
+match-count ratio separates collisions (0.74-0.90) from clean pushes (0.05-0.18) on the user's own
+labels via `tools/crawl.py`.
+
+**The next phase the user is deciding:** a continuous loop (walk -> play until the wallet is empty ->
+reset -> repeat). `run_cycles.py` already has the shape; its `_walk_to_table` calls the OLD
+dead-reckoning `go.main` and must be swapped for chain_walk + the reload. The minigame runner last
+ran live 2026-08-28 and needs one paid smoke cycle. "Improve" should target minigame STRATEGY, never
+the navigation controller unattended.
+
 ## LIVE NOW (13:10) — the plain 25 on patch51, and what waits behind it
 
 Launched 12:55 on 2d0f4e0 (verified injector build; the frame-dump binary is NOT on the rig).
