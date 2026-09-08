@@ -105,12 +105,18 @@ class Wp:
 class FakeChain:
     """waypoints + a SCRIPTED locate(); reached() is the spec's rule verbatim."""
 
-    def __init__(self, n, fixes=(), default=None, headings=None, wide=None):
+    def __init__(self, n, fixes=(), default=None, headings=None, wide=None,
+                 lookback="script"):
         self.waypoints = [Wp(i, _AUTO if headings is None else headings[i])
                           for i in range(n)]
         self._fixes = list(fixes)
         self.default = default
         self.wide = wide              # what a WIDE search (window > 3) returns
+        # A LOOK-BACK (window > WINDOW, < WIDE_AHEAD) is a second look at the
+        # SAME image. By default it consumes the script like any locate() --
+        # the regression tests script it that way -- but a test about a run
+        # of consecutive fits must not have every other fit eaten by it.
+        self.lookback = lookback
         self.locate_calls = []
         self.wide_calls = []
 
@@ -121,6 +127,8 @@ class FakeChain:
             # do not depend on how often the loop looks far.
             self.wide_calls.append(k_hint)
             return self.wide
+        if window > chain_walk.WINDOW and self.lookback != "script":
+            return self.lookback
         self.locate_calls.append(k_hint)
         return self._fixes.pop(0) if self._fixes else self.default
 
@@ -381,7 +389,14 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 3, 4, 5, 6, 6, 6, 6, 6, 6])
         self.assertNotIn(3, [f["k"] for f in res["fixes"]][4:])
         self.assertIn("weak", [f["action"] for f in res["fixes"]])
-        self.assertEqual(rig.strafes(), [], "a weak dx must not steer")
+        # A lone weak dx never steers. Identical junk repeated is the one
+        # thing the junk-run rule DOES steer on (every fourth agreeing fit),
+        # so the strafes here are that rule's and nothing else's.
+        lat = [(i, f["lateral"]) for i, f in enumerate(res["fixes"]) if f.get("lateral")]
+        self.assertEqual(len(lat), len(rig.strafes()))
+        self.assertTrue(lat and lat[0][0] >= chain_walk.JUNK_CONSISTENT_N - 1,
+                        "no strafe before the fourth agreeing junk fit: %r" % lat)
+        self.assertTrue(all(l.get("consistent") == chain_walk.JUNK_CONSISTENT_N for _, l in lat), lat)
         self.assertEqual(rig.count("jump"), 1, "four weak fixes are a stall")
 
     def test_a_weak_fix_that_names_the_target_advances_and_keeps_the_blind_budget(self):
@@ -687,15 +702,86 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(chain_walk.CONSISTENT_N, 3)
         fixes = [Fix(k=1, inliers=20, dx=-150.0), Fix(k=2, inliers=18, dx=-204.0),
                  Fix(k=3, inliers=17, dx=-219.0), Fix(k=4, inliers=19, dx=-300.0)]
-        ch = FakeChain(30, fixes, default=None)
+        ch = FakeChain(30, fixes, default=None, lookback=None)
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=4.05)
         strafes = rig.strafes()
         self.assertEqual(len(strafes), 1, "exactly one strafe, on the third agreeing fit")
         self.assertLess(strafes[0][1], 0.0, "the scene is LEFT: strafe left")
         lat = [f["lateral"] for f in res["fixes"] if f.get("lateral")]
-        self.assertEqual(lat[0]["dx"], -204.0, "the median of the three")
+        self.assertEqual(lat[0]["dx"], -204.0, "the median of the first three")
         self.assertEqual(lat[0]["consistent"], 3)
+
+    def test_four_same_side_junk_fits_steer_once_but_three_do_not(self):
+        # The corridor drift cluster: 6-14-inlier fits reading the scene ever
+        # further LEFT. Four agreeing steer once by their median; three never
+        # do (three in a row occur in arriving trials, four never).
+        self.assertEqual((chain_walk.JUNK_CONSISTENT_N, chain_walk.JUNK_MIN_INLIERS), (4, 6))
+        fixes = [Fix(k=1, inliers=9, dx=-103.0), Fix(k=2, inliers=8, dx=-198.0),
+                 Fix(k=3, inliers=11, dx=-241.0), Fix(k=4, inliers=7, dx=-252.0)]
+        ch = FakeChain(30, fixes, default=None, lookback=None)
+        rig = Rig(ch, table_at=None)
+        always_turning(rig.go, time_cap=4.05)
+        strafes = rig.strafes()
+        self.assertEqual(len(strafes), 1)
+        self.assertLess(strafes[0][1], 0.0)
+        ch3 = FakeChain(30, fixes[:3], default=None, lookback=None)
+        rig3 = Rig(ch3, table_at=None)
+        always_turning(rig3.go, time_cap=3.05)
+        self.assertEqual(rig3.strafes(), [], "three junk fits are not evidence")
+
+    def test_stationary_runs_carry_each_frame_and_its_heading(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0), (30.0, 0.0), (30.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        self.assertEqual(chain_walk.stationary_runs(wps), {4: [(2, 90.0), (3, 60.0), (4, 30.0)]})
+
+    def test_the_pan_from_the_run_looks_along_recorded_headings_and_matches_their_own_frames(self):
+        # Flag on: at the stop (run frames 2, 3, 4 at 90, 60, 30) the loop looks
+        # at the run's first and middle headings and matches frame 2 at 90 and
+        # frame 3 at 60 -- NOT the stop's frame 4. Flag off: the +-25 looks.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0), (30.0, 0.0), (30.0, -0.35), (30.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        old = chain_walk.STOP_PAN_FROM_RUN
+        chain_walk.STOP_PAN_FROM_RUN = True
+        try:
+            # it1 push -> Fix(1); it2 stop head-on -> None; pan at 90 (frame 2) -> None;
+            # pan at 60 (frame 3) -> credible with dx +80 -> verified, strafe RIGHT
+            ch = FakeChain(7, [Fix(k=1), None, None, Fix(k=3, inliers=90, dx=80.0), Fix(k=5), Fix(k=6)], default=None)
+            ch.waypoints = wps
+            rig = Rig(ch, table_at=9)
+            res = rig.go()
+            acts = [f["action"] for f in res["fixes"]]
+            self.assertEqual(acts[:2], ["advanced", "turned-looked"])
+            turns = [round(e[1]) for e in rig.events if e[0] == "turn"]
+            self.assertEqual(turns[:5], [90, 30, 90, 60, 30], "to the stop, the run's first and middle headings, back")
+            self.assertEqual(ch.locate_calls[1:4], [4, 2, 3], "head-on at the stop, then each look at ITS OWN frame")
+            self.assertGreater(rig.strafes()[0][1], 0.0, "dx > 0 from the run frame: strafe RIGHT, no un-yaw")
+            self.assertEqual(res["fixes"][1]["lateral"]["pan_heading"], 60.0)
+        finally:
+            chain_walk.STOP_PAN_FROM_RUN = old
+
+    def test_the_pan_is_off_by_default_even_when_the_stop_has_a_run(self):
+        # The control for the flag: the SAME stop with a stationary run, flag
+        # off (as shipped), looks at +-STOP_LOOK_DEG and never asks a run
+        # frame. A mutant that pans regardless of the flag passes every other
+        # test because their chains have no runs to pan from.
+        self.assertFalse(chain_walk.STOP_PAN_FROM_RUN)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0), (30.0, 0.0), (30.0, -0.35), (30.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(7, [Fix(k=1), None, None, None, Fix(k=5), Fix(k=6)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=9)
+        rig.go()
+        turns = [round(e[1]) for e in rig.events if e[0] == "turn"]
+        looks = [round(30 + d) for d in chain_walk.STOP_LOOK_DEG]
+        self.assertEqual(turns[2:4], looks, "the +-25 looks, not the run's headings: %r" % turns)
+        # head-on at the stop, then both looks matched against the STOP's own
+        # frame 4 (the pan would ask frames 2 and 3 here; a later look-back
+        # legitimately asks 3, so only the stop's three calls are pinned)
+        self.assertEqual(ch.locate_calls[1:4], [4, 4, 4], ch.locate_calls)
 
     def test_thin_fits_that_disagree_on_side_do_not_steer(self):
         fixes = [Fix(k=1, inliers=20, dx=-150.0), Fix(k=2, inliers=18, dx=+204.0),

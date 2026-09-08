@@ -183,6 +183,14 @@ NO_PROGRESS_MAX = 12
 # stairs with five fits in a row at 15-30 inliers reading -120, -159, -204,
 # -219, -323 px and were refused all five times. Strafe once by their median.
 CONSISTENT_N = 3
+# The same rule for JUNK fits (6..14 inliers, under WEAK_MIN): four in a row on
+# the same side. Measured over the 53 journals of batches 4-7: four such fits
+# in a row never occur in an ARRIVING trial (0 of 24) and occur five times in
+# the failing ones (the office-corridor drift cluster, four failures of ~30 s
+# each: dx -47 -50 -103 -198 -241 -252 -367 -390 at 6-16 inliers, refused
+# every time). Three in a row do occur in arrivals (2), so four it is.
+JUNK_CONSISTENT_N = 4
+JUNK_MIN_INLIERS = 6
 # A turn stop is verified against its own frame after the turn; if nothing
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
@@ -194,6 +202,11 @@ TURN_RETRY_MAX = 3
 # the user's path, with the counter just visible at the left edge; the stop's
 # frame fitted nothing head-on, the loop turned and walked into the wall.
 STOP_LOOK_DEG = (-25.0, 25.0)
+# THE PAN FROM THE RUN (ships False; the A/B decides). At a stop, look along
+# headings the drive's own stationary run recorded there and match each look
+# against the frame recorded AT that heading. See stationary_runs().
+STOP_PAN_FROM_RUN = False
+STOP_PAN_LOOKS = 2              # how many run frames to look at (first, middle)
 # A stop whose frame and both looks fit NOTHING is most likely an NPC in the
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.
@@ -456,6 +469,36 @@ def plan_indices(wps, stride=None):
     return plan
 
 
+def stationary_runs(wps):
+    """{last index of each stationary run: [(index, heading), ...] for the run}.
+
+    The frames the drive recorded while turning on the spot at a stop, each
+    with its own heading: a small panorama at every stop. Same stationarity
+    rule as plan_indices; frames whose heading is None are skipped.
+    """
+    runs, run = {}, []
+    for i, w in enumerate(wps):
+        if i == 0:
+            continue
+        lx = getattr(w, "lx", None) or 0.0
+        ly = getattr(w, "ly", None)
+        unknown = "stick:unknown" in (getattr(w, "note", "") or "")
+        stationary = (not unknown and ly is not None
+                      and abs(ly) <= STATIONARY_STICK and abs(lx) <= STATIONARY_STICK)
+        if stationary:
+            h = getattr(w, "heading", None)
+            if h is None:
+                h = getattr(w, "cam", None)
+            run.append((i, h))
+            continue
+        if run:
+            runs[run[-1][0]] = [(i2, h2) for i2, h2 in run if h2 is not None]
+            run = []
+    if run:
+        runs[run[-1][0]] = [(i2, h2) for i2, h2 in run if h2 is not None]
+    return runs
+
+
 def plan_min_iterations(plan, window=None):
     """Fewest iterations for a plan: one per turn-only target, and the push
     targets at ADVANCE_MAX per iteration."""
@@ -603,6 +646,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     # THE ARITHMETIC, BEFORE ANYTHING MOVES, because a TIMED_OUT with no
     # arithmetic beside it cannot be told from a navigation failure.
     plan = plan_indices(wps)
+    runs = stationary_runs(wps) if STOP_PAN_FROM_RUN else {}
     n_turn = sum(1 for _, push, _ in plan if not push)
     n_push = len(plan) - n_turn
     min_iters = plan_min_iterations(plan)     # the loop iterates per TARGET (audit)
@@ -638,6 +682,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     turn_retries = 0            # retries spent on the current turn stop
     since_advance = 0           # iterations since k last rose
     dx_run = []                 # dx of the last fits (>= WEAK_MIN_INLIERS), for the consistency rule
+    junk_run = []               # dx of the last JUNK fits (>= JUNK_MIN_INLIERS), four agreeing steer once
     last_cred_scale = 1.0       # scale of the last CREDIBLE fit
     escaped_prev = False        # the previous iteration escaped: no lateral undo this one
     waited_here = False         # the current stop has had its one wait
@@ -855,7 +900,37 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                                "seconds": round(secs, 3), "dx": round(dxt)}
             past_ev = not verified and real and kt is not None and kt > target_k
             looked = None
-            if not verified and not past_ev and heading is not None:
+            pan = runs.get(target_k) if STOP_PAN_FROM_RUN else None
+            if not verified and not past_ev and heading is not None and pan and len(pan) >= 2:
+                # THE PAN FROM THE RUN: look along headings the drive recorded
+                # at this stop and match each against ITS OWN frame. The fit's
+                # dx is then relative to that heading and needs no un-yawing.
+                picks = [pan[0], pan[len(pan) // 2]][:STOP_PAN_LOOKS]
+                best = None
+                for idx2, h2 in picks:
+                    turn_to(h2 % 360.0)
+                    img2 = capture()
+                    _save(shots, iteration, k, img2, log, suffix=f"_pan{idx2}")
+                    f2 = chain.locate(img2, idx2, window=1)
+                    i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
+                    if f2 is not None and i2 >= FIX_MIN_INLIERS and (best is None or i2 > best[1]):
+                        best = (h2, i2, f2)
+                turn_to(heading)
+                last_cmd = heading
+                if best is not None:
+                    h2, i2, f2 = best
+                    looked = {"pan_heading": round(h2, 1), "inliers": i2}
+                    verified = True
+                    fix_t, inl_t = f2, i2
+                    dx2 = getattr(f2, "dx", 0.0) or 0.0
+                    if abs(dx2) > LATERAL_TOL_PX:
+                        secs = min(LATERAL_CAP_SEC, abs(dx2) / (LATERAL_GAIN * LATERAL_MAG))
+                        if secs >= LATERAL_MIN_SEC:
+                            side = RIGHT if dx2 > 0 else LEFT
+                            strafe(side * LATERAL_MAG, secs)
+                            looked["strafe"] = {"side": "right" if side > 0 else "left",
+                                                "seconds": round(secs, 3), "px": round(dx2)}
+            elif not verified and not past_ev and heading is not None:
                 # LOOK AROUND before believing the stop is occluded or passed:
                 # a lateral displacement puts the stop's scene off to one side.
                 best = None
@@ -1121,12 +1196,28 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             dx_run = dx_run[-CONSISTENT_N:]
         else:
             dx_run = []
+        if fix is not None and inl_now >= JUNK_MIN_INLIERS and getattr(fix, "dx", None) is not None:
+            junk_run.append(float(fix.dx))
+            junk_run = junk_run[-JUNK_CONSISTENT_N:]
+        else:
+            junk_run = []
         consistent = None
+        consistent_n = 0
         if dx is None and not escaped and len(dx_run) >= CONSISTENT_N \
                 and all(abs(v) > LATERAL_TOL_PX for v in dx_run) \
                 and len({v > 0 for v in dx_run}) == 1:
             consistent = sorted(dx_run)[len(dx_run) // 2]
+            consistent_n = CONSISTENT_N
             dx = consistent
+            dx_run = []
+            junk_run = []
+        elif dx is None and not escaped and len(junk_run) >= JUNK_CONSISTENT_N \
+                and all(abs(v) > LATERAL_TOL_PX for v in junk_run) \
+                and len({v > 0 for v in junk_run}) == 1:
+            consistent = sorted(junk_run)[len(junk_run) // 2]
+            consistent_n = JUNK_CONSISTENT_N
+            dx = consistent
+            junk_run = []
             dx_run = []
         if dx is not None and not escaped and not escaped_prev and abs(dx) > LATERAL_TOL_PX:
             secs = min(LATERAL_CAP_SEC, abs(dx) / (LATERAL_GAIN * LATERAL_MAG))
@@ -1138,7 +1229,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                        "side": "right" if side > 0 else "left",
                        "seconds": round(secs, 3)}
             if consistent is not None:
-                lateral["consistent"] = CONSISTENT_N
+                lateral["consistent"] = consistent_n
 
         # `at_end` is what tells a terminal stall from a mid-chain one in
         # the journal: at the last waypoint k == target and no push can
