@@ -515,9 +515,13 @@ class IndexAdvance(unittest.TestCase):
 
     def test_after_an_unverified_turn_blind_pushes_are_capped_at_two(self):
         wps = [Wp(0, 90.0)]
-        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 12, start=1):
+        # 40 walking frames after the stop: ~20 push targets, so the stop is
+        # far from the six-target tail and only the unverified-turn cap can
+        # explain two blind pushes. (A 12-frame chain put the whole plan in
+        # the tail and the tail cap masked a mutant that removed this one.)
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 40, start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        ch = FakeChain(15, [Fix(k=1)], default=None)
+        ch = FakeChain(43, [Fix(k=1)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=24.05)
