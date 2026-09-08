@@ -33,6 +33,10 @@ grep -c 'STOP YAW [-+]' "overnight/chain_trials_$B.log" || true
 echo "\n== failures, with their reasons"
 grep '^\[.*\] FAILED' "overnight/chain_trials_$B.log" | cut -c1-200 || echo "  none"
 
+echo "\n== LANDING THE OBSERVABILITY PATCH (patch53: config print + turn_to's asked error)"
+.venv/bin/python -B drafts/pending_after_ab/apply_patch53.py "$PWD" \
+  && BASEBALL_TEST_RUN=1 .venv/bin/python -B tests/routing/test_chain_walk.py 2>&1 | tail -1
+
 echo "\n== PERCEPTION PROFILE (the 0.9s nobody has ever split)"
 .venv/bin/python -B tools/profile_perception.py --chain route_user_1853 -n 20 \
   2>&1 | tee "overnight/census/perception_profile_$B.txt"
