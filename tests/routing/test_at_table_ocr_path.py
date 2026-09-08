@@ -122,6 +122,33 @@ class OcrPath(unittest.TestCase):
         self.assertGreaterEqual(tp.score(img), tp.MATCH_MIN)
         self.assertTrue(tp.at_table(img))
 
+    def test_the_fee_token_is_seen_when_the_mask_and_the_words_are_not(self):
+        # b13 trial 5, it073 (overnight/chain_frames/t1788848574793): the
+        # character at the dealer's prompt on a dark frame, scored FAILED --
+        # score 0.147 under MATCH_MIN_WITH_WORD, one OCR word. The fee token
+        # "$50" reads on 0 of 7,885 route frames and on this one (census
+        # overnight/census/at_table_ocr_tokens_20260908.json). Pinned: neither
+        # earlier path accepts it, the fee path does.
+        im = Image.open(os.path.join(CASES, "prompt_dark_b13_t05_it073.jpg")).convert("RGB")
+        self.assertEqual(tp.FEE_BOX, (0.30, 0.58, 0.72, 0.70), "the census band")
+        self.assertLess(tp.score(im), tp.MATCH_MIN_WITH_WORD)
+        self.assertLess(tp.ocr_words(im), tp.OCR_MIN_WORDS)
+        self.assertTrue(tp.ocr_reads_fee(im))
+        self.assertTrue(tp.at_table(im))
+
+    def test_the_fee_token_reads_on_no_negative_fixture(self):
+        # Every negative this file knows, plus Wanda: the fee path must be as
+        # silent on them as the census says it is on the whole route.
+        names = [os.path.join(CASES, n) for n in (
+            "no_prompt_top_negative_k173.jpg", "no_prompt_top_negative_k89.jpg",
+            "no_prompt_one_word_0189.jpg")]
+        names += [QUEST_LOG, CLEAN_BAR]
+        names += [os.path.join(_ROOT, "test_fixtures", "wanda_prompt", n)
+                  for n in ("wanda_ref.jpg", "wanda_occluded.jpg")]
+        for path in names:
+            self.assertFalse(tp.ocr_reads_fee(load(path)), path)
+            self.assertFalse(tp.at_table(load(path)), path)
+
     def test_two_words_are_required(self):
         # Pinned as a literal: at one word the corpus was not measured clean.
         self.assertEqual(tp.OCR_MIN_WORDS, 2)

@@ -71,6 +71,19 @@ os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 import chain_walk
 import pose
 
+
+def _rewind_budget(tc, n):
+    """The rewind MECHANISM's tests run at the budget they were written for.
+
+    STOP_REWIND_MAX ships at 0 (see chain_walk.py and
+    test_the_rewind_ships_DISABLED_...). Every test that exercises a rewind, or
+    asserts that a rewind did NOT happen for a reason other than the budget,
+    sets 2 here first, so it still tests the rule it names.
+    """
+    prev = chain_walk.STOP_REWIND_MAX
+    chain_walk.STOP_REWIND_MAX = n
+    tc.addCleanup(setattr, chain_walk, "STOP_REWIND_MAX", prev)
+
 # The harness that SCORES the walk. It is pure enough to test offline —
 # `import _harness` pulls in nothing but the standard library, and no module
 # name under overnight/ collides with a repo-root one — and it had no test at
@@ -579,6 +592,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertTrue(res["arrived"])
 
     def test_a_stop_is_advanced_unverified_only_after_STOP_REWIND_MAX_rewinds(self):
+        _rewind_budget(self, 2)
         # WHAT THIS TEST USED TO SAY, and why it could not stay (patch41). It
         # was `..._accepted_unverified_after_the_retries`: three 9-inlier fits
         # bought three retry pushes and then k was stamped at the stop. Both
@@ -594,7 +608,7 @@ class IndexAdvance(unittest.TestCase):
         # side, and the loop backs off, waits and REWINDS to 1 -- the last
         # waypoint a credible fit named. Twice. The third time it gives up and
         # takes the stop.
-        self.assertEqual(chain_walk.STOP_REWIND_MAX, 2)
+        # (the budget is set to 2 above; the shipped value is 0, pinned below)
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35)] * 8 + [(0.0, 0.0)]
                                     + [(0.0, -0.35)] * 4, start=1):
@@ -621,6 +635,39 @@ class IndexAdvance(unittest.TestCase):
                          "the third time, the stop is taken unverified as before")
         self.assertNotIn("rewound_to", res["fixes"][15])
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
+
+    def test_the_rewind_ships_DISABLED_an_unverified_stop_is_taken_on_the_first_pass(self):
+        # SHIPPED AT ZERO (2026-09-08, batch 15). Rule C's rewind was measured
+        # live at the bar-entrance stop 129, the stop the audit's table named
+        # as the lever: across batches 12-14 a trial that took 129 UNVERIFIED
+        # (no rewind) arrived 11 of 11; in batch 15 the three trials that
+        # REWOUND there arrived 0 of 3, each lost at 109 on the re-approach.
+        # The rewind walks the character back along the same line into the
+        # NPC it had just met, and every action on the re-approach is
+        # unevidenced so the once-per-blockage turn-early never re-arms (b15
+        # trial 4, notes_cur_t04_1788853535.md). Rules A and B are unchanged;
+        # the mechanism stays and the tests above run it at 2 on purpose.
+        #
+        # Same walk as the test above, at the SHIPPED budget: after the back
+        # and the wait the stop is taken unverified on the FIRST pass, and no
+        # row carries `rewound_to`.
+        self.assertEqual(chain_walk.STOP_REWIND_MAX, 0)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35)] * 8 + [(0.0, 0.0)]
+                                    + [(0.0, -0.35)] * 4, start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(14, [Fix(k=1)], default=None, lookback=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:6], [
+            "advanced", "blind-advance", "blind-advance",
+            "turn-back", "turn-wait", "turned-unverified"], acts)
+        self.assertEqual(res["fixes"][5]["k"], 9,
+                         "the stop is taken unverified on the first pass")
+        self.assertEqual([f for f in res["fixes"] if "rewound_to" in f], [],
+                         "no rewind at the shipped budget")
 
     def test_no_retry_pushes_at_a_stop_after_a_wall_scale_fit(self):
         # The same stop as above, but the last credible fit before it read
@@ -721,6 +768,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertNotIn("turned-past", acts, acts)
 
     def test_after_an_unverified_turn_blind_pushes_are_capped_at_two(self):
+        _rewind_budget(self, 2)
         wps = [Wp(0, 90.0)]
         # 40 walking frames after the stop: ~20 push targets, so the stop is
         # far from the six-target tail and only the unverified-turn cap can
@@ -776,6 +824,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertIn(25.0, turns)
 
     def test_an_unverified_stop_rewinds_to_the_last_credible_k_and_re_approaches(self):
+        _rewind_budget(self, 2)
         # Rule C. Two blind pushes carry the estimate from 1 to 7; the stop at
         # 9 fits nothing head-on or either side. Stamping k = 9 there is what
         # put trial 13's estimate at the dealer's table while the character
@@ -808,6 +857,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertTrue(res["arrived"])
 
     def test_the_rewind_budget_is_spent_PER_STOP_not_per_walk(self):
+        _rewind_budget(self, 2)
         # STOP_REWIND_MAX belongs to A STOP, not to the walk: a chain with two
         # turn stops that both fit nothing rewinds twice at EACH. Without the
         # per-stop reset the second stop would find the budget already spent
@@ -851,6 +901,7 @@ class IndexAdvance(unittest.TestCase):
                          "each stop is taken unverified once its own budget is spent")
 
     def test_a_rewind_re_approaches_on_the_ORDINARY_blind_budget(self):
+        _rewind_budget(self, 2)
         # THE FIRST DRAFT OF RULE C MANUFACTURED A LOST. It set
         # `unverified_turn = True` on the rewind, meaning to bound the blind
         # pushes the three approaches spend between them. `_blind_cap` reads
@@ -905,6 +956,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertNotIn("escape:jump", acts[:22], acts)
 
     def test_a_relocalisation_is_the_rewind_floor_b11_trial_12(self):
+        _rewind_budget(self, 2)
         # THE INCIDENT RULE C DOES NOT CHANGE, PINNED SO NOBODY READS IT INTO
         # THE JOURNALS. b11 trial 12 (route_user_1853_t12_1788843644.jsonl
         # rows 34-37) went: WIDE relocalisation past the stop to waypoint 144
@@ -956,6 +1008,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual([f for f in res["fixes"] if "rewound_to" in f], [])
 
     def test_a_rewind_never_falls_back_past_a_stop_that_verified(self):
+        _rewind_budget(self, 2)
         # `last_cred_k` was written only by the push branch and the two wide
         # relocalisations, so a stop that VERIFIED left no mark on it. This
         # walk gets credible push fits at 1, 4 and 7, VERIFIES the stop at 9,
@@ -1020,6 +1073,7 @@ class IndexAdvance(unittest.TestCase):
                         "circling the two stops until the cap")
 
     def test_a_fit_at_exactly_WEAK_MIN_INLIERS_is_not_nothing_at_a_stop(self):
+        _rewind_budget(self, 2)
         # RULE A IS A STRICT `<`, AND THE BOUNDARY IS NOT PINNED ANYWHERE ELSE
         # -- a skeptic mutated it to `<=` and all 145 tests stayed green.
         # WEAK_MIN_INLIERS is the line between junk (6-13) and right-but-thin
@@ -1093,6 +1147,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertNotIn("turn-retry", at_it, at_it)
 
     def test_a_past_acceptance_advances_and_never_rewinds(self):
+        _rewind_budget(self, 2)
         # TURNED-PAST IS UNTOUCHED by the rewind. A thin-but-real fit at a
         # LATER waypoint is evidence the stop is behind the character, and
         # rewinding on it would walk back over ground already covered. k

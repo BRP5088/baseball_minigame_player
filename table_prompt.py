@@ -22,6 +22,7 @@ though both are white text in the same place.
 
 import glob
 import os
+import re
 
 import numpy as np
 from PIL import Image
@@ -265,7 +266,9 @@ def at_table(img):
     words = ocr_words(img)
     if words >= OCR_MIN_WORDS:
         return True
-    return s >= MATCH_MIN_WITH_WORD and words >= 1
+    if s >= MATCH_MIN_WITH_WORD and words >= 1:
+        return True
+    return ocr_reads_fee(img)
 # THE STROKE MASK CANNOT SEE WHITE TEXT OVER A BRIGHT BACKGROUND, BY
 # CONSTRUCTION. It keeps a pixel only if it is > STROKE_BRIGHT and its 11x11
 # neighbourhood averages < STROKE_LOCAL -- the rule that removes the dealer's
@@ -321,3 +324,36 @@ def ocr_words(img):
 
 def ocr_says_prompt(img):
     return ocr_words(img) >= OCR_MIN_WORDS
+
+
+# THE FEE TOKEN, "$50" / "(50)", IS THE SAFEST ADDITION ON RECORD (2026-09-08).
+# Three batch-13 trial-5 arrivals stood at the prompt on a dark frame and were
+# scored FAILED: score 0.147 under MATCH_MIN_WITH_WORD with one word. Measured
+# over EVERY route frame on disk, 3x, PSM 6, both polarities, on FEE_BOX
+# (overnight/census/at_table_ocr_tokens_20260908.json):
+#
+#     "$50" or "(50)" read on route frames (k < 185)    0 of 7,885
+#     read on the known prompt frames                   58 of 81
+#     prompt WORDS >= 1 on the same route frames        24 of 7,885
+#
+# So it runs LAST, only after the mask, the two-word rule and the
+# word-plus-score rule have all said no, and it reads the census band exactly
+# -- FEE_BOX is not TEXT_BOX, and the zero was measured on FEE_BOX.
+FEE_BOX = (0.30, 0.58, 0.72, 0.70)
+FEE_UPSCALE = 3
+_FEE_RE = re.compile(r"\$ ?50|\(\s*\$?\s*5\s*0\s*\)|50\)|\(50")
+
+
+def ocr_reads_fee(img):
+    """Does the prompt band read the fee, "$50" or "(50)", in either polarity?"""
+    from PIL import ImageOps
+    import ocr_glyphs
+    w, h = img.size
+    x0, y0, x1, y1 = FEE_BOX
+    c = img.convert("L").crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    c = c.resize((c.width * FEE_UPSCALE, c.height * FEE_UPSCALE), Image.BICUBIC)
+    for cand in (c, ImageOps.invert(c)):
+        txt = (ocr_glyphs.image_to_text(cand, OCR_PSM, None) or "").lower()
+        if _FEE_RE.search(txt):
+            return True
+    return False

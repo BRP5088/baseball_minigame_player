@@ -265,7 +265,14 @@ TURN_RETRY_MAX = 3
 # an arriving trial takes, and the stop table (audit/stop_table.md) says a
 # stop taken unverified arrives 1 in 14 at 129 and 0 in 6 at 166, so a third
 # re-approach is worth less than the seconds it costs.
-STOP_REWIND_MAX = 2
+# SHIPPED AT ZERO (2026-09-08, batch 15). Measured at the bar-entrance stop
+# 129: batches 12-14 took it UNVERIFIED and arrived 11/11; batch 15 REWOUND
+# there 3 times and arrived 0/3, each lost at 109 on the re-approach -- the
+# rewind walks the character back into the NPC it had just met, and every
+# action on a re-approach is unevidenced so turn-early never re-arms (b15 t4,
+# agent_progress/closed-loop/review/notes_cur_t04_1788853535.md). The
+# mechanism stays; its tests run it at 2 for themselves.
+STOP_REWIND_MAX = 0
 # LOOK AROUND AT AN UNVERIFIED STOP before believing "occluded / past": yaw
 # these many degrees each way, match the stop's frame at each, and if a
 # credible fit appears take its lateral offset as a correction. Batch 5 trial
