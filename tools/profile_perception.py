@@ -65,7 +65,8 @@ def run(chain_name, n, window):
           f"(paid ONCE per walk, not per iteration)")
 
     caps, locs, kps = [], [], []
-    k_hint = 1
+    hits = 0                    # a locate that ABSTAINS may do less work than a
+    k_hint = 1                  # real one; without this the timing can flatter
     for i in range(n):
         t = time.perf_counter()
         img = compass.fast_capture()
@@ -82,9 +83,13 @@ def run(chain_name, n, window):
         places.keypoints(img)
         kps.append(time.perf_counter() - t)
         if fix is not None:
+            hits += 1
             k_hint = fix.k
 
     print(f"\nPER ITERATION, measured on the live stream (window={window}):")
+    print(f"  locate returned a Fix on {hits} of {len(locs)} samples -- an ABSTAIN "
+          f"does less work,\n  so a low hit rate means these timings are a FLOOR, "
+          f"not the walking cost.")
     print(summarise("fast_capture", caps))
     print(summarise("Chain.locate (whole)", locs))
     print(summarise("  of which ORB detect", kps))
@@ -96,6 +101,44 @@ def run(chain_name, n, window):
         print(f"  UNATTRIBUTED          {(1.320 - per - 0.400)*1000:.0f} ms -- turning, "
               f"settling, and the rest of the loop")
     return caps, locs
+
+
+def offline(chain_name, n, window):
+    """The cost of a locate that SUCCEEDS, timed on the chain's own frames.
+
+    The live mode's fit cost is a FLOOR whenever the character is parked off the
+    chain: locate abstains, and an abstain does less work than a match. Feeding
+    each recorded waypoint's own frame back in guarantees a hit, so this is the
+    matching cost the walk actually pays. No rig, no console.
+    """
+    from PIL import Image      # places._as_gray expects a PIL image, as
+    import chain as chain_mod  # compass.fast_capture returns
+
+    ch = chain_mod.Chain.load(os.path.join("chains", chain_name), log=lambda *a: None)
+    wps = [w for w in ch.waypoints if getattr(w, "path", "") and os.path.exists(w.path)]
+    if not wps:
+        raise SystemExit("no waypoint frames on disk for " + chain_name)
+    step = max(1, len(wps) // n)
+    picked = wps[::step][:n]
+    locs, hits, reads = [], 0, []
+    for w in picked:
+        t = time.perf_counter()
+        img = Image.open(w.path).convert("RGB")
+        reads.append(time.perf_counter() - t)
+        if img is None:
+            continue
+        t = time.perf_counter()
+        fix = ch.locate(img, w.index, window=window)
+        locs.append(time.perf_counter() - t)
+        if fix is not None:
+            hits += 1
+    print(f"\nOFFLINE, each waypoint's OWN frame (window={window}), so the fit MUST hit:")
+    print(f"  locate returned a Fix on {hits} of {len(locs)} -- if this is not "
+          f"almost all of them, the\n  chain or the window is wrong and the "
+          f"number below means nothing.")
+    print(summarise("Chain.locate (hit)", locs))
+    print(summarise("  (Image.open, not paid live)", reads))
+    return locs, hits
 
 
 def selftest():
@@ -139,11 +182,16 @@ if __name__ == "__main__":
     ap.add_argument("-n", type=int, default=20)
     ap.add_argument("--window", type=int, default=3)
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--offline", action="store_true",
+                    help="time a SUCCEEDING locate on the chain's own frames; no rig")
     ap.add_argument("--force", action="store_true",
                     help="run even while a harness is live (do not)")
     a = ap.parse_args()
     if a.selftest:
         selftest()
+        raise SystemExit(0)
+    if a.offline:
+        offline(a.chain, a.n, a.window)
         raise SystemExit(0)
     if harness_running() and not a.force:
         raise SystemExit("REFUSING: chain_trials.py is running. ORB here would "

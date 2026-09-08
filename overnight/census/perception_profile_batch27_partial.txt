@@ -1,0 +1,13 @@
+Chain.load  2.88s for 205 waypoints (paid ONCE per walk, not per iteration)
+
+PER ITERATION, measured on the live stream (window=3):
+  locate returned a Fix on 0 of 20 samples -- an ABSTAIN does less work,
+  so a low hit rate means these timings are a FLOOR, not the walking cost.
+  fast_capture           n= 20  median    33.9 ms  p10    30.4  p90    41.3
+  Chain.locate (whole)   n= 20  median    16.8 ms  p10    15.8  p90    19.4
+    of which ORB detect  n= 20  median     8.9 ms  p10     8.6  p90     9.3
+
+  capture + locate      51 ms median
+  a push is             400 ms of stick
+  a journal iteration   1320 ms median (n=1748, last 40 journals)
+  UNATTRIBUTED          869 ms -- turning, settling, and the rest of the loop
