@@ -39,6 +39,12 @@ The loop for the night, in order, repeated:
    The same shape as the end-turn rule, at every stop: when the best look fits with |dx| > END_TURN_PX, turn
    toward the scene (dx / px-per-degree, capped) and re-verify instead of retrying pushes or accepting.
    Candidate after (a); build only with the end-turn machinery already in.
+   (f) READY: `drafts/pending_after_ab/apply_patch36.py` — no retry pushes at a stop when the last credible fit
+   had WALL scale (the fast-vs-slow study, `agent_progress/closed-loop/fast_runs/notes.md`: every slow arrival
+   lost 30-45 s at stops 88/129 to three empty retries then the ladder, at scale 2.2-2.6; the retries that
+   helped carried 1.1-1.2; wall-scale fits: fast runs 0-2, slow 3-6, no overlap at n=5). Verified on a cp
+   scratch copy with the module under test proven: 118 tests, mutants "gate removed" and "WALL_SCALE 3.5"
+   caught. Lands with (a) at the batch end.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
