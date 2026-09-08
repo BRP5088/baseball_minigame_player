@@ -503,6 +503,8 @@ class IndexAdvance(unittest.TestCase):
         strafes = rig.strafes()
         self.assertEqual(len(strafes), 1)
         self.assertLess(strafes[0][1], 0.0, "the scene was to the LEFT: strafe left")
+        self.assertLessEqual(strafes[0][2], chain_walk.LATERAL_CAP_SEC,
+                             "a yawed fit earns one ordinary correction, never a double one")
         self.assertNotIn("turn-retry", acts)
         self.assertEqual(res["fixes"][1]["lateral"]["deg"], -25.0)
 

@@ -884,7 +884,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     # walking heading is dx + ddeg * 19.7 (ddeg < 0 = left).
                     dx2 = getattr(f2, "dx", 0.0) or 0.0
                     px = dx2 + ddeg * 19.7
-                    secs = min(LATERAL_CAP_SEC * 2, abs(px) / (LATERAL_GAIN * LATERAL_MAG))
+                    # ONE ordinary correction, not a double one: batch 7 trial
+                    # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
+                    # strafe RIGHT that three credible head-on fits then undid
+                    # LEFT. A yawed fit sees the scene half out of frame; it
+                    # earns a normal step, and the next head-on fit decides.
+                    secs = min(LATERAL_CAP_SEC, abs(px) / (LATERAL_GAIN * LATERAL_MAG))
                     if secs >= LATERAL_MIN_SEC:
                         side = RIGHT if px > 0 else LEFT
                         strafe(side * LATERAL_MAG, secs)
