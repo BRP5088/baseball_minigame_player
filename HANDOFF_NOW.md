@@ -4,14 +4,12 @@
 
 ## Now
 
-- **THE 25 IS RUNNING (relaunched 20:11:57 after batch 5, 1/3, added the look-around at unverified stops, af216b0; the first launch at 20:05 went 1/3 and was stopped)**: `overnight/chain_trials.py --chain route_user_1853 --trials 25`
-  -> `overnight/chain_trials.json` / `.log`, frames `overnight/chain_frames/t*/`, journals
-  `overnight/chain_journals/route_user_1853_t*.jsonl`. The requirement is 25 CONSECUTIVE arrivals; count the
-  longest run of ARRIVED lines. Batches so far (archived as `overnight/chain_trials_batch{1..4}.*`):
-  batch 1 2/4 (turn at the door taken short), batch 2 0/2 and batch 3 0/2 (lost at the street crossing),
-  batch 4 8/10 at 90-121 s (both misses: a stop whose frame fitted nothing, retried into an NPC). Each fixed
-  in `chain_walk.py`, the last one d9fbba8. Review a trial: `tools/turn_review.py <shots dir> <journal>`,
-  pair them by time (the journal name carries the epoch; the shots dir its ms). The user is at dinner.
+- **THE 25, sixth launch, RUNNING (21:08:25)** with the audit round (3df1727): `overnight/chain_trials.py
+  --chain route_user_1853 --trials 25`, 180 s cap, STUCK after 12 non-advancing iterations, LOST after 9
+  blind. Earlier launches tonight, archived as `overnight/chain_trials_batch{4,5,5b,5c,5d,5e}.*`: batch 4 8/10;
+  5b 2/6; 5c 2/3; 5e 6/14. Each stop's cause and fix is in `git log -- chain_walk.py`. Reviews and audits:
+  `agent_progress/closed-loop/{review,audit,panel,snoopy_sweep}/`. Review a trial: `tools/turn_review.py
+  <shots dir> <journal>` (pair by time; look at the turns first). The user is awake and watching.
 - **CLOSED-LOOP TRIALS RUNNING** (relaunched after trial 1's lesson): `overnight/chain_trials.py --chain
   route_user_1853 --trials 10` -> `overnight/chain_trials.json`, `.log`, frames `overnight/chain_frames/t*/`,
   journals `overnight/chain_journals/`. Chain = the USER's own drive (`chains/route_user_1853`, 205 waypoints,

@@ -661,6 +661,33 @@ Pair a journal with its shots by time.
 six pushes there before a jump cleared it); the user's camera pitch on the
 stairs (every fit there carries a 200-300 px vertical offset the loop ignores).
 
+**THE AUDIT ROUND (2026-09-07 21:00, commit 3df1727).** After eight rapid
+patches the controller was audited by two independent skeptics while the
+console ran; every confirmed finding was a guard that could not fire or a
+rule that fired on the wrong measurement, the project's signature shape:
+the plan pointer never rewound after a regression (the target then sat past
+the window forever); a thin fit advanced the estimate to the target without
+naming it; a stop verified only when its fit was BADLY misaligned; the
+look-around's frames overwrote the frame the verdict was made on; and the
+gates 29/120 sat inside the overlap of the census they cited, which had been
+built on a 41-waypoint chain while the live run loads 205. All fixed and
+mutation-tested. **The live-frame census** (`tools/live_gate_census.py` ->
+`overnight/census/live_gate_census.json`, 1,858 in-window fits, 468 far
+matches): true fits from arriving trials median 98 inliers, p25 49; wrong-
+place matches p95 126, MAX 164. No count separates them; the sequence window
+does the work, and only the wide-search gate was moved (to 165, above the
+wrong-place maximum). **The stop table** (`agent_progress/closed-loop/audit/
+stop_table.md`, 43 journals): the bar-entrance stop at chain 129 verifies 58%
+of the time and a trial that takes it unverified arrives 1 in 14; stop 166
+unverified arrives 0 in 6. That stop is the lever. **Arrival review** (13
+arrivals, frame by frame): 12 minor detours, 1 wandered-and-lucky, 0 off the
+route; every detour was a wedge at a real obstacle (the exit-door threshold,
+the bartender's counter with two NPCs and two steins). **Failure review** (10
+failures): turn-taken-short 5, NPC in view 2, blind into an obstacle, estimate
+ran ahead, lateral displacement 1 each. Measured rates by version: batch 4
+8/10, batch 5e 6/14 (three rules shipped in between, one of them a
+regression corrected in 5e); the audit round runs as this is written.
+
 
 ### (a) Where the route stands
 

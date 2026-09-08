@@ -25,8 +25,10 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, running on your drive", "state": "running",
-     "detail": "25 trials, 400 s cap, launched 20:05. The requirement is 25 in a row. Batch 4 before it: 8 of 10 arrived in 90-121 s; both misses came at the bar-entrance stop where an NPC filled the view and three retry pushes walked into her. Fixed: a stop whose picture fits nothing is treated as occluded, no retry."},
+    {"title": "THE 25, sixth launch, with the audit round", "state": "running",
+     "detail": "Two skeptics audited the controller while the earlier launches ran and confirmed five guards that could not fire or fired on the wrong measurement; all fixed and mutation-tested. A live-frame census showed no inlier count separates true fits from wrong places (the sequence window does the work), so only the wide-search gate moved. The stop table says the bar-entrance stop is the lever: verified 58% of the time, and an unverified pass there arrives 1 in 14. Earlier tonight: batch 4 8/10, batch 5e 6/14."},
+    {"title": "Arrival review: did they wander?", "state": "done",
+     "detail": "13 arrivals read frame by frame: 12 minor detours, 1 wandered-and-lucky, 0 off the route. Every detour was a wedge at a real obstacle: the exit-door threshold and the bartender's counter with two NPCs and two steins."},
     {"title": "Batches 1-4", "state": "done",
      "detail": "1: 2/4, turned at the door before reaching it (your call). 2 and 3: 0/2 each, lost at the street crossing where the shop facade looks the same from the doorway and halfway across. 4: 8/10. Each failure was one spot and one fix."},
     {"title": "Sensor go/no-go", "state": "done",
