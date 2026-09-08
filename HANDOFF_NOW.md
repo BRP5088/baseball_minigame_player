@@ -27,9 +27,14 @@ NPC in the portrait room. Every failure has a reader's note in `agent_progress/c
   (10 a side): arrival 9/10 vs 9/10, and THE INSTRUMENT -- the first fit after the stop -- read
   -352 px on every off-arm trial and +72 px on every on-arm trial. Shipped ON at 07:43 (da361ef).
 
-**Refused by census tonight (do not rebuild):** a runner-up margin on wide relocalisations; a
-lateral-offset or scale gate at the 129 stop; a scene-change gate on blind pushes; a stuck-progress
-reset (too rare). Details and raw numbers: `agent_progress/closed-loop/review/census_after_129_notes.md`.
+**Refused by census tonight and this morning (do not rebuild without new evidence):** a runner-up
+margin on wide relocalisations; a lateral-offset or scale gate at the 129 stop; a scene-change gate on
+blind pushes; a stuck-progress reset; a mid-chain end turn (5 of 249 trials); the end-game tail (at its
+floor); the head-on large-dx yaw (costs nothing); the escape-ladder reorder (a time saver at one
+waypoint, arrival ceiling ~zero); the EARLY RESCUE at an unverified stop (its believe gate sits inside
+one population, 129 is where it can only lose, and it is Rule C again). Details and raw numbers:
+`agent_progress/closed-loop/review/census_after_129_notes.md` and the workflow directories under
+`agent_progress/closed-loop/{wanderers,early_rescue,tail_headon}/`.
 
 **Batch 21 (da361ef, rescue + yaw ON, 07:43-08:27): 21 of 25, walk median 81.4 s, best streak 11.**
 18 yaw firings, 5 rescue firings, and THE RESCUE'S FIRST WIN (t18: lost at the bar entrance, it
