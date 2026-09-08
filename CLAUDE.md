@@ -1416,6 +1416,20 @@ the step. Measured 2026-09-07: four flagship agents drafting scripts burned
 already killed; the static QA audit on Haiku, ten agents, cost 1.16M for an
 evening's findings. Token bleed is a failure of the DISPATCH, not of the agent.
 
+**16a. A SUB-AGENT'S SCRATCH TREE IS A COPY, NEVER A SYMLINK FARM, AND NEVER
+INSIDE THE CHECKOUT.** 2026-09-07 22:47: a skeptic building a "scratch copy
+with symlinks to the rest of the checkout" ran its `ln -s` loop with the
+CHECKOUT as the destination, and 65 tracked test files under `tests/routing/`
+became symlinks pointing at their own absolute path. Nothing failed for half
+an hour: the one test file it copied was real, its runs were green, and the
+damage surfaced only when the pre-commit hook hit "Too many levels of
+symbolic links". `git status --porcelain | grep '^ T'` lists the casualties
+and `git checkout --` restores tracked ones; an UNTRACKED file replaced this
+way is gone. Every dispatch prompt says: build scratch trees with `cp`, under
+the scratchpad, and never run `ln` with a path inside the checkout. After any
+sub-agent finishes, `find . -type l` outside the venvs and `git status` for
+`T` entries, before trusting anything.
+
 **17. THE A/B RUNNER RE-IMPORTS `graph_walk.py` FROM DISK ON EVERY TRIAL, SO A
 MUTANT ON DISK FOR ONE SECOND IS THE CODE A LIVE TRIAL RUNS.** `_harness.run_trial`
 spawns `python <script> --one-trial <arm>` per trial — that is the design, so

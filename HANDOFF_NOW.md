@@ -1,9 +1,15 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 22:34. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 23:20. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
+- **THE PAN A/B, THIRD ATTEMPT, RUNNING (23:2x, commit with 'turn early when blind near a turn stop'):** the
+  turn-early rule LANDED (`drafts/pending_after_ab/apply_patch33.py` applied; notes and every skeptic's scratch
+  work under `agent_progress/closed-loop/turn_early/`; 117 tests; 8 mutants caught). Same harness:
+  `overnight/chain_trials.py --chain route_user_1853 --trials 20 --arms off,on`. **Landing it cost 25 minutes
+  of repair:** a skeptic's scratch-tree setup symlinked 65 tracked files under `tests/routing/` to themselves
+  inside the checkout (CLAUDE.md §10.16a); restored with `git checkout --`, the full suite re-run afterwards.
 - **THE PAN A/B, SECOND ATTEMPT, STOPPED 22:24:47 at 7 trials (`overnight/chain_trials_ab_pan_try2.*`): pan off
   1/4, pan on 1/2, 1 INVALID (the chiaki game window vanished mid-walk for a few seconds; chiaki itself never
   restarted).** Trials 5, 6, 7 were all lost at Wanda (k=112) with the FULL ladder — jump, back, a 0.6 s left
