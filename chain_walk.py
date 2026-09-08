@@ -391,6 +391,17 @@ STOP_YAW_NEAR_FIT_ONLY = False
 # of the user's walk. It is the census's own boundary -- the unbiased population
 # above is exactly 128/129/130 -- and not a tuned number.
 STOP_YAW_FIT_TOL = 1
+# NO STOP YAW AT THE PLAN'S LAST TURN-ONLY STOP (patch51). The yaw is cleared
+# at the NEXT turn-only stop; the last stop has none, so a yaw taken there
+# rides the whole final approach and the end turn then aims the tail ON TOP
+# of it. Census of the 196 stop over 266 walks since batch 16
+# (agent_progress/closed-loop/review/census_after_129_notes.md, 2026-09-08):
+# head-on or strafed, 225 arrived / 1 ended without the prompt / 1 failed;
+# looked and YAWED (6), 4 arrived / 2 ended at 204 without the prompt (b24
+# t12 +29.2 deg, b26 t1 +10.6 deg). The last three pushes go straight at the
+# dealer and the prompt zone is 0.05 u wide (OPEN-22): a rotated final
+# approach walks past it. The strafe there is the measured 225/227 path.
+STOP_YAW_SKIP_LAST_STOP = True
 # A stop whose frame and both looks fit NOTHING is most likely an NPC in the
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.
@@ -1564,7 +1575,14 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     fit_off = int(getattr(f2, "k", target_k)) - target_k
                     near_fit = (not STOP_YAW_NEAR_FIT_ONLY
                                 or abs(fit_off) <= STOP_YAW_FIT_TOL)
-                    if STOP_LOOK_YAW and near_fit and abs(px) > LATERAL_TOL_PX:
+                    # ... and never at the plan's LAST stop: nothing clears
+                    # the yaw after it, so it would ride the whole final
+                    # approach under the end turn (STOP_YAW_SKIP_LAST_STOP).
+                    last_stop = (STOP_YAW_SKIP_LAST_STOP
+                                 and last_stop_j is not None
+                                 and pi == last_stop_j)
+                    if (STOP_LOOK_YAW and near_fit and not last_stop
+                            and abs(px) > LATERAL_TOL_PX):
                         # THE OFFSET AT A LOOKED STOP IS A YAW, NOT A POSITION
                         # (see STOP_LOOK_YAW): turn by it instead of stepping
                         # sideways, and let it ride every push until the next
@@ -1597,6 +1615,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                             looked["yaw_skipped"] = {
                                 "fit_k": int(getattr(f2, "k", target_k)),
                                 "off": fit_off}
+                            if last_stop:
+                                looked["yaw_skipped"]["reason"] = "last stop"
                         # ONE ordinary correction, not a double one: batch 7 trial
                         # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
                         # strafe RIGHT that three credible head-on fits then undid
@@ -1809,8 +1829,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                    if looked is not None and "yaw" in looked else "")
                 # ... and a yaw the near-fit gate refused names the offset that
                 # refused it, beside the sidestep that ran in its place.
-                + ((f"  STOP YAW skipped (fit "
-                    f"{looked['yaw_skipped']['off']:+d} from the stop), strafe "
+                + (("  STOP YAW skipped ("
+                    + (looked["yaw_skipped"]["reason"]
+                       if "reason" in looked["yaw_skipped"] else
+                       f"fit {looked['yaw_skipped']['off']:+d} from the stop")
+                    + "), strafe "
                     + (f"{looked['strafe']['side']} for "
                        f"{looked['strafe']['seconds']:.2f}s on "
                        f"{looked['strafe']['px']} px"

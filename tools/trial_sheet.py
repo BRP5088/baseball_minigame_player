@@ -27,6 +27,28 @@ LINE_RE = re.compile(
     r".*?failure=(.*)")
 
 
+def row_for(rows, path):
+    """The journal row THIS FRAME belongs to.
+
+    An iteration has always been able to save more than one FRAME (a rescue's
+    three looks), and since `chain_walk.DOOR_STOP_EXTRA_PUSH` it can record
+    more than one ROW: the door step's row shares the stop's iteration number
+    and is written FIRST. Looking the label up by number alone therefore put
+    "door-step" on the STOP'S OWN frame -- the frame the user's standing rule
+    asks a reader to judge the turn on. A label that reads as evidence and is
+    not is CLAUDE.md 10.1, and this tool is where a reader meets it.
+
+    Falls back to the iteration's first row, so a frame with no door step, or
+    a suffix nothing has taught this function about, labels as it always did.
+    """
+    base = os.path.basename(path)
+    itn = int(re.search(r"it_(\d+)_", base).group(1))
+    here = [r for r in rows if r["iteration"] == itn]
+    extra = "_door" in base
+    return next((r for r in here if (r.get("action") == "door-step") == extra),
+                here[0] if here else None)
+
+
 def main(tn, log=os.path.join(ROOT, "overnight", "chain_trials.log")):
     line = next((l for l in open(log) if re.match(r"\[ *%d\] " % tn, l)), None)
     if line is None:
@@ -42,11 +64,11 @@ def main(tn, log=os.path.join(ROOT, "overnight", "chain_trials.log")):
     dirs = sorted(glob.glob(os.path.join(ROOT, "overnight", "chain_frames", "t*")), key=lambda p: int(os.path.basename(p)[1:]))
     d = next(p for p in dirs if jt <= int(os.path.basename(p)[1:]) // 1000 <= jt + 90)
     rows = [json.loads(l) for l in open(j)]
-    fs = sorted(glob.glob(os.path.join(d, "it_[0-9][0-9][0-9]_k*[0-9].jpg")), key=lambda p: int(re.search(r"it_(\d+)_", p).group(1)))
+    fs = sorted(glob.glob(os.path.join(d, "it_[0-9][0-9][0-9]_k*[0-9].jpg")), key=lambda p: (int(re.search(r"it_(\d+)_", p).group(1)), p))
     ims = []
     for p in fs[::3]:
         im = cv2.resize(cv2.imread(p), (320, 180)); itn = int(re.search(r"it_(\d+)_", p).group(1))
-        row = next((r for r in rows if r["iteration"] == itn), None)
+        row = row_for(rows, p)
         cv2.putText(im, f"it{itn} k{row['k']} {row['action'][:12]}" if row else f"it{itn}", (4, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
         ims.append(im)
     rws = [cv2.hconcat(ims[i:i + 6]) for i in range(0, len(ims), 6)]

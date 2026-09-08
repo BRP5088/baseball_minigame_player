@@ -2294,7 +2294,22 @@ class StopLookYaw(unittest.TestCase):
     (6 firings, +141..+230, an over-turn of 29-57% of the yaw, 4 arrived). The
     flag sends that second population to the sidestep instead, and its tests
     drive it both ways for the same reason.
+
+    STOP_YAW_SKIP_LAST_STOP (patch51) is the third flag and it ships True: no
+    yaw at the plan's LAST turn-only stop, because nothing clears it after
+    that and it rides the whole final approach under the end turn (the 196
+    census: yawed 2 of 6 ended without the prompt, head-on or strafed 1 of
+    227). The single-stop rig every test above drives has its only stop AS
+    the plan's last, so setUp turns that flag OFF for them: they are the
+    yaw's own mechanics and the A/B's off arm, and the patch51 tests below
+    turn it on explicitly.
     """
+
+    def setUp(self):
+        prev = chain_walk.STOP_YAW_SKIP_LAST_STOP
+        self.shipped_skip_last = prev      # the value as imported, for the pin
+        chain_walk.STOP_YAW_SKIP_LAST_STOP = False
+        self.addCleanup(setattr, chain_walk, "STOP_YAW_SKIP_LAST_STOP", prev)
 
     # wp2 is the STOP (ly = 0, a stationary run of one). The pushes after it
     # carry a DIFFERENT heading from the stop's, so a yaw riding the next push
@@ -2631,6 +2646,81 @@ class StopLookYaw(unittest.TestCase):
         self.assertEqual(self.turns(rig)[:5], [90.0, 30.0, 90.0, 60.0, 30.0],
                          "to the stop, the run's first and middle headings, "
                          "BACK TO THE STOP'S OWN HEADING -- no yaw on it")
+
+    # -- patch51: no yaw at the plan's LAST turn-only stop --------------------
+
+    @staticmethod
+    def _skip_last(go, *a, **kw):
+        """Run a walk with the yaw ON and its LAST-STOP rule on: the shipped pair."""
+        old = (chain_walk.STOP_LOOK_YAW, chain_walk.STOP_YAW_SKIP_LAST_STOP)
+        chain_walk.STOP_LOOK_YAW = True
+        chain_walk.STOP_YAW_SKIP_LAST_STOP = True
+        try:
+            return go(*a, **kw)
+        finally:
+            (chain_walk.STOP_LOOK_YAW,
+             chain_walk.STOP_YAW_SKIP_LAST_STOP) = old
+
+    def test_the_last_stop_rule_ships_ON(self):
+        # Literal (10.11), read as IMPORTED: setUp turns the flag off for the
+        # single-stop rig, so the live attribute is False inside every test
+        # here. The 196 census: yawed 2 of 6 ended without the prompt
+        # against 1 of 227 head-on or strafed.
+        self.assertIs(self.shipped_skip_last, True)
+        self.assertIs(chain_walk.STOP_YAW_SKIP_LAST_STOP, False,
+                      "ANTI-VACUITY: setUp did switch it off for the rig")
+
+    def test_at_the_plans_LAST_stop_the_look_STRAFES_and_says_why(self):
+        # The default rig's only stop IS the plan's last. The fit is AT the
+        # stop (off 0) and px is the yaw tests' own -257.5 -- everything that
+        # fires the yaw at a mid stop -- and the strafe runs instead, byte for
+        # byte the flag-off path, with the reason in the journal.
+        rig = self._look_at(2)
+        res = self._skip_last(rig.go)
+        self.assertEqual(self.turns(rig), self.STRAFE_TURNS,
+                         "no yaw turn; the next push takes the plan's raw 10.0")
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)])
+        lat = res["fixes"][1]["lateral"]
+        self.assertNotIn("yaw", lat)
+        self.assertEqual(lat, {"deg": -25.0, "inliers": 90,
+                               "yaw_skipped": {"fit_k": 2, "off": 0,
+                                               "reason": "last stop"},
+                               "strafe": self.STRAFE_LAT},
+                         "the journal names the rule that refused the yaw")
+        self.assertTrue(res["arrived"])
+
+    def test_a_MID_stop_still_YAWS_with_the_last_stop_rule_on(self):
+        # Two stops. The yaw fires at the first and is cleared at the second,
+        # which is the plan's last and is verified head-on here -- the same
+        # rig and the same turn list as
+        # test_the_yaw_is_cleared_at_the_next_turn_only_stop, with the
+        # shipped pair on. A mutant that refuses every stop fails here.
+        rig = self._rig(self._wps(after=[(10.0, -0.35), (20.0, 0.0),
+                                         (30.0, -0.35)]),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3), Fix(k=4, inliers=200)], table_at=8)
+        res = self._skip_last(rig.go)
+        self.assertEqual(self.turns(rig),
+                         [90.0, 0.0, 335.0, 25.0, 0.0, 346.9, 356.9,
+                          20.0, 30.0])
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["yaw"], {"deg": -13.1, "px": -258})
+        self.assertNotIn("yaw_skipped", lat)
+        self.assertEqual(rig.strafes(), [])
+        self.assertTrue(res["arrived"])
+
+    def test_with_the_rule_OFF_the_last_stop_YAWS_as_it_did_before(self):
+        # The control (the A/B's off arm): the pre-patch51 path, pinned.
+        prev = chain_walk.STOP_YAW_SKIP_LAST_STOP
+        chain_walk.STOP_YAW_SKIP_LAST_STOP = False
+        self.addCleanup(setattr, chain_walk, "STOP_YAW_SKIP_LAST_STOP", prev)
+        rig = self._look_at(2)
+        res = self._on(rig.go)
+        self.assertEqual(self.turns(rig), self.YAW_TURNS)
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["yaw"], {"deg": -13.1, "px": -258})
+        self.assertNotIn("yaw_skipped", lat)
+        self.assertEqual(rig.strafes(), [])
 
     def test_a_REGRESSION_drops_the_stop_yaw(self):
         """A look-back regression says the character is BEHIND where the loop
