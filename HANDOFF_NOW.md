@@ -23,6 +23,7 @@ The loop for the night, in order, repeated:
    turn toward the scene, offset kept on the remaining pushes; being verified); (b) SHORT END STEPS: when the
    fit says "at the endpoint" and there is no prompt, push in ~0.09 u steps with at_table() between them and
    back off the moment the table leaves the view (ab3 trial 5: solid fit at 204, no prompt, then three full
+   scheduled pushes into a window);
    (c) the COLLISION census (`tools/collision_census.py`, committed): whole evening 45% of walked seconds are
    escapes/stalls/misses; portrait room (Wanda) 11.7 s a trial, bar counter->tables 14.7, door->street 8.4;
    since the ladder round 38%. Two WASTE INVESTIGATORS + skeptics (workflow `waste-investigators`) are on
