@@ -311,6 +311,12 @@ DETOUR_TARGETS = 3
 # Actions that mean the walk moved on; the next blockage restarts the ladder.
 PROGRESS_ACTIONS = ("advanced", "relocalised", "regressed", "turned")
 ESCAPE_STRAFE_MAG = 0.45
+# ... and the two of them that carry NO evidence: both advance k at a stop that
+# fitted nothing (or fitted thinly at a later waypoint), so neither is proof the
+# character moved. They re-arm the escape ladder like any progress action; they
+# do NOT re-arm the once-per-blockage turn-early, which would otherwise cascade
+# from stop to stop while the character stands still against the same NPC.
+UNEVIDENCED_ACTIONS = ("turned-unverified", "turned-past")
 
 # Sign convention, verified in three places rather than assumed:
 #   slow_traverse.walk_leg sends `left_x = ar.to_axis(lx)`
@@ -344,6 +350,19 @@ def _blind_cap(pi, plan, unverified_turn, last_cred_scale):
         if any(not push for _, push, _ in ahead):
             return 1
     return BLIND_MAX
+
+
+def _near_stop(pi, plan):
+    """The plan index of a TURN-ONLY stop within NEAR_STOP_TARGETS of `pi`, or None.
+
+    The same window `_blind_cap` uses to cut the blind budget to one push near a
+    stop, read the other way round: not "is a stop close" but "which entry is
+    it", so the loop can take that stop instead of an escape rung.
+    """
+    for j in range(pi, min(len(plan), pi + NEAR_STOP_TARGETS)):
+        if not plan[j][1]:
+            return j
+    return None
 
 
 def _fix_row(fix):
@@ -711,6 +730,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     backed_here = False         # ... and its one step back
     k_prev_iter = 0
     unverified_turn = False     # the last stop was accepted unverified
+    turned_early = False        # this blockage has already taken its early turn
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
@@ -835,6 +855,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         # the same trial (batch 7 trial 1) -- were never retried there.
         if action is not None and action.startswith(PROGRESS_ACTIONS):
             escapes = 0
+            if action not in UNEVIDENCED_ACTIONS:
+                # A turn-early is spent until the walk moves ON EVIDENCE. An
+                # unverified turn is not that evidence -- it advances k at a
+                # stop that fitted nothing -- so re-arming on it would let one
+                # blockage turn early at stop after stop without moving.
+                turned_early = False
         if at_end:
             # Nothing left in the plan: push toward the last waypoint along
             # the plan's final heading, inside the end budget above.
@@ -1128,6 +1154,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # for up to BLIND_MAX pushes -- a featureless door panel is exactly
             # where the plan has to keep moving -- and only then treat the
             # silence as a blockage.
+            near_stop_j = None if at_end else _near_stop(pi, plan)
             wide = None
             if blind >= 1 and not at_end:
                 # From the first blind push on, look far AHEAD for a strong
@@ -1148,6 +1175,44 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls = 0
                 action = "blind-advance"
+            elif near_stop_j is not None and not turned_early:
+                # TURN EARLY, RATHER THAN PUSH INTO WHATEVER IS THERE. The blind
+                # budget is spent and a TURN-ONLY stop is within
+                # NEAR_STOP_TARGETS plan entries: take the stop NOW instead of
+                # the first escape rung. 2026-09-07 22:00-22:10, three trials in
+                # a row and both arms of an A/B: an NPC stood ON the turn point
+                # in the portrait room (the drive walked north to waypoint 114,
+                # stopped, and panned 1.3 -> 303.3 deg, which compiles to pushes
+                # at ...112, 114 then one turn-only stop at 129). The estimate
+                # stalled at 112 with her filling the frame, the near-a-stop
+                # blind budget is ONE, and the walk spent itself on misses and
+                # rungs pushing north into her without ever reaching the turn.
+                # The user, watching: "you walked too close to her and should
+                # have turned left." A turn moves the character NOTHING, so it
+                # costs less than any rung and comes before all of them.
+                #
+                # Only the POINTER moves -- k is not touched, because the rule
+                # is about what to do next, not a claim about where we are. The
+                # stop's own verification (turned / -aligned / -looked /
+                # turn-back / -wait / -retry / -unverified / -past) is unchanged
+                # and decides whether the plan really is there. ONE per
+                # blockage: see UNEVIDENCED_ACTIONS.
+                pi = near_stop_j
+                turned_early = True
+                misses = 0
+                stalls = 0
+                action = "turn-early"
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix), "action": action,
+                        "lateral": None, "at_end": at_end,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-early: "
+                    f"blind with the budget spent and a turn stop at "
+                    f"{plan[pi][0]} within {NEAR_STOP_TARGETS} targets — turning "
+                    f"to {plan[pi][2]} now instead of pushing into whatever is "
+                    f"in front")
+                continue
             elif fix is None:
                 lost += 1
                 misses += 1
