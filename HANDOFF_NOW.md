@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 09:14. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 09:40. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
@@ -48,8 +48,21 @@ which is now the rescue's ceiling). Rescue tally over three batches: 14 firings,
 arrived, 11 found nothing. The three losses: past 129 after a correct yaw (t6), and the office
 stretch twice (t20, t23: lost at 88 after the blind corridor, the wrong-door / stairs-NPC family).
 
-**Running now:** the twenty-third launch, the same build a third time (09:12), monitors on trial
-lines, rescue firings and STOP YAW firings. **Next, in order:** (1) THE YAW REFINEMENT: apply the yaw only
+**Running now (09:40):** the twenty-third launch, the same build a third time (09:12), monitors on
+trial lines, rescue firings and STOP YAW firings -- and FOUR research/build workflows, all read-only on
+the checkout except `drafts/pending_after_ab/` and their own `agent_progress/closed-loop/<name>/`:
+  1. `yaw-fit-gate-builder` (09:20): patch46, STOP_YAW_NEAR_FIT_ONLY (the yaw only when the look fits the
+     stop's index +-1, else the old strafe) -- lands at a batch boundary as an A/B `--flag`.
+  2. `wanderer-investigation` (09:25): three finders (what precedes a pin in the journal; what actually
+     freed a pinned character; the office corridor and the wrong door), three judges, one refuter ->
+     `agent_progress/closed-loop/wanderers/`.
+  3. `early-rescue-research` (09:37): censuses, a design and a refutation of doing the rescue's
+     whole-chain look AT an unverified stop after a blind run instead of stamping the stop and burning
+     the ladder + LOST_MAX first -> `agent_progress/closed-loop/early_rescue/`.
+  4. `tail-and-headon-research` (09:40): the end-game latency at the table; head-on stop fits with a
+     large offset (item (e) in full) -> `agent_progress/closed-loop/tail_headon/`.
+The user is awake (09:30): "sounds good! continue" / "feel free to use sub agents to research
+improvements" / "if you have another ideas, go for it"; usage at 09:35: 5-hour 9%, resets ~11:55. **Next, in order:** (1) THE YAW REFINEMENT: apply the yaw only
 when the look's fit is at the stop's index +-1 (fall back to the strafe otherwise), or derive it from
 the fit's own recorded heading -- a structural condition, not a tuned number; verify on the journals
 (15 firings on disk), A/B with `--flag`; (2) the same yaw for a HEAD-ON stop fit with a large |dx|
