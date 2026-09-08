@@ -234,7 +234,20 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, FIFTEENTH LAUNCH, RUNNING (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
+- **THE 25, SIXTEENTH LAUNCH, RUNNING (04:20, commit 078a912 = a8ff495 + patch42), plain `--trials 25`.**
+  patch42: `STOP_REWIND_MAX` 2 -> 0 (the rewind mechanism and its tests stay, at budget 2 for themselves;
+  rules A and B untouched) and `at_table()` reads the "$50" / "(50)" fee token LAST, on the census band
+  `FEE_BOX` (0.30, 0.58, 0.72, 0.70) at 3x, both polarities -- 0 of 7,885 route frames, 58 of 81 prompt
+  frames, all three b13-t5 frames (`overnight/census/at_table_ocr_tokens_20260908.json`). Three mutants
+  caught. Monitor `bz2defi67`. **Fifteenth launch (a8ff495 again), STOPPED at the boundary after trial 12:
+  9 of 12, walk median 80.6 s [71..97], best streak 3** (`overnight/chain_trials_batch15.*`, gitignored).
+  Its three failures: t4 and t9 lost at 109 after REWINDING from the 129 stop (the b15 t4 reader,
+  `notes_cur_t04_1788853535.md`: face-to-chest with an NPC at the turn point, the rewind walks back into
+  her, no action on the re-approach re-arms turn-early, miss/escape/lost in the coat-rack corner); t5 lost at
+  169 (reader pending). The census that decided it: across b12-b14 every trial that took 129 UNVERIFIED
+  arrived (11/11); in b15 every trial that rewound there was lost (0/3). One rule, one round, reverted by
+  its own measurement.
+- **THE 25, FIFTEENTH LAUNCH, DONE 04:15 (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
   (a8ff495, the rewind): 22 of 25, walk median 82.2 s [72..116], best streak 10** (`overnight/
   chain_trials_batch14.*`). Its three failures, each read: t6 the coat rack in the shop alcove (the rewind
   fired correctly and the re-approach walked the same line), t14 the window past the dealer (a 206 px
