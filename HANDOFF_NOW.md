@@ -63,6 +63,13 @@ The loop for the night, in order, repeated:
    tree (with patch35/36/38 in): 132 tests, mutants "'not regressed' removed" and "rule deleted" caught (the
    builder's six caught earlier). Lands at the tenth launch's end together with (a)'s sibling (patch37) if
    its build is done by then.
+   (i) READY: `drafts/pending_after_ab/apply_patch39.py` — the prompt check consulted only in the chain's tail,
+   TABLE_CHECK_TAIL 30 (targets >= 175 on the 205 chain): every true closed-loop arrival on disk (64) had its
+   target at 197-204 when the prompt appeared, the false one 61. Defence in depth for the $50 gate after
+   trial 12; the old 3-waypoint gate's lag failure has 22 waypoints of room. Verified on a cp scratch copy
+   of the current tree: 133 tests, mutant "tail None" caught. The min_iterations literals move with it
+   (1000 -> 970; window 3 -> 324; chains shorter than the tail -> 1). Lands at the eleventh launch's end
+   with patch37 (stop-tie, if its skeptics pass).
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
