@@ -83,6 +83,16 @@ The loop for the night, in order, repeated:
    second layer) at the eleventh launch's end. b11 trial 10 was the end-turn rule's FIRST LIVE FIRING
    (+25 deg at k=197 on dx +493) and it brought the character squarely to the dealer; the detector then
    scored the arrival a failure — the frame is the fixture.
+   (k) b11 trial 12 (reader `notes_b11_t12`... in `agent_progress/closed-loop/review/`): a WIDE relocalisation
+   at it35 jumped the estimate from 114 (genuinely at the portrait room, an NPC in the doorway) to 144 on a
+   195-inlier fit whose runner-up was 183 and whose fitted indices spanned 129-190; the frames never changed
+   through it43; the 166 stop failed three verifications and was accepted unverified; then a wedge. CENSUS
+   (109 wide relocalisations tonight): EVERY one has a fitted spread > 20 and a runner-up >= 0.9 of the best,
+   and 102 of 109 verified the next stop — neither metric discriminates and the mechanism is usually right
+   (3 of 109 bad). No rule from that. What survives is the reader's second point, the stop table's own
+   lesson: an UNVERIFIED stop (three failed verifications) should REWIND to the last credible k and
+   relocalise, not advance the pointer to the stop on faith (unverified stops arrive 1 in 14 at 129, 0 in 6
+   at 166). Candidate for a builder round after patch37.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
