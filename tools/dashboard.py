@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, eleventh launch: end-turn rule in, dark-frame retry out", "state": "running",
+    {"title": "THE 25, twelfth launch: tie fix, tail gate, detector rule", "state": "running",
+     "detail": "Eleventh launch 21 of 25. Landed now: a stop is a tie only when the runner-up is a different place (the old rule fired on 28 of 37 replayed stops and cost two thirds of the extra time per arrival), the look-around stops at the first strong look, the prompt check is only consulted in the last 30 waypoints, and the detector believes a 0.20 correlation when it also reads a prompt word (measured on all 7,885 route frames: zero false positives). The rewind-on-unverified rule is in build for the next boundary."},
+    {"title": "THE 25, eleventh launch: end-turn rule in, dark-frame retry out", "state": "done",
      "detail": "The tenth launch made 11 true arrivals in a row, then trial 12 'arrived' on the street: the new dark-frame retry of the prompt detector fired on the office doorway facing the L&B storefront. Reverted at once (that detector is the $50 gate; a 500-frame check had said zero false positives and the 701st frame fired). Landed instead: past the last turn stop, a large offset turns the camera toward the dealer instead of strafing, built by a builder and three skeptics. The tie fix is next."},
     {"title": "THE 25, tenth launch: retry gate + dark-frame detector", "state": "done",
      "detail": "The pan A/B finished 9/10 against 8/10, no difference, flag stays off. Tonight's readers and three studies (fast vs slow, the record 67.9 s run, the cost of each rule) agree: collisions are flat, the extra 20-30 s per arrival is ceremony at the turn stops, and two thirds of it is the tie rule firing on near-duplicate waypoints. Landed now: no retry pushes after a wall-scale fit (the slow runs' 30-45 s at stops 88 and 129), and the prompt detector retries dark frames (trial 10 stood at the prompt for three iterations unseen). Next boundary: turn toward the dealer at the end, and the tie fix."},

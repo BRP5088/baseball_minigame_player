@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 00:41. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 01:34. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -131,7 +131,16 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, ELEVENTH LAUNCH, RUNNING (00:38:34, commit f8af4d3), plain `--trials 25`, pan OFF:** the END-TURN
+- **THE 25, TWELFTH LAUNCH, RUNNING (01:31:01, commit 2220c83), plain `--trials 25`:** landed at the boundary:
+  patch37 (a stop tie needs a different place, symmetric; the look-around and the pan exit on a strong look),
+  patch39 (the prompt check only in the last 30 waypoints), patch40 (at_table() believes 0.20 with one OCR
+  word). **Eleventh launch (f8af4d3): 21 of 25, 0 invalid** (`overnight/chain_trials_batch11.*`): the four
+  failures by reader — t10 the detector blind with the prompt on screen after the end-turn's first live
+  firing (fixed, patch40); t12 a rare wide-relocalisation error (3 of 109 tonight) then a stop accepted
+  unverified; t13 an NPC at the 196 stop, a 13-inlier fit in the ungoverned middle, three retries through a
+  side door (the rewind round, patch41, in build); t25 lost at 166 after two early turns (reader pending).
+  Tonight's true-arrival streak record: 20 across the tenth and eleventh launches (11 + 9).
+- **THE 25, ELEVENTH LAUNCH, DONE 01:29 (00:38:34, commit f8af4d3), plain `--trials 25`, pan OFF:** the END-TURN
   rule is in (patch34) and the dark-frame detector retry (patch38) is REVERTED. **Tenth launch (e49cd3e):
   11 true arrivals in a row (walk 78-129 s), then trial 12 "arrived" at k=58 in 47 s — the office doorway
   looking at the L&B storefront, frame mean 54, raw score 0.129, normalised 0.258 >= MATCH_MIN.** A false
