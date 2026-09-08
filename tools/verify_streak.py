@@ -64,6 +64,13 @@ def selftest():
     missing = {k: v for k, v in good(1).items() if k != "at_table_recheck"}
     rows, best = audit({"runs": [missing]})
     assert best == 0, rows
+    # OUTCOME AND `arrived` DISAGREEING is the case OPEN-14 actually hit: the
+    # harness scored a trial ARRIVED while the walk itself had not arrived.
+    # Without this case the check is decorative (a mutant deleting it survived).
+    liar = dict(good(2), arrived=False)
+    rows, best = audit({"runs": [good(1), liar, good(3)]})
+    assert best == 1, (rows, best)
+    assert any("arrived False" in c for _, _, cs in rows for c in cs), rows
     rows, best = audit({"runs": []})
     assert best == 0 and rows == []
     print("selftest OK: a clean run, a false recheck breaking it, a missing "
