@@ -148,6 +148,20 @@ END_BLIND_MAX = 2
 # count it as reaching the target. Arriving trials advanced through the bar at
 # scales 1.0-1.5; trial 3 stalled at 166 with 2.1 and 2.6 while at ~181.
 PAST_SCALE = 1.6
+# NEAR A WALL, NEAR A STOP: when the last credible fit had scale >= WALL_SCALE
+# (the scene that much larger than in its frame: the wall a push away) and the
+# next turn stop is within NEAR_STOP_TARGETS plan entries, a blind sensor gets
+# ONE dead-reckoned push, not six, and then the stop. Batch 6 trials 4 and 7
+# lost credibility at 100-104 with scales 2.9 and 2.6 and pushed four times
+# into the portrait wall the user's drive stops at; arrivals turned there while
+# still seeing the room. Scale alone does not separate them (arrivals saw
+# 2.4-3.7 too); blindness right after it does.
+WALL_SCALE = 2.5
+NEAR_STOP_TARGETS = 3
+# A BACKWARD step: the one move that creates clearance from a wall. Batch 6
+# trials 4 and 7 stood nose-first against the portrait wall; looks, a wait,
+# retries and sidesteps could not open the view; a step back would have.
+BACK_SEC = 0.5
 # A weak fix (under FIX_MIN_INLIERS) still corroborates the plan when it has at
 # least this many inliers: right-but-thin fits in trials 1-3 read 17-36, junk
 # read 6-13 (n ~ 15, provisional; re-measure from overnight/chain_journals/).
@@ -287,6 +301,17 @@ def _strong_ahead(chain, img, k, n):
     if wide is not None and inl >= STRONG_MIN_INLIERS and int(wide.k) > k:
         return wide
     return None
+
+
+def _blind_cap(pi, plan, unverified_turn, last_cred_scale):
+    """How many blind pushes are allowed from here."""
+    if pi >= len(plan) - END_TAIL_TARGETS or unverified_turn:
+        return END_BLIND_MAX
+    if last_cred_scale >= WALL_SCALE:
+        ahead = plan[pi:pi + NEAR_STOP_TARGETS]
+        if any(not push for _, push, _ in ahead):
+            return 1
+    return BLIND_MAX
 
 
 def _fix_row(fix):
@@ -493,7 +518,7 @@ def _timeout_diagnosis(res, n, min_iters, time_cap):
 def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
          journal=None, iteration_sec_floor=None, end_iterations=None,
          turn_to=None, push=None, strafe=None, jump=None, at_table=None,
-         now=time.time, sleep=time.sleep):
+         now=time.time, sleep=time.sleep, back=None):
     """Servo along `chain` until the dealer prompt is on screen.
 
     Returns {arrived, seconds, pushes, k_final, iterations, waypoints,
@@ -523,6 +548,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
 
         turn_to(heading)        turn the camera to an absolute bearing
         push(mag, secs)         ONE continuous forward push, mag > 0 = forward
+        back(mag, secs)         ONE continuous BACKWARD push
         strafe(lx, secs)        ONE continuous sidestep, lx > 0 = RIGHT
         jump()                  press Cross once
         at_table(img) -> bool   is the BASEBALL CARDS prompt on screen
@@ -543,6 +569,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # GRAVEYARD row that ended two rooms adrift.
             return _st.walk_leg(0.0, -abs(mag), secs, capture, read_heading,
                                 label="chain push", log=log, step_sec=secs)
+    if back is None:
+        import slow_traverse as st
+        def back(mag, secs, _st=st):
+            # ly POSITIVE is backward on walk_leg's axis (forward is -abs(mag)).
+            return _st.walk_leg(0.0, abs(mag), secs, capture, read_heading,
+                                label="chain back", log=log, step_sec=secs)
     if strafe is None:
         import slow_traverse as st
         def strafe(lx, secs, _st=st):
@@ -606,8 +638,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     turn_retries = 0            # retries spent on the current turn stop
     since_advance = 0           # iterations since k last rose
     dx_run = []                 # dx of the last fits (>= WEAK_MIN_INLIERS), for the consistency rule
+    last_cred_scale = 1.0       # scale of the last CREDIBLE fit
     escaped_prev = False        # the previous iteration escaped: no lateral undo this one
     waited_here = False         # the current stop has had its one wait
+    backed_here = False         # ... and its one step back
     k_prev_iter = 0
     unverified_turn = False     # the last stop was accepted unverified
     walk_heading = None         # the last heading a push was made along
@@ -652,7 +686,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         None, wait, jump (§8(g)).
         """
         nonlocal escapes
-        which = escapes % 3          # the ladder CYCLES: jump, left, right, jump, ...
+        which = escapes % 4          # the ladder CYCLES: jump, back, left, right, jump, ...
         escapes += 1
         if which == 0:
             # Jump comes round again: the one arrival that beat the patron
@@ -660,7 +694,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # had fired earlier in the street, got only sidesteps there.
             jump()
             return "escape:jump"
-        side = LEFT if which == 1 else RIGHT
+        if which == 1:
+            back(PUSH_MAG, BACK_SEC)
+            return "escape:back"
+        side = LEFT if which == 2 else RIGHT
         strafe(side * ESCAPE_STRAFE_MAG, ESCAPE_STRAFE_SEC)
         return "escape:left" if side < 0 else "escape:right"
 
@@ -871,6 +908,17 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     f", no evidence of being short")
                 continue
             if (not verified and (fix_t is None or tied) and looked is None
+                    and turn_retries == 0 and not backed_here):
+                backed_here = True
+                back(PUSH_MAG, BACK_SEC)
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": None, "action": "turn-back", "lateral": None,
+                        "at_end": False, "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-back: nothing fits "
+                    f"head-on or either side; one step back for clearance")
+                continue
+            if (not verified and (fix_t is None or tied) and looked is None
                     and turn_retries == 0 and not waited_here):
                 waited_here = True
                 sleep(STOP_WAIT_SEC)
@@ -902,6 +950,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             stalls = 0
             turn_retries = 0
             waited_here = False
+            backed_here = False
             unverified_turn = not verified
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
@@ -927,13 +976,13 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # advances could have run ahead, and forward past the target.
             back_hint = plan[max(0, pi - blind - 1)][0] if pi > 0 else 0
             back_hint = max(0, min(back_hint, k - LOOKBACK))
-            back = chain.locate(img, back_hint,
+            lbfix = chain.locate(img, back_hint,
                                 window=max(WINDOW, (k - back_hint) + WINDOW))
-            binl = None if back is None else (getattr(back, "inliers", 0) or 0)
-            if back is not None and binl >= FIX_MIN_INLIERS and (fix is None or binl > inl):
-                fix, inl, weak = back, binl, False
-                if int(back.k) < k:
-                    k = max(0, int(back.k))
+            binl = None if lbfix is None else (getattr(lbfix, "inliers", 0) or 0)
+            if lbfix is not None and binl >= FIX_MIN_INLIERS and (fix is None or binl > inl):
+                fix, inl, weak = lbfix, binl, False
+                if int(lbfix.k) < k:
+                    k = max(0, int(lbfix.k))
                     regressed = True
                     # The plan pointer is otherwise monotone: without this,
                     # the target stays > WINDOW ahead of k after a regression
@@ -982,8 +1031,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls = 0
                 action = "relocalised"
-            elif blind < (END_BLIND_MAX if (pi >= len(plan) - END_TAIL_TARGETS or unverified_turn)
-                          else BLIND_MAX) and not at_end:
+            elif blind < _blind_cap(pi, plan, unverified_turn, last_cred_scale) and not at_end:
                 blind += 1
                 k = target_k
                 misses = 0
@@ -1023,6 +1071,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             blind = 0
             lost = 0
             unverified_turn = False
+            last_cred_scale = float(getattr(fix, "scale", 1.0) or 1.0)
             # Never past the target this push was aimed at (one push, one
             # target: a wrong match must not run the plan ahead of the
             # character) and never past the last waypoint (locate() may

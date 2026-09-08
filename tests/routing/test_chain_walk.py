@@ -188,6 +188,10 @@ class Rig:
         self.t += secs
         self.events.append(("sleep", secs))
 
+    def back(self, mag, secs):
+        self.t += secs
+        self.events.append(("back", mag, secs))
+
     def capture(self):
         self.captures += 1
         self.t += self.CAPTURE_SEC
@@ -223,7 +227,7 @@ class Rig:
             self.chain, self.capture, lambda: 87.0, log=lambda *a: None,
             turn_to=self.turn_to, push=self.push, strafe=self.strafe,
             jump=self.jump, at_table=self.at_table, now=self.now,
-            sleep=self.sleep, **kw)
+            sleep=self.sleep, back=self.back, **kw)
 
     def count(self, name):
         return sum(1 for e in self.events if e[0] == name)
@@ -509,14 +513,14 @@ class IndexAdvance(unittest.TestCase):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        # it2: head-on None, looks None, None -> WAIT once (an NPC may move);
-        # it3: still nothing -> retry push; it4: head-on credible -> turned
+        # it2: head-on None, looks None, None -> one step BACK for clearance;
+        # it3: still nothing -> WAIT once; it4: head-on credible -> turned
         ch = FakeChain(5, [Fix(k=1), None, None, None, None, None, None, Fix(k=3, inliers=90), Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=11)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:4], ["advanced", "turn-wait", "turn-retry", "turned"])
+        self.assertEqual(acts[:4], ["advanced", "turn-back", "turn-wait", "turned"])
 
     def test_a_junk_fit_at_a_later_waypoint_is_not_evidence_of_being_past(self):
         wps = [Wp(0, 90.0)]
@@ -541,13 +545,13 @@ class IndexAdvance(unittest.TestCase):
         ch = FakeChain(43, [Fix(k=1)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=28.05)
+        res = always_turning(rig.go, time_cap=32.05)
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[1], "turn-wait")
-        self.assertEqual(acts[2:5], ["turn-retry"] * 3)
-        self.assertEqual(acts[5], "turned-unverified")
-        self.assertEqual(acts[6:8], ["blind-advance"] * 2)
-        self.assertEqual(acts[8], "miss", "an unverified turn allows two blind pushes, not six")
+        self.assertEqual(acts[1:3], ["turn-back", "turn-wait"])
+        self.assertEqual(acts[3:6], ["turn-retry"] * 3)
+        self.assertEqual(acts[6], "turned-unverified")
+        self.assertEqual(acts[7:9], ["blind-advance"] * 2)
+        self.assertEqual(acts[9], "miss", "an unverified turn allows two blind pushes, not six")
 
     def test_a_real_fit_at_the_stop_with_a_large_offset_strafes_toward_the_scene(self):
         # Batch 5c trial 3: 26 inliers at the stop's own index, dx -297: the
@@ -790,9 +794,9 @@ class IndexAdvance(unittest.TestCase):
         rig = Rig(ch, table_at=8)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:3], ["advanced", "turn-wait", "turned"])
-        self.assertIn(("sleep", chain_walk.STOP_WAIT_SEC), rig.events)
-        self.assertEqual(rig.count("push"), 3, "one before the stop, none during the wait, two after")
+        self.assertEqual(acts[:3], ["advanced", "turn-back", "turned"])
+        self.assertTrue(any(e[0] == "back" for e in rig.events), "one step back for clearance came first")
+        self.assertEqual(rig.count("push"), 3, "one before the stop, none during the back step, two after")
 
     def test_no_lateral_correction_in_the_iteration_after_an_escape_sidestep(self):
         # Audit: the aligner undid the escape sidestep on the very next iteration.
@@ -802,14 +806,15 @@ class IndexAdvance(unittest.TestCase):
         res = always_turning(rig.go, time_cap=12.05)
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[3], "escape:jump")
-        # the 8th action is the sidestep; the fix right after it carries dx 300
-        fixes2 = [Fix(k=0, scale=0.5)] * 7 + [Fix(k=0, scale=0.5, dx=300.0)] + [Fix(k=0, scale=0.5)] * 6
+        # the 12th action is the first SIDESTEP (jump, back, then left); the
+        # fix right after it carries dx 300
+        fixes2 = [Fix(k=0, scale=0.5)] * 11 + [Fix(k=0, scale=0.5, dx=300.0)] + [Fix(k=0, scale=0.5)] * 6
         ch2 = FakeChain(30, fixes2, default=Fix(k=0, scale=0.5))
         rig2 = Rig(ch2, table_at=None)
-        res2 = always_turning(rig2.go, time_cap=12.05)
+        res2 = without_stuck(lambda **kw: always_turning(rig2.go, **kw), time_cap=16.05)
         acts2 = [f["action"] for f in res2["fixes"]]
-        self.assertEqual(acts2[7], "escape:left")
-        self.assertIsNone(res2["fixes"][8]["lateral"], "no lateral undo right after the sidestep")
+        self.assertEqual(acts2[11], "escape:left")
+        self.assertIsNone(res2["fixes"][12]["lateral"], "no lateral undo right after the sidestep")
 
     def test_a_tied_fit_at_a_stop_is_ambiguity_not_verification(self):
         # Batch 5e trial 6: 33 inliers against a runner-up of 33 at the bar
@@ -825,13 +830,40 @@ class IndexAdvance(unittest.TestCase):
         rig = Rig(ch, table_at=9)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:3], ["advanced", "turn-wait", "turned"])
+        self.assertEqual(acts[:3], ["advanced", "turn-back", "turned"])
 
     def test_the_escape_ladder_cycles_so_a_jump_comes_round_again(self):
         rig = Rig(FakeChain(30, default=Fix(k=0, scale=0.5)), table_at=None)
         res = without_stuck(lambda **kw: always_turning(rig.go, **kw), time_cap=60.0)
         acts = [f["action"] for f in res["fixes"] if f["action"].startswith("escape")]
-        self.assertEqual(acts[:4], ["escape:jump", "escape:left", "escape:right", "escape:jump"])
+        self.assertEqual(acts[:5], ["escape:jump", "escape:back", "escape:left", "escape:right", "escape:jump"])
+
+    def test_blind_after_a_wall_scale_fit_with_a_stop_ahead_gets_one_push(self):
+        self.assertEqual((chain_walk.WALL_SCALE, chain_walk.NEAR_STOP_TARGETS), (2.5, 3))
+        # walking frames 1..15 (push targets 1, 4, 7, 10, 13), a stop at 16,
+        # walking after. From k=4 the stop is four targets away (no cap), from
+        # k=7 it is within three (cap 1).
+        wps = [Wp(0, 0.0)]
+        for i, (h, ly) in enumerate([(0.0, -0.35)] * 15 + [(90.0, 0.0)] + [(90.0, -0.35)] * 30, start=1):   # long tail: the six-target tail cap stays clear
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        plan = chain_walk.plan_indices(wps)
+        self.assertEqual([i for i, p, _ in plan][:6], [1, 4, 7, 10, 13, 16])
+        # a credible fit at 3 with scale 2.9 (the wall a push away), then blind
+        ch = FakeChain(47, [Fix(k=1), Fix(k=4, scale=2.9, inliers=90)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=8.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "advanced"])
+        self.assertEqual(acts[2], "blind-advance", "toward 7 the stop is still four targets off: allowed")
+        self.assertNotEqual(acts[3], "blind-advance", "toward 10 the stop is within three: one blind push was the budget")
+        # the same without the wall scale: the full blind budget applies
+        ch2 = FakeChain(47, [Fix(k=1), Fix(k=4, scale=1.2, inliers=90)], default=None)
+        ch2.waypoints = wps
+        rig2 = Rig(ch2, table_at=None)
+        res2 = always_turning(rig2.go, time_cap=8.05)
+        acts2 = [f["action"] for f in res2["fixes"]]
+        self.assertEqual(acts2[2:4], ["blind-advance", "blind-advance"])
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds
@@ -875,17 +907,15 @@ class Escapes(unittest.TestCase):
         self.assertEqual([i for i, a in enumerate(acts, 1)
                           if a.startswith("escape")], [4, 8, 12])
         self.assertEqual([acts[3], acts[7], acts[11]],
-                         ["escape:jump", "escape:left", "escape:right"])
+                         ["escape:jump", "escape:back", "escape:left"])
         self.assertEqual(acts[4:7], ["stalled"] * 3, "the counter must reset")
         # LEFT is negative lx, RIGHT positive — the same axis walk_leg drives.
         sides = [e[1] for e in rig.strafes()]
-        self.assertEqual(len(sides), 2)
+        self.assertEqual(len(sides), 1, "jump, back, then the first sidestep within 12 iterations")
         self.assertLess(sides[0], 0.0, "the first sidestep escape goes LEFT")
-        self.assertGreater(sides[1], 0.0, "the second goes RIGHT")
-        self.assertEqual([abs(s) for s in sides],
-                         [chain_walk.ESCAPE_STRAFE_MAG] * 2)
-        self.assertEqual([e[2] for e in rig.strafes()],
-                         [chain_walk.ESCAPE_STRAFE_SEC] * 2)
+        self.assertEqual([abs(s) for s in sides], [chain_walk.ESCAPE_STRAFE_MAG])
+        self.assertEqual([e[2] for e in rig.strafes()][:1],
+                         [chain_walk.ESCAPE_STRAFE_SEC] * 1)
 
     def test_misses_escape_after_MISS_MAX(self):
         self.assertEqual(chain_walk.MISS_MAX, 3)
@@ -896,7 +926,7 @@ class Escapes(unittest.TestCase):
                           if a.startswith("escape")], [9, 12],
                          "six blind advances first, then misses count; LOST "
                          "ends the walk before a third escape")
-        self.assertEqual([acts[8], acts[11]], ["escape:jump", "escape:left"])
+        self.assertEqual([acts[8], acts[11]], ["escape:jump", "escape:back"])
         self.assertEqual(acts[-1], "lost")
         self.assertTrue(all(f["fix"] is None for f in res["fixes"]))
         self.assertEqual(rig.count("jump"), 1)
@@ -1481,7 +1511,7 @@ class EndOfChain(unittest.TestCase):
         self.assertEqual(acts[0], "advanced")
         self.assertEqual([i for i, a in enumerate(acts)
                           if a.startswith("escape")], [6, 10])
-        self.assertEqual([acts[6], acts[10]], ["escape:jump", "escape:left"])
+        self.assertEqual([acts[6], acts[10]], ["escape:jump", "escape:back"])
         self.assertEqual(rig.count("jump"), 1)
         self.assertEqual(res["end_iterations"], 11)
         self.assertTrue(res["failure"].startswith("reached the last waypoint"),
@@ -1642,9 +1672,12 @@ class DefaultConsoleWrappers(unittest.TestCase):
         esc = [l["lx"] for l in self.legs if l["lx"] != 0.0]
         # Six blind, then misses: jump at 9, LEFT at 12, and LOST_MAX (9
         # iterations with nothing credible) ends the walk before the RIGHT.
-        self.assertEqual(esc, [-chain_walk.ESCAPE_STRAFE_MAG],
-                         "the first sidestep escape goes LEFT on walk_leg's own "
-                         "lx axis (the walk declares itself lost before the RIGHT)")
+        # The ladder is jump, back, left, right: within the LOST budget the
+        # walk reaches jump and back; the sidesteps come after. Check the back
+        # rung reached walk_leg with ly POSITIVE (backward on its axis).
+        backs = [l for l in self.legs if l["ly"] > 0.0]
+        self.assertEqual(len(backs), 1, "the back rung is one walk_leg with ly > 0")
+        self.assertEqual(esc, [], "no sidestep before the walk declares itself lost")
 
     def test_the_default_prompt_check_is_table_prompt_at_table(self):
         # at_table() is the arrival authority AND the $50 gate. If walk() ever
