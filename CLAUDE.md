@@ -745,12 +745,15 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         the top of the stairs), cost nothing. The office losses of
                                                                         b17-b19 are wanderers: an NPC at the stairs, doors that open
                                                                         when a blind push hits them.
-    a411fe4  07:07   A/B 20 (10/arm) running                             patch44 STOP_LOOK_YAW, `--arms off,on --flag STOP_LOOK_YAW`:
-                                                                        at a stop verified by the look-around, TURN by px/PX_PER_DEG
+    a411fe4  07:07   A/B 20  off 9/10    78.3 s                        patch44 STOP_LOOK_YAW, `--arms off,on --flag STOP_LOOK_YAW`:
+             (10/arm)        on  9/10    79.4 s                        at a stop verified by the look-around, TURN by px/PX_PER_DEG
                                                                         (the end turn's formula, capped at END_TURN_MAX_DEG) and
                                                                         carry the offset to the next stop, instead of the capped
-                                                                        0.3 s strafe. Scored on arrival AND on the first credible
-                                                                        fit's dx after the 129 stop (off arm: median -300 px)
+                                                                        0.3 s strafe. Arrival a tie (Fisher 1.0; each loss a
+                                                                        wanderer). THE INSTRUMENT DECIDED IT: the first credible
+                                                                        fit's dx after a looked 129 stop, off arm median -352
+                                                                        [-383..-264] on 5 of 5, on arm +72 [-96..+150] on 5 of 5
+                                                                        (yaws -12.6..-22.9 deg) -- no overlap. SHIPPED ON (patch45).
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED

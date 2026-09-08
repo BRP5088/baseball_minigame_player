@@ -339,7 +339,15 @@ STOP_PAN_LOOKS = 2              # how many run frames to look at (first, middle)
 # for. It MOVES NOTHING: GRAVEYARD's two survivors out of thirteen navigation
 # changes are the aim sweep and turning, and every change that failed moved
 # the character. `stop_yaw` carries it until the next turn-only stop.
-STOP_LOOK_YAW = False
+#
+# SHIPS ON (patch45, 2026-09-08 07:55). The A/B, 10 a side interleaved
+# (overnight/chain_trials_ab_stop_yaw.*): arrival 9/10 against 9/10, and the
+# INSTRUMENT -- the first credible fit's dx after a looked 129 stop -- read
+# median -352 px on every off-arm trial (the strafe left the scene ~18 deg
+# left) and median +72 px on every on-arm trial (five yaws of -12.6..-22.9
+# deg): two populations, no overlap at 5 and 5. The OFF path is the control
+# and its test sets the flag False for itself.
+STOP_LOOK_YAW = True
 # A stop whose frame and both looks fit NOTHING is most likely an NPC in the
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.

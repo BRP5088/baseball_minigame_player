@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 07:09. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 07:58. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,23 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **TWENTIETH LAUNCH, RUNNING (07:07, commit a411fe4 = 32e4400 + patch44): THE STOP_LOOK_YAW A/B,
+- **THE STOP_LOOK_YAW A/B IS DONE (07:52): SHIP IT.** `overnight/chain_trials_ab_stop_yaw.*`,
+  `agent_progress/closed-loop/review/ab_stop_yaw_score.out`:
+
+      arm    arrived   walk median   129 looked   first credible dx after the stop
+      off     9/10       78.3 s          5         median -352  [-383 -361 -352 -302 -264]
+      on      9/10       79.4 s          5         median  +72  [ -96  -86  +72  +77 +150]
+
+  Arrival a tie (Fisher 1.0; the off loss was the tables-aisle patron, stuck at 173; the on loss the NPC
+  at the top of the stairs with nothing fitting -- neither touched the yaw's path). THE INSTRUMENT is
+  two populations with no overlap at 5 and 5: after the strafe the scene still sits ~350 px (18 deg)
+  left of the walking heading on every off-arm trial; after the yaw (-12.6..-22.9 deg) it sits within
+  ~90 px on every on-arm trial. The sensor confirmed the mechanism on every firing. **patch45 flips
+  STOP_LOOK_YAW to True** (the OFF path stays as the control; four tests set it False for themselves),
+  verified on a cp scratch copy; lands now with a plain 25 (the twenty-first launch). Morning follow-up
+  named in `census_after_129_notes.md`: the same offset shows in HEAD-ON 129 fits (b20 t2: 132 inliers,
+  dx -325, strafed) -- the yaw for a head-on fit with |dx| > END_TURN_PX at a stop is the next candidate.
+- **TWENTIETH LAUNCH, DONE (07:07, commit a411fe4 = 32e4400 + patch44): THE STOP_LOOK_YAW A/B,
   `overnight/chain_trials.py --chain route_user_1853 --arms off,on --flag STOP_LOOK_YAW --trials 20`
   (10 a side, interleaved; the arm is set in the CHILD through BASEBALL_CHAIN_ARM_FLAG; rows carry
   `STOP_LOOK_YAW-on/off`; `tools/trial_sheet.py` reads the new label).** Score it two ways when it ends:

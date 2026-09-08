@@ -704,6 +704,9 @@ class IndexAdvance(unittest.TestCase):
                                     "turned-unverified"], acts)
 
     def test_an_unverified_stop_looks_left_and_right_before_giving_up(self):
+        prev = chain_walk.STOP_LOOK_YAW
+        chain_walk.STOP_LOOK_YAW = False
+        self.addCleanup(setattr, chain_walk, "STOP_LOOK_YAW", prev)
         # Head-on the stop's frame fits nothing; looking 25 deg LEFT it fits
         # credibly with the scene 60 px right of centre in that view -> the
         # stop is verified, one strafe LEFT (the scene is ~430 px left of the
@@ -1720,6 +1723,9 @@ class IndexAdvance(unittest.TestCase):
                          [90, 0, 335, 25, 0], rig.events)
 
     def test_a_strong_first_look_ends_the_look_around(self):
+        prev = chain_walk.STOP_LOOK_YAW
+        chain_walk.STOP_LOOK_YAW = False
+        self.addCleanup(setattr, chain_walk, "STOP_LOOK_YAW", prev)
         # +-STOP_LOOK_DEG used to sample BOTH directions however decisive the
         # first was: 2 turns, 2 captures, 2 locates and a turn back, every
         # time, at +20.9 s a trial (rule_costs/notes.md). A look at 170
@@ -1742,6 +1748,9 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(rig.captures, 5, "one capture for the single look")
 
     def test_a_weak_first_look_still_samples_the_other_side(self):
+        prev = chain_walk.STOP_LOOK_YAW
+        chain_walk.STOP_LOOK_YAW = False
+        self.addCleanup(setattr, chain_walk, "STOP_LOOK_YAW", prev)
         # THE CONTROL for the test above: at 90 inliers the first look is
         # credible but not strong, so the +25 look still runs and wins it.
         wps = self._stop_with_a_two_frame_run()
@@ -2308,10 +2317,13 @@ class StopLookYaw(unittest.TestCase):
     def turns(rig):
         return [round(e[1], 1) for e in rig.events if e[0] == "turn"]
 
-    def test_the_flag_ships_OFF_and_reuses_the_END_TURNs_own_constants(self):
+    def test_the_flag_ships_ON_and_reuses_the_END_TURNs_own_constants(self):
         # Literals (10.11): a test that reads the constant it guards passes
-        # forever. STOP_LOOK_YAW invents no number of its own.
-        self.assertIs(chain_walk.STOP_LOOK_YAW, False)
+        # forever. STOP_LOOK_YAW invents no number of its own. It ships ON
+        # (patch45): the A/B's instrument read the first credible dx after a
+        # looked 129 stop at median -352 px with the strafe (off, 5 of 5) and
+        # +72 px with the yaw (on, 5 of 5), arrival 9/10 each.
+        self.assertIs(chain_walk.STOP_LOOK_YAW, True)
         self.assertEqual(chain_walk.PX_PER_DEG, 19.7)
         self.assertEqual(chain_walk.END_TURN_MAX_DEG, 45.0)
         self.assertEqual(chain_walk.LATERAL_TOL_PX, 35.0)
@@ -2361,10 +2373,13 @@ class StopLookYaw(unittest.TestCase):
         self.assertTrue(res["arrived"])
 
     def test_with_the_flag_OFF_the_stop_STRAFES_exactly_as_today(self):
-        # THE CONTROL, and the shipped path. Pinned as literals so a mutant
-        # that yaws regardless of the flag fails here, and so that "the flag
-        # off is byte-for-byte today's behaviour" is a measurement.
-        self.assertIs(chain_walk.STOP_LOOK_YAW, False)
+        # THE CONTROL (the A/B's off arm; no longer the shipped path since
+        # patch45). Pinned as literals so a mutant that yaws regardless of
+        # the flag fails here, and so that "the flag off is byte-for-byte the
+        # old behaviour" stays a measurement.
+        prev = chain_walk.STOP_LOOK_YAW
+        chain_walk.STOP_LOOK_YAW = False
+        self.addCleanup(setattr, chain_walk, "STOP_LOOK_YAW", prev)
         rig = self._rig(self._wps(),
                         [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
                          None, Fix(k=3)], table_at=7)
