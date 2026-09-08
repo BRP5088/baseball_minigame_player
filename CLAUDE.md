@@ -711,7 +711,9 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
     078a912  04:02         25     22            82.5 s      11        STOP_REWIND_MAX 0 (rules A/B stay); at_table() reads the
                                                                         "$50" fee token last: 0 of 7,885 route frames, 58 of 81
                                                                         prompt frames, the three b13-t5 "FAILED at the prompt"
-                                                                        frames all read it. The three failures, each read: all
+                                                                        frames all read it -- AND IT DECIDED 2 OF THE 22 ARRIVALS
+                                                                        (t9 score 0.173, t14 0.245, zero words, fee read; 17 by the
+                                                                        mask, 3 by two words). The three failures, each read: all
                                                                         PINNED in the portrait room / bar entrance (a framed
                                                                         portrait, the bar-entrance corner after the 129 look's
                                                                         strafe, the photographer NPC then a wrong 191-inlier wide

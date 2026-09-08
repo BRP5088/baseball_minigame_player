@@ -237,7 +237,9 @@ The loop for the night, in order, repeated:
 - **THE 25, SEVENTEENTH LAUNCH, RUNNING (04:51, commit 078a912 again), plain `--trials 25`: a repeatability
   run while patch43 is built.** **Sixteenth launch (078a912 = a8ff495 + patch42): 22 of 25, 0 invalid, walk
   median 82.5 s [74..115], best streak 11** (`overnight/chain_trials_batch16.*`): the rewind's removal
-  restored the b14 rate, no better; the fee token is defence, not a lever. Its three failures, each read
+  restored the b14 rate; **the fee token decided 2 of the 22 arrivals** (t9 score 0.173 and t14 0.245, zero
+  prompt words, "$50" read -- the b13-t5 shape that scored FAILED before patch42; 17 arrivals by the mask, 3
+  by two words; re-scored offline from each arrival's last frame). Its three failures, each read
   (`agent_progress/closed-loop/review/notes_cur_t12_1788856027.md`, `notes_b16_t16.md`,
   `notes_b16_t19.md`): t12 the 129 look fitted at 186 inliers, the un-yaw strafe LEFT (asked -371 px, capped
   0.3 s) put the character into the bar-entrance corner, 20 rows with no fit at all, pinned; t16 walked
