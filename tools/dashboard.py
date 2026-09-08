@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "Pan A/B: look along the recorded pan, 10 v 10 interleaved", "state": "running",
+    {"title": "Pan A/B, second attempt, on the ladder round", "state": "running",
+     "detail": "First attempt stopped at 4 trials: Wanda Fuller stood on the route in the portrait room and three trials in a row walked into her face, both arms. Readers on every failed trial tonight: 5 of 7 were an NPC filling the view, and each died having tried one or two escape rungs because the lost budget ran out before the ladder finished. Now every blockage gets the whole ladder, a sidestep is a 0.6 s detour held for three targets, and the pan A/B runs again on top, 10 v 10 interleaved."},
+    {"title": "Pan A/B, first attempt", "state": "done",
      "detail": "The ninth launch of the 25 went 1 of 5: three trials lost right after the bar-tables stop, where the head-on check has failed in 8 of the last 9 trials and the sideways look's arithmetic disagreed with the next reading by 300 px. The judge's first item was to A/B the pan that matches each look against its own recorded frame. Off arm = the 25's own configuration, so nothing is lost by switching. Readers are on every failed trial."},
     {"title": "THE 25, ninth launch (80182ac)", "state": "done",
      "detail": "Eighth launch 2/2 (155 s, 104 s), seventh 1/2. New in this one: the look-around strafe is one ordinary correction (batch 7's failure was a doubled one), four same-side junk fits steer once (0 of 24 arriving trials had four; 5 failing ones did), and the pan-from-run sits behind a flag, off, for its own A/B. Every failed trial gets a screenshot reader the moment it lands; the ninth's trial 1 (lost at k=173, the bar-tables stop again) is being read now."},

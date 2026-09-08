@@ -1451,7 +1451,12 @@ test or harness may redirect is read at CALL time, never captured in a
 default.** Grep for `=STORE)`, `=PATH)`, `=DELAY)` shapes before trusting any
 redirect.
 
-**19. SAVE PATCH SCRIPTS BEFORE EXECUTING THEM.** When an agent writes a script
+**19. SAVE PATCH SCRIPTS BEFORE EXECUTING THEM, AND ASSERT EVERY ANCHOR BEFORE
+WRITING ANY FILE.** 2026-09-07 22:00: a two-file patch script asserted and wrote
+`overnight/chain_trials.py`, then failed an anchor assert on `tools/dashboard.py`
+— with the harness file already on disk, mid-batch, and the next trial child
+died on it (rule 21 broken by a script that was half right). One assert block
+for all files, then all writes. **19. SAVE PATCH SCRIPTS BEFORE EXECUTING THEM.** When an agent writes a script
 to parse, slice or patch a critical project file — this file, the map, a
 harness — it saves the script to disk first (the scratchpad is fine) and gates
 the atomic write behind strict assertions on every anchor it will touch. If an

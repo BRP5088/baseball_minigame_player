@@ -1,10 +1,25 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 22:02. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 22:16. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
-- **THE PAN A/B, RUNNING (21:59:30, commit 2f27596):** `overnight/chain_trials.py --chain route_user_1853
+- **THE PAN A/B, SECOND ATTEMPT, RUNNING (22:13:30, commit 45436a0):** same harness and arms as below, on
+  top of the ladder round. **The first attempt (21:59-22:05, 2f27596) was stopped at 4 trials (off 0/2, on
+  1/2; `overnight/chain_trials_ab_pan_try1.*`): Wanda Fuller, an NPC, stood on the route at k=112 in the
+  portrait room and trials 1-3 walked into her face in BOTH arms** (frames: `overnight/chain_frames/
+  t1788832781074/it_040_k112.jpg`, `t1788832862511/it_038_k112.jpg` — "Wanda Fuller [] Talk" filling the
+  screen). Trial 4 (pan on) arrived once she had moved. **Tonight's failure census by reader** (one reader per
+  failed trial, `agent_progress/closed-loop/review/notes_cur_t0*.md`): NPC in view 5 (Wanda x3, a matron at
+  173, the patron at 196-200), Pete at the stop 166 then a sideways veer 1, the jukebox at 171 1. Every one
+  ended "lost after 9" or "stuck after 12" having tried one or two ladder rungs: LOST_MAX 9 reached the third
+  rung on the iteration it ended the walk, and the rung counter carried across the trial. **The ladder round
+  (45436a0):** the ladder restarts at jump after any progress; LOST_MAX 13 / NO_PROGRESS_MAX 17 (one full
+  cycle); a sidestep rung is a 0.6 s detour (0.3 s measured a sliver of clearance), the RIGHT rung doubled
+  after a LEFT, and the correction that would walk back into the obstacle is held for 3 plan targets. Eight
+  mutants caught. A Talk-prompt detector was tried and abandoned: OCR misses "Talk" over a white glove and
+  template-matching the button glyph scores wedge frames 0.94 (`scratchpad/npc_probe.py`, `glyph_probe.py`).
+- **THE PAN A/B, FIRST ATTEMPT, STOPPED (21:59:30, commit 2f27596):** `overnight/chain_trials.py --chain route_user_1853
   --trials 20 --arms off,on` — `STOP_PAN_FROM_RUN` off/on interleaved, 10 trials an arm, the arm applied INSIDE
   the trial child from `BASEBALL_CHAIN_PAN`, per-arm tally and a Fisher exact in `overnight/chain_trials.json`
   (`arms`, `tally`, `fisher_p`; each run row carries `arm` and `pan`). The judge's first item. Monitor on
