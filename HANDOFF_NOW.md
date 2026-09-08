@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 06:19. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 07:00. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,18 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, NINETEENTH LAUNCH, RUNNING (06:15, commit 32e4400 = 078a912 + patch43 + patch43b), plain
+- **NINETEENTH LAUNCH DONE 06:56: 23 of 25, walk median 80.2 s [70..107], best streak 10**
+  (`overnight/chain_trials_batch19.*`, the night's best count, = b13). The rescue fired twice and found
+  nothing twice (t11: through a WRONG DOOR in the office corridor into an unmapped storage room, the
+  wide search then anchored falsely, `notes for b19 t11`; t17: an NPC now standing at the top of the
+  stairs beside the pedestals, the look's 34-inlier fit occlusion-degraded, the strafe left went toward
+  her, `notes_b19_t17_1788864106.md`). No cost to any arrival. **The office losses of b17-b19 (six in
+  ~75 trials after ~100 without) are WANDERERS**: an NPC at the stairs, and corridor doors that open when
+  a blind push hits them (b18 t22 bedroom, b19 t11 storage room). Environment, not controller; what the
+  controller could do better there is not to sidestep toward an occluder on a thin fit (patch44).
+  **NEXT LAUNCH (07:00-07:12): patch44's A/B if its recheck says READY by then (`land44.sh` in the
+  scratchpad: `--arms off,on --flag STOP_LOOK_YAW --trials 20`), else the rescue build again for 25.**
+- **THE 25, NINETEENTH LAUNCH, DONE (06:15, commit 32e4400 = 078a912 + patch43 + patch43b), plain
   `--trials 25`: THE LOST RESCUE'S FIRST LIVE RUN.** Read every `rescued` / `rescue-failed` row (the
   journal carries `rescue: {looks, deg, inliers, from_k, to_k}`; frames `_rescue_look0/L/R`): a rescue
   that believes a look and then arrives is the win; a rescue that believes a WRONG look is the hazard

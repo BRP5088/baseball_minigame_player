@@ -731,14 +731,20 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         39-46; four stairs losses in 40 trials after ~100 without)
                                                                         and two more identical 129-look failures (t10, t20). The
                                                                         fastest walk on record, t3 at 62.7 s: nothing went wrong.
-    32e4400  06:15         25     running                             patch43+43b, a LOST RESCUE: at lost >= LOST_MAX, once per
+    32e4400  06:15         25     23            80.2 s      10        patch43+43b, a LOST RESCUE: at lost >= LOST_MAX, once per
                                                                         walk, back out 1.0 s and look 0/-25/+25 over the WHOLE chain
                                                                         behind the last credible k at the strong gate (165); fires
                                                                         only where the walk was already lost, so every firing is a
                                                                         measurement and arrivals cost nothing. patch44 (STOP_LOOK_YAW:
                                                                         a looked stop turns instead of strafing; census: after the
                                                                         129 strafe the next fit still reads -300 px on 93 of 96
-                                                                        arrivals) is in build for an A/B
+                                                                        arrivals) is in build for an A/B. RESULT: 23/25, the night's
+                                                                        best count (= b13); the rescue fired twice, found nothing
+                                                                        twice (t11 in an unmapped storage room through a WRONG DOOR
+                                                                        in the office corridor; t17 against an NPC now standing at
+                                                                        the top of the stairs), cost nothing. The office losses of
+                                                                        b17-b19 are wanderers: an NPC at the stairs, doors that open
+                                                                        when a blind push hits them.
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
