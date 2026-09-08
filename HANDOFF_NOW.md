@@ -109,6 +109,14 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (v) b15 trial 4 (03:5x): the shop-alcove loss again, the same rows as b14 t6 (scale 1.9 -> 3.9 through
+   94-102, blind, turn-early, rewind to 99, blind re-approach, lost). CENSUS of the credible fit scale over
+   k 90-109 on tonight's builds: ARRIVALS' max there has median 2.56, p90 3.02, max 3.66, and 60 of 102
+   arrivals carry a credible fit >= 2.5 in that stretch — the climb is the NORMAL reading of that stretch
+   (the chain was recorded further from the furniture than the loop walks), not a precursor. No rule on the
+   scale there (§10.4), and the reader's "throttle on rising scale" idea is refuted by it. What the two
+   losses share that arrivals do not: the sensor going fully blind at 104 for 20+ iterations. Reader
+   pending on what fills the view.
    (u) b14 trial 15's reader (`notes_b14_t15.md`): at the 39 stop the -25 look plainly showed the stairwell,
    the un-yawed strafe was small (+434 - 492 = -58 px), the committed frame at the recorded heading showed the
    furniture ALCOVE (the un-yaw arithmetic said "3 deg off"; the frames said 25), blind pushes then walked
