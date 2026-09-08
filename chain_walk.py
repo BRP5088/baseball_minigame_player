@@ -348,6 +348,49 @@ STOP_PAN_LOOKS = 2              # how many run frames to look at (first, middle)
 # deg): two populations, no overlap at 5 and 5. The OFF path is the control
 # and its test sets the flag False for itself.
 STOP_LOOK_YAW = True
+# ... AND THE UN-YAW ONLY MEANS ANYTHING WHEN THE LOOK FOUND THE STOP ITSELF.
+# `px = dx + ddeg * PX_PER_DEG` assumes the frame that matched IS the stop's
+# frame. A fit two or three waypoints PAST the stop is a different pose of the
+# recording, so the sum answers about somewhere the character is not.
+#
+# THE CENSUS IS A NAMED POPULATION, NOT A GLOB. overnight/chain_journals/ is
+# written by the LIVE batch: globbing it returned 41 rows and then 42 two
+# minutes later, so counts taken that way are stale before they are read
+# (CLAUDE.md's "name the fixture files", one level up). The 120 journals of
+# 2026-09-08 05:36-09:09, ending with the last trial of batch 22, are listed
+# with a sha256 each in drafts/pending_after_ab/patch46_yaw_firings.json and
+# recounted by patch46_yaw_census.py beside it. 39 firings, each scored on the
+# first credible fit (>= FIX_MIN_INLIERS) in the five rows after it:
+#
+#   stop 129, look fit within +-1   22 firings   dx -232..+263, BOTH SIGNS
+#                                                (14 pos, 8 neg), 20 ARRIVED
+#   stop 129, look fit +2 / +3       6 firings   dx +141..+230, ALL POSITIVE
+#                                                4 ARRIVED; the two losses
+#                                                (b21 t13, t17) went blind into
+#                                                geometry in the rows after
+#   stop  39, look fit +3            8 firings   dx -9..+174, BOTH SIGNS
+#   stops 39 / 166 / 196 at the stop 3 firings
+#
+# A leftover that keeps the yaw's own sign reversed on six firings out of six is
+# an OVER-TURN of 29-57% of the yaw, not scatter -- and those rows sit at the
+# extreme of the yaw range (-20.1..-25.1 deg against -9.4..-23.8 at the stop).
+# Where the fit is at the stop the leftover is unbiased, which is the shape a
+# correction that landed has.
+#
+# So gate the yaw on the STRUCTURAL condition its formula needs, and fall back
+# to the sidestep -- the pre-STOP_LOOK_YAW path, unchanged -- when it does not
+# hold. SHIPS OFF: an A/B decides it, the way patch45's did
+# (`--arms off,on --flag STOP_YAW_NEAR_FIT_ONLY`). It is NOT a special case for
+# one stop, and equally the signature is only AT one stop: the stairs stop 39
+# asks half the yaw (-104..-210 px) and its leftovers are both signs, so the
+# eight firings the flag sends to the strafe there ride a rule whose evidence is
+# at 129. What that costs is what the measurement is for.
+STOP_YAW_NEAR_FIT_ONLY = False
+# How far the look's fit may sit from the stop's own index and still be "the
+# stop seen": ONE waypoint, which at the recording's 0.25 s is a quarter second
+# of the user's walk. It is the census's own boundary -- the unbiased population
+# above is exactly 128/129/130 -- and not a tuned number.
+STOP_YAW_FIT_TOL = 1
 # A stop whose frame and both looks fit NOTHING is most likely an NPC in the
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.
@@ -1381,7 +1424,16 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     # is the relation the END TURN inverts; ONE literal, named.
                     dx2 = getattr(f2, "dx", 0.0) or 0.0
                     px = dx2 + ddeg * PX_PER_DEG
-                    if STOP_LOOK_YAW and abs(px) > LATERAL_TOL_PX:
+                    # ... and that formula assumes the frame that matched IS
+                    # the stop's own (see STOP_YAW_NEAR_FIT_ONLY): a fit two or
+                    # three waypoints on is a different pose, and the census
+                    # says it then over-turns by 29-57% of itself, one way.
+                    # `f2.k` is the look's own index; the default keeps a Fix
+                    # without one inside the gate rather than outside it.
+                    fit_off = int(getattr(f2, "k", target_k)) - target_k
+                    near_fit = (not STOP_YAW_NEAR_FIT_ONLY
+                                or abs(fit_off) <= STOP_YAW_FIT_TOL)
+                    if STOP_LOOK_YAW and near_fit and abs(px) > LATERAL_TOL_PX:
                         # THE OFFSET AT A LOOKED STOP IS A YAW, NOT A POSITION
                         # (see STOP_LOOK_YAW): turn by it instead of stepping
                         # sideways, and let it ride every push until the next
@@ -1402,6 +1454,18 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                         last_cmd = new_heading
                         looked["yaw"] = {"deg": ddeg_fix, "px": round(px)}
                     else:
+                        # THE NEAR-FIT GATE REFUSED THIS ONE. Name it in the
+                        # journal: a stop the gate sent to the sidestep and a
+                        # stop the flag was simply off for take the same path,
+                        # and 10.1 is that a no-op and a working path must not
+                        # have identical output. Recorded only where a yaw
+                        # would otherwise have fired -- inside LATERAL_TOL_PX
+                        # there is nothing to skip, and a marker there would
+                        # claim the gate refused a correction never on offer.
+                        if STOP_LOOK_YAW and abs(px) > LATERAL_TOL_PX:
+                            looked["yaw_skipped"] = {
+                                "fit_k": int(getattr(f2, "k", target_k)),
+                                "off": fit_off}
                         # ONE ordinary correction, not a double one: batch 7 trial
                         # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
                         # strafe RIGHT that three credible head-on fits then undid
@@ -1611,7 +1675,16 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 # is how a reader tells it from the sidestep it replaced.
                 + (f"  STOP YAW {looked['yaw']['deg']:+.1f} deg on "
                    f"{looked['yaw']['px']} px, no strafe"
-                   if looked is not None and "yaw" in looked else ""))
+                   if looked is not None and "yaw" in looked else "")
+                # ... and a yaw the near-fit gate refused names the offset that
+                # refused it, beside the sidestep that ran in its place.
+                + ((f"  STOP YAW skipped (fit "
+                    f"{looked['yaw_skipped']['off']:+d} from the stop), strafe "
+                    + (f"{looked['strafe']['side']} for "
+                       f"{looked['strafe']['seconds']:.2f}s on "
+                       f"{looked['strafe']['px']} px"
+                       if "strafe" in looked else "under the minimum, none"))
+                   if looked is not None and "yaw_skipped" in looked else ""))
             continue
 
         fix = chain.locate(img, k)

@@ -2278,8 +2278,22 @@ class StopLookYaw(unittest.TestCase):
 
     STOP_LOOK_YAW turns by it instead, using the END TURN's own formula and
     cap, and carries the offset on every push until the next turn-only stop.
-    It ships False; these tests drive it both ways and pin the shipped path
-    as literals, because a mutant that ignores the flag must fail.
+    It ships True (patch45); these tests drive it both ways and pin the
+    shipped path as literals, because a mutant that ignores the flag must
+    fail.
+
+    STOP_YAW_NEAR_FIT_ONLY (patch46) is the second flag here and it ships
+    False. The un-yaw assumes the frame that matched IS the stop's own frame.
+    Over the 39 firings in a CLOSED, NAMED population -- 120 journals, the
+    manifest and a sha256 each in drafts/pending_after_ab/
+    patch46_yaw_firings.json, recounted by patch46_yaw_census.py, because
+    overnight/chain_journals/ is written by the live batch and a glob over it
+    is not a population -- the leftover after the yaw is UNBIASED where the
+    look's fit sits within one waypoint of the stop (22 firings, dx -232..+263
+    both signs, 20 arrived) and ALL POSITIVE where it sits two or three ahead
+    (6 firings, +141..+230, an over-turn of 29-57% of the yaw, 4 arrived). The
+    flag sends that second population to the sidestep instead, and its tests
+    drive it both ways for the same reason.
     """
 
     # wp2 is the STOP (ly = 0, a stationary run of one). The pushes after it
@@ -2425,6 +2439,198 @@ class StopLookYaw(unittest.TestCase):
         self.assertEqual(rig.strafes(), [])
         self.assertEqual(self.turns(rig), [90.0, 0.0, 335.0, 25.0, 0.0, 10.0],
                          "the next push takes the plan's raw heading")
+
+    @staticmethod
+    def _gated(go, *a, **kw):
+        """Run a walk with the yaw ON and its NEAR-FIT GATE on too."""
+        old = (chain_walk.STOP_LOOK_YAW, chain_walk.STOP_YAW_NEAR_FIT_ONLY)
+        chain_walk.STOP_LOOK_YAW = True
+        chain_walk.STOP_YAW_NEAR_FIT_ONLY = True
+        try:
+            return go(*a, **kw)
+        finally:
+            (chain_walk.STOP_LOOK_YAW,
+             chain_walk.STOP_YAW_NEAR_FIT_ONLY) = old
+
+    def _look_at(self, k, after=None, fixes_after=(), table_at=7, dx=235.0):
+        """The StopLookYaw rig with the -25 deg look fitting waypoint `k`.
+
+        The stop is waypoint 2 and the look reads the default 235 px inside
+        the same -25 frame, so px (-257.5) and the yaw it implies (-13.1 deg)
+        are IDENTICAL across the gate tests below: the only thing that varies
+        is where the sensor says that frame was, and any difference in the
+        turn list is the gate and nothing else. `dx` is overridden by exactly
+        one test, the one that needs px INSIDE LATERAL_TOL_PX.
+        """
+        return self._rig(self._wps(after=after),
+                         [Fix(k=1), None, Fix(k=k, inliers=90, dx=dx),
+                          None, Fix(k=3)] + list(fixes_after),
+                         table_at=table_at)
+
+    # The stop, both looks, back to the stop, THE YAW, then the next push's own
+    # plan heading with the yaw on it -- and the same list with neither.
+    YAW_TURNS = [90.0, 0.0, 335.0, 25.0, 0.0, 346.9, 356.9]
+    STRAFE_TURNS = [90.0, 0.0, 335.0, 25.0, 0.0, 10.0]
+    STRAFE_LAT = {"side": "left", "seconds": 0.3, "px": -258}
+
+    def test_the_near_fit_gate_ships_OFF_and_its_tolerance_is_ONE_waypoint(self):
+        # Literals (10.11): a test that reads the constant it guards passes
+        # forever. The tolerance is the census's own boundary -- the unbiased
+        # population at the 129 stop is exactly the fits at 128/129/130.
+        self.assertIs(chain_walk.STOP_YAW_NEAR_FIT_ONLY, False)
+        self.assertEqual(chain_walk.STOP_YAW_FIT_TOL, 1)
+
+    def test_gated_a_look_fitting_ONE_PAST_the_stop_still_YAWS(self):
+        # Inside the tolerance, so the gate must change NOTHING: this is the
+        # census's 22-firing population, the one whose leftover is unbiased.
+        rig = self._look_at(3)
+        res = self._gated(rig.go)
+        self.assertEqual(self.turns(rig), self.YAW_TURNS,
+                         "the yaw fires exactly as it does today")
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["yaw"], {"deg": -13.1, "px": -258})
+        self.assertNotIn("yaw_skipped", lat)
+        self.assertEqual(rig.strafes(), [],
+                         "a yaw REPLACES the sidestep; it never does both")
+        self.assertTrue(res["arrived"])
+
+    def test_gated_a_look_fitting_TWO_PAST_the_stop_STRAFES_AND_SAYS_SO(self):
+        # The census's 6-firing population: dx +141..+230 after the yaw, all
+        # one way. The fallback is the OLD path, and it must be the old path
+        # exactly -- same seconds, same side, same px as the flag-off control
+        # two tests up.
+        rig = self._look_at(4)
+        res = self._gated(rig.go)
+        self.assertEqual(self.turns(rig), self.STRAFE_TURNS,
+                         "no yaw turn, and the next push takes the plan's raw "
+                         "10.0")
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)],
+                         "LEFT at LATERAL_MAG for the capped LATERAL_CAP_SEC "
+                         "-- the same sidestep the flag-off path takes")
+        lat = res["fixes"][1]["lateral"]
+        self.assertNotIn("yaw", lat)
+        self.assertEqual(lat, {"deg": -25.0, "inliers": 90,
+                               "yaw_skipped": {"fit_k": 4, "off": 2},
+                               "strafe": self.STRAFE_LAT},
+                         "the journal says WHY no yaw fired; without the "
+                         "marker a gated stop and a flag-off stop are the "
+                         "same row (10.1)")
+
+    def test_gated_the_rule_is_SYMMETRIC_a_fit_two_BEHIND_also_strafes(self):
+        # The formula fails on the OFFSET, not on the direction: a fit behind
+        # the stop is as much "a different pose" as one ahead. Nothing on disk
+        # measures the behind case (locate bounds its answer to [stop-1,
+        # stop+3]), so this is the gate's stated shape held to, not a claim
+        # about frequency.
+        rig = self._look_at(0)
+        res = self._gated(rig.go)
+        self.assertEqual(self.turns(rig), self.STRAFE_TURNS)
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)])
+        lat = res["fixes"][1]["lateral"]
+        self.assertNotIn("yaw", lat)
+        self.assertEqual(lat["yaw_skipped"], {"fit_k": 0, "off": -2})
+        self.assertEqual(lat["strafe"], self.STRAFE_LAT)
+
+    def test_with_the_gate_OFF_a_FAR_fit_YAWS_exactly_as_it_ships_today(self):
+        # THE MATCHED CONTROL. Same rig as the +2 test, same look, same px --
+        # the flag is the ONLY difference, so a mutant that applies the gate
+        # whatever the flag says fails here and nowhere else.
+        self.assertIs(chain_walk.STOP_YAW_NEAR_FIT_ONLY, False)
+        self.assertIs(chain_walk.STOP_LOOK_YAW, True)
+        rig = self._look_at(4)
+        res = rig.go()
+        self.assertEqual(self.turns(rig), self.YAW_TURNS)
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["yaw"], {"deg": -13.1, "px": -258})
+        self.assertNotIn("yaw_skipped", lat)
+        self.assertEqual(rig.strafes(), [])
+        # ... and at +3, the far end of what locate() can return, both ways:
+        # shipped it yaws, gated it does not.
+        far = dict(after=[(10.0, -0.35), (10.0, -0.35), (10.0, -0.35)],
+                   fixes_after=[Fix(k=4), Fix(k=5)], table_at=9)
+        rig3 = self._look_at(5, **far)
+        lat3 = rig3.go()["fixes"][1]["lateral"]
+        self.assertEqual(lat3["yaw"], {"deg": -13.1, "px": -258})
+        self.assertIn(346.9, self.turns(rig3), "ANTI-VACUITY: the yaw was taken")
+        rig3g = self._look_at(5, **far)
+        lat3g = self._gated(rig3g.go)["fixes"][1]["lateral"]
+        self.assertNotIn("yaw", lat3g)
+        self.assertEqual(lat3g["yaw_skipped"], {"fit_k": 5, "off": 3})
+        self.assertNotIn(346.9, self.turns(rig3g))
+
+    def test_inside_LATERAL_TOL_PX_the_gate_MARKS_NOTHING_however_far_the_fit(self):
+        """A stop with nothing to correct records no skip -- either flag, any fit.
+
+        The marker's own guard is `if STOP_LOOK_YAW and abs(px) >
+        LATERAL_TOL_PX`, and its px half had no test: dropping it survived all
+        191 tests (skeptic 2, 2026-09-08), because
+        test_inside_LATERAL_TOL_PX_neither_a_yaw_nor_a_strafe pins the yaw and
+        the strafe but never the new key. Without the px half, a stop whose
+        look found the scene straight ahead is journalled as a yaw the near-fit
+        gate refused -- a correction that was never on offer -- and at fit +2
+        with the gate ON it says so on the one population the A/B reads. 500 px
+        inside the -25 frame is 500 - 492.5 = 7.5 px from the walking heading,
+        so nothing fires and nothing is recorded whatever the fit index is.
+        """
+        for gated in (False, True):
+            for fit_k, off in ((2, 0), (4, +2)):
+                with self.subTest(gated=gated, fit_off=off):
+                    rig = self._look_at(fit_k, dx=500.0)
+                    res = (self._gated if gated else self._on)(rig.go)
+                    lat = res["fixes"][1]["lateral"]
+                    self.assertNotIn("yaw", lat)
+                    self.assertNotIn("strafe", lat)
+                    self.assertNotIn("yaw_skipped", lat)
+                    self.assertEqual(lat, {"deg": -25.0, "inliers": 90},
+                                     "the look is recorded and nothing else")
+                    self.assertEqual(rig.strafes(), [])
+                    self.assertEqual(self.turns(rig), self.STRAFE_TURNS,
+                                     "the next push takes the plan's raw "
+                                     "heading, no yaw on it")
+
+    def test_the_PAN_branch_takes_no_yaw_and_no_SKIP_with_ALL_flags_on(self):
+        """The pan sidesteps as it always did, and records neither.
+
+        The pan and the look-around are the two arms of one if/elif and only
+        the elif consults these flags -- but that held for the wrong reason
+        once already: a mutant that put the yaw block inside the PAN branch
+        passed all 179 tests (skeptic 1, 2026-09-08) because no test had armed
+        both flags at once. The pan's fit here sits TWO past the stop, so a
+        gate copied into the pan would have something to refuse, and a
+        `yaw_skipped` leaking in would show. The pan's dx is measured against
+        the run frame's OWN heading and needs no un-yawing, which is exactly
+        why there is no yaw here to gate.
+        """
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0),
+                                     (30.0, 0.0), (30.0, -0.35), (30.0, -0.35)],
+                                    start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        ch = FakeChain(7, [Fix(k=1), None, None,
+                           Fix(k=6, inliers=90, dx=80.0), Fix(k=5), Fix(k=6)],
+                       default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=9)
+        old = chain_walk.STOP_PAN_FROM_RUN
+        chain_walk.STOP_PAN_FROM_RUN = True
+        try:
+            res = self._gated(rig.go)
+        finally:
+            chain_walk.STOP_PAN_FROM_RUN = old
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["pan_heading"], 60.0,
+                         "ANTI-VACUITY: the PAN branch ran, not the "
+                         "look-around")
+        self.assertNotIn("yaw", lat)
+        self.assertNotIn("yaw_skipped", lat)
+        self.assertEqual(lat["strafe"], {"side": "right", "seconds": 0.111,
+                                         "px": 80})
+        self.assertEqual(self.turns(rig)[:5], [90.0, 30.0, 90.0, 60.0, 30.0],
+                         "to the stop, the run's first and middle headings, "
+                         "BACK TO THE STOP'S OWN HEADING -- no yaw on it")
 
     def test_a_REGRESSION_drops_the_stop_yaw(self):
         """A look-back regression says the character is BEHIND where the loop
