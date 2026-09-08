@@ -773,7 +773,12 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         129 (t6), the office stretch twice (t20, t23, lost at 88
                                                                         after the corridor). Rescue tally over three batches: 14
                                                                         firings, 3 believed, 3 arrived
-    da361ef  09:12 (third)  25     running                             the same build again
+    da361ef  09:12 (third)  25     23            79.8 s      21        the same build again: STREAK 21, TYING THE RECORD (b12).
+                                                                        Losses: t3 the office stretch; t25 the fourth fit-ahead
+                                                                        yaw over-correction (a look matched waypoint 132, yaw
+                                                                        -25.8, the next fits +126/+275, blind, lost) -- 3 of 7 such
+                                                                        firings lost, the patch46 gate's case
+    da361ef  09:57 (4th)    12     running                             a short batch so the next boundary meets patch46/47
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED

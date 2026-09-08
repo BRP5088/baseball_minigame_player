@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 09:40. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 10:12. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
@@ -48,9 +48,20 @@ which is now the rescue's ceiling). Rescue tally over three batches: 14 firings,
 arrived, 11 found nothing. The three losses: past 129 after a correct yaw (t6), and the office
 stretch twice (t20, t23: lost at 88 after the blind corridor, the wrong-door / stairs-NPC family).
 
-**Running now (09:40):** the twenty-third launch, the same build a third time (09:12), monitors on
-trial lines, rescue firings and STOP YAW firings -- and FOUR research/build workflows, all read-only on
-the checkout except `drafts/pending_after_ab/` and their own `agent_progress/closed-loop/<name>/`:
+**Batch 23 (da361ef, third run, 09:12-09:56): 23 of 25, walk median 79.8 s, STREAK 21 -- ties the
+record.** Losses: t3 the office stretch (lost at 88 after the blind corridor); t25 the fit-ahead yaw
+over-correction a fourth time (the look matched 132, yaw -25.8, next fits +126/+275, blind, lost) --
+3 of 7 such firings lost, exactly patch46's case.
+
+**Running now (10:10):** the twenty-fourth launch, a SHORT batch of 12 on the same build (09:57) so the
+next boundary meets the two patches in build. Research verdicts so far: `tail-and-headon-research`
+REFUSED both its candidates (the end-game is at its floor, 4.4 s median vs the human's 2.2 s; the head-on
+large-dx bias costs nothing measurable and its instrument would be circular); `wanderer-investigation`
+found NOTHING TO SHIP (the only surviving mechanism -- on a blind blockage the LEFT sidestep frees the
+character, jump 0/106 back 0/87 left 55/262 -- is 80% one waypoint, has an arrival ceiling of ~zero and
+would be a time saver of 6-8 s on the trials blocked at 129; its probe design is queued). Both in
+`census_after_129_notes.md`. Workflows launched at 09:20-09:50, all read-only on the checkout except
+`drafts/pending_after_ab/` and their own `agent_progress/closed-loop/<name>/`:
   1. `yaw-fit-gate-builder` (09:20): patch46, STOP_YAW_NEAR_FIT_ONLY (the yaw only when the look fits the
      stop's index +-1, else the old strafe) -- lands at a batch boundary as an A/B `--flag`.
   2. `wanderer-investigation` (09:25): three finders (what precedes a pin in the journal; what actually
