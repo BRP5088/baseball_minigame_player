@@ -252,6 +252,20 @@ JUNK_MIN_INLIERS = 6
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
 TURN_RETRY_MAX = 3
+# ... and when the verification is exhausted with nothing credible, the stop is
+# NOT where the estimate is: k rewinds to the last credible waypoint and the
+# loop re-approaches. A rewind moves the ESTIMATE, not necessarily the
+# character, so without a bound one stop could be circled forever. After this
+# many rewinds the stop is advanced unverified as it always was, and LOST,
+# STUCK and the time cap still end the walk. It is spent PER STOP and NEVER
+# REFUNDED (see `rewinds_at`): a counter that resets when the walk visits
+# another stop is not a bound at all, and measured 22 rewinds against this 2.
+# A LIVELOCK BOUND, not a measured
+# quantity: two re-approaches is what a 400 s cap can afford beside the ~90 s
+# an arriving trial takes, and the stop table (audit/stop_table.md) says a
+# stop taken unverified arrives 1 in 14 at 129 and 0 in 6 at 166, so a third
+# re-approach is worth less than the seconds it costs.
+STOP_REWIND_MAX = 2
 # LOOK AROUND AT AN UNVERIFIED STOP before believing "occluded / past": yaw
 # these many degrees each way, match the stop's frame at each, and if a
 # credible fit appears take its lateral offset as a correction. Batch 5 trial
@@ -896,6 +910,20 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     dx_run = []                 # dx of the last fits (>= WEAK_MIN_INLIERS), for the consistency rule
     junk_run = []               # dx of the last JUNK fits (>= JUNK_MIN_INLIERS), four agreeing steer once
     last_cred_scale = 1.0       # scale of the last CREDIBLE fit
+    last_cred_k = 0             # ... and the waypoint it NAMED. Waypoint 0 is
+                                # the reset spawn, trusted the way k is trusted
+                                # above, so it is the floor a rewind falls to.
+    rewinds_at = {}             # stop -> rewinds already spent AT THAT STOP.
+                                # A dict rather than a (which stop, how many)
+                                # pair, because a pair is REFUNDABLE: a rewind
+                                # can land BEFORE an earlier stop, that stop
+                                # then fails too, and coming back the counter
+                                # has been reset by the other stop. Measured
+                                # on a two-stop chain: 22 rewinds and the whole
+                                # 400 s cap spent oscillating, with
+                                # STOP_REWIND_MAX = 2 in force the whole time.
+                                # Keyed by stop, the pool is finite -- two per
+                                # stop for the life of the walk.
     escaped_prev = False        # the previous iteration escaped: no lateral undo this one
     waited_here = False         # the current stop has had its one wait
     backed_here = False         # ... and its one step back
@@ -1132,6 +1160,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 wide = _strong_ahead(chain, img, target_k, n)
                 if wide is not None:
                     k = min(int(wide.k), n - 1)
+                    last_cred_k = k
                     blind = 0
                     lost = 0
                     misses = 0
@@ -1272,7 +1301,17 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     f"{'nothing' if fix_t is None else f'waypoint {int(fix_t.k)} at {inl_t} inliers'}"
                     f", no evidence of being short")
                 continue
-            if (not verified and (fix_t is None or tied) and looked is None
+            # RULE A: A THIN FIT AT A STOP IS NOTHING. These two gates ask
+            # "did anything fit at all", and a fit under WEAK_MIN_INLIERS is
+            # not an answer: b11 trial 13 read 13 inliers with a runner-up of
+            # 11 at the k=196 stop with an NPC filling the frame -- neither
+            # None nor tied (11 < 0.9 * 13) -- so the step back and the wait
+            # were both skipped and three retry pushes went through a side
+            # doorway into an unmapped corridor. WEAK_MIN_INLIERS is reused
+            # rather than a new constant invented: it is already the line
+            # between right-but-thin (17-36) and junk (6-13).
+            nothing_t = fix_t is None or tied or inl_t < WEAK_MIN_INLIERS
+            if (not verified and nothing_t and looked is None
                     and turn_retries == 0 and not backed_here):
                 backed_here = True
                 back(PUSH_MAG, BACK_SEC)
@@ -1283,7 +1322,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-back: nothing fits "
                     f"head-on or either side; one step back for clearance")
                 continue
-            if (not verified and (fix_t is None or tied) and looked is None
+            if (not verified and nothing_t and looked is None
                     and turn_retries == 0 and not waited_here):
                 waited_here = True
                 sleep(STOP_WAIT_SEC)
@@ -1303,7 +1342,15 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # nothing at stops 88 and 129 in every slow arrival tonight, and
             # the ladder ran anyway (fast_runs/notes.md). The retries that
             # helped carried scale 1.1-1.2.
-            if (not verified and turn_retries < TURN_RETRY_MAX
+            # RULE B: and it needs EVIDENCE OF BEING SHORT, which is the
+            # stop's frame fitting an EARLIER waypoint CREDIBLY. A thin fit is
+            # not that evidence and neither is silence; both mean "I cannot
+            # see", and a push forward on "I cannot see" is how trial 13 left
+            # the room. locate() bounds its answer to [stop-1, stop+3], so
+            # `kt < target_k` is the whole of the short case.
+            short_ev = (fix_t is not None and inl_t >= FIX_MIN_INLIERS
+                        and kt is not None and kt < target_k)
+            if (not verified and short_ev and turn_retries < TURN_RETRY_MAX
                     and walk_heading is not None and not early_stop
                     and last_cred_scale < WALL_SCALE):
                 turn_retries += 1
@@ -1320,6 +1367,80 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     f"{turn_retries}/{TURN_RETRY_MAX}: the stop's frame did not "
                     f"fit ({inl_t} inliers); one more push along {walk_heading:.1f}")
                 continue
+            if not verified:
+                # RULE C: AN UNVERIFIED STOP REWINDS. Nothing credible fitted
+                # here, so "I am at the stop" is not a reading -- it is the
+                # plan talking. Stamping k = target_k there put trial 13's
+                # estimate at the dealer's table while the character stood in
+                # a service corridor, and the stop table (audit/stop_table.md)
+                # says a stop taken unverified arrives 1 in 14 at 129 and 0 in
+                # 6 at 166. Go BACK to the last credible waypoint, rewind the
+                # plan pointer so it re-derives from there -- the same thing
+                # the look-back regression does, and for the same reason --
+                # and let the ordinary machinery re-approach: the wide search
+                # from the first blind push, the ladder on stalls, the
+                # back-off and the looks here.
+                #
+                # min(), so a rewind never moves the estimate FORWARD: a
+                # look-back regression may already have put k behind the last
+                # credible fit, and that regression is the better evidence.
+                #
+                # `rewound_k < k` is the no-op guard, and it is also the
+                # honest statement of WHEN THIS RULE APPLIES: only when there
+                # is ground between the last credible sighting and where k
+                # stands. When the last credible fit IS where k already stands
+                # there is nothing to re-approach -- the pointer would
+                # re-derive to this same stop and the loop would repeat this
+                # iteration, spending a rewind and a stop cycle to change
+                # nothing (CLAUDE.md 10.1's no-op path that logs like an
+                # action) -- so the stop is advanced unverified exactly as
+                # before. b11 trial 12 is that case and is NOT fixed here: its
+                # wide relocalisation to 144 (195 inliers) is itself the last
+                # credible sighting, and the alternative would be falling back
+                # past it onto a 42-inlier fit. Trial 13 is the case that IS
+                # fixed: blind and thin pushes carried its estimate to the
+                # stop, so there is real ground to re-walk.
+                #
+                # `blind = 0` and `unverified_turn = False` because the
+                # estimate is back on the last thing the SENSOR SAW, which is
+                # the opposite of the unverified stamp that flag means -- and
+                # `_blind_cap` reads it with no regard to distance, so setting
+                # it here would hold the WHOLE re-approach to END_BLIND_MAX
+                # (2). A five-target run to a stop that never fits then
+                # crosses on 4 blind advances the first time, gets 2 on the
+                # re-approach, bridges once with the near-stop turn-early
+                # (one-shot per blockage, and every action a re-approach makes
+                # is unevidenced so it never re-arms), and the second
+                # re-approach goes miss/escape/LOST at a k BEHIND the stop --
+                # a walk-ending failure on ground it had just crossed. The
+                # bound on a rewind is STOP_REWIND_MAX, LOST, STUCK and the
+                # cap. `lost` is NOT reset: a walk that cannot see must still
+                # end.
+                rewound_k = min(last_cred_k, k)
+                if rewinds_at.get(target_k, 0) < STOP_REWIND_MAX and rewound_k < k:
+                    rewinds_at[target_k] = rewinds_at.get(target_k, 0) + 1
+                    k = rewound_k
+                    pi = 0
+                    blind = 0
+                    misses = 0
+                    stalls = 0
+                    turn_retries = 0
+                    waited_here = False
+                    backed_here = False
+                    early_stop = False
+                    unverified_turn = False
+                    action = "turned-unverified"
+                    record({"iteration": iteration, "k": k, "target": target_k,
+                            "fix": _fix_row(fix_t), "action": action,
+                            "lateral": None, "rewound_to": k, "at_end": False,
+                            "seconds": round(now() - it_t0, 2),
+                            "elapsed": round(now() - t0, 2)})
+                    log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  "
+                        f"{action}: nothing credible fitted the stop — REWOUND "
+                        f"to {k} (rewind {rewinds_at[target_k]}"
+                        f"/{STOP_REWIND_MAX} at this stop) "
+                        f"rather than claiming the stop")
+                    continue
             k = target_k
             misses = 0
             stalls = 0
@@ -1328,6 +1449,21 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             backed_here = False
             early_stop = False
             unverified_turn = not verified
+            if verified and inl_t >= FIX_MIN_INLIERS:
+                # A VERIFIED STOP IS A CREDIBLE SIGHTING, and nothing recorded
+                # it as one: `last_cred_k` was written only by the push path's
+                # credible-fix branch and the two wide relocalisations. So a
+                # walk that verified stop A on a look-around and then failed
+                # at stop B rewound to a push fix from BEFORE A, re-walking
+                # ground that was never in doubt and crossing back through
+                # whatever is between them. FIX_MIN_INLIERS, not `verified`
+                # alone: the head-on `real` path verifies from
+                # WEAK_MIN_INLIERS (15) up, thin enough to advance on and too
+                # thin to be the floor a later rewind falls to. The pan path
+                # matched an index inside this stop's own stationary run,
+                # where the character does not move, so target_k is the right
+                # credit for all three.
+                last_cred_k = target_k
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
                 action = "turned-looked"
@@ -1413,6 +1549,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 wide = _strong_ahead(chain, img, k, n)
             if wide is not None:
                 k = min(int(wide.k), n - 1)
+                last_cred_k = k
                 fix = wide
                 weak = False
                 blind = 0
@@ -1500,6 +1637,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             lost = 0
             unverified_turn = False
             last_cred_scale = float(getattr(fix, "scale", 1.0) or 1.0)
+            # The waypoint a CREDIBLE fit named is the rewind target. It is the
+            # fit's own index, not k: k may be held back by `reached`, and what
+            # a rewind wants is the last place the sensor could actually see.
+            last_cred_k = min(int(fix.k), n - 1)
             # Never past the target this push was aimed at (one push, one
             # target: a wrong match must not run the plan ahead of the
             # character) and never past the last waypoint (locate() may
