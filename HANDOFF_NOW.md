@@ -109,6 +109,16 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (t) b14 trial 14's reader (`notes_cur_t14_1788852050.md`): at the 196 stop the fit named 199 (3 ahead)
+   with dx -206 and the offset never closed over six iterations of left strafes (0.16-0.29 s); the
+   character drifted to the WINDOW on the room's left, pressed against the pane, blind. The same 3-ahead fit
+   appeared at 166 in that trial and self-corrected. The reader's open question: a heading error at the
+   turn (aimed at the window, not the chair) rather than translation — the strafe gain at close range should
+   have closed 200 px in one step and did not. Under the end-turn threshold (400 px); arrivals' tail offsets
+   reach 342, so the threshold cannot come down to catch it (§10.4). Candidate for the morning: at the end,
+   when N consecutive strafes on the same side do not shrink |dx| (the 'not taking' signature measured
+   earlier tonight at 3 of 3 end-fails vs 1 arrival at >450 px — re-census at 100-250 px), turn toward the
+   scene instead. Not built.
    (s') b14 trial 6's reader (`notes_b14_t06.md`): the blind view was the COAT RACK beside the standing patron
    in the shop alcove (k 104-109), a geometry wedge the ladder never clears; the fit SCALE had climbed
    monotonically 1.1 -> 4.0 over ~46 waypoints (street -> shop) with inliers falling, crossing WALL_SCALE one
