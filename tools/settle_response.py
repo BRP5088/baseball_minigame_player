@@ -87,18 +87,61 @@ def run(chain_name, pushes, mag, sec, reset=True):
 
     ch = chain_mod.Chain.load(os.path.join("chains", chain_name),
                               log=lambda *a: None)
+    # WHERE TO START, and the two ways the first version got this wrong.
+    # (1) It searched a 200-waypoint window. chain.py's own docstring calls a
+    #     global search "the localiser's known trap", and it duly matched
+    #     waypoint 48 from the spawn -- a stretch the character was nowhere
+    #     near. (2) It accepted ANY Fix, so a 6-inlier coincidence passed as a
+    #     position. Every later reading then compared against the wrong part of
+    #     the chain and returned ~6 inliers at every delay: a number that never
+    #     varies, read as a verdict (10.1).
+    # After a reset the spawn IS the chain's start, so look there and demand a
+    # fit as credible as the walk itself demands.
+    import chain_walk
+    import slow_traverse as st
+    import walk_steps as ws
+    floor = chain_walk.FIX_MIN_INLIERS
+
+    # FACE THE ROUTE FIRST. The spawn is deterministic at bearing 87 (E) and
+    # the chain's opening waypoints were recorded at 271 (W) -- 184 degrees
+    # apart, because the spawn faces the typewriter desk and the route leaves
+    # the other way. A real walk's FIRST action is that turn, which is why
+    # trials fit the opening at ~195 inliers and a probe taken before turning
+    # fits nothing at all. Locating without turning measures the wrong pose.
+    opening = next((w.heading for w in ch.waypoints[:8]
+                    if getattr(w, "heading", None) is not None), None)
+    if opening is not None:
+        print(f"turning to the chain's opening heading {opening:.1f} "
+              f"(the spawn faces {ws.read_heading():.0f})")
+        st.turn_to(opening, ws.read_heading, compass.fast_capture,
+                   log=lambda *a: None)
+        time.sleep(0.4)
+
     img = compass.fast_capture()
-    fix = ch.locate(img, 1, window=200) if img is not None else None
-    if fix is None:
+    fix = ch.locate(img, 1, window=6) if img is not None else None
+    if fix is None or fix.inliers < floor:
+        got = "nothing" if fix is None else f"{fix.inliers} inliers at k={fix.k}"
         raise SystemExit(
-            "cannot fit the CURRENT frame anywhere on the chain, so every "
-            "reading below would abstain for a reason that is not settling. "
-            "Stand the character on the route first (a reset spawn works).")
+            f"REFUSING: the starting frame does not fit the chain's opening "
+            f"credibly ({got}, need >= {floor}). Every reading would then be "
+            f"measuring the wrong stretch of chain, not settling. Reset so the "
+            f"character stands at the spawn, and check the stream is live.")
     k = fix.k
-    print(f"starting at chain waypoint {k} ({fix.inliers} inliers)")
+    print(f"starting at chain waypoint {k} ({fix.inliers} inliers, "
+          f"floor {floor})")
 
     samples = {d: [] for d in DELAYS}
     for i in range(pushes):
+        # FOLLOW THE ROUTE, don't hold one heading. The recorded chain curves,
+        # so eight pushes along the opening bearing walk off it and the fits
+        # collapse (measured: inliers fell to 10-14 against the ~150 a real
+        # walk sees, and k never advanced). A walk re-aims before every push;
+        # so must this, or the curve measures going off-route, not settling.
+        aim = getattr(ch.waypoints[min(k, len(ch.waypoints) - 1)],
+                      "heading", None)
+        if aim is not None:
+            st.turn_to(aim, ws.read_heading, compass.fast_capture,
+                       log=lambda *a: None)
         # THE PUSH IS SENT HERE, NOT THROUGH walk_leg, for one reason: walk_leg
         # sleeps SETTLE_SEC before it returns, so sampling from its return would
         # start 350 ms after the stick released and miss the entire window this
@@ -114,11 +157,11 @@ def run(chain_name, pushes, mag, sec, reset=True):
             im = compass.fast_capture()
             f = ch.locate(im, k, window=3) if im is not None else None
             samples[d].append(None if f is None else f.inliers)
-        last = [f for f in samples[DELAYS[-1]] if f is not None]
-        if last:
-            nf = ch.locate(compass.fast_capture(), k, window=3)
-            if nf is not None:
-                k = nf.k
+        nf = ch.locate(compass.fast_capture(), k, window=3)
+        if nf is not None and nf.inliers >= floor:
+            k = nf.k          # only a CREDIBLE fit may move the anchor
+        print(f"    anchor k={k}" + ("" if nf is None else
+              f" (fit k={nf.k} inliers={nf.inliers})"))
         print(f"  push {i+1}/{pushes} done, now near waypoint {k}")
 
     rows, best, knee = curve(samples)
@@ -129,7 +172,13 @@ def run(chain_name, pushes, mag, sec, reset=True):
     print(f"  {'delay':>7s} {'n':>4s} {'median inliers':>15s} {'abstains':>9s}")
     for d, n, m, ab in rows:
         print(f"  {d:6.2f}s {n:4d} {m:15.1f} {ab:9d}")
-    print(f"\n  best median {best:.1f}; first delay within 5% of it: {knee}")
+    strong = sum(1 for d in samples for x in samples[d]
+                 if x is not None and x >= floor)
+    total = sum(len(samples[d]) for d in samples)
+    print(f"\n  CREDIBLE samples (>= {floor} inliers): {strong} of {total}. "
+          f"If that is near zero the curve\n  below is noise about the wrong "
+          f"place, not a settling curve -- do not read it.")
+    print(f"  best median {best:.1f}; first delay within 5% of it: {knee}")
     print("  REPORTED, NOT APPLIED. Shortening a settle is a live change and "
           "belongs in an A/B scored on ARRIVAL, not on inliers alone.")
     return rows

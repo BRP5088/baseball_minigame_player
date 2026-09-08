@@ -54,6 +54,14 @@ import pose
 # above 0.60, so 0.45 sits inside the measured-repeatable band.
 PUSH_MAG = 0.45
 PUSH_SEC = 0.40                 # the duration that table was measured at
+# SETTLE PROBE (patch54), OFF unless BASEBALL_SETTLE_PROBE is set in the
+# environment. After each push it captures and fits at these delays measured
+# FROM THE STICK RELEASE, and writes the inlier counts into the journal row, so
+# a real walk -- with the controller keeping the character on the route -- says
+# whether SETTLE_SEC's 0.35 s is needed. It makes the walk slower, so it is a
+# separate short run, never an arm of a measured batch.
+SETTLE_PROBE_ENV = "BASEBALL_SETTLE_PROBE"
+SETTLE_PROBE_DELAYS = (0.00, 0.05, 0.10, 0.15, 0.25, 0.35)
 
 # Consecutive UNMEASURABLE fixes (locate() returned None) before an escape.
 # Not measured -- there is no population of "how many blind frames in a row is
@@ -649,6 +657,18 @@ def _near_stop(pi, plan):
     return None
 
 
+def settle_probe_on(env=None):
+    """Is the settle probe armed? Read at CALL time, never at import (10.18).
+
+    A module-level knob captured in a default cannot be redirected by a test or
+    a harness, and this project has the scar: `tools/prompt_ocr_ab` set
+    BASEBALL_TEST_RUN at import and every stick send for the rest of that live
+    run was silently dropped.
+    """
+    e = os.environ if env is None else env
+    return bool(e.get(SETTLE_PROBE_ENV))
+
+
 def _last_stop_index(plan):
     """The plan index of the LAST turn-only stop, or None if the plan has none.
 
@@ -1018,12 +1038,17 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             return _st.turn_to(heading, read_heading, capture, log=log)
     if push is None:
         import slow_traverse as st
-        def push(mag, secs, _st=st):
+        def push(mag, secs, on_release=None, _st=st):
             # step_sec == seconds is ONE continuous push. Chunking it would
             # re-accelerate from a standstill and cover less ground -- the
             # GRAVEYARD row that ended two rooms adrift.
+            # Forwarded ONLY when there is one, so the shipped call is the
+            # call it has always been -- four tests stub walk_leg with today's
+            # signature, and passing on_release=None to them is a TypeError.
+            extra = {} if on_release is None else {"on_release": on_release}
             return _st.walk_leg(0.0, -abs(mag), secs, capture, read_heading,
-                                label="chain push", log=log, step_sec=secs)
+                                label="chain push", log=log, step_sec=secs,
+                                **extra)
     if back is None:
         import slow_traverse as st
         def back(mag, secs, _st=st):
@@ -1385,8 +1410,27 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             turn_to(heading)
             last_cmd = heading
             turned = True
+        settle_rows = None       # this iteration's probe samples, if armed
         if do_push:
-            push(PUSH_MAG, PUSH_SEC)
+            probe = None
+            if settle_probe_on():
+                probe = []
+
+                def _sample(_k=k, _probe=probe):
+                    t0 = time.monotonic()
+                    for d in SETTLE_PROBE_DELAYS:
+                        while time.monotonic() - t0 < d:
+                            time.sleep(0.005)
+                        im = capture()
+                        f = chain.locate(im, _k, window=WINDOW) if im is not None else None
+                        _probe.append({"delay": d,
+                                       "inliers": None if f is None else f.inliers,
+                                       "k": None if f is None else f.k})
+
+                push(PUSH_MAG, PUSH_SEC, on_release=_sample)
+            else:
+                push(PUSH_MAG, PUSH_SEC)
+            settle_rows = probe          # attached to this iteration's row
             res["pushes"] += 1
             if heading is not None:
                 walk_heading = heading
@@ -2290,6 +2334,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         row = {"iteration": iteration, "k": k, "target": target_k,
                "fix": _fix_row(fix), "action": action, "lateral": lateral,
                "at_end": at_end,
+               **({"settle": settle_rows} if settle_rows else {}),
                "seconds": round(now() - it_t0, 2),
                "elapsed": round(now() - t0, 2)}
         record(row)

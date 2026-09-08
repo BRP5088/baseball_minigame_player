@@ -48,7 +48,17 @@ import it), never presses Square/Triangle/OPTIONS, and never starts a match.
 The only money path in this project is the Square press at the prompt, and
 nothing here presses it — reaching the prompt is the whole measurement.
 
+ATTEMPTS PER TRIAL (patch52). A trial may spend more than one walk, each after
+its OWN reset, stopping at the first arrival: at the measured per-walk 0.874
+(n=207, batch 16 on) a single walk gives P(25 consecutive) = 3.5%, and CLAUDE.md
+8(c) records retrying as the only lever with the leverage to close that. It
+DEFAULTS TO ONE, so a run without `--attempts` is exactly the run it was. The
+first attempt of every trial is its own control -- same session, same build --
+so `arrived_first_attempt` stays comparable with every batch before it and no
+interleaved A/B is needed (10.5).
+
     .venv/bin/python -B overnight/chain_trials.py <chain-name> [--trials N] [--no-shots]
+                                                  [--attempts N]
 
 `<chain-name>` is a directory under `chains/`, written by chain_record.py.
 """
@@ -89,6 +99,19 @@ TIME_CAP = 180.0                 # walk()'s own cap — the ">400 s" of the spec
 # decides how long to wait.
 SETUP_BUDGET = 180.0
 CEILING = int(TIME_CAP + SETUP_BUDGET)   # 580 — the external kill
+# WALKS ONE TRIAL MAY SPEND (patch52), each after its OWN reset, stopping at the
+# first arrival. ONE is today's behaviour exactly; the value reaches the child
+# through the environment, set inside main(). Per-walk arrival is 0.874 over 207
+# trials (batch 16 on), so a single walk gives P(25 consecutive) = 3.5%, and
+# CLAUDE.md 8(c) measured retrying as the lever that closes that gap for the
+# dead-reckoning executor (attempts=9 9/9 vs attempts=3 5/10, p = 0.0325).
+# WHETHER IT TRANSFERS IS THE OPEN QUESTION: it rests on the obstacle not still
+# standing there after the reload, and the evidence for that is one weak
+# conditional (P(fail | previous trial failed) 1/24 against 23/173, p = 0.32).
+# The first attempt of every trial is its own control, so the batch measures
+# both halves at once.
+ATTEMPTS = 1
+ATTEMPTS_ENV = "BASEBALL_CHAIN_ATTEMPTS"
 # A MISSING GAME WINDOW is not a trial result (patch48). game_window_rect()
 # lists ON-SCREEN windows only, so a Space switch or a fullscreen app in front
 # of chiaki makes it None; the child then dies in reset_environment within a
@@ -131,6 +154,145 @@ def retry_this_trial(outcome, retries):
     """Re-run an INVALID trial number, at most WINDOW_RETRY_MAX times."""
     return outcome == INVALID and retries < WINDOW_RETRY_MAX
 
+
+def attempts_from_argv(argv=None):
+    """`--attempts N` from the PARENT's command line, or ATTEMPTS.
+
+    Read at CALL time from argv, never captured in a default (CLAUDE.md 10.18).
+    """
+    argv = list(sys.argv if argv is None else argv)
+    if "--attempts" not in argv:
+        return ATTEMPTS
+    i = argv.index("--attempts")
+    if i + 1 >= len(argv):
+        raise SystemExit("--attempts takes a count, e.g. --attempts 2")
+    return _attempts_value(argv[i + 1], "--attempts")
+
+
+def attempts_per_trial(env=None):
+    """How many walks THIS CHILD may spend, from the environment it inherited.
+
+    The environment is read at CALL time so a test can hand it one, and the
+    parent sets it inside main(): a flag set at import is how stick injection
+    was silently switched off inside a live harness (CLAUDE.md 5, 10.1).
+    """
+    env = os.environ if env is None else env
+    raw = env.get(ATTEMPTS_ENV)
+    if raw is None:
+        return ATTEMPTS
+    return _attempts_value(raw, ATTEMPTS_ENV)
+
+
+def _attempts_value(raw, where):
+    """A whole number of walks, >= 1. REFUSED rather than silently defaulted.
+
+    A typo that fell back to 1 would run a plain batch while the log, the
+    result file and the reader all said `--attempts 2` -- 10.1's no-op that
+    reports like a change, in the place where it costs the whole measurement.
+    """
+    try:
+        n = int(str(raw).strip())
+    except ValueError:
+        raise SystemExit(f"{where} takes a whole number of walks, not {raw!r}")
+    if n < 1:
+        raise SystemExit(f"{where} must be at least 1, not {n}")
+    return n
+
+
+def ceiling_for(attempts):
+    """The external kill for a trial allowed `attempts` walks.
+
+    A TIMEOUT MUST NOT CENSOR THE ARM THAT SPENDS LONGER (CLAUDE.md 10.14).
+    Two attempts is legitimately two resets, two setups and two walks, and a
+    ceiling sized for one would kill exactly the trials the retry exists to
+    produce -- which is how OPEN-5's 420s ceiling censored 3 of 6 deep-arm
+    trials, and how this file's own 420s-against-a-400s-cap started.
+    """
+    return int((TIME_CAP + SETUP_BUDGET) * attempts)
+
+
+def attempt_journal(journal, attempt):
+    """Where attempt N writes its rows. Attempt 1 keeps the parent's path.
+
+    chain_walk APPENDS, so two walks sharing one file would interleave two
+    sequences of iteration numbers and `recover()` would read the pair as one
+    walk -- a killed trial's evidence quietly wrong rather than absent, which
+    is worse. Attempt 1 is byte for byte the path the parent set, so nothing
+    about a single-attempt trial changes on disk.
+    """
+    if not journal or attempt <= 1:
+        return journal
+    return f"{journal}.a{attempt}"
+
+
+def walk_attempts(attempts, reset, load, walk, log):
+    """Up to `attempts` (reset, walk) cycles; stop at the first arrival.
+
+    THE SEAM, deliberately with no console in it: `reset(attempt)` reloads the
+    world, `load()` returns the chain and is called ONCE (Chain.load runs ORB
+    over every waypoint), `walk(attempt, chain)` returns walk()'s own result.
+    Its tests drive it with stubs.
+
+    Returns the LAST walk's result with the attempt bookkeeping added, so a
+    retried arrival can never be mistaken for a first-walk one (10.1).
+    """
+    chain = None
+    walks = []
+    res = None
+    for attempt in range(1, attempts + 1):
+        reset(attempt)
+        if chain is None:
+            chain = load()
+        try:
+            res = walk(attempt, chain)
+        except Exception as exc:                               # noqa: BLE001
+            # A CRASH IS A FAILURE A RELOAD CAN ALSO FIX -- chain_walk raising
+            # is not evidence the world is unwalkable -- but it is never
+            # swallowed. The traceback goes to the log, the attempt is recorded
+            # as an exception, and IF THIS WAS THE LAST ALLOWED ATTEMPT it is
+            # RE-RAISED, so a default one-attempt run dies exactly as it dies
+            # today: no JSON, the parent's run_trial returns None, INVALID.
+            import traceback
+            log(f"  walk {attempt} raised {type(exc).__name__}: {exc}")
+            for line in traceback.format_exc().rstrip().splitlines():
+                log(f"    {line}")
+            if attempt >= attempts:
+                raise
+            res = {"arrived": False, "seconds": None, "exception": True,
+                   "failure": f"exception: {type(exc).__name__}: {exc}"}
+        row = {"attempt": attempt,
+               "arrived": bool(res.get("arrived")),
+               "walk_seconds": res.get("seconds"),
+               "failure": res.get("failure"),
+               "k_final": res.get("k_final")}
+        for key in ("shots", "journal", "setup_seconds", "iterations",
+                    "pushes", "setup_over_budget", "exception"):
+            if key in res:
+                row[key] = res[key]
+        walks.append(row)
+        if row["arrived"]:
+            break
+        if res.get("setup_over_budget"):
+            # A slow console is not something a second walk can fix, and it is
+            # never a navigation result (10.6). End the trial; classify() maps
+            # it to INVALID either way.
+            break
+        if attempt < attempts:
+            log(f"  walk {attempt} did not arrive ({res.get('failure')}); "
+                f"attempt {attempt + 1} of {attempts} reloads and walks again")
+    res = dict(res if res is not None else {})
+    arrived_on = next((w["attempt"] for w in walks if w["arrived"]), None)
+    res["attempts_allowed"] = attempts
+    res["attempts_used"] = len(walks)
+    res["arrived_on_attempt"] = arrived_on
+    res["first_walk_arrived"] = bool(walks and walks[0]["arrived"])
+    res["retried"] = len(walks) > 1
+    res["walks"] = walks
+    res["walk_exceptions"] = sum(1 for w in walks if w.get("exception"))
+    res["walk_seconds_total"] = round(
+        sum(w["walk_seconds"] or 0.0 for w in walks), 1)
+    return res
+
 CHAINS = os.path.join(ROOT, "chains")
 OUT = os.path.join(HERE, "chain_trials.json")
 SHOTS_ROOT = os.path.join(HERE, "chain_frames")
@@ -150,7 +312,8 @@ DEFAULT_ARM_FLAG = "STOP_PAN_FROM_RUN"
 ARRIVED, TIMED_OUT, FAILED, INVALID = "ARRIVED", "TIMED_OUT", "FAILED", "INVALID"
 
 USAGE = (".venv/bin/python -B overnight/chain_trials.py <chain-name> "
-         "[--trials N] [--no-shots] [--arms off,on] [--flag CHAIN_WALK_FLAG]")
+         "[--trials N] [--attempts N] [--no-shots] [--arms off,on] "
+         "[--flag CHAIN_WALK_FLAG]")
 
 
 def arm_flag_name(argv=None):
@@ -291,11 +454,23 @@ def config():
             "LATERAL_TOL_PX": chain_walk.LATERAL_TOL_PX,
             "TABLE_CHECK_TAIL": chain_walk.TABLE_CHECK_TAIL,
             "END_PUSH_UNITS": chain_walk.END_PUSH_UNITS,
+            # The stop-yaw family and the door step DECIDE something in the
+            # walk, so a log that does not name them cannot be compared with
+              # the next one -- this function's own reason for existing.
+            "STOP_LOOK_YAW": chain_walk.STOP_LOOK_YAW,
+            "STOP_YAW_NEAR_FIT_ONLY": chain_walk.STOP_YAW_NEAR_FIT_ONLY,
+            "STOP_YAW_SKIP_LAST_STOP": chain_walk.STOP_YAW_SKIP_LAST_STOP,
+            "DOOR_STOP_EXTRA_PUSH": chain_walk.DOOR_STOP_EXTRA_PUSH,
             "end_iteration_budget": chain_walk.end_iteration_budget()}
 
 
 def one_trial(name):
-    """The CHILD. Reset, load the chain, walk it once. Prints one JSON line."""
+    """The CHILD. Reset, load the chain, walk it. Prints one JSON line.
+
+    Up to `attempts_per_trial()` walks (patch52), each after its OWN reset,
+    stopping at the first arrival. The default is ONE, and with one this is
+    the trial it has always been: one reset, one Chain.load, one walk.
+    """
     _assert_live()
     t_start = time.time()
     shots = os.environ.get("BASEBALL_CHAIN_SHOTS", "1") != "0"
@@ -310,35 +485,64 @@ def one_trial(name):
         print(m, flush=True)
 
     armed = apply_arm(chain_walk, log)
+    attempts = attempts_per_trial()
 
     d = chain_dir(name)
     if not os.path.isdir(d):
         raise SystemExit(f"no such chain: {d}")
 
-    if not wait_for_game_window(log):
-        raise SystemExit(f"no chiaki game window for {WINDOW_WAIT_SEC:.0f}s")
-    reset_env.reset_environment(log=log, progress_file="progress_testing.json")
-    time.sleep(1.2)               # the world has to finish appearing
-    t_reset = time.time()
+    held = {}                     # the chain, loaded once and reused
+    clock = {}                    # this attempt's setup timings
 
-    ch = chain_mod.Chain.load(d, log=log)
-    t_loaded = time.time()
-    setup = t_loaded - t_start
-    log(f"  setup {setup:.1f}s (reset {t_reset - t_start:.1f}s, "
-        f"Chain.load {t_loaded - t_reset:.1f}s for {len(ch.waypoints)} "
-        f"waypoints) of a {SETUP_BUDGET:.0f}s budget")
-    over = setup_verdict(setup, waypoints=len(ch.waypoints))
-    if over is not None:
-        log(f"  {over['failure']}")
-        over["chain"] = name
-        return over
+    def do_reset(attempt):
+        # ATTEMPT 1'S CLOCK STARTS AT THE PROCESS START, so `setup_seconds`
+        # keeps the meaning every earlier batch recorded (interpreter, the
+        # cv2/tesserocr imports, the reset, Chain.load). A later attempt pays
+        # only its own reset, and its row says so.
+        clock["t0"] = t_start if attempt == 1 else time.time()
+        if attempt > 1:
+            log(f"  attempt {attempt}/{attempts}: resetting again")
+        if not wait_for_game_window(log):
+            raise SystemExit(f"no chiaki game window for "
+                             f"{WINDOW_WAIT_SEC:.0f}s")
+        reset_env.reset_environment(log=log,
+                                    progress_file="progress_testing.json")
+        time.sleep(1.2)           # the world has to finish appearing
+        clock["t_reset"] = time.time()
 
-    shots_dir = None
-    if shots:
-        shots_dir = os.path.join(SHOTS_ROOT, f"t{int(time.time() * 1000)}")
-    res = chain_walk.walk(ch, compass.fast_capture, ws.read_heading, log=log,
-                          time_cap=TIME_CAP, shots=shots_dir, journal=journal,
-                          end_iterations=END_ITERATIONS)
+    def do_load():
+        held["chain"] = chain_mod.Chain.load(d, log=log)
+        return held["chain"]
+
+    def do_walk(attempt, ch):
+        t_loaded = time.time()
+        setup = t_loaded - clock["t0"]
+        log(f"  setup {setup:.1f}s (reset {clock['t_reset'] - clock['t0']:.1f}s, "
+            f"Chain.load {t_loaded - clock['t_reset']:.1f}s for "
+            f"{len(ch.waypoints)} waypoints) of a {SETUP_BUDGET:.0f}s budget")
+        over = setup_verdict(setup, waypoints=len(ch.waypoints))
+        if over is not None:
+            log(f"  {over['failure']}")
+            return over
+        shots_dir = None
+        if shots:
+            shots_dir = os.path.join(SHOTS_ROOT, f"t{int(time.time() * 1000)}")
+        r = chain_walk.walk(ch, compass.fast_capture, ws.read_heading, log=log,
+                            time_cap=TIME_CAP, shots=shots_dir,
+                            journal=attempt_journal(journal, attempt),
+                            end_iterations=END_ITERATIONS)
+        r["shots"] = shots_dir
+        r["journal"] = attempt_journal(journal, attempt)
+        r["setup_seconds"] = round(setup, 1)
+        r["reset_seconds"] = round(clock["t_reset"] - clock["t0"], 1)
+        r["load_seconds"] = round(t_loaded - clock["t_reset"], 1)
+        return r
+
+    res = walk_attempts(attempts, do_reset, do_load, do_walk, log)
+    if res.get("setup_over_budget"):
+        res["chain"] = name
+        return res
+    ch = held["chain"]
     # A second look 0.8 s later, recorded beside the verdict and never used to
     # score: at_table() measured 0 false positives on 693 clean frames, and
     # this is how the first live run measures it on ITS frames.
@@ -355,13 +559,13 @@ def one_trial(name):
     res["arm_flag"] = armed or DEFAULT_ARM_FLAG
     res["arm_value"] = bool(getattr(chain_walk, res["arm_flag"], False))
     res["waypoints"] = len(ch.waypoints)
-    res["shots"] = shots_dir
     res["journal"] = journal
-    # NAMED FOR WHAT IT MEASURES. `res["seconds"]` is walk()'s own clock and the
-    # parent renames it `walk_seconds`; these three say where the rest went.
-    res["setup_seconds"] = round(setup, 1)
-    res["reset_seconds"] = round(t_reset - t_start, 1)
-    res["load_seconds"] = round(t_loaded - t_reset, 1)
+    # NAMED FOR WHAT IT MEASURES. `res["seconds"]` is the LAST walk's own clock
+    # and the parent renames it `walk_seconds`; `setup_seconds`, `reset_seconds`
+    # and `load_seconds` are that same attempt's, set beside it in do_walk, and
+    # every attempt's own copy is in `walks`. `walk_seconds_total` is the sum
+    # over the attempts, which is the quantity that grew -- two numbers that
+    # differ must not share a name (10.1).
     res["child_seconds"] = round(time.time() - t_start, 1)
     return res
 
@@ -379,8 +583,38 @@ def fisher_exact(a, b, c, d):
     return min(1.0, sum(prob(x) for x in range(lo, hi + 1) if prob(x) <= p_obs + 1e-12))
 
 
-def recover(path):
-    """Read back what a KILLED child managed to write to its journal.
+def recover(path, attempts=1):
+    """The journal of the attempt that was IN FLIGHT when the child was killed.
+
+    THE BASE PATH IS ALWAYS ATTEMPT 1'S. With more than one attempt (patch52)
+    each walk journals to `attempt_journal(journal, n)`, so once attempt 1 has
+    failed its file holds a COMPLETE, already-superseded walk. Reading it after
+    a kill during attempt 2 returns a full `fixes` list and a clean k_final
+    describing the wrong walk -- evidence that parses cleanly and is not about
+    the thing that happened, which this project has already paid for twice
+    (§10.15: check WHICH moment the frame captures; §10.1: a no-op path whose
+    output looks like the working one). So scan from the HIGHEST attempt down.
+
+    THE TEST IS EXISTENCE, NOT CONTENT. chain_walk creates the file with its
+    first row, so a `.a2` that exists but holds nothing parseable still proves
+    attempt 2 started; the row then carries `recovered_attempt` and NO `fixes`.
+    Absent evidence, never the wrong evidence -- falling back to attempt 1's
+    rows there would reintroduce exactly the defect this docstring describes.
+    """
+    if not path:
+        return {}
+    for attempt in range(max(1, int(attempts or 1)), 0, -1):
+        p = attempt_journal(path, attempt)
+        if not os.path.exists(p):
+            continue
+        out = {"recovered_attempt": attempt, "recovered_journal": p}
+        out.update(_recover_rows(p))
+        return out
+    return {}
+
+
+def _recover_rows(path):
+    """Read back what a KILLED child managed to write to ONE journal file.
 
     `run_trial` returns None for a kill, so without this the per-iteration
     `fixes` — the whole point of a closed loop — are lost on precisely the
@@ -409,7 +643,7 @@ def recover(path):
             "pushes": sum(1 for r in rows if r.get("iteration", 0) >= 1)}
 
 
-def trial_row(i, outcome, secs, r, journal=None):
+def trial_row(i, outcome, secs, r, journal=None, attempts=1):
     """One row of the result file. THE HARNESS-MEASURED FIELDS ALWAYS WIN.
 
     `row.update(r)` used to run LAST, and walk() returns a dict containing
@@ -427,14 +661,74 @@ def trial_row(i, outcome, secs, r, journal=None):
         row.update(r)
         if "seconds" in row:
             row["walk_seconds"] = row.pop("seconds")
-    elif journal:
-        row.update(recover(journal))
+    else:
+        # A KILLED CHILD PRINTS NO JSON, so none of walk_attempts' attempt
+        # bookkeeping reaches the row -- and the tally would then read the
+        # trial as un-retried whatever it actually spent. The parent knows how
+        # many attempts it ALLOWED, and the journal that exists says which one
+        # was in flight, so both are recorded from this side.
+        row["attempts_allowed"] = attempts
+        if journal:
+            row.update(recover(journal, attempts=attempts))
+            a = row.get("recovered_attempt")
+            if a is not None:
+                row["attempts_used"] = a
+                row["retried"] = a > 1
+                if a > 1:
+                    # PROVABLE: attempt 2 only ever starts after walk 1 came
+                    # back without arriving. At attempt 1 it is NOT provable --
+                    # a child can arrive and be killed before it prints -- so
+                    # the key is left ABSENT rather than guessed False.
+                    row["first_walk_arrived"] = False
     row.update({"trial": i, "outcome": outcome, "seconds": secs})
     return row
 
 
-def classify(r, secs, log):
-    """One trial's outcome. `r` is None when nothing could be parsed."""
+def trial_line(i, outcome, secs, row, armtxt=""):
+    """The ONE LINE a human scans a batch by. A RETRY MUST BE VISIBLE ON IT.
+
+    A trial that arrived on its first walk and one that failed, reloaded and
+    arrived on its second printed the SAME BYTES: the structured record told
+    them apart and the line a reader actually reads did not. That is CLAUDE.md
+    10.1 -- a working path and a no-op path with identical output -- recurring
+    at the log-reading layer, in a project whose habit is to read a batch as
+    `outcomes [T,T,T,F,...]` off the log.
+
+    THE MARKER GOES BEFORE `failure=`. tools/trial_sheet.py's LINE_RE ends
+    `.*?failure=(.*)`, so anything appended AFTER it becomes part of the
+    failure text of every row.
+    """
+    used = row.get("attempts_used") or 1
+    mark = ""
+    if used > 1:
+        on = row.get("arrived_on_attempt")
+        allowed = row.get("attempts_allowed", used)
+        mark = (f"attempt {on}/{allowed}  " if on
+                else f"attempts {used}/{allowed}  ")
+    tail = ""
+    if row.get("recovered"):
+        a = row.get("recovered_attempt", 1)
+        where = f"attempt {a}'s journal" if a > 1 else "the journal"
+        tail = f"  [rows RECOVERED from {where}]"
+    return (f"[{i:2d}] {outcome:9s} {armtxt}"
+            f"k={row.get('k_final', '--')}/{row.get('waypoints', '--')}  "
+            f"it={row.get('iterations', '--')}  "
+            f"pushes={row.get('pushes', '--')}  "
+            f"seconds={secs:.1f} (walk {row.get('walk_seconds', '--')}, "
+            f"setup {row.get('setup_seconds', '--')})  "
+            f"{mark}failure={row.get('failure')}" + tail)
+
+
+def classify(r, secs, log, ceiling=None):
+    """One trial's outcome. `r` is None when nothing could be parsed.
+
+    `ceiling` is the external kill this trial actually ran under -- with more
+    than one attempt it is `ceiling_for(attempts)`, not the single-walk
+    CEILING, or a trial killed at its real ceiling would be read as a crash.
+    Resolved at CALL time, never captured in a default (10.18).
+    """
+    if ceiling is None:
+        ceiling = CEILING
     if r is None:
         # run_trial returns None for a kill, a crash AND a dead stream, so ask
         # the console which it was rather than guessing. A killed trial on a
@@ -444,14 +738,14 @@ def classify(r, secs, log):
         except Exception as e:
             log(f"    could not check the stream: {type(e).__name__}: {e}")
             live = False
-        if live and secs >= CEILING:
+        if live and secs >= ceiling:
             return TIMED_OUT
         return INVALID
     if r.get("setup_over_budget"):
         return INVALID
     if r.get("arrived"):
         return ARRIVED
-    if r.get("failure") == "timed out" or secs >= CEILING:
+    if r.get("failure") == "timed out" or secs >= ceiling:
         return TIMED_OUT
     return FAILED
 
@@ -462,6 +756,9 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if "--trials" in sys.argv:
         args = [a for a in args if a != sys.argv[sys.argv.index("--trials") + 1]]
+    if "--attempts" in sys.argv:
+        args = [a for a in args
+                if a != sys.argv[sys.argv.index("--attempts") + 1]]
     arms = []
     if "--arms" in sys.argv:
         spec = sys.argv[sys.argv.index("--arms") + 1]
@@ -485,6 +782,11 @@ def main():
     # harness (CLAUDE.md §5), and tests/harness scans this directory for it.
     if "--no-shots" in sys.argv:
         os.environ["BASEBALL_CHAIN_SHOTS"] = "0"
+    # ... and how many walks each trial may spend. Set HERE, inside main(),
+    # for the same reason, and the ceiling scales with it (10.14).
+    attempts = attempts_from_argv()
+    os.environ[ATTEMPTS_ENV] = str(attempts)
+    ceiling = ceiling_for(attempts)
 
     d = chain_dir(name)
     if not os.path.isdir(d):
@@ -507,15 +809,17 @@ def main():
     res = {"question": "closed-loop chain walk from the reset spawn to the "
                        "dealer prompt, scored like the dead-reckoning route",
            "chain": name, "chain_dir": d, "trials": trials,
-           "time_cap": TIME_CAP, "ceiling": CEILING,
+           "time_cap": TIME_CAP, "ceiling": ceiling,
            "setup_budget": SETUP_BUDGET,
+           "attempts": attempts,
            "config": config(),
            "arms": arms,
            "arm_flag": flag,
            "runs": []}
     log(f"chain trials: {trials} of {name} "
-        f"(walk cap {TIME_CAP:.0f}s + setup budget {SETUP_BUDGET:.0f}s = "
-        f"external ceiling {CEILING}s)")
+        f"(walk cap {TIME_CAP:.0f}s + setup budget {SETUP_BUDGET:.0f}s "
+        f"x {attempts} attempt{'s' if attempts != 1 else ''} = "
+        f"external ceiling {ceiling}s)")
     log(f"  config {res['config']}")
 
     n = chain_size(d)
@@ -552,23 +856,16 @@ def main():
                 # ... and WHICH flag it sets. Set HERE, inside main(), never
                 # at import (CLAUDE.md 5, and tests/harness scans for it).
                 os.environ[ARM_FLAG_ENV] = flag
-            r, secs = _harness.run_trial(__file__, name, CEILING, log=log)
-            outcome = classify(r, secs, log)
-            row = trial_row(i, outcome, secs, r, journal=journal)
+            r, secs = _harness.run_trial(__file__, name, ceiling, log=log)
+            outcome = classify(r, secs, log, ceiling=ceiling)
+            row = trial_row(i, outcome, secs, r, journal=journal,
+                            attempts=attempts)
             row["journal"] = journal
             if arm is not None:
                 row["arm"] = f"{label}-{arm}"
             res["runs"].append(row)
             armtxt = f"{row['arm']:8s} " if arm is not None else ""
-            log(f"[{i:2d}] {outcome:9s} {armtxt}"
-                f"k={row.get('k_final', '--')}/{row.get('waypoints', '--')}  "
-                f"it={row.get('iterations', '--')}  "
-                f"pushes={row.get('pushes', '--')}  "
-                f"seconds={secs:.1f} (walk {row.get('walk_seconds', '--')}, "
-                f"setup {row.get('setup_seconds', '--')})  "
-                f"failure={row.get('failure')}"
-                + ("  [rows RECOVERED from the journal]"
-                   if row.get("recovered") else ""))
+            log(trial_line(i, outcome, secs, row, armtxt))
             if row.get("timeout_diagnosis"):
                 log(f"     {row['timeout_diagnosis']}")
             _harness.save_result(OUT, res)
@@ -591,6 +888,25 @@ def main():
     log("")
     log(f"  arrived {arrived}/{len(got)} valid "
         f"({res['invalid']} invalid, never counted as failures)")
+    # THE FIRST WALK OF EVERY TRIAL IS ITS OWN CONTROL, measured in this same
+    # session on this same build, so this is the number that compares with
+    # every batch recorded before --attempts (0.874 over n=207). With one
+    # attempt the two lines are equal, which checks the bookkeeping for free.
+    first = sum(1 for r in got if r.get("first_walk_arrived"))
+    res["arrived_first_attempt"] = first
+    retried = [r for r in got if r.get("retried")]
+    log(f"  of which on the FIRST walk {first}/{len(got)} "
+        f"(the rate comparable with every batch before --attempts)")
+    # ALWAYS SET, and NOT named `retried`. Every row carries `retried` as a
+    # BOOL; a batch-level INT under the same name is two quantities wearing one
+    # name (10.1), and a key that is absent rather than 0 when nothing retried
+    # makes "no retries" indistinguishable from "an older result file".
+    res["trials_retried"] = len(retried)
+    res["retries_that_arrived"] = sum(1 for r in retried
+                                      if r["outcome"] == ARRIVED)
+    if retried:
+        log(f"  a second or later walk was spent on {len(retried)} trials "
+            f"and arrived on {res['retries_that_arrived']} of them")
     for kind in (TIMED_OUT, FAILED):
         log(f"  {kind}: {sum(1 for r in got if r['outcome'] == kind)}")
     if arms:

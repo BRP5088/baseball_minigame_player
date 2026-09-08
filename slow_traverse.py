@@ -62,7 +62,7 @@ class Hazard:
 
 
 def walk_leg(lx, ly, seconds, capture, read_heading, label="", log=print,
-             step_sec=None):
+             step_sec=None, on_release=None):
     """Walk one leg, reporting travel per step and any hazard.
 
     `step_sec` is how long a single continuous push lasts. It defaults to
@@ -92,6 +92,12 @@ def walk_leg(lx, ly, seconds, capture, read_heading, label="", log=print,
                  "right_x 0", "right_y 0"])
         time.sleep(step)
         ar.send(["left_x 0", "left_y 0"])
+        # THE INSTANT THE STICK IS ZEROED, before the settle. Anything hooked
+        # after this function returns starts SETTLE_SEC late and cannot see the
+        # window it exists to measure (patch54). Default None: the two lines
+        # around this are the shipped path, untouched.
+        if on_release is not None:
+            on_release()
         time.sleep(SETTLE_SEC)
         spent += step
 
@@ -154,7 +160,8 @@ def turn_to(target, read_heading, capture, log=print, tolerance=TURN_TOLERANCE,
     which is the evidence OPEN-3 needs. Observability only: no threshold and no
     control-flow decision changed here.
     """
-    for i in range(max_steps):
+    asked, sent = 0.0, 0.0      # the FIRST error seen, and the stick time
+    for i in range(max_steps):   # spent on it; both for the log line only
         now = read_heading()
         if now is None:
             log(f"        turn to {target:.1f}: NO compass reading, abandoned "
@@ -162,6 +169,8 @@ def turn_to(target, read_heading, capture, log=print, tolerance=TURN_TOLERANCE,
                 f"not a heading that was reached")
             break
         err = (target - now + 540) % 360 - 180
+        if i == 0:
+            asked = err
         if abs(err) <= tolerance:
             if i == 0:
                 log(f"        turn to {target:.1f}: NO-OP, already inside "
@@ -170,8 +179,15 @@ def turn_to(target, read_heading, capture, log=print, tolerance=TURN_TOLERANCE,
                     f"the caller's step line will look like a turn that "
                     f"happened")
             else:
+                # `err` here is what is LEFT, which is inside `tolerance` by
+                # construction and so says nothing (10.12). `asked` is the
+                # error this call was given and `sent` the stick time it spent
+                # -- the two numbers needed to ask whether TURN_TOLERANCE and
+                # the 0.35 s settle below are worth what turning costs (~40% of
+                # the walk). Recorded, not acted on.
                 log(f"        turn to {target:.1f}: TURNED to {now:.1f} "
-                    f"(err {err:+.1f}) in {i} push(es)")
+                    f"(err {err:+.1f}) in {i} push(es), asked "
+                    f"{asked:+.1f} deg, stick {sent:.2f}s")
             return now, []
         # Use the MEASURED response curve, not a linear gain. The stick is
         # dead below ~0.35 and triples between 0.90 and 1.00, so a linear
@@ -186,6 +202,7 @@ def turn_to(target, read_heading, capture, log=print, tolerance=TURN_TOLERANCE,
             break
         ar.send([f"right_x {ar.to_axis(mag if err > 0 else -mag)}",
                  "right_y 0", "left_x 0", "left_y 0"])
+        sent += secs
         time.sleep(secs)
         ar.send(["right_x 0"])
         time.sleep(0.35)

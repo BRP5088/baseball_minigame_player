@@ -2265,6 +2265,76 @@ class Lateral(unittest.TestCase):
         self.assertEqual(res["fixes"][0]["lateral"]["side"], "right")
 
 
+
+class SettleProbe(unittest.TestCase):
+    """patch54: the fit sampled WHILE the character is still coming to rest.
+
+    700 ms of a 1440 ms iteration is two hard-coded 0.35 s sleeps and neither
+    has ever been measured. A standalone probe cannot do it -- without the
+    controller the character leaves the route within a few pushes and 8 of 96
+    readings clear the credibility floor -- so the sampler rides a real walk.
+    It is OFF unless the environment says otherwise, and off it changes nothing.
+    """
+
+    def test_the_probe_is_read_at_CALL_time_and_defaults_OFF(self):
+        # 10.18: a knob captured in a default cannot be redirected, and the
+        # import-time BASEBALL_TEST_RUN incident dropped every stick send of a
+        # live run. Drive both answers through an injected environment.
+        self.assertFalse(chain_walk.settle_probe_on({}))
+        self.assertTrue(chain_walk.settle_probe_on(
+            {chain_walk.SETTLE_PROBE_ENV: "1"}))
+        self.assertEqual(chain_walk.SETTLE_PROBE_ENV, "BASEBALL_SETTLE_PROBE")
+        self.assertNotIn(chain_walk.SETTLE_PROBE_ENV, os.environ,
+                         "ANTI-VACUITY: the suite must not run with it armed")
+
+    def test_walk_leg_calls_on_release_AFTER_zeroing_and_BEFORE_the_settle(self):
+        # The whole point: a hook that fires after walk_leg returns starts
+        # SETTLE_SEC late and misses the window. Order is the assertion.
+        import slow_traverse as st
+        from PIL import Image
+        shot = Image.new("RGB", (8, 8))      # walk_leg greys every capture
+        order = []
+        real_send, real_sleep = st.ar.send, st.time.sleep
+        st.ar.send = lambda lines: order.append(("send", tuple(lines)))
+        st.time.sleep = lambda s: order.append(("sleep", round(s, 3)))
+        try:
+            st.walk_leg(0.0, -0.45, 0.40, lambda: shot, lambda: 0.0,
+                        log=lambda *a: None, step_sec=0.40,
+                        on_release=lambda: order.append(("PROBE",)))
+        finally:
+            st.ar.send, st.time.sleep = real_send, real_sleep
+        kinds = [o[0] for o in order]
+        self.assertIn("PROBE", kinds, "the callback never fired")
+        zeroed = next(i for i, o in enumerate(order)
+                      if o[0] == "send" and "left_x 0" in o[1])
+        probe = kinds.index("PROBE")
+        settle = next(i for i, o in enumerate(order)
+                      if o[0] == "sleep" and o[1] == round(st.SETTLE_SEC, 3)
+                      and i > zeroed)
+        self.assertLess(zeroed, probe, "it must fire AFTER the stick is zeroed")
+        self.assertLess(probe, settle, "...and BEFORE the settle sleep")
+
+    def test_with_no_callback_walk_leg_is_byte_for_byte_todays_path(self):
+        # The shipped path must not gain a branch's worth of behaviour.
+        import slow_traverse as st
+        from PIL import Image
+        shot = Image.new("RGB", (8, 8))      # walk_leg greys every capture
+        order = []
+        real_send, real_sleep = st.ar.send, st.time.sleep
+        st.ar.send = lambda lines: order.append(("send", tuple(lines)))
+        st.time.sleep = lambda s: order.append(("sleep", round(s, 3)))
+        try:
+            st.walk_leg(0.0, -0.45, 0.40, lambda: shot, lambda: 0.0,
+                        log=lambda *a: None, step_sec=0.40)
+        finally:
+            st.ar.send, st.time.sleep = real_send, real_sleep
+        self.assertEqual([o[0] for o in order],
+                         ["send", "sleep", "send", "sleep"],
+                         "push, wait, zero, settle -- and nothing else")
+        self.assertEqual(order[1], ("sleep", 0.4))
+        self.assertEqual(order[3], ("sleep", round(st.SETTLE_SEC, 3)))
+
+
 class StopLookYaw(unittest.TestCase):
     """(n) AT A LOOKED STOP THE OFFSET IS A YAW, AND A SIDESTEP CANNOT FIX ONE.
 
@@ -3746,7 +3816,14 @@ class Journal(unittest.TestCase):
 
 
 class HarnessScoring(unittest.TestCase):
-    """(j) overnight/chain_trials.py: the scoring, offline, with no console."""
+    """(j) overnight/chain_trials.py: the scoring, offline, with no console.
+
+    ... and (patch52) the ATTEMPTS loop: up to N walks per trial, each after
+    its own reset, stopping at the first arrival, the chain loaded once, the
+    ceiling scaled with N, and a record in which a retried arrival cannot be
+    mistaken for a first-walk one. `walk_attempts` is the seam and takes its
+    reset, load and walk as arguments, so none of this touches the console.
+    """
 
     def setUp(self):
         self._alive = chain_trials._harness.alive
@@ -3908,7 +3985,14 @@ class HarnessScoring(unittest.TestCase):
                     "LATERAL_MAG", "LATERAL_CAP_SEC", "LATERAL_TOL_PX",
                     "TABLE_CHECK_TAIL"):
             self.assertIn(key, cfg)
-        self.assertEqual(len(cfg), 12)
+        # patch53: the stop-yaw family and the door step decide something in
+        # the walk, so a log that does not name them cannot be compared with
+        # the next one -- config()'s own reason for existing.
+        for key in ("STOP_LOOK_YAW", "STOP_YAW_NEAR_FIT_ONLY",
+                    "STOP_YAW_SKIP_LAST_STOP", "DOOR_STOP_EXTRA_PUSH"):
+            self.assertIn(key, cfg)
+            self.assertIsInstance(cfg[key], bool)
+        self.assertEqual(len(cfg), 16)
 
     # --- the ARM, and WHICH flag it sets -----------------------------------
 
@@ -4068,6 +4152,370 @@ class HarnessScoring(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertIsNone(m.group(3))
         self.assertEqual(int(m.group(4)), 204)
+
+    # -- patch52: attempts per trial ---------------------------------------
+    #
+    # walk_attempts() is the seam: reset, load and walk are injected, so the
+    # loop is exercised with NO console, no chain and no chain_walk. Each
+    # stubbed walk is a dict shaped like walk()'s own result.
+
+    def _attempts(self, attempts, results):
+        """Drive walk_attempts with stubs; return (result, call log)."""
+        calls = []
+        seq = list(results)
+
+        def reset(attempt):
+            calls.append(("reset", attempt))
+
+        def load():
+            calls.append(("load",))
+            return "THE CHAIN"
+
+        def walk(attempt, chain):
+            calls.append(("walk", attempt, chain))
+            return dict(seq.pop(0))
+
+        return chain_trials.walk_attempts(attempts, reset, load, walk,
+                                          self.log), calls
+
+    ARRIVES = {"arrived": True, "seconds": 84.0, "k_final": 204}
+    MISSES = {"arrived": False, "seconds": 180.0, "failure": "lost",
+              "k_final": 129}
+
+    def test_the_default_is_ONE_attempt_and_the_walk_runs_ONCE(self):
+        # Literals (10.11): the shipped default, and the loop that honours it.
+        self.assertEqual(chain_trials.ATTEMPTS, 1)
+        self.assertEqual(chain_trials.attempts_per_trial(env={}), 1)
+        res, calls = self._attempts(1, [self.MISSES])
+        self.assertEqual(calls, [("reset", 1), ("load",),
+                                 ("walk", 1, "THE CHAIN")])
+        self.assertEqual(res["attempts_allowed"], 1)
+        self.assertEqual(res["attempts_used"], 1)
+        self.assertIsNone(res["arrived_on_attempt"])
+        self.assertIs(res["retried"], False)
+        self.assertIs(res["first_walk_arrived"], False)
+
+    def test_an_arrival_on_the_first_walk_costs_no_second_walk(self):
+        # A trial that arrives must cost exactly what it costs today. A wasted
+        # second walk after an arrival would be 3 minutes of console time per
+        # trial and a second $50 prompt approached for nothing.
+        res, calls = self._attempts(2, [self.ARRIVES, self.MISSES])
+        self.assertEqual([c[0] for c in calls], ["reset", "load", "walk"])
+        self.assertEqual(res["attempts_used"], 1)
+        self.assertEqual(res["arrived_on_attempt"], 1)
+        self.assertIs(res["retried"], False)
+        self.assertIs(res["first_walk_arrived"], True)
+        self.assertEqual(len(res["walks"]), 1)
+
+    def test_a_failed_first_walk_is_retried_after_its_OWN_reset(self):
+        # THE MECHANISM: the reload is what moves the NPC out of the doorway,
+        # so a retry without its own reset would re-walk the same world. And
+        # the chain is loaded ONCE -- Chain.load runs ORB over every waypoint.
+        res, calls = self._attempts(2, [self.MISSES, self.ARRIVES])
+        self.assertEqual(calls, [("reset", 1), ("load",),
+                                 ("walk", 1, "THE CHAIN"),
+                                 ("reset", 2), ("walk", 2, "THE CHAIN")])
+        self.assertEqual([c[0] for c in calls].count("load"), 1,
+                         "Chain.load is 3-45s of ORB; paying it twice is waste")
+        self.assertEqual([c[0] for c in calls].count("walk"), 2)
+        self.assertEqual(res["attempts_used"], 2)
+        self.assertEqual(res["arrived_on_attempt"], 2)
+        self.assertTrue(res["arrived"], "the LAST walk's result is returned")
+        self.assertTrue(any("attempt 2 of 2" in m for m in self.logs), self.logs)
+
+    def test_a_RETRIED_arrival_is_distinguishable_from_a_FIRST_walk_one(self):
+        # CLAUDE.md 10.1, this project's signature failure: a working path and
+        # a no-op path with identical output. Without these fields the
+        # first-attempt rate -- the only number comparable with the 0.874 over
+        # n=207 -- would be unrecoverable from the result file.
+        straight, _ = self._attempts(2, [self.ARRIVES])
+        retried, _ = self._attempts(2, [self.MISSES, self.ARRIVES])
+        self.assertTrue(straight["arrived"] and retried["arrived"])
+        for key, a, b in (("arrived_on_attempt", 1, 2),
+                          ("attempts_used", 1, 2),
+                          ("first_walk_arrived", True, False),
+                          ("retried", False, True)):
+            self.assertEqual(straight[key], a, key)
+            self.assertEqual(retried[key], b, key)
+        # ... and each walk's own outcome and seconds, so the conditional rate
+        # (arrivals among the walks that FOLLOW a failure) is countable.
+        self.assertEqual([(w["attempt"], w["arrived"], w["walk_seconds"])
+                          for w in retried["walks"]],
+                         [(1, False, 180.0), (2, True, 84.0)])
+        self.assertEqual(retried["walks"][0]["failure"], "lost")
+        self.assertEqual(retried["walk_seconds_total"], 264.0)
+        self.assertEqual(straight["walk_seconds_total"], 84.0)
+
+    def test_a_setup_over_its_budget_ends_the_trial_and_spends_no_retry(self):
+        # A slow console is not something a second walk can fix, and it is
+        # never a navigation result (10.6). One reset, one walk, INVALID.
+        over = chain_trials.setup_verdict(chain_trials.SETUP_BUDGET + 1,
+                                          waypoints=205)
+        res, calls = self._attempts(2, [over, self.ARRIVES])
+        self.assertEqual([c[0] for c in calls], ["reset", "load", "walk"])
+        self.assertEqual(res["attempts_used"], 1)
+        self.assertIsNone(res["arrived_on_attempt"])
+        self.assertEqual(
+            chain_trials.classify(res, chain_trials.CEILING, self.log),
+            chain_trials.INVALID)
+
+    def test_the_ceiling_SCALES_with_the_attempts(self):
+        # LITERALS, not recomputed from the constants under test (10.11) -- a
+        # check that multiplies TIME_CAP + SETUP_BUDGET itself would pass
+        # forever, including on a ceiling_for that ignores its argument.
+        # A ceiling sized for one walk kills exactly the trials the retry
+        # exists to produce (10.14; OPEN-5's 420s censored 3 of 6 deep trials).
+        self.assertEqual(chain_trials.CEILING, 360)
+        self.assertEqual(chain_trials.ceiling_for(1), 360)
+        self.assertEqual(chain_trials.ceiling_for(2), 720)
+        self.assertEqual(chain_trials.ceiling_for(3), 1080)
+        # ... and classify compares against the ceiling the trial ACTUALLY ran
+        # under: a two-attempt child killed at 700s of a 720s ceiling died on
+        # its own, and reading it against the single-walk 360 would file it as
+        # a slow arm's timeout. The three lines differ only in the ceiling.
+        chain_trials._harness.alive = lambda: True
+        self.assertEqual(chain_trials.classify(None, 700.0, self.log),
+                         chain_trials.TIMED_OUT,
+                         "at the SINGLE-walk ceiling, 700s is past the kill")
+        self.assertEqual(
+            chain_trials.classify(None, 700.0, self.log, ceiling=720),
+            chain_trials.INVALID,
+            "at the TWO-walk ceiling the same kill is a crash, not a timeout")
+        self.assertEqual(
+            chain_trials.classify(None, 720.0, self.log, ceiling=720),
+            chain_trials.TIMED_OUT)
+
+    def test_the_attempt_count_reaches_the_CHILD_through_the_environment(self):
+        # The same road the arm and the shots flag already travel, and read at
+        # CALL time (10.18). A junk value is REFUSED, never defaulted: a silent
+        # fallback to 1 would run a plain batch while the log said --attempts 2.
+        self.assertEqual(chain_trials.ATTEMPTS_ENV, "BASEBALL_CHAIN_ATTEMPTS")
+        self.assertEqual(
+            chain_trials.attempts_per_trial(
+                env={chain_trials.ATTEMPTS_ENV: "3"}), 3)
+        for bad in ("two", "", "0", "-1"):
+            with self.assertRaises(SystemExit, msg=bad):
+                chain_trials.attempts_per_trial(
+                    env={chain_trials.ATTEMPTS_ENV: bad})
+        self.assertEqual(chain_trials.attempts_from_argv(["chain_trials.py"]), 1)
+        self.assertEqual(
+            chain_trials.attempts_from_argv(
+                ["chain_trials.py", "route", "--attempts", "2"]), 2)
+        with self.assertRaises(SystemExit):
+            chain_trials.attempts_from_argv(["chain_trials.py", "--attempts"])
+        # ... and that main() exports it and uses the scaled ceiling. main()
+        # cannot run offline (_assert_live, console_lock, run_trial), so this
+        # half is a SOURCE check and says so; it pins the four sites.
+        with open(os.path.join(_ROOT, "overnight", "chain_trials.py")) as fh:
+            src = fh.read()
+        self.assertIn("    attempts = attempts_from_argv()", src)
+        self.assertIn("    os.environ[ATTEMPTS_ENV] = str(attempts)", src)
+        self.assertIn("    ceiling = ceiling_for(attempts)", src)
+        self.assertIn("_harness.run_trial(__file__, name, ceiling, log=log)",
+                      src)
+        self.assertIn("classify(r, secs, log, ceiling=ceiling)", src)
+        self.assertNotIn("run_trial(__file__, name, CEILING", src)
+        # ... and that the tally reports BOTH rates, under names that do not
+        # collide with the per-ROW booleans (row["retried"] is a bool on every
+        # row; a batch-level int of the same name is 10.1 again).
+        self.assertIn('res["arrived_first_attempt"] = first', src)
+        self.assertIn('r.get("first_walk_arrived")', src)
+        self.assertIn('res["trials_retried"] = len(retried)', src)
+        self.assertNotIn('res["retried"] = len(retried)', src)
+        # ... and that the killed-trial row gets the attempts the parent
+        # allowed, so recover() can name the attempt that was in flight.
+        self.assertIn("attempts=attempts)", src)
+
+    def test_one_trials_own_wiring_is_pinned_by_SOURCE_and_here_is_why(self):
+        # WHY THIS IS A SOURCE CHECK AND NOT AN EXECUTION. one_trial() opens
+        # with _assert_live(), which raises SystemExit while BASEBALL_TEST_RUN
+        # is set -- and that flag is what holds every input path OFF for this
+        # whole suite. Running one_trial here would mean clearing it, which is
+        # the exact accident CLAUDE.md 5 and 10.1 record: an import cleared it
+        # inside a live harness and fifty "readings" came from a camera that
+        # never turned. So the LOOP is executed through walk_attempts (above,
+        # with stubs) and the CLOSURES one_trial hands it are pinned as text.
+        # A typo here -- a retry journalling over attempt 1's file, or a shots
+        # directory not reaching the row -- would pass every other test.
+        with open(os.path.join(_ROOT, "overnight", "chain_trials.py")) as fh:
+            src = fh.read()
+        self.assertIn("    attempts = attempts_per_trial()", src)
+        self.assertIn(
+            "    res = walk_attempts(attempts, do_reset, do_load, do_walk, log)",
+            src)
+        self.assertIn("    def do_reset(attempt):", src)
+        self.assertIn("    def do_load():", src)
+        self.assertIn("    def do_walk(attempt, ch):", src)
+        self.assertIn('        held["chain"] = chain_mod.Chain.load(d, log=log)',
+                      src)
+        # EVERY attempt journals to its OWN file, and the walk's own outputs
+        # are attached to THAT attempt's result, not to a shared variable.
+        self.assertIn("journal=attempt_journal(journal, attempt),", src)
+        self.assertIn('        r["journal"] = attempt_journal(journal, attempt)',
+                      src)
+        self.assertIn('        r["shots"] = shots_dir', src)
+        self.assertIn('        r["setup_seconds"] = round(setup, 1)', src)
+        # ... and the single-walk child is gone, not merely bypassed.
+        self.assertNotIn("res = chain_walk.walk(ch, compass.fast_capture", src)
+
+    def test_a_kill_during_a_RETRY_recovers_the_RETRYS_journal(self):
+        # THE BASE PATH IS ALWAYS ATTEMPT 1'S. Once attempt 1 has failed its
+        # journal holds a COMPLETE walk, so reading it after a kill during
+        # attempt 2 returns a full fixes list and a clean k_final describing
+        # the wrong walk -- evidence that parses cleanly and is not about what
+        # happened, which is worse than none (10.15: check WHICH moment).
+        d = tempfile.mkdtemp(prefix="chain_recover_a2_")
+        try:
+            p = os.path.join(d, "j.jsonl")
+            with open(p, "w") as fh:                  # attempt 1: complete
+                for i in range(5):
+                    fh.write(json.dumps({"iteration": i, "k": 10 + i,
+                                         "action": "advanced"}) + "\n")
+            with open(p + ".a2", "w") as fh:          # attempt 2: killed
+                for i in range(2):
+                    fh.write(json.dumps({"iteration": i, "k": 100 + i,
+                                         "action": "advanced"}) + "\n")
+            row = chain_trials.trial_row(5, chain_trials.TIMED_OUT, 700.0,
+                                         None, journal=p, attempts=2)
+            self.assertEqual(row["k_final"], 101,
+                             "the KILLED walk's evidence, not attempt 1's")
+            self.assertEqual(row["recovered_attempt"], 2)
+            self.assertEqual(len(row["fixes"]), 2)
+            self.assertEqual(row["attempts_used"], 2)
+            self.assertEqual(row["attempts_allowed"], 2)
+            self.assertIs(row["retried"], True)
+            # PROVABLE at attempt >= 2: walk 1 came back without arriving, or
+            # attempt 2 would never have started.
+            self.assertIs(row["first_walk_arrived"], False)
+            # ... and the old, single-attempt reading is the one it replaces.
+            old = chain_trials.trial_row(5, chain_trials.TIMED_OUT, 700.0,
+                                         None, journal=p, attempts=1)
+            self.assertEqual(old["k_final"], 14)
+            self.assertEqual(old["recovered_attempt"], 1)
+            self.assertNotIn("first_walk_arrived", old,
+                             "a kill on attempt 1 may have arrived and died "
+                             "before printing; that is UNKNOWN, not False")
+            # AN EMPTY .a2 STILL PROVES ATTEMPT 2 STARTED. chain_walk creates
+            # the file with its first row, so existence is the test -- and
+            # falling back to attempt 1's rows here would be the same defect.
+            open(p + ".a2", "w").close()
+            row = chain_trials.trial_row(6, chain_trials.TIMED_OUT, 700.0,
+                                         None, journal=p, attempts=2)
+            self.assertEqual(row["recovered_attempt"], 2)
+            self.assertEqual(row["attempts_used"], 2)
+            self.assertNotIn("fixes", row, "absent evidence, never the wrong "
+                                           "evidence")
+            self.assertNotIn("k_final", row)
+            # ... and an attempt that never started falls back cleanly.
+            os.remove(p + ".a2")
+            row = chain_trials.trial_row(7, chain_trials.TIMED_OUT, 700.0,
+                                         None, journal=p, attempts=3)
+            self.assertEqual(row["recovered_attempt"], 1)
+            self.assertEqual(row["k_final"], 14)
+            self.assertEqual(row["attempts_allowed"], 3)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_a_RETRIED_arrival_is_visible_on_the_LINE_a_human_scans(self):
+        # 10.1 at the log-reading layer: the two rows below differ in every
+        # way that matters and used to print the same bytes.
+        first = {"k_final": 204, "waypoints": 205, "iterations": 60,
+                 "pushes": 40, "walk_seconds": 84.0, "setup_seconds": 12.0,
+                 "failure": None, "attempts_allowed": 2, "attempts_used": 1,
+                 "arrived_on_attempt": 1}
+        retried = dict(first, attempts_used=2, arrived_on_attempt=2)
+        a = chain_trials.trial_line(5, chain_trials.ARRIVED, 190.0, first)
+        b = chain_trials.trial_line(5, chain_trials.ARRIVED, 380.0, retried)
+        self.assertNotEqual(a, b)
+        self.assertNotIn("attempt", a)
+        self.assertIn("attempt 2/2", b)
+        # THE MARKER GOES BEFORE `failure=`: tools/trial_sheet.py's LINE_RE
+        # ends `.*?failure=(.*)`, so anything after it joins the failure text.
+        self.assertLess(b.index("attempt 2/2"), b.index("failure="))
+        self.assertTrue(b.endswith("failure=None"), b)
+        # A trial that spent every attempt and arrived on NONE says so too.
+        lost = dict(first, attempts_used=2, arrived_on_attempt=None,
+                    failure="lost")
+        c = chain_trials.trial_line(5, chain_trials.FAILED, 380.0, lost)
+        self.assertIn("attempts 2/2", c)
+        # ... and all three are checked against the READER ITSELF, loaded by
+        # path. trial_sheet is what the user's standing rule runs on every
+        # failed trial, and a marker in the wrong place would not break it --
+        # it would quietly become part of every row's failure text.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "trial_sheet_marker_check",
+            os.path.join(_ROOT, "tools", "trial_sheet.py"))
+        sheet = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sheet)
+        for line in (a, b, c):
+            m = sheet.LINE_RE.match(line)
+            self.assertIsNotNone(m, f"the reader refused: {line}")
+            self.assertEqual(int(m.group(4)), 204)
+        self.assertEqual(sheet.LINE_RE.match(b).group(8), "None",
+                         "the marker must not join the failure text")
+        self.assertEqual(sheet.LINE_RE.match(c).group(8), "lost")
+        # ... and a recovered row names WHICH attempt's journal it read.
+        rec = chain_trials.trial_line(
+            5, chain_trials.TIMED_OUT, 700.0,
+            dict(lost, recovered=True, recovered_attempt=2))
+        self.assertIn("[rows RECOVERED from attempt 2's journal]", rec)
+        self.assertIn("[rows RECOVERED from the journal]",
+                      chain_trials.trial_line(
+                          5, chain_trials.TIMED_OUT, 700.0,
+                          {"recovered": True, "failure": "x"}))
+        # ... and today's single-attempt line is unchanged, to the byte.
+        plain = {"k_final": 204, "waypoints": 205, "iterations": 60,
+                 "pushes": 40, "walk_seconds": 84.0, "setup_seconds": 12.0,
+                 "failure": None}
+        self.assertEqual(
+            chain_trials.trial_line(5, chain_trials.ARRIVED, 96.0, plain),
+            "[ 5] ARRIVED   k=204/205  it=60  pushes=40  "
+            "seconds=96.0 (walk 84.0, setup 12.0)  failure=None")
+
+    def test_a_walk_that_RAISES_spends_the_next_attempt_and_is_never_hidden(self):
+        # chain_walk raising is not evidence the world is unwalkable, so the
+        # reload is worth spending -- but a swallowed crash is how a harness
+        # reports a clean batch of nothing. The traceback is logged, the
+        # attempt is recorded as an exception, and on the LAST allowed attempt
+        # it is RE-RAISED, so a default one-attempt run dies exactly as today.
+        calls = []
+
+        def boom(attempt, chain):
+            calls.append(attempt)
+            if attempt == 1:
+                raise RuntimeError("capture died")
+            return dict(self.ARRIVES)
+
+        res = chain_trials.walk_attempts(
+            2, lambda a: None, lambda: "C", boom, self.log)
+        self.assertEqual(calls, [1, 2])
+        self.assertEqual(res["arrived_on_attempt"], 2)
+        self.assertIs(res["first_walk_arrived"], False)
+        self.assertIs(res["walks"][0]["exception"], True)
+        self.assertEqual(res["walks"][0]["failure"],
+                         "exception: RuntimeError: capture died")
+        self.assertEqual(res["walk_exceptions"], 1)
+        self.assertTrue(any("RuntimeError: capture died" in m
+                            for m in self.logs), self.logs)
+        self.assertTrue(any("Traceback" in m for m in self.logs), self.logs)
+        # ... and with ONE attempt it propagates, byte for byte as today.
+        with self.assertRaises(RuntimeError):
+            chain_trials.walk_attempts(
+                1, lambda a: None, lambda: "C", boom, self.log)
+
+    def test_a_later_attempt_journals_to_its_OWN_file(self):
+        # chain_walk APPENDS, so two walks sharing one journal would splice two
+        # sequences of iteration numbers and recover() would read the pair as
+        # one walk. Attempt 1 keeps the parent's exact path, so a single-
+        # attempt trial is unchanged on disk.
+        self.assertEqual(chain_trials.attempt_journal("/j/t01.jsonl", 1),
+                         "/j/t01.jsonl")
+        self.assertEqual(chain_trials.attempt_journal("/j/t01.jsonl", 2),
+                         "/j/t01.jsonl.a2")
+        self.assertEqual(chain_trials.attempt_journal("/j/t01.jsonl", 3),
+                         "/j/t01.jsonl.a3")
+        self.assertIsNone(chain_trials.attempt_journal(None, 2))
 
     def test_a_chain_name_may_not_be_a_path(self):
         # run_trial builds its temp filenames from this argument.

@@ -36,6 +36,34 @@ S = os.path.join(ROOT, "slow_traverse.py")
 h = open(H).read()
 s = open(S).read()
 
+T = os.path.join(ROOT, "tests", "routing", "test_chain_walk.py")
+t = open(T).read()
+
+edits_t = [
+ # The config test pins the dict's SIZE as a literal (10.11, correctly: a test
+ # that read len(cfg) from the code would pass forever). Adding four keys must
+ # therefore update it AND name them, or the guard silently stops covering them.
+ ("""        for key in ("MISS_MAX", "STALL_MAX", "WINDOW", "LATERAL_GAIN",
+                    "LATERAL_MAG", "LATERAL_CAP_SEC", "LATERAL_TOL_PX",
+                    "TABLE_CHECK_TAIL"):
+            self.assertIn(key, cfg)
+        self.assertEqual(len(cfg), 12)
+""",
+  """        for key in ("MISS_MAX", "STALL_MAX", "WINDOW", "LATERAL_GAIN",
+                    "LATERAL_MAG", "LATERAL_CAP_SEC", "LATERAL_TOL_PX",
+                    "TABLE_CHECK_TAIL"):
+            self.assertIn(key, cfg)
+        # patch53: the stop-yaw family and the door step decide something in
+        # the walk, so a log that does not name them cannot be compared with
+        # the next one -- config()'s own reason for existing.
+        for key in ("STOP_LOOK_YAW", "STOP_YAW_NEAR_FIT_ONLY",
+                    "STOP_YAW_SKIP_LAST_STOP", "DOOR_STOP_EXTRA_PUSH"):
+            self.assertIn(key, cfg)
+            self.assertIsInstance(cfg[key], bool)
+        self.assertEqual(len(cfg), 16)
+"""),
+]
+
 edits_h = [
  ("""            "END_PUSH_UNITS": chain_walk.END_PUSH_UNITS,
             "end_iteration_budget": chain_walk.end_iteration_budget()}
@@ -99,6 +127,8 @@ for a, b in edits_h:
     assert h.count(a) == 1, ("harness anchor", a[:50], h.count(a))
 for a, b in edits_s:
     assert s.count(a) == 1, ("slow_traverse anchor", a[:50], s.count(a))
+for a, b in edits_t:
+    assert t.count(a) == 1, ("test anchor", a[:50], t.count(a))
 assert "STOP_YAW_SKIP_LAST_STOP" not in h, "config already names the flag"
 assert "asked" not in s.split("def turn_to")[1][:2000], "turn_to already logs it"
 # the settle and the tolerance are NOT touched by this patch
@@ -111,6 +141,8 @@ for a, b in edits_h:
     h = h.replace(a, b)
 for a, b in edits_s:
     s = s.replace(a, b)
+for a, b in edits_t:
+    t = t.replace(a, b)
 
 ast.parse(h)
 ast.parse(s)
@@ -128,6 +160,11 @@ assert s.count("        time.sleep(0.35)\n") == 1
 # (10.10: count the occurrences before trusting a match). Pin the LINE.
 assert s.count("TURN_TOLERANCE = 4.0       # degrees") == 1
 
+ast.parse(t)
+assert t.count("self.assertEqual(len(cfg), 16)") == 1
+assert t.count("self.assertEqual(len(cfg), 12)") == 0
+
 open(H, "w").write(h)
 open(S, "w").write(s)
+open(T, "w").write(t)
 print("patch53 applied to", ROOT)
