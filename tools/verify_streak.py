@@ -71,6 +71,23 @@ def selftest():
     rows, best = audit({"runs": [good(1), liar, good(3)]})
     assert best == 1, (rows, best)
     assert any("arrived False" in c for _, _, cs in rows for c in cs), rows
+    # A BAD OUTCOME WITH EVERYTHING ELSE CLEAN. Only the outcome check can
+    # catch this one; without it a mutant deleting that check survived, because
+    # every other failing case here also trips a different check.
+    wrong = dict(good(2), outcome="FAILED")
+    rows, best = audit({"runs": [good(1), wrong, good(3)]})
+    assert best == 1, (rows, best)
+    assert any("outcome FAILED" in c for _, _, cs in rows for c in cs), rows
+    # AN "ARRIVAL" THAT ENDED FAR SHORT OF THE CHAIN'S END, everything else
+    # clean. Without this the end-of-chain check is decorative.
+    short = dict(good(2), k_final=140)
+    rows, best = audit({"runs": [good(1), short, good(3)]})
+    assert best == 1, (rows, best)
+    assert any("ended at waypoint 140" in c for _, _, cs in rows for c in cs), rows
+    # ...and a walk that ends a few waypoints early is NORMAL, not a break:
+    # arrivals in the record legitimately stop at 197-203 of 205.
+    rows, best = audit({"runs": [good(1), dict(good(2), k_final=197), good(3)]})
+    assert best == 3, (rows, best)
     rows, best = audit({"runs": []})
     assert best == 0 and rows == []
     print("selftest OK: a clean run, a false recheck breaking it, a missing "
