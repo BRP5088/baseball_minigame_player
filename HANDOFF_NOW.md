@@ -70,6 +70,19 @@ The loop for the night, in order, repeated:
    of the current tree: 133 tests, mutant "tail None" caught. The min_iterations literals move with it
    (1000 -> 970; window 3 -> 324; chains shorter than the tail -> 1). Lands at the eleventh launch's end
    with patch37 (stop-tie, if its skeptics pass).
+   (j) READY: `drafts/pending_after_ab/apply_patch40.py` — at_table() accepts a correlation >= 0.20 when the
+   OCR reads at least ONE prompt word (MATCH_MIN_WITH_WORD). Two arrivals tonight (ab4 t10, b11 t10) stood at
+   the prompt with the words plainly on screen at 0.220-0.237 and were scored FAILED. The FULL census this
+   time (`overnight/census/at_table_raw_scores_20260908.json`, all 7,885 route frames at k < 185 + 78 prompt
+   frames): the score alone overlaps (negatives reach 0.218) but every negative at >= 0.17 reads 0 prompt
+   words except one at 0.189; the conjunction fires on 0 of 7,885 route frames and recovers 16 of the 24
+   prompt frames under 0.25, all six misses included. Fixtures: `prompt_dark_b11_t10_it064.jpg`,
+   `no_prompt_top_negative_k173.jpg` (0.218), `no_prompt_top_negative_k89.jpg` (0.216),
+   `no_prompt_one_word_0189.jpg`. Verified on a cp scratch copy with the module proven: 11 tests, mutants
+   "conjunction removed", "0.17", "word requirement dropped" caught. Lands with patch39 (the tail gate, the
+   second layer) at the eleventh launch's end. b11 trial 10 was the end-turn rule's FIRST LIVE FIRING
+   (+25 deg at k=197 on dx +493) and it brought the character squarely to the dealer; the detector then
+   scored the arrival a failure — the frame is the fixture.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
