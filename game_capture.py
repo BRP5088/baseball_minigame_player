@@ -24,11 +24,37 @@ def grab(width=None):
     scale-sensitive, so feeding a different size silently shifts them.
     """
     img = None
+    # WHY THE EXCEPTION'S IDENTITY MATTERS HERE, when it never used to.
+    #
+    # NoGameWindow means one specific thing: we know where the game window is
+    # supposed to be and it is not visible -- which, since the frame dump
+    # landed, is the NORMAL state whenever the user is on another macOS Space.
+    # That is the whole point of the dump, and it turns this function's last
+    # resort into a trap: pyautogui.screenshot() grabs the PRIMARY DISPLAY, so
+    # in exactly that state it returns a picture of the user's own desktop and
+    # hands it back as "the game's pixels". This module's own docstring is
+    # about that incident -- the 1Hz logger wrote 247 frames of the user's
+    # actual work to disk and the vision model answered "other" until the run
+    # stalled -- and two callers reach here with no focus recovery first:
+    # orchestrator._fast_grab (which read_balance_from_pause_menu uses to
+    # verify the pause menu opened, on the $50 money path) and
+    # _screenshot_logger_loop (which does not focus, by its own comment).
+    #
+    # So a missing window returns None, which is what this function's docstring
+    # has always promised. Every OTHER failure keeps the fallback, because a
+    # broken compass import or a dead mss is the case it was written for and
+    # nothing about it says the display is the wrong one.
+    missing_window = False
     try:
         import compass
         img = compass.fast_capture()
-    except Exception:
+    except Exception as exc:
+        # By NAME, not by isinstance: compass itself may be what failed to
+        # import, and then there is no class here to compare against.
+        missing_window = type(exc).__name__ == "NoGameWindow"
         img = None
+    if img is None and missing_window:
+        return None
     if img is None:
         # Last resort. This is the WRONG display on a multi-monitor setup, so it
         # is a degraded fallback rather than an equivalent path — better than

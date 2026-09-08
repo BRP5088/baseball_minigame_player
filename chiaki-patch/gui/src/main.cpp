@@ -22,6 +22,7 @@ int main(int argc, char *argv[]) { return real_main(argc, argv); }
 #include <QApplication>
 
 #include "injectinput.h"
+#include "framedump.h"
 #include <QtTypes>
 
 #ifdef CHIAKI_ENABLE_CLI
@@ -118,6 +119,16 @@ int real_main(int argc, char *argv[])
 	// injection path is dead while every symbol still links — which is how a
 	// rebuild can look successful and reach the console with nothing.
 	InjectInputStart();
+
+	// Open the decoded-frame mapping. No-op unless CHIAKI_FRAME_DUMP is set.
+	// Started HERE, beside InjectInputStart, for the same reason: one place
+	// that reads the environment once, on a path that runs exactly once.
+	// It is deliberately NOT started per session and NOT stopped when a
+	// session quits -- a reader ages the dump by its timestamp, so "the
+	// session ended" already reads as "no fresh frames", and tearing the
+	// mapping down on session end would leave a reconnect silently dumping
+	// nothing with every symbol still linked.
+	FrameDumpStart();
 
     SDL_SetHint(SDL_HINT_APP_NAME, "chiaki-ng");
 

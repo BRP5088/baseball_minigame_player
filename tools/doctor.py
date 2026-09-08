@@ -27,6 +27,7 @@ def snapshot(log=print):
         return None
     w, h = img.size
     aspect = w / h
+    log(f"  served by {'the frame DUMP' if img.info.get('frame_dump') else 'the SCREEN'}")
     log(f"  capture   {w}x{h}  aspect {aspect:.3f}"
         f"{'' if abs(aspect - 16 / 9) < 0.01 else '   <- NOT 16:9, the crop is wrong'}")
     log(f"  bearing   {compass.read_bearing(img)}")
@@ -62,6 +63,31 @@ def main():
         ok &= not frozen
     except Exception as e:
         print(f"  picture frozen     unknown ({type(e).__name__})")
+    # WHICH PATH SERVED THE FRAME. The whole point of the dump is that a
+    # capture no longer needs chiaki's window to be on the current Space, so
+    # "is the dump alive" is now a rig fact on the same footing as "is the
+    # FIFO there" -- and when it is NOT alive, every capture is back to
+    # grabbing the screen and will die at the next Space switch. Silence here
+    # would make the two states look identical, which is this project's
+    # signature failure.
+    try:
+        import frame_dump
+        st = frame_dump.stats()
+    except Exception as e:
+        st = None
+        print(f"  frame dump         unreadable ({type(e).__name__}: {e})")
+    if st is not None:
+        # The gate the reader would actually apply, which is derived from the
+        # writer's own throttle -- not the module's floor.
+        fresh = st["age_s"] <= st.get("age_limit_s", frame_dump.MAX_AGE_S)
+        print(f"  frame dump         {st['path']}  {st['width']}x{st['height']} "
+              f"seq {st['seq']}  age {st['age_s'] * 1000:.0f}ms"
+              f"  push {st['push_us']}us"
+              f"{'' if fresh else '   <- STALE; captures fall back to the screen'}")
+    else:
+        print(f"  frame dump         absent   <- captures grab the SCREEN, which "
+              f"fails when chiaki's window leaves the current Space "
+              f"(is CHIAKI_FRAME_DUMP exported? does the log say 'frame dump'?)")
     print("  --- current frame ---")
     ok &= snapshot() is not None
     stray = kill_runaways.find()

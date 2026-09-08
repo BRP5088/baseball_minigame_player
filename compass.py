@@ -58,6 +58,41 @@ from PIL import Image
 # ocr_glyphs is the speedup that kept the right answers.
 _MSS = None
 
+# --- THE FRAME DUMP, tried BEFORE the screen --------------------------------
+#
+# chiaki's patched build writes every decoded frame into a memory-mapped file
+# (chiaki-patch/framedump.h). Reading that instead of grabbing the window is
+# what lets a run survive the user switching macOS Spaces: game_window_rect()
+# lists ON-SCREEN windows only, so a Space switch used to raise NoGameWindow
+# and kill the walk -- six of them between 10:30 and 11:05 on 2026-09-08.
+#
+# The flag is read at CALL time, never captured in a default argument
+# (CLAUDE.md 10.18), so a harness or a test can turn it off for one arm.
+USE_FRAME_DUMP = True
+
+# None means "wherever CHIAKI_FRAME_DUMP says", which is what production wants.
+# A test names a file of its own here instead of pointing the environment at
+# one: frame_dump.read_frame() deliberately refuses the DEFAULT path under
+# BASEBALL_TEST_RUN, so that the offline suite can never be handed a frame by
+# a chiaki that happens to be streaming on this machine.
+FRAME_DUMP_PATH = None
+
+
+def _frame_from_dump():
+    """The newest decoded frame from chiaki's mmap, or None.
+
+    None means "fall back to the screen", and it covers every case: the patched
+    build is not running, the environment variable is unset, no frame has
+    arrived yet, the dump has gone stale because the stream stopped, or a read
+    was torn. Nothing here ever raises -- a capture path that can fail in a new
+    way is worse than one that is merely slower.
+    """
+    try:
+        import frame_dump
+        return frame_dump.read_frame(FRAME_DUMP_PATH)
+    except Exception:
+        return None
+
 
 class NoGameWindow(RuntimeError):
     """Raised when there is no game window to capture."""
@@ -132,6 +167,17 @@ def fast_capture():
     bar. chiaki centres a 16:9 stream in its window, so the crop follows from
     the window rect the OS reports, and does not depend on what is on screen.
     """
+    # THE DUMP FIRST. It is the same 1920x1080 game frame the window path
+    # produces after cropping the letterbox, so every fraction taken from it
+    # means what it meant before, and nothing downstream changes. When it
+    # returns None the window path below runs exactly as it always has.
+    if USE_FRAME_DUMP:
+        _img = _frame_from_dump()
+        if _img is not None:
+            _img.info["game_only"] = True
+            _img.info["frame_dump"] = True
+            return _img
+
     global _MSS
     import mss
     import input_controller as _ic

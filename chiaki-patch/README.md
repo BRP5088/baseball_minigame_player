@@ -29,13 +29,56 @@ Plus the two new files that edit 4 compiles in:
 
     injectinput.cpp   injectinput.h    ->  chiaki-ng-src/gui/src/
 
+## The SECOND patch: the frame dump (2026-09-08)
+
+Same shape, three more edits, and one of them is the same silent one.
+
+chiaki writes its DECODED frames into a memory-mapped file, and the Python side
+reads that instead of grabbing chiaki's window off the screen. The screen path
+depends on the window being composited on the CURRENT macOS Space —
+`input_controller.game_window_rect()` lists ON-SCREEN windows only, and
+`CGWindowListCreateImage` returns nothing for a window on an inactive Space —
+so switching Spaces killed six walks between 10:30 and 11:05 that morning.
+
+| # | file | edit | fails how |
+|---|---|---|---|
+| 6 | `gui/CMakeLists.txt` | add `src/framedump.cpp` to `SOURCE_FILES` | **SILENT** — same reason as edit 4 |
+| 7 | `gui/src/main.cpp` | `#include "framedump.h"` + `FrameDumpStart()` beside `InjectInputStart()` | **SILENT** — no mapping is ever opened |
+| 8 | `gui/src/qmlbackend.cpp` | `FrameDumpPush(frame.frame)` right after `chiaki_ffmpeg_decoder_pull_frame` | nothing is ever dumped |
+
+Plus the two new files:
+
+    framedump.cpp   framedump.h   ->  chiaki-ng-src/gui/src/
+
+**Edit 8 is in `qmlbackend.cpp` and NOT in `streamsession.cpp`, deliberately.**
+`streamsession.cpp`'s `FfmpegFrameCb` only emits a Qt signal; it never holds an
+`AVFrame`. The lambda at `gui/src/qmlbackend.cpp:1107` is the ONLY caller of
+`chiaki_ffmpeg_decoder_pull_frame`, and that function CONSUMES frames from the
+codec (`avcodec_receive_frame`), so pulling a second time anywhere else would
+take frames AWAY from the renderer rather than copy them. The push sits BEFORE
+`prepareFrameForPresentation` so the dump does its own hardware transfer into
+its own frame and the render path is bit-identical with the dump on or off.
+
+**It is OPT-IN, like the injector.** Unset `CHIAKI_FRAME_DUMP` and
+`FrameDumpStart()` returns at once, the mapping is null, and `FrameDumpPush()`
+is one load and a return. `restart_chiaki.sh` exports it beside
+`CHIAKI_INJECT_INPUT` and greps the launch log for `frame dump`.
+
+The file format — a 4096-byte header, one packed NV12/I420 slot, and a
+two-counter seqlock for tearing — is documented at the top of `framedump.h`,
+which is the authority; `frame_dump.py` parses exactly that layout and the
+struct offsets are `static_assert`ed on the C++ side.
+
 ## What is in this directory
 
     injectinput.cpp        the new source
     injectinput.h          its header
+    framedump.cpp          the frame dump's source
+    framedump.h            its header AND the file-format spec
     streamsession.cpp      full patched copy (edits 1-3)
-    gui/CMakeLists.txt     full patched copy (edit 4)
-    gui/src/main.cpp       full patched copy (edit 5)
+    gui/CMakeLists.txt     full patched copy (edits 4 and 6)
+    gui/src/main.cpp       full patched copy (edits 5 and 7)
+    gui/src/qmlbackend.cpp full patched copy (edit 8)
 
 `gui/CMakeLists.txt` and `gui/src/main.cpp` were added on 2026-09-04. Before
 that they existed **only as prose in CLAUDE.md**, which is why this README could

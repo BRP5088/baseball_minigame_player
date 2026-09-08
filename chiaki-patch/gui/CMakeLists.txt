@@ -27,6 +27,7 @@ set(SOURCE_FILES
 	include/streamsession.h
 	src/streamsession.cpp
 	src/injectinput.cpp
+	src/framedump.cpp
 	include/sessionlog.h
 	src/sessionlog.cpp
 	include/settings.h

@@ -91,6 +91,19 @@ PATCH_FILES = [
     ("streamsession.cpp", "gui/src/streamsession.cpp"),
     ("gui/CMakeLists.txt", "gui/CMakeLists.txt"),
     ("gui/src/main.cpp", "gui/src/main.cpp"),
+    # THE FRAME DUMP (2026-09-08). chiaki writes its decoded frames to a
+    # memory-mapped file so the Python side stops capturing the screen -- a
+    # macOS Space switch takes chiaki's window off the window list and killed
+    # six walks in thirty-five minutes. Same five-edit shape as the injector,
+    # and the same two silent ones: gui/CMakeLists.txt (sources are LISTED)
+    # and the FrameDumpStart() call in main.cpp.
+    ("framedump.cpp", "gui/src/framedump.cpp"),
+    ("framedump.h", "gui/src/framedump.h"),
+    # qmlbackend.cpp is patched for the FIRST time here. It is the ONLY caller
+    # of chiaki_ffmpeg_decoder_pull_frame, which CONSUMES from the codec, so it
+    # is the one place a decoded frame can be copied without taking it away
+    # from the renderer -- streamsession.cpp only emits a signal.
+    ("gui/src/qmlbackend.cpp", "gui/src/qmlbackend.cpp"),
 ]
 
 PATCH_DIR = os.path.join(_ROOT, "chiaki-patch")
@@ -148,9 +161,12 @@ check("the divergence check covers every file in chiaki-patch/",
       + ("; LISTED BUT ABSENT: %s" % ", ".join(_phantom) if _phantom else ""))
 
 # The count floor is kept as well. Coverage alone would be satisfied by an empty
-# chiaki-patch/ and an empty list — five is the patch's own documented size:
-# five edits across three files, plus the two new files.
-check("the divergence check has files to compare", len(_listed) >= 5,
+# chiaki-patch/ and an empty list. Five was the injector patch's own documented
+# size (five edits across three files, plus its two new files); the frame dump
+# added three more files, so the floor is eight. IT IS A FLOOR, NOT THE EXACT
+# COUNT: the exact count would turn every future patched file into a failure
+# here instead of at the coverage check above, which names the file.
+check("the divergence check has files to compare", len(_listed) >= 8,
       "%d distinct patch-side paths" % len(_listed))
 
 diverged, missing = [], []
