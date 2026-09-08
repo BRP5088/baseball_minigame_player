@@ -989,6 +989,22 @@ contrast guard; `ink()` stays as the aim sweep's ordering signal.
 `tests/routing/test_at_table_ocr_path.py` carries a fixture only the correlation
 can accept and Wanda pinned rejected; three mutants caught.
 
+## at_table() ALSO MISSES THE PROMPT IN A DARK CAPTURE, AND A BRIGHTNESS-NORMALISED RETRY FIRED ON A STREET (2026-09-08)
+
+The closed loop stood at the prompt for three iterations (frame mean 75/255,
+`test_fixtures/table_prompt_cases/prompt_dark_ab4_t10_it062.jpg`) reading
+False; a 1.2x gain read True. A retry on a copy scaled toward mean 90 (cap
+1.5x) measured 21/21 arrival frames against 18/21 raw and 0 false positives on
+500 route frames, shipped, and on its twelfth live trial "arrived" at k=58 —
+the office doorway facing the L&B storefront, mean 54, normalised score 0.258
+against MATCH_MIN 0.25. Re-measured on 36 prompt frames and 701 route frames:
+the normalised scores of the prompts the raw mask misses are 0.25-0.30 and the
+normalised negatives reach 0.258 — one population (§10.4). Reverted the same
+minute. **The lesson is the census size: a 500-frame sample said 0; the frame
+that fired was the 701st.** `at_table()` is the $50 gate; a change to it is
+measured on EVERY route frame on disk, and a false positive anywhere is a
+veto. The dark miss stays open.
+
 ## at_table() CANNOT SEE THE PROMPT OVER THE LIGHT TABLE TOP, and a local-contrast mask does not fix it (2026-09-07)
 
 Goal-leg A/B trial 1 stood AT the dealer's table, camera pitched down onto the

@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 00:15. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 00:41. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -80,7 +80,20 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, TENTH LAUNCH, RUNNING (00:13:19, commit e49cd3e), plain `--trials 25`, pan OFF.** On the fourth
+- **THE 25, ELEVENTH LAUNCH, RUNNING (00:38:34, commit f8af4d3), plain `--trials 25`, pan OFF:** the END-TURN
+  rule is in (patch34) and the dark-frame detector retry (patch38) is REVERTED. **Tenth launch (e49cd3e):
+  11 true arrivals in a row (walk 78-129 s), then trial 12 "arrived" at k=58 in 47 s — the office doorway
+  looking at the L&B storefront, frame mean 54, raw score 0.129, normalised 0.258 >= MATCH_MIN.** A false
+  positive on the $50 gate. Measured afterwards on 36 prompt frames and 701 route frames: the normalised
+  scores of the prompts the raw mask misses are 0.25-0.30 and the normalised negatives reach 0.258 — one
+  population, no threshold (§10.4); the earlier 500-frame census (0 FP) had simply not drawn that frame.
+  Archived `overnight/chain_trials_batch10.*`; the arrivals sheet
+  `agent_progress/closed-loop/review/tenth_launch_arrivals.jpg` (trial 12 marked). The dark-prompt MISS
+  (ab4 trial 10, three iterations at the prompt unseen) stands as an open detector gap: fixture
+  `test_fixtures/table_prompt_cases/prompt_dark_ab4_t10_it062.jpg`; a fix must separate two populations the
+  normalised correlation does not (OCR on the normalised band? the prompt's fixed screen box?) and be
+  measured on ALL route frames, not a sample.
+- **THE 25, TENTH LAUNCH, STOPPED 00:37 at trial 12 (00:13:19, commit e49cd3e), plain `--trials 25`, pan OFF.** On the fourth
   A/B attempt's build plus patch36 (no retry pushes at a stop after a wall-scale fit) and patch38 (at_table()
   retries a dark frame brightness-normalised). **Pan A/B, fourth attempt, DONE (7fa0efa, 20 trials, 0
   invalid): pan off 9/10 (walk median 104.5 s), pan on 8/10 (99.7 s), Fisher p = 1.00** — no arrival
