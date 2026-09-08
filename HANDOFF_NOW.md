@@ -1,10 +1,22 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 23:20. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 23:33. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
-- **THE PAN A/B, THIRD ATTEMPT, RUNNING (23:2x, commit with 'turn early when blind near a turn stop'):** the
+- **THE PAN A/B, FOURTH ATTEMPT, RUNNING (23:31:17, commit 7fa0efa):** the retry-skip landed at the user's
+  request ("don't wait, land the retry fix now and relaunch"): a stop reached by turn-early takes NO retry pushes
+  (`drafts/pending_after_ab/apply_patch35.py`). Third attempt (532825d, 6 trials): pan off 1/3, pan on 2/3
+  (`overnight/chain_trials_ab_pan_try3.*`). Turn-early FIRED LIVE at Wanda in trials 2 and 3 (both arrived;
+  trial 3 first pushed north three more times on the retry rule — the fix above). The three failures were all
+  at the END: trials 1 and 5 "reached 204 without the prompt" (the walk-past-the-table shape, dx 460-777 px
+  left after the 196 stop), trial 6 lost at the 196 stop. **The end-turn rule is being built** (workflow:
+  Opus builder + two Sonnet skeptics; `drafts/pending_after_ab/apply_patch34.py` when done; notes in
+  `agent_progress/closed-loop/end_turn/`): past the last stop, a fit with |dx| > END_TURN_PX 400 turns the
+  camera toward the scene by dx/px-per-degree (cap 45 deg, at most 3 per walk) and keeps that yaw offset on
+  every remaining push, instead of strafing. Readers on ab3 trials 1 and 5 are in flight
+  (`agent_progress/closed-loop/review/notes_ab3_t0*.md`).
+- **THE PAN A/B, THIRD ATTEMPT, STOPPED 23:31 (23:2x, commit with 'turn early when blind near a turn stop'):** the
   turn-early rule LANDED (`drafts/pending_after_ab/apply_patch33.py` applied; notes and every skeptic's scratch
   work under `agent_progress/closed-loop/turn_early/`; 117 tests; 8 mutants caught). Same harness:
   `overnight/chain_trials.py --chain route_user_1853 --trials 20 --arms off,on`. **Landing it cost 25 minutes
