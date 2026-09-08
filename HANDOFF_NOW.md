@@ -23,9 +23,14 @@ The loop for the night, in order, repeated:
    turn toward the scene, offset kept on the remaining pushes; being verified); (b) SHORT END STEPS: when the
    fit says "at the endpoint" and there is no prompt, push in ~0.09 u steps with at_table() between them and
    back off the moment the table leaves the view (ab3 trial 5: solid fit at 204, no prompt, then three full
-   scheduled pushes into a window); (c) the COLLISION census (`tools/collision_census.py`, being written):
-   where the time goes in escapes/stalls/misses by chain region -- the user's "Wanda, the wall near Wanda, the
-   bar" -- and a rule per cluster only where the frames show the same event.
+   (c) the COLLISION census (`tools/collision_census.py`, committed): whole evening 45% of walked seconds are
+   escapes/stalls/misses; portrait room (Wanda) 11.7 s a trial, bar counter->tables 14.7, door->street 8.4;
+   since the ladder round 38%. Two WASTE INVESTIGATORS + skeptics (workflow `waste-investigators`) are on
+   the bar counter (129-142) and street + the wall near Wanda (40-114); notes land in
+   `agent_progress/closed-loop/waste/`. (d) FAST-RUN STUDY (the user's idea, 23:58: study the fast arrivals'
+   commands beside the frames): one agent ranks tonight's arrivals by walk time, tables the five fastest against
+   the five slowest by region and by stop, and proposes at most three controller changes;
+   `agent_progress/closed-loop/fast_runs/notes.md`. Usage at 23:58: 5-hour 39% (resets 02:02), weekly 42%.
 4. At the batch end: apply the verified patch(es), run the test file, mutants in the checkout (the console is
    idle), commit, `ensure_stream.ensure_live()` (the PS5 may have dozed during the build; standing permission
    to wake it), relaunch `overnight/chain_trials.py --chain route_user_1853 --trials 20 --arms off,on` while
