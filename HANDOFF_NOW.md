@@ -2,6 +2,36 @@
 
 **Updated 2026-09-08 12:27 -- THE USER IS RESTARTING THE MAC. NOTHING IS RUNNING. Read this block first.**
 
+## LIVE NOW (13:10) — the plain 25 on patch51, and what waits behind it
+
+Launched 12:55 on 2d0f4e0 (verified injector build; the frame-dump binary is NOT on the rig).
+5 of 5 arrived so far. Monitors are armed on trial outcomes and on every STOP YAW firing.
+
+**HOW TO READ THIS BATCH, because it is easy to misread.** patch51 only changes behaviour when
+the plan's LAST turn-only stop (chain 196) is verified by the LOOK-AROUND rather than head-on, and
+that happens about 6 times in 266 walks. At n=25 the expected firings are under one, and so far the
+marker `STOP YAW skipped (last stop)` has fired ZERO times — all five trials verified 196 head-on.
+So a good count here shows patch51 broke nothing; it is NOT evidence the rule helps. Count the
+FIRINGS across batches against the baseline of 4 arrived / 2 ended without the prompt in 6 firings.
+The mid-route yaw is untouched and still fires (129, -16.9 to -21.3 deg on 78-172 inliers).
+
+**AT THE NEXT BOUNDARY, in this order:**
+1. `.venv/bin/python -B tools/profile_perception.py --chain route_user_1853 -n 20` (committed
+   f27380b; it refuses while the harness runs, by design). A push-like iteration is a median 1.32 s
+   (n=1748, last 40 journals) and the push is 0.40 s of stick, so ~0.9 s of every iteration is
+   perception and turning — and nothing has ever split it, because neither `chain.py` nor
+   `chain_walk.py` holds a single `perf_counter`. The frame dump's value AND the look-while-pushing
+   design both rest on that split. Measure it before building either (8(h)).
+2. `overnight/chain_trials.py`'s config print does not list `STOP_YAW_SKIP_LAST_STOP`, so a log
+   cannot say which flags were live. One line, at a boundary only (rule 21).
+3. `tools/dashboard.py`'s QUEUE is stale (its top entry still calls the fifteenth launch
+   "running"). Refresh and write_db. NOT during a batch — it re-scores frames with mask + OCR,
+   the CPU spike 10.13 forbids while a trial walks.
+
+Two workflows are running read-only alongside the batch: an adversarial skeptic pass over the
+uncommitted frame-dump build (go/no-go before it ever touches the rig), and a census of the
+wanderer/NPC loss class over the journal corpus. Neither writes to the Python import path.
+
 ## RESTART BLOCK (12:27) -- what was stopped, what is committed, what to do on return
 
 **State at the stop.** Batch 26 part 2 (a780ed6, plain 25) was stopped by me at 8 trials for the
