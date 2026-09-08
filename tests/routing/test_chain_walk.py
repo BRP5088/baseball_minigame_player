@@ -673,12 +673,21 @@ class IndexAdvance(unittest.TestCase):
         strong = Fix(k=31, inliers=170, second=160)   # the runner-up is the neighbour
         ch = FakeChain(60, default=None, wide=strong)
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=6.05)
+        res = always_turning(rig.go, time_cap=10.05)
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:2], ["blind-advance", "relocalised"])
         self.assertEqual([f["k"] for f in res["fixes"]][1], 31)
         self.assertEqual(ch.wide_calls[0], 2, "the wide search is hinted at k+1")
         self.assertEqual(ch.locate_calls[3], 31, "the next locate starts from the relocalised k")
+        # W34 (report agent_progress/closed-loop/snoopy_sweep/report.md): the
+        # blind budget must be FULL again after this relocalisation -- six
+        # more blind pushes must survive before a miss, not five (which is
+        # what a carried-over blind=1 from before the relocalisation would
+        # allow, since the wide fix's own k=31 no longer beats k=31 and so
+        # cannot mask the difference by relocalising a second time).
+        self.assertEqual(acts[2:8], ["blind-advance"] * 6,
+                         "blind budget not restored after a wide relocalisation")
+        self.assertEqual(acts[8], "miss")
 
     def test_a_wide_fix_under_the_strong_count_is_not_believed(self):
         self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 165)   # above the live wrong-place max of 164
@@ -705,6 +714,32 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[:2], ["advanced", "relocalised"])
         self.assertEqual([f["k"] for f in res["fixes"]][1], 9)
         self.assertNotIn("turn-retry", acts)
+
+    def test_the_blind_budget_is_full_again_after_a_turn_stop_relocalisation(self):
+        # W33 (report agent_progress/closed-loop/snoopy_sweep/report.md): the
+        # SAME blind-budget-restoration property as W34 above, but for the
+        # OTHER `blind = 0` site -- the wide relocalisation that fires at an
+        # unverified TURN STOP, not the one inside the main blind-push branch.
+        # One blind push before the stop (blind: 0 -> 1); the stop then
+        # relocalises far ahead via a strong fix. The budget must be FULL
+        # again afterward: six more blind pushes survive before a miss, not
+        # five (a carried-over blind=1 would allow only five).
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, -0.35), (0.0, 0.0)],
+                                     start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        for i in range(4, 100):
+            w = Wp(i, 0.0); w.lx = 0.0; w.ly = -0.35; wps.append(w)
+        ch = FakeChain(100, default=None, wide=Fix(k=20, inliers=170))
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=10.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["blind-advance", "relocalised"])
+        self.assertEqual([f["k"] for f in res["fixes"]][1], 20)
+        self.assertEqual(acts[2:8], ["blind-advance"] * 6,
+                         "blind budget not restored after a relocalised turn stop")
+        self.assertEqual(acts[8], "miss")
 
     def test_a_credible_fit_behind_the_target_with_a_large_scale_advances(self):
         self.assertEqual(chain_walk.PAST_SCALE, 1.6)
@@ -745,6 +780,33 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual([a for a in acts if a.startswith("escape:")],
                          ["escape:jump", "escape:back", "escape:left", "escape:right"])
         self.assertLess(res["seconds"], 60.0)
+
+    def test_scattered_non_advances_never_accumulate_to_stuck(self):
+        # W05 (report agent_progress/closed-loop/snoopy_sweep/report.md):
+        # `since_advance` means CONSECUTIVE iterations without k rising. An
+        # advance MUST reset it to zero, or the counter is really counting
+        # every non-advancing iteration the walk has EVER had, cumulatively --
+        # and a long, healthy walk (a ~1000-waypoint chain needs >= 333
+        # iterations, CLAUDE.md §11 OPEN-15/min_iterations) is close to
+        # certain to rack up NO_PROGRESS_MAX of those scattered across it.
+        #
+        # Fifteen cycles of (a credible fix that is READ but has not reached
+        # the target yet, then a credible fix that reaches it): never two
+        # non-advances in a row, so a mutant that drops the reset is the
+        # ONLY way this walk ends STUCK. Sized off the LIVE constant so this
+        # does not go stale if NO_PROGRESS_MAX is retuned again.
+        cycles = chain_walk.NO_PROGRESS_MAX + 3
+        fixes = []
+        for k in range(1, cycles + 1):
+            fixes.append(Fix(k=k - 1, scale=0.9, inliers=90))   # read, not reached
+            fixes.append(Fix(k=k, scale=1.0, inliers=90))       # reaches k
+        ch = FakeChain(cycles + 10, fixes, default=None, lookback=None)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=float(2 * cycles + 5))
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2 * cycles], ["stalled", "advanced"] * cycles,
+                         "scattered stalls: no two non-advances in a row")
+        self.assertFalse((res["failure"] or "").startswith("stuck"), res["failure"])
 
     def test_three_consistent_thin_fits_steer_once_by_their_median(self):
         # Batch 5e trials 13-14: five thin fits in a row, all with the scene
@@ -1067,6 +1129,12 @@ class Escapes(unittest.TestCase):
         self.assertEqual([acts[3], acts[7], acts[11]],
                          ["escape:jump", "escape:back", "escape:left"])
         self.assertEqual(acts[4:7], ["stalled"] * 3, "the counter must reset")
+        # C21: nothing pinned the escape's BACK rung's own duration -- a
+        # mutant that doubles BACK_SEC changes how far the character backs
+        # off a wall and nothing here notices. Literal, not the constant.
+        backs = [e for e in rig.events if e[0] == "back"]
+        self.assertEqual(len(backs), 1)
+        self.assertEqual(backs[0][2], 0.5, "the back rung must be BACK_SEC (0.5s)")
         # LEFT is negative lx, RIGHT positive — the same axis walk_leg drives.
         sides = [e[1] for e in rig.strafes()]
         self.assertEqual(len(sides), 1, "jump, back, then the first sidestep within 12 iterations")
@@ -1138,8 +1206,19 @@ class Lateral(unittest.TestCase):
         self.assertEqual(st, [], "|dx| under ALIGN_TOL_PX must not be corrected")
 
     def test_the_push_is_capped_and_floored(self):
+        # C05 (CLAUDE.md §10.11): asserting the capped push against
+        # `chain_walk.LATERAL_CAP_SEC` rises with the constant and passes
+        # forever -- a mutant that doubles the cap to 0.6s (the worst single
+        # sidestep in a narrow passage) left this green. Pin the literal, and
+        # prove the fixture actually NEEDS capping (5000px uncapped would
+        # take far longer than 0.3s at this gain) so the assertion is not
+        # vacuously true regardless of the cap's value.
+        self.assertEqual(chain_walk.LATERAL_CAP_SEC, 0.3)
+        uncapped = 5000.0 / (chain_walk.LATERAL_GAIN * chain_walk.LATERAL_MAG)
+        self.assertGreater(uncapped, 0.6,
+                           "the fixture must exceed even a doubled cap to be a real test")
         _, big = self._one(5000.0)          # never lunge
-        self.assertEqual(big[0][2], chain_walk.LATERAL_CAP_SEC)
+        self.assertEqual(big[0][2], 0.3)
         # 36px works out at 0.05s, and a push under ~0.10s does not move the
         # character at all — it would read as a correction and be none.
         _, small = self._one(36.0)
@@ -1288,6 +1367,34 @@ class ConsecutiveCounters(unittest.TestCase):
                          "a fix that could be READ must reset the miss count")
         self.assertEqual(rig.strafes(), [])
 
+    def test_a_readable_fix_resets_the_miss_counter_with_no_blind_advance_to_mask_it(self):
+        # W22 (report agent_progress/closed-loop/snoopy_sweep/report.md): the
+        # test above CANNOT fail on a mutant that deletes the credible
+        # branch's own `misses = 0` -- a credible fix ALSO resets `blind`
+        # unconditionally (unmutated), so the very next None/weak fix always
+        # takes the blind-advance branch first (its own cap is never 0),
+        # which ALSO sets `misses = 0` on its way to exhausting the budget
+        # again. The credible branch's reset is masked in every fixture that
+        # relies on a later blind-advance ladder to surface it.
+        #
+        # At the chain's LAST waypoint the blind-advance branch is gated off
+        # entirely by `not at_end`, so a subsequent miss goes straight to the
+        # miss counter with no such mask. Two misses (misses=2), a credible
+        # fix that is READ but does not advance, then one more miss:
+        # consecutively that is 1, never MISS_MAX, so nothing escapes.
+        # Cumulatively (the bug) it is 2 + 1 = 3 and the third miss escapes.
+        self.assertEqual(chain_walk.MISS_MAX, 3)
+        rig = Rig(FakeChain(2, [Fix(k=1, scale=1.0), None, None,
+                                Fix(k=1, scale=0.9), None], lookback=None),
+                  table_at=None)
+        res = rig.go(time_cap=10.0, end_iterations=10)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(
+            acts[:5], ["advanced", "miss", "miss", "stalled", "miss"],
+            "a fix that is READ but does not advance must still reset the "
+            "miss count -- a mutant that drops the reset escapes on the "
+            "5th action instead of a third miss")
+
     def test_an_advance_resets_the_stall_counter(self):
         self.assertEqual(chain_walk.STALL_MAX, 4)
         # three stalls, an ADVANCE, three more stalls: consecutively never 4.
@@ -1306,6 +1413,76 @@ class ConsecutiveCounters(unittest.TestCase):
         self.assertEqual(rig.count("jump"), 0,
                          "an advance must reset the stall count")
         self.assertEqual(rig.strafes(), [])
+
+
+class PlanMinIterations(unittest.TestCase):
+    """W01 (report agent_progress/closed-loop/snoopy_sweep/report.md):
+    `plan_min_iterations` -- what `walk()` ACTUALLY uses for
+    `res["min_iterations"]`, `iteration_budget_sec` and the ARITHMETIC-vs-
+    NAVIGATION timeout diagnosis -- had no test of its own; only the simpler
+    `min_iterations()` (a different function, see IterationArithmetic below)
+    was pinned. A mutant that drops turn-only targets from the floor entirely
+    makes a chain with several stops look arithmetically cheaper than it is,
+    so a genuinely unwalkable chain gets blamed on NAVIGATION instead.
+    """
+
+    def test_turn_only_targets_add_one_iteration_each_on_top_of_the_pushes(self):
+        # 2 turn-only stops + 9 push targets at window 3: two turns (one
+        # iteration each, never batched) plus ceil(9/3) for the pushes.
+        plan = [(1, False, 10.0), (2, False, 20.0)] + [(i, True, 0.0) for i in range(3, 12)]
+        self.assertEqual(chain_walk.plan_min_iterations(plan, window=3), 5)
+
+    def test_a_plan_of_only_turns_needs_one_iteration_each(self):
+        plan = [(i, False, float(i)) for i in range(4)]
+        self.assertEqual(chain_walk.plan_min_iterations(plan, window=3), 4)
+
+    def test_the_default_window_is_ADVANCE_MAX(self):
+        self.assertEqual(chain_walk.ADVANCE_MAX, 1)
+        plan = [(1, False, 0.0)] + [(i, True, 0.0) for i in range(2, 5)]
+        # one turn + three pushes at the default window (1): 1 + 3 = 4.
+        self.assertEqual(chain_walk.plan_min_iterations(plan), 4)
+
+    def test_an_empty_plan_still_needs_at_least_one_iteration(self):
+        self.assertEqual(chain_walk.plan_min_iterations([], window=3), 1)
+
+
+class PlanIndicesStrideAndBoundary(unittest.TestCase):
+    """P01/P02/P06 (report agent_progress/closed-loop/snoopy_sweep/report.md):
+    the caller's `stride` argument and the stationary boundary had no
+    coverage at all -- every existing test either takes the default stride
+    or drives stationarity through recorded `ly`, never at exactly
+    STATIONARY_STICK.
+    """
+
+    def test_a_caller_supplied_stride_is_honoured(self):
+        # P01/P06: with no stick data every frame is "unknown", so stride is
+        # the ONLY thing deciding which frames emit. stride=3 must emit
+        # every third frame, not every frame (P01: the argument silently
+        # replaced by the module default) and not EVERY frame regardless of
+        # the count (P06: the stride gate itself deleted) -- both mutants
+        # give [1, 2, 3] here instead of [1, 4, 7].
+        wps = [Wp(0, 0.0)] + [Wp(i, float(i)) for i in range(1, 10)]
+        plan = chain_walk.plan_indices(wps, stride=3)
+        pushes = [i for i, p, _ in plan if p]
+        self.assertEqual(pushes[:3], [1, 4, 7], "stride=3 was not honoured")
+
+    def test_the_default_stride_is_one(self):
+        self.assertEqual(chain_walk.STRIDE, 1)
+        wps = [Wp(0, 0.0)] + [Wp(i, float(i)) for i in range(1, 6)]
+        plan = chain_walk.plan_indices(wps)
+        self.assertEqual([i for i, p, _ in plan if p], [1, 2, 3, 4, 5])
+
+    def test_the_stationary_boundary_is_inclusive_at_the_threshold(self):
+        # P02: a stick magnitude of EXACTLY STATIONARY_STICK must count as
+        # stationary (<=), not walking (<) -- the threshold must sit AT the
+        # measured value, not just below it (CLAUDE.md §10.4).
+        self.assertEqual(chain_walk.STATIONARY_STICK, 0.05)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.05), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        plan = chain_walk.plan_indices(wps)
+        self.assertEqual(plan, [(1, True, 90.0), (2, False, 0.0), (3, True, 0.0)],
+                         "ly == STATIONARY_STICK must be treated as stationary")
 
 
 class IterationArithmetic(unittest.TestCase):
