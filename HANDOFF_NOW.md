@@ -102,6 +102,12 @@ The loop for the night, in order, repeated:
    the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
    arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
    detector miss (patch40's fixture).
+   (n) b11 trial 25 (reader `notes_cur_t25_1788845268.md`): the 129 stop verified at 151 inliers but tight on
+   a wall portrait; the next fit read 17 inliers with dx -369 (a capped strafe), two blind pushes walked into
+   the doorway pillar, the 166 stop was reached by dead reckoning, accepted unverified after back/wait, and
+   the ladder's four rungs each left the same flat wall. Two shapes already queued: the unverified-stop
+   REWIND (patch41 in build) and, for the blind pushes into geometry, the reader's "back up and turn around
+   to re-orient" — a candidate for the ladder's fifth rung, not built.
    (m) READY: `drafts/pending_after_ab/apply_patch37.py` STOP-TIE + LOOK-AROUND EARLY EXIT (workflow done
    01:2x; notes `agent_progress/closed-loop/stop_tie/`): a stop fit is a tie only when the runner-up is a
    DIFFERENT PLACE — outside the stop's stationary-run span (chain.py's Fix now carries second_k/second_dx,
