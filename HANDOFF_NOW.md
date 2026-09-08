@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 03:43. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 04:14. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,7 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, SIXTEENTH LAUNCH, RUNNING (04:20, commit 078a912 = a8ff495 + patch42), plain `--trials 25`.**
+- **THE 25, SIXTEENTH LAUNCH, RUNNING (04:02, commit 078a912 = a8ff495 + patch42), plain `--trials 25`.**
   patch42: `STOP_REWIND_MAX` 2 -> 0 (the rewind mechanism and its tests stay, at budget 2 for themselves;
   rules A and B untouched) and `at_table()` reads the "$50" / "(50)" fee token LAST, on the census band
   `FEE_BOX` (0.30, 0.58, 0.72, 0.70) at 3x, both polarities -- 0 of 7,885 route frames, 58 of 81 prompt
@@ -247,7 +247,7 @@ The loop for the night, in order, repeated:
   169 (reader pending). The census that decided it: across b12-b14 every trial that took 129 UNVERIFIED
   arrived (11/11); in b15 every trial that rewound there was lost (0/3). One rule, one round, reverted by
   its own measurement.
-- **THE 25, FIFTEENTH LAUNCH, DONE 04:15 (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
+- **THE 25, FIFTEENTH LAUNCH, STOPPED 04:00 after trial 12 (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
   (a8ff495, the rewind): 22 of 25, walk median 82.2 s [72..116], best streak 10** (`overnight/
   chain_trials_batch14.*`). Its three failures, each read: t6 the coat rack in the shop alcove (the rewind
   fired correctly and the re-approach walked the same line), t14 the window past the dealer (a 206 px

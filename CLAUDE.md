@@ -708,7 +708,7 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         bar-entrance stop 129 -- taken unverified (b12-14) 11/11
                                                                         arrived; rewound (b15) 0/3, each lost at 109 re-walking
                                                                         into the NPC it had just met
-    078a912  04:20         25     running                             STOP_REWIND_MAX 0 (rules A/B stay); at_table() reads the
+    078a912  04:02         25     running                             STOP_REWIND_MAX 0 (rules A/B stay); at_table() reads the
                                                                         "$50" fee token last: 0 of 7,885 route frames, 58 of 81
                                                                         prompt frames, the three b13-t5 "FAILED at the prompt"
                                                                         frames all read it
