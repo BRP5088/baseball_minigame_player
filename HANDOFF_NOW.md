@@ -109,6 +109,15 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (u) b14 trial 15's reader (`notes_b14_t15.md`): at the 39 stop the -25 look plainly showed the stairwell,
+   the un-yawed strafe was small (+434 - 492 = -58 px), the committed frame at the recorded heading showed the
+   furniture ALCOVE (the un-yaw arithmetic said "3 deg off"; the frames said 25), blind pushes then walked
+   into the cloth-draped chair; lost. CENSUS over tonight's 165 look-verified stops: a large (>150 px)
+   credible offset in the next three iterations happens 82 times and 78 of those ARRIVE (95%), no worse than
+   the 83 without one (84%); at 129 it is the norm (52 of 56, 50 arrived). So "the look's un-yaw does not
+   land the character on the line" is common and benign — no rule on it (§10.4). Stop 39: 30 visits, 26
+   arrived; t15's junk fits are not in the census's credible set. The morning's candidates stand as
+   recorded in (s), (t) and (s'); none built tonight on n = 1-3.
    (t) b14 trial 14's reader (`notes_cur_t14_1788852050.md`): at the 196 stop the fit named 199 (3 ahead)
    with dx -206 and the offset never closed over six iterations of left strafes (0.16-0.29 s); the
    character drifted to the WINDOW on the room's left, pressed against the pane, blind. The same 3-ahead fit
