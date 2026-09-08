@@ -474,7 +474,11 @@ STOP_TIE_DX_PX = 120.0
 # It MOVES THE CHARACTER, which is the shape GRAVEYARD closed thirteen times
 # out of thirteen (both survivors move nothing), so it ships OFF and an A/B
 # decides: `--arms off,on --flag DOOR_STOP_EXTRA_PUSH`.
-DOOR_STOP_EXTRA_PUSH = False
+# SHIPS ON (patch50, 2026-09-08 11:50): the A/B, 10 a side -- on arm 10/10, the
+# 39 stop verified HEAD-ON on every trial at 66 inliers, fit scale 1.04
+# [1.01..1.11]; off arm 9/10, three look-arounds and one unverified loss, 38
+# inliers, scale 0.96 [0.80..1.05] (overnight/chain_trials_ab_doorstep.*).
+DOOR_STOP_EXTRA_PUSH = True
 # THE STOP IT APPLIES TO, AND IT IS CHAIN-SPECIFIC: 39 is the office-door /
 # top-of-the-stairs turn-only stop of chains/route_user_1853, the drive every
 # batch walks. It is an index into THAT recording and not a property of the

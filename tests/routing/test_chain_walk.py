@@ -4298,11 +4298,13 @@ class DoorStopExtraPush(unittest.TestCase):
 
     # ---- the constants -----------------------------------------------------
 
-    def test_the_flag_ships_OFF_and_the_index_is_this_chains_door_stop(self):
+    def test_the_flag_ships_ON_and_the_index_is_this_chains_door_stop(self):
         # Literals (10.11): a test that reads the constant it guards passes
         # forever. 39 is chains/route_user_1853's office-door stop and ONE
         # push is what the user asked for.
-        self.assertIs(chain_walk.DOOR_STOP_EXTRA_PUSH, False)
+        # ON since patch50: the A/B's on arm verified the door stop head-on 10 of
+        # 10 at scale 1.04 against the off arm's 0.96 with a 0.80 tail.
+        self.assertIs(chain_walk.DOOR_STOP_EXTRA_PUSH, True)
         self.assertEqual(chain_walk.DOOR_STOP_INDEX, 39)
         self.assertEqual(chain_walk.DOOR_STOP_EXTRA_PUSHES, 1)
         self.assertEqual(chain_walk.DOOR_STEP_ACTION, "door-step")
