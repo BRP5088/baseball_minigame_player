@@ -3874,6 +3874,40 @@ class HarnessScoring(unittest.TestCase):
         finally:
             chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN = old
 
+    def test_wait_for_game_window_returns_when_the_probe_finds_one(self):
+        # patch48: the probe is None twice (off screen), then a rect; a stub
+        # clock and sleep make it instant. Three probes, True, no give-up line.
+        answers = [None, None, (0, 0, 100, 100)]
+        calls = []
+        t = [0.0]
+        def probe(): calls.append(1); return answers.pop(0)
+        def sleep(s): t[0] += s
+        ok = chain_trials.wait_for_game_window(self.log, probe=probe, sleep=sleep,
+                                                clock=lambda: t[0], max_sec=120.0)
+        self.assertTrue(ok)
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(any("waiting up to 120s" in m for m in self.logs), self.logs)
+        self.assertTrue(any("window back after" in m for m in self.logs), self.logs)
+
+    def test_wait_for_game_window_gives_up_after_the_budget(self):
+        t = [0.0]
+        def sleep(s): t[0] += s
+        ok = chain_trials.wait_for_game_window(self.log, probe=lambda: None, sleep=sleep,
+                                                clock=lambda: t[0], max_sec=10.0)
+        self.assertFalse(ok)
+        self.assertGreaterEqual(t[0], 9.0, "it waited out the budget, not one poll")
+        self.assertTrue(any("for 10s" in m for m in self.logs), self.logs)
+
+    def test_an_INVALID_trial_number_is_re_run_at_most_WINDOW_RETRY_MAX_times(self):
+        # Literals (10.11): INVALID re-runs twice, a third INVALID moves on,
+        # and a real result never re-runs.
+        self.assertEqual(chain_trials.WINDOW_RETRY_MAX, 2)
+        self.assertTrue(chain_trials.retry_this_trial(chain_trials.INVALID, 0))
+        self.assertTrue(chain_trials.retry_this_trial(chain_trials.INVALID, 1))
+        self.assertFalse(chain_trials.retry_this_trial(chain_trials.INVALID, 2))
+        for oc in (chain_trials.ARRIVED, chain_trials.FAILED, chain_trials.TIMED_OUT):
+            self.assertFalse(chain_trials.retry_this_trial(oc, 0), oc)
+
     def test_the_default_arms_ROW_LABEL_is_still_pan(self):
         # THE LABEL IS TEXT SOMEONE READS AND SOMETHING GREPS. `--flag` names
         # the attribute; it must not rename the rows of every batch written
@@ -4200,6 +4234,446 @@ class DefaultConsoleWrappers(unittest.TestCase):
         self.assertEqual(self.tables, [1])
         self.assertEqual(self.legs, [],
                          "nothing may move once the prompt is on screen")
+
+
+class DoorStopExtraPush(unittest.TestCase):
+    """(o) ONE MORE STEP TOWARD THE DOOR before the office-door stop turns.
+
+    The user, watching the live stream during batch 23 (2026-09-08, verbatim):
+    "an observation, you should take 1 more step towards the door in the
+    beginning of the route. saves you from rubbing against the banister."
+
+    The census says the same thing (agent_progress/closed-loop/review/
+    census_after_129_notes.md, 226 walks): the chain-39 stop verified head-on
+    fits at scale 1.03 and fails 10% of the time; verified only by the
+    look-around it fits at 0.87 -- the scene 13% smaller than the reference,
+    i.e. the character SHORT of the door -- and fails 29%. The corridor is
+    blind for the sensor (last credible fit at k 4-10; 13/16/19 dead-reckoned),
+    so the loop cannot see that it stopped short.
+
+    The flag ships OFF and the A/B decides, so these tests drive it BOTH ways
+    and pin the OFF path's console events as literals: a mutant that ignores
+    the flag must fail here.
+
+    AND THE ROW IT ADDS IS THE FIRST IN THIS MODULE TO SHARE AN ITERATION
+    NUMBER WITH ANOTHER ROW. Three readers -- `_timeout_diagnosis`,
+    `tools/live_gate_census.py` and `tools/trial_sheet.py` -- selected "one
+    iteration's own fit" by asking whether a row carried an iteration number,
+    a proxy that was exact until now. The last four tests here are those
+    readers, driven with the rows and the frames a REAL walk writes, because a
+    row nobody reads correctly is CLAUDE.md 10.1's evidence that is not.
+
+    THE CHAIN. wp2 is the turn-only stop (ly = 0.0, a stationary run of one),
+    reached after one walking push at 90 deg; the pushes after it carry 10 deg,
+    so every turn shows up in the event list as its own entry.
+    """
+
+    ROWS = [(90.0, -0.35), (0.0, 0.0), (10.0, -0.35), (10.0, -0.35)]
+
+    def _wps(self, rows=None):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate(rows or self.ROWS, start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        return wps
+
+    def _rig(self, wps, fixes, table_at, wide=None, lookback="script"):
+        ch = FakeChain(len(wps), fixes, default=None, wide=wide,
+                       lookback=lookback)
+        ch.waypoints = wps
+        return Rig(ch, table_at=table_at)
+
+    def _at(self, index):
+        """Point the rule at THIS chain's stop, restored afterwards."""
+        prev = chain_walk.DOOR_STOP_INDEX
+        chain_walk.DOOR_STOP_INDEX = index
+        self.addCleanup(setattr, chain_walk, "DOOR_STOP_INDEX", prev)
+
+    def _flag(self, on):
+        prev = chain_walk.DOOR_STOP_EXTRA_PUSH
+        chain_walk.DOOR_STOP_EXTRA_PUSH = on
+        self.addCleanup(setattr, chain_walk, "DOOR_STOP_EXTRA_PUSH", prev)
+
+    # ---- the constants -----------------------------------------------------
+
+    def test_the_flag_ships_OFF_and_the_index_is_this_chains_door_stop(self):
+        # Literals (10.11): a test that reads the constant it guards passes
+        # forever. 39 is chains/route_user_1853's office-door stop and ONE
+        # push is what the user asked for.
+        self.assertIs(chain_walk.DOOR_STOP_EXTRA_PUSH, False)
+        self.assertEqual(chain_walk.DOOR_STOP_INDEX, 39)
+        self.assertEqual(chain_walk.DOOR_STOP_EXTRA_PUSHES, 1)
+        self.assertEqual(chain_walk.DOOR_STEP_ACTION, "door-step")
+        # It invents no physical constant: the push is the ordinary one.
+        self.assertEqual(chain_walk.PUSH_MAG, 0.45)
+        self.assertEqual(chain_walk.PUSH_SEC, 0.40)
+
+    def test_the_plan_this_class_uses_has_its_stop_where_it_says(self):
+        # ANTI-VACUITY for every test below: if the plan had no turn-only
+        # target at 2, "no extra push" would pass for the wrong reason.
+        self.assertEqual(chain_walk.plan_indices(self._wps()),
+                         [(1, True, 90.0), (2, False, 0.0), (3, True, 10.0),
+                          (4, True, 10.0)])
+
+    # ---- the OFF path, pinned as literals ----------------------------------
+
+    def test_with_the_flag_OFF_the_console_sequence_is_UNCHANGED(self):
+        # THE CONTROL, and the shipped path. Every console call, in order.
+        self._flag(False)
+        self._at(2)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=200)], table_at=4)
+        res = rig.go()
+        self.assertEqual(rig.events, [
+            ("capture", 1), ("at_table", 1, False),
+            ("turn", 90.0), ("push", 0.45, 0.4),
+            ("capture", 2), ("at_table", 2, False),
+            ("turn", 0.0), ("capture", 3), ("at_table", 3, False),
+            ("turn", 10.0), ("push", 0.45, 0.4),
+            ("capture", 4), ("at_table", 4, True)])
+        self.assertEqual([f["action"] for f in res["fixes"]],
+                         ["advanced", "turned", "arrived"])
+        self.assertEqual(res["pushes"], 2)
+        self.assertTrue(res["arrived"])
+
+    # ---- the ON path -------------------------------------------------------
+
+    def _walk_with_a_door_step(self, shots=None):
+        """ONE REAL WALK with the flag on, whose rows the readers below read.
+
+        Nothing about the readers' tests is hand-written: the rows, their
+        iteration numbers and the frame names all come from this walk, so a
+        renamed action or a renamed suffix breaks them rather than passing.
+        """
+        self._flag(True)
+        self._at(2)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=90, scale=0.87),
+                         Fix(k=2, inliers=200)], table_at=5)
+        res = rig.go(**({"shots": shots} if shots else {}))
+        self.assertEqual([f["action"] for f in res["fixes"]],
+                         ["advanced", "door-step", "turned", "arrived"])
+        return res
+
+    def test_the_extra_push_comes_BEFORE_the_stops_turn_and_only_once(self):
+        # The same walk with the flag on: ONE more push, along the WALKING
+        # heading (90, already commanded, so no turn of its own), before the
+        # turn to the stop's 0.0 -- and the stop then verifies exactly as it
+        # did with the flag off.
+        self._flag(True)
+        self._at(2)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=90, scale=0.87),
+                         Fix(k=2, inliers=200)], table_at=5)
+        res = rig.go()
+        self.assertEqual(rig.events, [
+            ("capture", 1), ("at_table", 1, False),
+            ("turn", 90.0), ("push", 0.45, 0.4),
+            ("capture", 2), ("at_table", 2, False),
+            ("push", 0.45, 0.4), ("capture", 3),          # THE DOOR STEP
+            ("turn", 0.0), ("capture", 4), ("at_table", 4, False),
+            ("turn", 10.0), ("push", 0.45, 0.4),
+            ("capture", 5), ("at_table", 5, True)])
+        pushes = [i for i, e in enumerate(rig.events) if e[0] == "push"]
+        turn0 = next(i for i, e in enumerate(rig.events)
+                     if e[0] == "turn" and e[1] == 0.0)
+        self.assertEqual(len([i for i in pushes if i < turn0]), 2,
+                         "the walking push and the door step, both before the "
+                         "stop's turn")
+        self.assertEqual([f["action"] for f in res["fixes"]],
+                         ["advanced", "door-step", "turned", "arrived"])
+        self.assertEqual(res["pushes"], 3, "the door step counts as a push")
+        self.assertTrue(res["arrived"])
+
+    def test_the_extra_push_is_commanded_along_the_WALKING_heading(self):
+        # WHICH WAY THE STEP GOES, pinned where it can be seen. In the test
+        # above the walking heading is ALREADY the commanded one, so the step
+        # needs no turn of its own and the event list cannot say which heading
+        # it would have used -- and a step run along the STOP'S heading would
+        # go into the stairs, the exact opposite of this change. With the
+        # turn-skip off every turn is commanded, so the step's own heading is
+        # on the list: 90, the heading the walk arrived on, not the stop's 0.
+        self._flag(True)
+        self._at(2)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=90, scale=0.87),
+                         Fix(k=2, inliers=200)], table_at=5)
+        res = always_turning(rig.go)
+        self.assertEqual(rig.events, [
+            ("capture", 1), ("at_table", 1, False),
+            ("turn", 90.0), ("push", 0.45, 0.4),
+            ("capture", 2), ("at_table", 2, False),
+            ("turn", 90.0), ("push", 0.45, 0.4),           # THE DOOR STEP
+            ("capture", 3),
+            ("turn", 0.0), ("capture", 4), ("at_table", 4, False),
+            ("turn", 10.0), ("push", 0.45, 0.4),
+            ("capture", 5), ("at_table", 5, True)])
+        self.assertEqual([f["action"] for f in res["fixes"]],
+                         ["advanced", "door-step", "turned", "arrived"])
+
+    def test_the_door_step_row_carries_its_own_fix_and_says_which_push_it_was(self):
+        # The row is EVIDENCE: the fit after the extra push is what the A/B's
+        # instrument (the stop's fit scale) is read from, so it is recorded
+        # rather than thrown away (10.1, "a measurement taken and discarded").
+        self._flag(True)
+        self._at(2)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=90, scale=0.87),
+                         Fix(k=2, inliers=200)], table_at=5)
+        res = rig.go()
+        row = res["fixes"][1]
+        self.assertEqual(row["action"], "door-step")
+        self.assertEqual(row["k"], 1, "k is untouched by the extra push")
+        self.assertEqual(row["target"], 2)
+        self.assertIsNone(row["lateral"])
+        self.assertEqual(row["door_step"], {"n": 1, "heading": 90.0})
+        self.assertEqual(row["fix"]["inliers"], 90)
+        self.assertEqual(row["fix"]["scale"], 0.87)
+        self.assertEqual(rig.chain.locate_calls[1], 2,
+                         "the door step's frame is located against the STOP, "
+                         "which is the scene it was pushed toward")
+        self.assertEqual(rig.strafes(), [], "it steers nothing")
+
+    def test_a_stop_that_is_not_the_DOOR_STOP_gets_no_extra_push(self):
+        # THE MUTANT THIS EXISTS FOR: a rule that fires at every stop. With
+        # the flag ON and the index pointing somewhere this chain never
+        # reaches, the sequence is the OFF one, call for call.
+        self._flag(True)
+        self._at(7)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), Fix(k=2, inliers=200)], table_at=4)
+        res = rig.go()
+        self.assertEqual(rig.events, [
+            ("capture", 1), ("at_table", 1, False),
+            ("turn", 90.0), ("push", 0.45, 0.4),
+            ("capture", 2), ("at_table", 2, False),
+            ("turn", 0.0), ("capture", 3), ("at_table", 3, False),
+            ("turn", 10.0), ("push", 0.45, 0.4),
+            ("capture", 4), ("at_table", 4, True)])
+        self.assertNotIn("door-step", [f["action"] for f in res["fixes"]])
+        self.assertEqual(res["pushes"], 2)
+
+    def test_one_door_step_per_SERVICING_however_often_the_stop_comes_round(self):
+        # A stop whose frame fits nothing is served again and again -- one step
+        # back, one wait, then a retry push -- and every one of those returns
+        # to this same plan entry. That is the SAME stop, not four more steps.
+        self._flag(True)
+        self._at(2)
+        wps = self._wps([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)])
+
+        def tied_at(k):
+            # Credible, and NOT verification: a near-tied runner-up at another
+            # place whose dx disagrees. The one shape that buys a retry (see
+            # test_a_turn_stop_that_does_not_match_is_retried_after_one_more_push).
+            f = Fix(k=k, inliers=90, second=90)
+            f.second_k, f.second_dx = 8, 900.0
+            return f
+
+        # it1 push -> Fix(1); the door step's own frame; then the stop reads a
+        # credible TIE at the EARLIER waypoint 1 three times, with both looks
+        # blank each time (back, wait, retry), and the fourth read verifies.
+        rig = self._rig(wps, [Fix(k=1), Fix(k=2, inliers=90, scale=0.87),
+                              tied_at(1), None, None,   # stop + both looks
+                              tied_at(1), None, None,   # ... after the step back
+                              tied_at(1), None, None,   # ... after the wait
+                              Fix(k=2, inliers=200)], table_at=99,
+                        lookback=None)
+        res = without_stuck(rig.go, time_cap=60.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:5], ["advanced", "door-step", "turn-back",
+                                    "turn-wait", "turn-retry"], acts)
+        self.assertEqual(acts.count("door-step"), 1,
+                         "one servicing of the stop, one step toward the door")
+        self.assertIn("turned", acts, "ANTI-VACUITY: the stop was serviced "
+                                      "four times and did verify in the end")
+
+    def test_a_stop_SKIPPED_by_a_relocalisation_takes_no_step(self):
+        # The pointer walks over a turn-only entry when a wide relocalisation
+        # carries k past it: no turn_to, no push, no stop. The step must not
+        # fire for a stop the walk never serviced.
+        self._flag(True)
+        self._at(5)
+        rows = [(90.0, -0.35)] * 4 + [(0.0, 0.0)] + [(10.0, -0.35)] * 3
+        wps = self._wps(rows)
+        self.assertEqual([p for p in chain_walk.plan_indices(wps) if not p[1]],
+                         [(5, False, 0.0)], "the stop is at 5")
+        rig = self._rig(wps, [], table_at=4,
+                        wide=Fix(k=7, inliers=170, second=20))
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["blind-advance", "relocalised"], acts)
+        self.assertNotIn("door-step", acts)
+        self.assertEqual([f["k"] for f in res["fixes"]][1], 7,
+                         "ANTI-VACUITY: k really did jump past the stop at 5")
+
+    # ---- the three readers of the row it adds ------------------------------
+    #
+    # Found by two skeptics reviewing this patch, and both were the SAME
+    # defect: a reader selecting "one iteration's own fit row" with the proxy
+    # `r.get("iteration")`. That proxy was exact until this patch recorded a
+    # second row under one iteration number.
+
+    @staticmethod
+    def _tool_funcs(rel, *names):
+        """Run named top-level functions OUT of a tool that is a SCRIPT.
+
+        `tools/live_gate_census.py` does its work at module level -- it loads
+        the chain and globs every journal as it imports -- so the suite cannot
+        import it the way `TheRescueReachesTheReaders` imports
+        collision_census. Compiling ITS OWN FunctionDef nodes and nothing else
+        runs the real source of the rules under test, so a mutant in either
+        one fails here, without running the census.
+
+        It never skips: a missing file or a missing function is a failure that
+        names the fix.
+        """
+        import glob as _glob
+        import re as _re
+        path = os.path.join(_ROOT, *rel)
+        assert os.path.exists(path), f"{path} is missing"
+        tree = ast.parse(open(path).read(), path)
+        ns = {"glob": _glob, "os": os, "re": _re, "json": json}
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name in names:
+                exec(compile(ast.Module(body=[node], type_ignores=[]),
+                             path, "exec"), ns)
+        missing = [n for n in names if n not in ns]
+        assert not missing, f"{path} defines no {missing}"
+        return [ns[n] for n in names]
+
+    def test_the_timeout_diagnosis_counts_ITERATIONS_not_ROWS(self):
+        # `_timeout_diagnosis` is the string that decides whether a TIMED OUT
+        # trial was the CHAIN's length or the WALKING -- 10.1's "two paths
+        # with identical output", and the fix for each is the opposite of the
+        # other. Its population was every row carrying an iteration number, so
+        # the door step made it report one iteration too many and took the
+        # median over the door step's PARTIAL elapsed seconds.
+        res = self._walk_with_a_door_step()
+        with_it = [r for r in res["fixes"] if r.get("iteration")]
+        self.assertEqual(len({r["iteration"] for r in with_it}),
+                         len(with_it) - 1,
+                         "ANTI-VACUITY: exactly one iteration has two rows")
+        msg = chain_walk._timeout_diagnosis(res, 5, 1, 1000.0)
+        self.assertTrue(msg.startswith("NAVIGATION"), msg)
+        self.assertIn(f"{len(with_it) - 1} iterations", msg)
+        self.assertNotIn(f"{len(with_it)} iterations", msg)
+        own = sorted(r["seconds"] for r in with_it
+                     if r["action"] != "door-step")
+        self.assertIn(f"median {own[len(own) // 2]:.2f}s", msg,
+                      "and the median is over whole iterations")
+
+    def test_the_gate_census_does_not_take_the_door_step_for_an_iterations_fit(self):
+        # `tools/live_gate_census.py` builds the populations FIX_MIN /
+        # WEAK_MIN / STRONG are calibrated against (the audit round). The door
+        # step's fit is taken one push BEFORE the stop is verified -- a
+        # mid-iteration position the walk has not accepted -- and it would
+        # have entered NEAR twice for one iteration.
+        is_fit, = self._tool_funcs(("tools", "live_gate_census.py"),
+                                   "is_iteration_fit_row")
+        res = self._walk_with_a_door_step()
+        by_action = {r["action"]: r for r in res["fixes"]}
+        self.assertFalse(is_fit(by_action["door-step"]))
+        self.assertTrue(is_fit(by_action["advanced"]),
+                        "ANTI-VACUITY: a real fit row is still counted")
+        self.assertTrue(is_fit(by_action["turned"]))
+        # ... and the rules it already had are still rules.
+        self.assertFalse(is_fit({"iteration": 3, "fix": None}))
+        self.assertFalse(is_fit({"iteration": 3, "fix": {"inliers": None}}))
+        self.assertFalse(is_fit({"iteration": 0, "fix": {"inliers": 90}}))
+
+    def test_the_gate_census_reads_the_iterations_OWN_frame(self):
+        # The second half of the same contamination, and it is the FAR
+        # population: the census globs `it_NNN_k*.jpg` UNSORTED and matches
+        # `fs[0]` against a window 30 ahead. A door-step iteration saves two
+        # frames, taken one push apart, so `fs[0]` was whichever the
+        # filesystem listed first. `turn_review.frame_for` fixed exactly this
+        # shape once already, for the rescue's three look frames.
+        import glob as _glob
+        import re as _re
+        frame_for, = self._tool_funcs(("tools", "live_gate_census.py"),
+                                      "frame_for")
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        self._walk_with_a_door_step(shots=d)
+        doors = _glob.glob(os.path.join(d, "*_door*.jpg"))
+        self.assertEqual(len(doors), 1,
+                         "ANTI-VACUITY: the walk saved one door-step frame")
+        itn = int(_re.search(r"it_(\d+)_",
+                             os.path.basename(doors[0])).group(1))
+        both = _glob.glob(os.path.join(d, f"it_{itn:03d}_k*.jpg"))
+        self.assertEqual(len(both), 2,
+                         "ANTI-VACUITY: that iteration has two frames on disk")
+        base = [p for p in both if "_door" not in os.path.basename(p)]
+        self.assertEqual(frame_for(d, itn), base[0])
+        self.assertIsNone(frame_for(d, 999), "no frames, no answer")
+        # ... and NOT because of the order a walk happens to write them in.
+        # A walk writes the iteration's own frame first, so an unsorted glob
+        # would answer correctly here and be wrong the moment anything else
+        # touched the directory. Written door-first, it answers wrongly.
+        d2 = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d2)
+        for suffix in ("_door1", "_rescue_look0", ""):
+            open(os.path.join(d2, f"it_007_k16{suffix}.jpg"), "w").close()
+        self.assertEqual(os.path.basename(frame_for(d2, 7)), "it_007_k16.jpg")
+
+    def test_the_gate_census_actually_CALLS_the_two_rules(self):
+        # A rule a script defines and does not use is 10.1's no-op that looks
+        # like a fix. The script's body cannot be imported, so the check is on
+        # its own parse tree: with the function definitions taken out, both
+        # names must still be CALLED by what remains.
+        path = os.path.join(_ROOT, "tools", "live_gate_census.py")
+        tree = ast.parse(open(path).read(), path)
+        body = [n for n in tree.body if not isinstance(n, ast.FunctionDef)]
+        called = {n.func.id for st in body for n in ast.walk(st)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        self.assertIn("desc", called,
+                      "ANTI-VACUITY: this scan can see the script's own calls")
+        self.assertIn("is_iteration_fit_row", called)
+        self.assertIn("frame_for", called)
+
+    def test_the_trial_sheet_labels_each_frame_with_ITS_OWN_row(self):
+        # trial_sheet is what the user's standing rule runs on every failed
+        # trial, and a reader agent judges the turn from the label. It looked
+        # the label up by iteration number and took the FIRST row -- which on
+        # a door-step iteration is the door step's -- so the STOP'S OWN frame
+        # was labelled "door-step". Loaded BY PATH, like the other tests of
+        # this tool, so it cannot pick up another module of the same name.
+        import glob as _glob
+        import importlib.util
+        import re as _re
+        spec = importlib.util.spec_from_file_location(
+            "trial_sheet_door_step", os.path.join(_ROOT, "tools",
+                                                  "trial_sheet.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        rows = self._walk_with_a_door_step(shots=d)["fixes"]
+        door = _glob.glob(os.path.join(d, "*_door*.jpg"))[0]
+        itn = int(_re.search(r"it_(\d+)_", os.path.basename(door)).group(1))
+        base = [p for p in _glob.glob(os.path.join(d, f"it_{itn:03d}_k*.jpg"))
+                if "_door" not in os.path.basename(p)][0]
+        self.assertEqual(mod.row_for(rows, door)["action"], "door-step")
+        self.assertEqual(mod.row_for(rows, base)["action"], "turned",
+                         "the stop's own frame keeps the stop's own outcome")
+        # THE CONTROL, and it is the strong form: every frame that is NOT the
+        # door step's labels EXACTLY as the old lookup labelled it -- including
+        # `it_000`, the frame saved before the first iteration, which has no
+        # row of its own and never had one.
+
+        def old(path):
+            n = int(_re.search(r"it_(\d+)_", os.path.basename(path)).group(1))
+            return next((r for r in rows if r["iteration"] == n), None)
+
+        others = [p for p in _glob.glob(os.path.join(d, "it_*_k*.jpg"))
+                  if f"it_{itn:03d}_" not in os.path.basename(p)]
+        self.assertTrue(others, "ANTI-VACUITY: the walk saved other frames")
+        self.assertIn(None, [old(p) for p in others],
+                      "ANTI-VACUITY: it_000 has no row, then as now")
+        for p in others:
+            self.assertEqual(mod.row_for(rows, p), old(p))
 
 
 class NeverTouchesTheForbidden(unittest.TestCase):

@@ -435,6 +435,62 @@ STOP_TIE_FRAC = 0.9
 # each in a trial that ARRIVED; the high pair is stop 129 in batch 5e trials 5
 # and 6. 120 sits in the gap -- 1.26x the low maximum, 0.65x the high minimum.
 STOP_TIE_DX_PX = 120.0
+# ONE MORE STEP TOWARD THE DOOR BEFORE THE OFFICE-DOOR STOP TURNS (ships OFF;
+# the A/B decides).
+#
+# THE USER, watching the live stream during batch 23 (2026-09-08 09:50,
+# verbatim): "an observation, you should take 1 more step towards the door in
+# the beginning of the route. saves you from rubbing against the banister."
+#
+# THE STOP'S OWN FIT SCALE SAYS THE SAME THING, and it is this rule's
+# instrument (agent_progress/closed-loop/review/census_after_129_notes.md,
+# 226 walks since batch 16):
+#     39 verified head-on (195 walks)      scale median 1.03-1.04   10% failed
+#     39 verified by the LOOK-AROUND (31)  scale median 0.87-0.88   29% failed
+#     39 unverified (2)                    scale 0.78-0.79          both failed
+# Scale under 1 is the scene SMALLER than the reference: the character SHORT
+# of the door when it turns. The corridor is blind for the sensor on every
+# walk -- the last credible fit is at chain 4-10 and the pushes to 13, 16 and
+# 19 are dead-reckoned -- so nothing in the loop can notice, and the stairs
+# losses of batches 17-23 all begin from that short position (the turn goes
+# into the bannister alcove, or into the mouse NPC beside the newel post).
+#
+# HOW FAR ONE PUSH IS, READ OFF THE CHAIN ITSELF rather than chosen: the
+# corridor's push targets are 10, 13, 16 and 19, one PLAN_STEP_UNITS apart,
+# and the 39 stop's own stationary run spans waypoints 21..39 (the human
+# standing still and turning). So one more PUSH_MAG x PUSH_SEC push carries
+# the character about three recorded frames -- from waypoint 19's spot INTO
+# the span the recording turned in, not past it.
+#
+# WHAT IT CANNOT DO, said plainly: the step is taken BEFORE the stop's turn,
+# so it cannot be conditioned on the stop's fit -- that fit is only measured
+# after the turn, and the 195 head-on walks that already stand at scale 1.03
+# get the step too. Gating on the scale would need a number inside a
+# population the loop cannot read until it is too late to act on it (10.4).
+# That cost is exactly what the A/B weighs, and the `door-step` row carries
+# the fit taken right after the push, so the on arm's own rows say whether it
+# overshoots rather than leaving it to be argued about.
+#
+# It MOVES THE CHARACTER, which is the shape GRAVEYARD closed thirteen times
+# out of thirteen (both survivors move nothing), so it ships OFF and an A/B
+# decides: `--arms off,on --flag DOOR_STOP_EXTRA_PUSH`.
+DOOR_STOP_EXTRA_PUSH = False
+# THE STOP IT APPLIES TO, AND IT IS CHAIN-SPECIFIC: 39 is the office-door /
+# top-of-the-stairs turn-only stop of chains/route_user_1853, the drive every
+# batch walks. It is an index into THAT recording and not a property of the
+# world -- another chain's door stop is another number, and a chain with no
+# stop there leaves the rule dormant, because no plan entry ever equals it.
+DOOR_STOP_INDEX = 39
+# How many extra pushes. ONE, because one step is what the user asked for.
+DOOR_STOP_EXTRA_PUSHES = 1
+# THE ACTION THE EXTRA PUSH RECORDS, and the reason it is a name and not a
+# bare literal: it is the FIRST row this module has ever written that shares
+# an iteration number with another row, and three readers select "one
+# iteration's own fit" by asking whether a row HAS an iteration number --
+# `_timeout_diagnosis` below, `tools/live_gate_census.py`, and
+# `tools/trial_sheet.py`. That proxy was exact until this row existed. Each
+# of those three now excludes this action by name, and each has a test.
+DOOR_STEP_ACTION = "door-step"
 # A retry (turn back, one more push) needs EVIDENCE of being short: the stop's
 # frame fitting an EARLIER waypoint, however thinly. A frame that fits nothing
 # is an occluded view or a stop already passed (batch 4 trial 8: Wanda the
@@ -870,7 +926,16 @@ def _timeout_diagnosis(res, n, min_iters, time_cap):
     output": ten trials of a chain too long to finish look exactly like ten
     navigation failures, and the fix for each is the opposite of the other.
     """
-    per = sorted(r["seconds"] for r in res["fixes"] if r.get("iteration"))
+    # ONE ITERATION'S OWN ROW, NOT EVERY ROW CARRYING ITS NUMBER. A
+    # DOOR_STEP_ACTION row is an extra push taken INSIDE an iteration: it
+    # shares the iteration's number with the row that resolves the stop, and
+    # its `seconds` is the PARTIAL elapsed time up to the push, not a whole
+    # iteration. Counted here it reported more iterations than the walk ran
+    # (`res["iterations"]` is the loop's own counter and is right) and pulled
+    # the median down -- inside the string that decides ARITHMETIC against
+    # NAVIGATION, which is the whole reason this function exists.
+    per = sorted(r["seconds"] for r in res["fixes"]
+                 if r.get("iteration") and r.get("action") != DOOR_STEP_ACTION)
     if not per:
         return (f"no iteration completed inside the {time_cap:.0f}s cap — "
                 f"suspect the console, not the chain")
@@ -1047,6 +1112,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     early_stop = False          # the current stop was reached by turn-early: no retry pushes
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
+    door_stepped = False        # this SERVICING of DOOR_STOP_INDEX has had
+                                # its extra push (DOOR_STOP_EXTRA_PUSH)
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
                              None)
     last_stop_j = _last_stop_index(plan)   # the end turn fires only past this
@@ -1235,6 +1302,66 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # would undo the correction that earned it. It is cleared at that
             # stop, on a look-back regression, and on a lost rescue.
             heading = (heading + end_yaw + stop_yaw) % 360.0
+
+        # ONE MORE STEP TOWARD THE DOOR (DOOR_STOP_EXTRA_PUSH), BEFORE THE
+        # TURN AND NOT AFTER. The point is to reach the stop and turn THERE:
+        # the user watched the loop turn short and rub along the banister, and
+        # the stop's verifying fit scale of 0.87 on the looked stops measures
+        # the same thing. A push taken AFTER the turn would run along the
+        # STOP'S heading -- into the stairs -- which is the opposite change.
+        #
+        # ONCE PER SERVICING. A turn-back, a turn-wait and a turn-retry all
+        # come round the loop to this same plan entry, and that is the same
+        # stop, not a second step; `door_stepped` is cleared only by an
+        # iteration that services something else, so a re-approach after a
+        # rescue or a look-back regression -- which walks other targets to get
+        # back here -- takes the step again, deliberately. A stop the plan
+        # SKIPS (a wide relocalisation carrying k past it) is never unpacked
+        # as `plan[pi]` at all, so this cannot fire on one.
+        #
+        # Nothing else changes for the WALK: the push is the ordinary
+        # PUSH_MAG/PUSH_SEC one along the heading the walk arrived on, its
+        # frame is captured and recorded as evidence, and the stop is then
+        # turned to and verified exactly as before. The row is evidence only --
+        # it moves no counter, spends no blind budget and gates nothing.
+        #
+        # IT DOES CHANGE ONE THING FOR THE READERS, and that is why
+        # DOOR_STEP_ACTION exists: this row shares its iteration number with
+        # the row that resolves the stop, and it is recorded FIRST. Every
+        # reader that selected an iteration's own fit by "does this row carry
+        # an iteration number" now excludes this action by name.
+        servicing_door_stop = not do_push and target_k == DOOR_STOP_INDEX
+        if not servicing_door_stop:
+            door_stepped = False
+        elif (DOOR_STOP_EXTRA_PUSH and not door_stepped
+                and walk_heading is not None):
+            door_stepped = True
+            for step_i in range(1, max(1, int(DOOR_STOP_EXTRA_PUSHES)) + 1):
+                if (last_cmd is None
+                        or abs((walk_heading - last_cmd + 540.0) % 360.0 - 180.0)
+                        > TURN_SKIP_DEG):
+                    turn_to(walk_heading)
+                    last_cmd = walk_heading
+                push(PUSH_MAG, PUSH_SEC)
+                res["pushes"] += 1
+                img_d = capture()
+                _save(shots, iteration, k, img_d, log, suffix=f"_door{step_i}")
+                fix_d = chain.locate(img_d, target_k)
+                inl_d = 0 if fix_d is None else (getattr(fix_d, "inliers", 0) or 0)
+                sc_d = None if fix_d is None else getattr(fix_d, "scale", None)
+                sc_d = None if sc_d is None else round(float(sc_d), 2)
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix_d), "action": DOOR_STEP_ACTION,
+                        "lateral": None,
+                        "door_step": {"n": step_i,
+                                      "heading": round(walk_heading, 1)},
+                        "at_end": False,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  "
+                    f"door-step {step_i}/{DOOR_STOP_EXTRA_PUSHES}: one more "
+                    f"push along {walk_heading:.1f} before the stop turns "
+                    f"(the frame after it fits {inl_d} inliers, scale {sc_d})")
 
         turned = False
         if heading is not None and (

@@ -89,6 +89,47 @@ TIME_CAP = 180.0                 # walk()'s own cap — the ">400 s" of the spec
 # decides how long to wait.
 SETUP_BUDGET = 180.0
 CEILING = int(TIME_CAP + SETUP_BUDGET)   # 580 — the external kill
+# A MISSING GAME WINDOW is not a trial result (patch48). game_window_rect()
+# lists ON-SCREEN windows only, so a Space switch or a fullscreen app in front
+# of chiaki makes it None; the child then dies in reset_environment within a
+# second and the parent scored INVALID and moved on -- 12 of an A/B's 20
+# trial numbers went that way in ~15 s on 2026-09-08. The child now waits for
+# the window before its reset; the parent re-runs an INVALID number after
+# waiting, a bounded number of times, keeping the INVALID row marked.
+WINDOW_WAIT_SEC = 120.0
+WINDOW_POLL_SEC = 3.0
+WINDOW_RETRY_MAX = 2
+
+
+def wait_for_game_window(log, probe=None, sleep=time.sleep, clock=time.monotonic,
+                         max_sec=None):
+    """True once a chiaki game window is on screen, False after max_sec."""
+    if probe is None:
+        import input_controller
+        probe = input_controller.game_window_rect
+    if max_sec is None:
+        max_sec = WINDOW_WAIT_SEC
+    t0 = clock()
+    waited = False
+    while True:
+        if probe() is not None:
+            if waited:
+                log(f"  chiaki game window back after {clock() - t0:.0f}s")
+            return True
+        if clock() - t0 >= max_sec:
+            log(f"  no chiaki game window on screen for {max_sec:.0f}s")
+            return False
+        if not waited:
+            log(f"  no chiaki game window on screen (another Space, a fullscreen "
+                f"app in front, or the stream reconnecting); waiting up to "
+                f"{max_sec:.0f}s")
+            waited = True
+        sleep(WINDOW_POLL_SEC)
+
+
+def retry_this_trial(outcome, retries):
+    """Re-run an INVALID trial number, at most WINDOW_RETRY_MAX times."""
+    return outcome == INVALID and retries < WINDOW_RETRY_MAX
 
 CHAINS = os.path.join(ROOT, "chains")
 OUT = os.path.join(HERE, "chain_trials.json")
@@ -274,6 +315,8 @@ def one_trial(name):
     if not os.path.isdir(d):
         raise SystemExit(f"no such chain: {d}")
 
+    if not wait_for_game_window(log):
+        raise SystemExit(f"no chiaki game window for {WINDOW_WAIT_SEC:.0f}s")
     reset_env.reset_environment(log=log, progress_file="progress_testing.json")
     time.sleep(1.2)               # the world has to finish appearing
     t_reset = time.time()
@@ -494,7 +537,9 @@ def main():
 
     os.makedirs(JOURNAL_ROOT, exist_ok=True)
     with console_lock.held("chain_trials"):
-        for i in range(1, trials + 1):
+        i = 1
+        window_retries = 0
+        while i <= trials:
             # The child inherits this environment, so the journal path reaches
             # it without a second CLI argument (run_trial spawns exactly
             # `--one-trial <arg>`). Set HERE, inside main(), never at import.
@@ -527,6 +572,16 @@ def main():
             if row.get("timeout_diagnosis"):
                 log(f"     {row['timeout_diagnosis']}")
             _harness.save_result(OUT, res)
+            if retry_this_trial(outcome, window_retries):
+                window_retries += 1
+                row["window_retry"] = window_retries
+                log(f"     INVALID: waiting for the game window, then re-running "
+                    f"trial {i} ({window_retries}/{WINDOW_RETRY_MAX})")
+                wait_for_game_window(log)
+                _harness.save_result(OUT, res)
+                continue
+            window_retries = 0
+            i += 1
 
     got = [r for r in res["runs"] if r["outcome"] != INVALID]
     arrived = sum(1 for r in got if r["outcome"] == ARRIVED)
