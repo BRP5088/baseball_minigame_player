@@ -169,13 +169,20 @@ WEAK_MIN_INLIERS = 15
 # Consecutive iterations with no credible fix AFTER the blind budget is spent
 # before the walk declares itself LOST (three escape cycles). Off the route
 # nothing can match; burning the rest of the cap only delays the next trial.
-LOST_MAX = 9
+# One full ladder per blockage. The ladder fires a rung every MISS_MAX misses
+# (or STALL_MAX stalls), so a budget of 9 reached the third rung on the very
+# iteration it ended the walk: every trial lost tonight at Wanda (an NPC
+# parked on the route at k=112, three in a row) or at the jukebox (k=171-173,
+# three in a row) had tried ONE rung whose effect was observed, and which
+# rung depended on how many escapes the trial had spent earlier. Budgets of
+# MISS_MAX*4+1 and STALL_MAX*4+1 let all four rungs fire and be seen.
+LOST_MAX = 13
 # NO PROGRESS: this many consecutive iterations without k advancing (stalls,
 # misses, escapes, retries, all of it) ends the walk as STUCK, whatever the
 # sensor sees. LOST covers a blind sensor; this covers a wanderer whose sensor
 # still sees the room -- pushing at a door, circling a stop. Arrivals advance
 # at least every few iterations; twelve without is ~20 s of nothing.
-NO_PROGRESS_MAX = 12
+NO_PROGRESS_MAX = 17
 # CONSISTENT THIN FITS STEER. A single weak fix never steers (its dx is junk:
 # -847 px at 7 inliers). But CONSISTENT_N consecutive fits of at least
 # WEAK_MIN_INLIERS whose dx all exceed the tolerance on the SAME side are
@@ -290,7 +297,19 @@ TURN_SKIP_DEG = 1.0
 # silent 400s of forward pushes logged as progress.
 END_PUSH_UNITS = 0.05           # OPEN-22's measured prompt-zone offset
 
-ESCAPE_STRAFE_SEC = 0.3
+# A sidestep rung is a DETOUR around a body, not a nudge. At 0.3 s the frame
+# after 'escape:left' showed a sliver of wall at the far edge and nothing
+# else (batch 9 trial 2, pressed on the jukebox; trial 4, an NPC), and the
+# very next push walked straight back into the obstacle because the lateral
+# correction pulled toward the recorded line. So: 0.6 s, the RIGHT rung
+# doubled when a LEFT was taken in the same blockage (the same clearance on
+# the other side), and the correction that would undo the detour is held
+# off for DETOUR_TARGETS plan targets. 0.6 is the smallest doubling of a
+# measured-insufficient 0.3, not a measured body width.
+ESCAPE_STRAFE_SEC = 0.6
+DETOUR_TARGETS = 3
+# Actions that mean the walk moved on; the next blockage restarts the ladder.
+PROGRESS_ACTIONS = ("advanced", "relocalised", "regressed", "turned")
 ESCAPE_STRAFE_MAG = 0.45
 
 # Sign convention, verified in three places rather than assumed:
@@ -674,6 +693,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     misses = 0
     stalls = 0
     escapes = 0
+    action = None               # the previous iteration's action (rung reset below)
+    detour_side = None          # the side of the last sidestep rung, held while k < detour_until
+    detour_until = -1
     iteration = 0
     end_iters = 0               # iterations spent standing ON the last waypoint
     pi = 0                      # the plan pointer: first target past k
@@ -742,8 +764,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         if which == 1:
             back(PUSH_MAG, BACK_SEC)
             return "escape:back"
+        nonlocal detour_side, detour_until
         side = LEFT if which == 2 else RIGHT
-        strafe(side * ESCAPE_STRAFE_MAG, ESCAPE_STRAFE_SEC)
+        secs = ESCAPE_STRAFE_SEC * (2 if (side > 0 and detour_side is not None and detour_side < 0) else 1)
+        strafe(side * ESCAPE_STRAFE_MAG, secs)
+        detour_side, detour_until = side, k + DETOUR_TARGETS
         return "escape:left" if side < 0 else "escape:right"
 
     # THE FIRST FRAME, BEFORE ANYTHING MOVES. A chain recorded to the table ends
@@ -804,6 +829,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
 
         iteration += 1
         it_t0 = now()
+        # EVERY BLOCKAGE STARTS ITS LADDER AT THE FIRST RUNG. The rung counter
+        # used to persist for the whole walk, so a late wedge got only the
+        # sidesteps while jump and back -- which had already worked twice in
+        # the same trial (batch 7 trial 1) -- were never retried there.
+        if action is not None and action.startswith(PROGRESS_ACTIONS):
+            escapes = 0
         if at_end:
             # Nothing left in the plan: push toward the last waypoint along
             # the plan's final heading, inside the end budget above.
@@ -1219,6 +1250,14 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             dx = consistent
             junk_run = []
             dx_run = []
+        if detour_side is not None and k >= detour_until:
+            detour_side = None
+        if dx is not None and detour_side is not None and (dx > 0) != (detour_side > 0) \
+                and abs(dx) > LATERAL_TOL_PX:
+            # The correction would undo the detour: hold it until the plan
+            # has moved DETOUR_TARGETS past the blockage.
+            lateral = {"held": "detour", "dx": float(dx), "side": "held", "seconds": 0.0}
+            dx = None
         if dx is not None and not escaped and not escaped_prev and abs(dx) > LATERAL_TOL_PX:
             secs = min(LATERAL_CAP_SEC, abs(dx) / (LATERAL_GAIN * LATERAL_MAG))
             if secs < LATERAL_MIN_SEC:
