@@ -622,6 +622,43 @@ class TheRunnerUpIsOnTheFix(_Base):
                     f"when it is a landslide, or as a landslide either way "
                     f"({fix.detail})")
 
+    def test_second_k_and_second_dx_name_the_runner_up(self):
+        """`second` says how big the runner-up was; these say WHO it was.
+
+        chain_walk's stop-tie rule has to tell an adjacent near-duplicate frame
+        of one stationary run from a candidate describing a different place,
+        and the count alone cannot: at a turn stop the runner-up is 0.92-0.96
+        of the winner by construction. Run both ways round so neither field can
+        pass by naming a fixed position.
+        """
+        for thin_at, whole_at in ((1, 0), (0, 1)):
+            with self.subTest(thin_at=thin_at):
+                wps = [None, None]
+                wps[whole_at] = _waypoint(self.warp(1.00 + 0.06 * whole_at),
+                                          whole_at, "whole")
+                wps[thin_at] = self._thin(1.00 + 0.06 * thin_at, thin_at)
+                ch = chain.Chain(wps)
+                fix = ch.locate(self.warp(1.03), k_hint=0, window=1)
+                self.assertIsNotNone(fix)
+                self.assertEqual(sorted(fix.candidates), [0, 1], fix.detail)
+                self.assertEqual(fix.k, whole_at, fix.detail)
+                self.assertEqual(fix.second_k, thin_at,
+                                 f"second_k must be the RUNNER-UP's index, not "
+                                 f"the winner's ({fix.detail})")
+                self.assertNotEqual(fix.second_k, fix.k, fix.detail)
+                self.assertEqual(fix.second_dx,
+                                 fix.candidates[thin_at]["dx"], fix.detail)
+                self.assertEqual(fix.as_dict()["second_k"], fix.second_k)
+
+    def test_a_fix_built_without_the_runner_up_fields_says_it_cannot_say(self):
+        # They are OPTIONAL with defaults so every existing caller and test
+        # keeps working; None is "cannot say", which chain_walk must not read
+        # as separation.
+        f = chain.Fix(k=0, k_float=0.0, inliers=9, dx=1.0, dy=2.0, scale=1.0,
+                      second=3, detail="d")
+        self.assertIsNone(f.second_k)
+        self.assertEqual(f.second_dx, 0.0)
+
     def test_no_runner_up_reads_zero(self):
         solo = chain.Chain([_waypoint(self.warp(1.00), 0, "solo")])
         fix = solo.locate(self.warp(1.03), k_hint=0, window=0)
@@ -631,6 +668,8 @@ class TheRunnerUpIsOnTheFix(_Base):
             fix.second, 0,
             f"with one candidate there is no runner-up, and 0 is what says so "
             f"({fix.detail})")
+        self.assertIsNone(fix.second_k, fix.detail)
+        self.assertEqual(fix.second_dx, 0.0, fix.detail)
 
     def test_second_reaches_the_caller_in_the_dict_and_the_log_line(self):
         # chain_walk records `fix.as_dict()` per iteration and that JSON is the

@@ -95,8 +95,12 @@ class Fix:
     """What chain.locate() hands back. Attribute access only, like the real one."""
 
     def __init__(self, k, scale=1.0, dx=0.0, dy=0.0, inliers=120, second=5,
-                 k_float=None, detail="stub"):
+                 k_float=None, detail="stub", second_k=None, second_dx=0.0):
         self.k = k
+        # WHO the runner-up was. None = "cannot say", the default a Fix built
+        # before these fields existed reports, and NOT evidence of a tie.
+        self.second_k = second_k
+        self.second_dx = second_dx
         self.scale = scale
         self.dx = dx
         self.dy = dy               # chain.Fix carries it; recorded, never acted on
@@ -302,7 +306,7 @@ class ArrivalStopsEverything(unittest.TestCase):
         # end of a 10-waypoint chain: the walk stops at ONCE anyway. The old
         # tail gate would have pushed on twice; if k lagged while the
         # character stood in the prompt it would have escaped and walked away.
-        self.assertIsNone(chain_walk.TABLE_CHECK_TAIL)
+        self.assertEqual(chain_walk.TABLE_CHECK_TAIL, 30)
         rig = Rig(FakeChain(10, [Fix(k=3), Fix(k=6)]), table_at=2)
         res = rig.go()
         self.assertTrue(res["arrived"])
@@ -489,6 +493,22 @@ class IndexAdvance(unittest.TestCase):
         always_turning(rig.go, time_cap=400.0)
         s = [(x[1] > 0, x[2]) for x in rig.strafes()]
         self.assertEqual(s, [(False, 0.6), (True, 1.2)], "LEFT 0.6, then RIGHT 1.2 (0.6 net on the other side): %r" % s)
+
+    def test_a_prompt_seen_before_the_tail_does_not_end_the_walk(self):
+        # Tenth launch trial 12: the prompt check fired at k=58 and the walk
+        # "arrived" on the street. On a 205-waypoint chain the check is asked
+        # only when the target is >= 175: a prompt "visible" from the fifth
+        # capture is ignored until then, and believed at once after.
+        self.assertEqual(chain_walk.TABLE_CHECK_TAIL, 30)
+        ch = FakeChain(205, default=Fix(k=204))    # every push reaches its target
+        rig = Rig(ch, table_at=5)
+        res = without_stuck(rig.go, time_cap=10 ** 6)
+        self.assertTrue(res["arrived"])
+        self.assertGreaterEqual(res["fixes"][-1]["target"], 175, res["fixes"][-1])
+        self.assertGreater(res["iterations"], 100, "the walk went on past the early prompt")
+        # and a short chain is unaffected: n - 30 < 0, the gate is always open
+        rig2 = Rig(FakeChain(6, [Fix(k=1)]), table_at=1)
+        self.assertTrue(rig2.go()["arrived"])
 
     def test_the_walk_declares_itself_lost_instead_of_burning_the_cap(self):
         self.assertEqual(chain_walk.LOST_MAX, 13)
@@ -902,6 +922,36 @@ class IndexAdvance(unittest.TestCase):
         finally:
             chain_walk.STOP_PAN_FROM_RUN = old
 
+    def test_a_strong_first_pan_look_ends_the_pan(self):
+        # The pan (shipped False) carries the same early exit as the
+        # look-around, and without a test of its own it would be a branch
+        # nothing exercises. The stop's run is frames 2, 3, 4 at 90, 60, 30;
+        # the FIRST pick (frame 2 at 90) fits at 170 -- above the live gate
+        # census's wrong-place maximum of 164 -- so the second pick is never
+        # looked at. The shipped pan test above is the control: its first pick
+        # misses and its second fits at 90, and BOTH looks run there.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0), (30.0, 0.0), (30.0, -0.35), (30.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        old = chain_walk.STOP_PAN_FROM_RUN
+        chain_walk.STOP_PAN_FROM_RUN = True
+        try:
+            ch = FakeChain(7, [Fix(k=1), None, Fix(k=2, inliers=170, dx=80.0),
+                               Fix(k=5), Fix(k=6)], default=None)
+            ch.waypoints = wps
+            rig = Rig(ch, table_at=5)
+            res = rig.go()
+            self.assertEqual([f["action"] for f in res["fixes"]][:2],
+                             ["advanced", "turned-looked"])
+            self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"],
+                             [90, 30, 90, 30],
+                             "to the stop, the run's FIRST heading, back")
+            self.assertEqual(ch.locate_calls[1:3], [4, 2],
+                             "head-on at the stop, then ONE run frame")
+            self.assertEqual(res["fixes"][1]["lateral"]["pan_heading"], 90.0)
+        finally:
+            chain_walk.STOP_PAN_FROM_RUN = old
+
     def test_the_pan_is_off_by_default_even_when_the_stop_has_a_run(self):
         # The control for the flag: the SAME stop with a stationary run, flag
         # off (as shipped), looks at +-STOP_LOOK_DEG and never asks a run
@@ -1063,21 +1113,228 @@ class IndexAdvance(unittest.TestCase):
             res2["fixes"][5]["lateral"],
             "control: the same dx with escaped_prev now False must strafe")
 
+    def _stop_with_a_two_frame_run(self):
+        """spawn, one walking frame east, a TWO-frame stationary run turning to
+        north (waypoints 2 and 3, so a runner-up can be INSIDE it), then two
+        walking frames. Plan: push 1, turn-only 3, push 4, push 5."""
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, 0.0),
+                                     (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        return wps
+
+    def test_the_stop_span_is_the_whole_stationary_run_holes_and_all(self):
+        # stationary_runs DROPS heading-None frames, so its list for this run
+        # is [2] alone; the span must still be 2..3 or a runner-up at the
+        # abstaining frame reads as a different place.
+        wps = self._stop_with_a_two_frame_run()
+        wps[3].heading = None
+        self.assertEqual(chain_walk.stationary_runs(wps), {3: [(2, 0.0)]})
+        self.assertEqual(chain_walk.stop_spans(wps), {3: 2})
+
+    def test_a_winner_and_runner_up_both_at_the_stop_are_not_a_tie(self):
+        # THE STRUCTURAL FALSE POSITIVE. A turn-only target collapses a run of
+        # near-duplicate frames, so the runner-up there is at 0.92-0.96 of the
+        # winner BY CONSTRUCTION -- measured on all six stops of the four
+        # fastest arrivals ever recorded, which verified head-on in 0.1-4.2 s
+        # (agent_progress/closed-loop/stop_tie/replay_stops.json). 95/100 =
+        # 0.95, over the 0.9 ratio, but BOTH candidates are inside this stop's
+        # own span (winner 3, runner-up 2, span 2..3): one spot 0.25 s apart,
+        # so verified head-on with no look-around at all. Note the test is
+        # BOTH indices, not the runner-up's alone -- the same runner-up with a
+        # winner PAST the span is the trial-6 tie two tests below.
+        #
+        # BOTH dx values are run. The replayed both-inside pairs disagree by
+        # 0.0-0.6 px, which is the realistic arm; the second arm disagrees by
+        # 410 px so that `apart` is TRUE and the span is the only thing left
+        # refusing the tie. Without it the test passed with the span lookup
+        # deleted (`run_lo = target_k`), which is the wiring it exists to pin.
+        for second_dx in (10.0, -400.0):
+            with self.subTest(second_dx=second_dx):
+                wps = self._stop_with_a_two_frame_run()
+                ch = FakeChain(6, [Fix(k=1),
+                                   Fix(k=3, inliers=100, second=95, second_k=2,
+                                       second_dx=second_dx, dx=10.0),
+                                   Fix(k=4), Fix(k=5)], default=None)
+                ch.waypoints = wps
+                rig = Rig(ch, table_at=4)
+                res = rig.go()
+                acts = [f["action"] for f in res["fixes"]]
+                self.assertEqual(acts[:2], ["advanced", "turned"], acts)
+                self.assertNotIn("turned-looked", acts)
+                self.assertEqual(
+                    [round(e[1]) for e in rig.events if e[0] == "turn"],
+                    [90, 0],
+                    "a look-around would add three turns: %r" % rig.events)
+
+    def test_a_runner_up_past_the_run_that_agrees_on_dx_is_not_a_tie_either(self):
+        # The runner-up one frame PAST the run (waypoint 4, outside the span)
+        # but reading nearly the same offset. Two places by index, one place by
+        # dx: 22 such pairs were replayed off arriving trials and their
+        # |second_dx - dx| runs 0..95 px. 50 is inside that population, so it
+        # is not a different place, and the dx half is what says so.
+        wps = self._stop_with_a_two_frame_run()
+        ch = FakeChain(6, [Fix(k=1),
+                           Fix(k=3, inliers=100, second=95, second_k=4,
+                               second_dx=60.0, dx=10.0),
+                           Fix(k=4), Fix(k=5)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=4)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned"], acts)
+        self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"],
+                         [90, 0], rig.events)
+
     def test_a_tied_fit_at_a_stop_is_ambiguity_not_verification(self):
-        # Batch 5e trial 6: 33 inliers against a runner-up of 33 at the bar
-        # stop was 'verified' and the loop was short of the doorway.
+        # UPDATED 2026-09-08 (patch37). This test used to script the batch 5e
+        # trial 6 numbers alone -- 33 inliers against a runner-up of 33 -- and
+        # a close count is no longer a tie on its own, because it is what a
+        # stationary run produces at EVERY stop. What it pins now is one of the
+        # two directions separation comes in: the WINNER is the stop (waypoint
+        # 2, its own one-frame span) and the near-tied runner-up is a DIFFERENT
+        # PLACE, outside the span and 426 px away from the winner's offset.
+        # The other direction -- winner past the span, runner-up at the stop --
+        # is the real trial-6 frame, and it has its own test below.
         self.assertEqual(chain_walk.STOP_TIE_FRAC, 0.9)
+        self.assertEqual(chain_walk.STOP_TIE_DX_PX, 120.0)
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
         # it2: head-on a TIED 33/33 fit at the stop -> not verified; looks None -> wait
-        ch = FakeChain(5, [Fix(k=1), Fix(k=2, inliers=33, second=33), None, None,
+        ch = FakeChain(5, [Fix(k=1),
+                           Fix(k=2, inliers=33, second=33, dx=40.0,
+                               second_k=4, second_dx=-386.0),
+                           None, None,
                            Fix(k=2, inliers=90, second=30), Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=9)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:3], ["advanced", "turn-back", "turned"])
+        # ... and the look-around DID run: a tie is what sends it there.
+        self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"][:5],
+                         [90, 0, 335, 25, 0], rig.events)
+
+    def test_a_strong_first_look_ends_the_look_around(self):
+        # +-STOP_LOOK_DEG used to sample BOTH directions however decisive the
+        # first was: 2 turns, 2 captures, 2 locates and a turn back, every
+        # time, at +20.9 s a trial (rule_costs/notes.md). A look at 170
+        # inliers is above the live gate census's wrong-place MAXIMUM of 164,
+        # so the other direction cannot change the verdict.
+        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 165)
+        wps = self._stop_with_a_two_frame_run()
+        # it2: head-on None; the -25 look fits at 170 -> stop looking.
+        ch = FakeChain(6, [Fix(k=1), None, Fix(k=3, inliers=170, dx=0.0),
+                           Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=5)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-looked"], acts)
+        self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"],
+                         [90, 0, 335, 0],
+                         "to the stop, ONE look, back -- not both looks")
+        self.assertEqual(res["fixes"][1]["lateral"]["deg"], -25.0)
+        self.assertEqual(rig.captures, 5, "one capture for the single look")
+
+    def test_a_weak_first_look_still_samples_the_other_side(self):
+        # THE CONTROL for the test above: at 90 inliers the first look is
+        # credible but not strong, so the +25 look still runs and wins it.
+        wps = self._stop_with_a_two_frame_run()
+        ch = FakeChain(6, [Fix(k=1), None, Fix(k=3, inliers=90, dx=0.0),
+                           Fix(k=3, inliers=100, dx=0.0), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=6)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-looked"], acts)
+        self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"],
+                         [90, 0, 335, 25, 0], "both looks, then back")
+        self.assertEqual(res["fixes"][1]["lateral"]["deg"], 25.0,
+                         "the SECOND look was the better one and must be used")
+
+    def test_the_winner_past_the_run_with_the_stop_as_runner_up_is_a_tie(self):
+        # THE MOTIVATING FRAME, IN THE SHAPE IT ACTUALLY HAS. Batch 5e trial 6,
+        # stop 129: the WINNER is waypoint 132 -- PAST the stop's own span
+        # 116..129 -- at 35 inliers and dx -386, and the near-tied runner-up
+        # (33) is waypoint 128, the stop's OWN frame, at dx -201. Scaled to
+        # this rig: span 2..3, winner 4, runner-up 2, the same 0.943 ratio and
+        # the same 185.4 px disagreement.
+        #
+        # A separation test that asked only about the RUNNER-UP called this
+        # "not a tie" -- the runner-up was inside the run, so it looked like a
+        # near-duplicate -- verified the stop, and strafed on the winner's
+        # -386 px: it acted on the candidate PAST the stop, which is the
+        # failure the constant was written for (the loop finished short of the
+        # doorway). Both indices are tested for that reason. Here the pair is
+        # two places, so it is a tie: nothing verified, NOTHING STRAFED, and
+        # the look-around runs. The two tests above are the controls -- same
+        # rig, pairs that are ONE place, no look-around.
+        #
+        # Honest limit, kept where it will be read: the ARRIVING batch 5e trial
+        # 5 reads this same stop at 34/31 with the same runner-up and the same
+        # 185 px, so this rule cannot tell the failure from the arrival. It
+        # does not try to. It sends both to the look-around instead of guessing
+        # that the winner is right.
+        self.assertEqual(chain_walk.STOP_TIE_FRAC, 0.9)
+        self.assertEqual(chain_walk.STOP_TIE_DX_PX, 120.0)
+        # BOTH trials are run, and both must tie. Trial 5's numbers are here to
+        # pin the COST as behaviour rather than as a sentence: a later change
+        # that quietly un-ties this shape to save the look-around fails here
+        # too, and has to argue with the frame instead of with the clock.
+        for who, inl, sec in (("t6, short of the doorway", 35, 33),
+                              ("t5, ARRIVED on the same reading", 34, 31)):
+            with self.subTest(trial=who):
+                wps = self._stop_with_a_two_frame_run()
+                ch = FakeChain(6, [Fix(k=1),
+                                   Fix(k=4, inliers=inl, second=sec, second_k=2,
+                                       second_dx=-201.0, dx=-386.4),
+                                   None, None,
+                                   Fix(k=3, inliers=90, second=30), Fix(k=4),
+                                   Fix(k=5)], default=None)
+                ch.waypoints = wps
+                rig = Rig(ch, table_at=12)
+                res = rig.go()
+                acts = [f["action"] for f in res["fixes"]]
+                self.assertEqual(acts[:3],
+                                 ["advanced", "turn-back", "turned"], acts)
+                self.assertEqual(
+                    [round(e[1]) for e in rig.events if e[0] == "turn"][:5],
+                    [90, 0, 335, 25, 0], rig.events)
+                self.assertEqual(
+                    rig.strafes(), [],
+                    "the offset of a candidate PAST the stop must not be "
+                    "acted on: %r" % (rig.strafes(),))
+
+    def test_a_decisive_win_is_not_a_tie_however_far_the_runner_up_sits(self):
+        # THE RATIO IS LOAD-BEARING TOO, and until 2026-09-08 nothing here said
+        # so: a skeptic deleted the count clause and all 178 tests stayed
+        # green. Separation alone must never make a tie. This fit wins 190 to
+        # 20 -- a ratio of 0.105, nowhere near STOP_TIE_FRAC -- while its weak
+        # runner-up happens to sit outside the stop's span AND to disagree by
+        # 510 px, so BOTH new conditions are true and only the count says the
+        # win is decisive. Without the clause a head-on win goes through the
+        # whole back-step / wait / look-around ladder: the ~20 s a stop this
+        # rule exists to stop paying, on the clearest fit there is.
+        self.assertEqual(chain_walk.STOP_TIE_FRAC, 0.9)
+        wps = self._stop_with_a_two_frame_run()
+        ch = FakeChain(6, [Fix(k=1),
+                           Fix(k=3, inliers=190, second=20, second_k=5,
+                               second_dx=500.0, dx=-10.0),
+                           Fix(k=4), Fix(k=5)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=8)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned"], acts)
+        self.assertNotIn("turned-looked", acts)
+        self.assertNotIn("turn-back", acts)
+        self.assertEqual([round(e[1]) for e in rig.events if e[0] == "turn"],
+                         [90, 0],
+                         "a tie would add the look-around's three turns: %r"
+                         % rig.events)
+
 
     def test_the_escape_ladder_cycles_so_a_jump_comes_round_again(self):
         rig = Rig(FakeChain(30, default=Fix(k=0, scale=0.5)), table_at=None)
@@ -1939,7 +2196,8 @@ class Bookkeeping(unittest.TestCase):
         self.assertIsNone(res["fixes"][1]["fix"], "a miss records fix=None")
         self.assertEqual(
             set(res["fixes"][0]["fix"]),
-            {"k", "k_float", "inliers", "dx", "dy", "scale", "second", "detail"})
+            {"k", "k_float", "inliers", "dx", "dy", "scale", "second",
+             "second_k", "second_dx", "detail"})
         self.assertEqual(res["fixes"][0]["fix"]["inliers"], 120)
         # The clock is only advanced by the stubs, so this is exact:
         # turn 0.5 + push 0.4 + capture 0.1.
@@ -2141,17 +2399,18 @@ class IterationArithmetic(unittest.TestCase):
 
     def test_the_minimum_iteration_count_is_the_windowed_arithmetic(self):
         self.assertEqual(chain_walk.WINDOW, 3)
-        self.assertIsNone(chain_walk.TABLE_CHECK_TAIL)
-        # Literals, not the formula re-expressed. With the prompt checked on
-        # every iteration the floor is the iterations k needs to reach the
-        # last waypoint at 3 per step: ceil(999 / 3) = 333. The old tail gate
-        # (an integer TABLE_CHECK_TAIL) is still honoured when passed.
-        # ADVANCE_MAX is 1: every waypoint but the spawn needs an iteration.
-        self.assertEqual(chain_walk.min_iterations(1000), 999)
-        self.assertEqual(chain_walk.min_iterations(1000, window=3), 333)
+        self.assertEqual(chain_walk.TABLE_CHECK_TAIL, 30)
+        # Literals, not the formula re-expressed. With TABLE_CHECK_TAIL 30 the
+        # prompt is believed once the target is within 30 of the end, so the
+        # floor is one iteration past k reaching n - 31: 1 + ceil(969 / 1) =
+        # 970, 1 + ceil(969 / 3) = 324. A chain shorter than the tail has the
+        # gate open from the first frame: the floor is 1. An explicit tail is
+        # still honoured when passed.
+        self.assertEqual(chain_walk.min_iterations(1000), 970)
+        self.assertEqual(chain_walk.min_iterations(1000, window=3), 324)
         self.assertEqual(chain_walk.min_iterations(1000, tail=3, window=3), 333)
-        self.assertEqual(chain_walk.min_iterations(10), 9)
-        self.assertEqual(chain_walk.min_iterations(4), 3)
+        self.assertEqual(chain_walk.min_iterations(10), 1)
+        self.assertEqual(chain_walk.min_iterations(4), 1)
         self.assertEqual(chain_walk.min_iterations(2), 1)
 
     def test_every_walk_reports_the_arithmetic(self):

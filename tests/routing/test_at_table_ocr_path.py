@@ -75,6 +75,28 @@ class OcrPath(unittest.TestCase):
         self.assertLess(tp.ocr_words(img), 2, "OCR now reads it; the case has moved")
         self.assertTrue(tp.at_table(img))
 
+    def test_a_dark_prompt_is_seen_by_the_correlation_plus_one_word(self):
+        # b11 trial 10, it064: the prompt on screen, score 0.226 (under
+        # MATCH_MIN), one OCR word. Pinned: neither the mask alone nor the OCR
+        # alone accepts it, the conjunction does.
+        im = Image.open(os.path.join(CASES, "prompt_dark_b11_t10_it064.jpg")).convert("RGB")
+        self.assertEqual(tp.MATCH_MIN_WITH_WORD, 0.20)
+        self.assertLess(tp.score(im), tp.MATCH_MIN)
+        self.assertGreaterEqual(tp.score(im), 0.20)
+        self.assertEqual(tp.ocr_words(im), 1)
+        self.assertTrue(tp.at_table(im))
+
+    def test_the_top_route_negatives_stay_rejected(self):
+        # The two highest-scoring non-prompt frames of 7,885 (0.218, 0.216:
+        # zero words) and the one negative with a prompt word (0.189, under
+        # MATCH_MIN_WITH_WORD): all three stay False.
+        for name in ("no_prompt_top_negative_k173.jpg", "no_prompt_top_negative_k89.jpg", "no_prompt_one_word_0189.jpg"):
+            im = Image.open(os.path.join(CASES, name)).convert("RGB")
+            self.assertFalse(tp.at_table(im), name)
+        im = Image.open(os.path.join(CASES, "no_prompt_one_word_0189.jpg")).convert("RGB")
+        self.assertGreaterEqual(tp.ocr_words(im), 1, "the fixture must carry a word, or the threshold is untested")
+        self.assertLess(tp.score(im), tp.MATCH_MIN_WITH_WORD)
+
     def test_wanda_prompt_stays_rejected_without_the_ink_gate(self):
         # The ink gate's stated purpose. Wanda's prompt is a different sentence
         # and the correlation alone rejects it by a wide margin.

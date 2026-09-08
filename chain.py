@@ -130,6 +130,8 @@ class Fix:
                   pair brackets it
         inliers   RANSAC inliers of the winning candidate
         second    the runner-up's inliers -- how thin the win was
+        second_k  the runner-up's INDEX, or None when nothing else fitted
+        second_dx the runner-up's dx (0.0 when there is no runner-up)
         dx, dy    pixel offset, pose.offset's convention (see below)
         scale     the similarity transform's scale (see below)
         detail    a one-line string for the log
@@ -151,10 +153,10 @@ class Fix:
     """
 
     __slots__ = ("k", "k_float", "inliers", "dx", "dy", "scale", "second",
-                 "detail", "candidates")
+                 "detail", "candidates", "second_k", "second_dx")
 
     def __init__(self, k, k_float, inliers, dx, dy, scale, second, detail,
-                 candidates=None):
+                 candidates=None, second_k=None, second_dx=0.0):
         self.k = int(k)
         self.k_float = float(k_float)
         self.inliers = int(inliers)
@@ -164,10 +166,21 @@ class Fix:
         self.second = int(second)
         self.detail = detail
         self.candidates = candidates or {}
+        # WHO the runner-up was, not just how big it was. `second` alone cannot
+        # tell an adjacent near-duplicate frame of one stationary run from a
+        # candidate that describes a different place, and chain_walk's stop-tie
+        # rule was refusing every turn stop on that ambiguity. Optional with
+        # defaults so nothing that builds a Fix the old way breaks; None means
+        # "no runner-up / cannot say", which a caller must not read as
+        # separation (chain_walk reads it as NO evidence of a tie).
+        self.second_k = None if second_k is None else int(second_k)
+        self.second_dx = float(second_dx)
 
     def as_dict(self):
         return {"k": self.k, "k_float": round(self.k_float, 3),
                 "inliers": self.inliers, "second": self.second,
+                "second_k": self.second_k,
+                "second_dx": round(self.second_dx, 1),
                 "dx": round(self.dx, 1), "dy": round(self.dy, 1),
                 "scale": round(self.scale, 4), "detail": self.detail}
 
@@ -396,7 +409,10 @@ class Chain:
                        key=lambda kv: (-kv[1]["inliers"],
                                        abs(kv[1]["scale"] - 1.0)))
         k, best = order[0]
-        second = order[1][1]["inliers"] if len(order) > 1 else 0
+        runner = order[1] if len(order) > 1 else None
+        second = runner[1]["inliers"] if runner else 0
+        second_k = runner[0] if runner else None
+        second_dx = runner[1]["dx"] if runner else 0.0
 
         gate = MIN_INLIERS          # module knob, read at CALL time (10.18)
         if gate is not None and best["inliers"] < gate:
@@ -409,7 +425,8 @@ class Chain:
                   f"fitted={sorted(fits)}")
         return Fix(k=k, k_float=k_float, inliers=best["inliers"],
                    dx=best["dx"], dy=best["dy"], scale=best["scale"],
-                   second=second, detail=detail, candidates=fits)
+                   second=second, detail=detail, candidates=fits,
+                   second_k=second_k, second_dx=second_dx)
 
     @staticmethod
     def _interpolate(k, fits):

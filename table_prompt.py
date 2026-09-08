@@ -72,6 +72,14 @@ REFERENCE_DIR = "test_fixtures/table_prompt"
 # set, when the threshold was 0.79. Genuine approach frames now score 0.30-0.39,
 # so do NOT restore that value — it would reject real prompts.
 MATCH_MIN = 0.25           # stroke-shape correlation
+# A correlation this high is believed when the OCR also reads at least ONE
+# prompt word. Two arrivals on 2026-09-08 were scored failed with the prompt
+# plainly on screen at 0.220-0.237 (dark captures). Over all 7,885 route
+# frames on disk the score alone overlaps (negatives reach 0.218) but every
+# negative at or above 0.17 reads 0 prompt words, one excepted at 0.189, while
+# the missed prompts read 1-3: the conjunction fires on 0 route frames and
+# recovers 16 of the 24 prompt frames under MATCH_MIN.
+MATCH_MIN_WITH_WORD = 0.20
 INK_MIN = 0.024            # fraction of the band that is thin bright stroke
 STROKE_BRIGHT = 175
 STROKE_LOCAL = 140
@@ -251,9 +259,13 @@ def at_table(img):
     # five readings at the prompt zone's edge (score 0.31-0.47, ink 0.011) --
     # white text over a bright body, a light table or a grey wall keeps the
     # correlation and loses the strokes. ink() stays as a signal for the sweep.
-    if score(img) >= MATCH_MIN:
+    s = score(img)
+    if s >= MATCH_MIN:
         return True
-    return ocr_says_prompt(img)
+    words = ocr_words(img)
+    if words >= OCR_MIN_WORDS:
+        return True
+    return s >= MATCH_MIN_WITH_WORD and words >= 1
 # THE STROKE MASK CANNOT SEE WHITE TEXT OVER A BRIGHT BACKGROUND, BY
 # CONSTRUCTION. It keeps a pixel only if it is > STROKE_BRIGHT and its 11x11
 # neighbourhood averages < STROKE_LOCAL -- the rule that removes the dealer's

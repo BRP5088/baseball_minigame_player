@@ -153,8 +153,14 @@ LOOKBACK = 2
 # stall, escape and walk away from a won table -- the exact failure the user
 # watched under dead reckoning. at_table() costs milliseconds and measured 0
 # false positives on 693 frames at non-table nodes (CLAUDE.md §3), so the gate
-# bought nothing. An integer here restores the old gate for an experiment.
-TABLE_CHECK_TAIL = None
+# bought nothing. THEN IT DID: 2026-09-08 a detector change fired at k=58 (the
+# office doorway facing the L&B storefront) and the walk "arrived" 47 s in.
+# at_table() is the $50 gate. Every true closed-loop arrival on disk (64) had
+# its target at 197-204 when the prompt appeared; the false one had 61. A tail
+# of 30 waypoints (targets >= 175 on the 205-waypoint chain) sits 22 under the
+# lowest true arrival, so a lagging estimate has that much room, and no false
+# positive anywhere before the bar tables can end a walk.
+TABLE_CHECK_TAIL = 30
 
 # THE PLAN. The recorder samples every 0.25 s and ~40% of an executor-recorded
 # chain is STATIONARY: the camera turns between steps and the 0.35 s settle
@@ -262,10 +268,46 @@ STOP_PAN_LOOKS = 2              # how many run frames to look at (first, middle)
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.
 STOP_WAIT_SEC = 2.0
-# A stop fit whose runner-up is within this fraction of it is AMBIGUOUS, not
-# verification: batch 5e trial 6 'verified' the bar-entrance stop on 33 inliers
-# against a runner-up of 33 with dx -386, and was short of the doorway.
+# A stop fit whose runner-up is within this fraction of it MAY be ambiguity
+# rather than verification -- but the ratio ALONE never was evidence of it, and
+# from 2026-09-08 it is only the first of three conditions.
+#
+# WHAT THE RATIO ACTUALLY MEASURES AT A STOP. A turn-only target is a
+# STATIONARY RUN of the recording collapsed to one index: several frames of the
+# same spot, 0.25 s apart. Their fits to one live frame are near-duplicates, so
+# the runner-up sits at 0.92-0.96 of the winner BY CONSTRUCTION. Replaying 37
+# saved stop frames through chain.locate (agent_progress/closed-loop/stop_tie/
+# replay_stops.py) calls a tie at EVERY one of the six stops of the four
+# fastest arrivals ever recorded -- each of which verified head-on at the time
+# in 0.1-4.2 s. The rule-cost study puts two thirds of the +34 s per arrival
+# that followed this constant on exactly that (rule_costs/notes.md).
+#
+# AND ALONE IT COULD NOT CATCH ITS OWN EXAMPLE EITHER. Batch 5e trial 6's stop
+# 129 ("33 against 33 with dx -386") reads winner 132, runner-up 128, and the
+# ARRIVING batch 5e trial 5 reads the same stop at 34/31 with the same runner-up
+# and the same 185 px disagreement. Nothing built from (best, second, dx)
+# separates those two frames -- so the rule cannot be "spot the failure"; it can
+# only be "spot the AMBIGUITY and go and look".
 STOP_TIE_FRAC = 0.9
+# ... so a tie also needs the two candidates to be TWO PLACES: their indices not
+# both inside the stop's own stationary-run span (below), AND their dx
+# disagreeing by more than this.
+#
+# THE SPAN TEST IS ON BOTH INDICES, NOT JUST THE RUNNER-UP'S. Two indices inside
+# one span are one spot 0.25 s apart, and neither being there is what makes the
+# pair informative -- in EITHER direction. A first draft asked only about the
+# runner-up and lost exactly the frame above, whose WINNER (132) is the one past
+# the span and whose runner-up (128) is the stop's own frame: it verified the
+# stop and strafed on the winner's -386 px, which is the bug.
+#
+# WHAT THIS GATE JUDGES, MEASURED. Over the 37 replayed stop fits, those with a
+# close count and two places read |second_dx - dx| =
+#     0 0 0 0 0 0 0.2 0.3 0.4 0.6 1 4 4 6 6 9 11 27 45 67 95   |   185.0 185.4
+# TWO populations with a gap between them (10.4), not the one the runner-up-only
+# draft had: the low group is every neighbour one to three frames off the stop,
+# each in a trial that ARRIVED; the high pair is stop 129 in batch 5e trials 5
+# and 6. 120 sits in the gap -- 1.26x the low maximum, 0.65x the high minimum.
+STOP_TIE_DX_PX = 120.0
 # A retry (turn back, one more push) needs EVIDENCE of being short: the stop's
 # frame fitting an EARLIER waypoint, however thinly. A frame that fits nothing
 # is an occluded view or a stop already passed (batch 4 trial 8: Wanda the
@@ -469,7 +511,8 @@ def _fix_row(fix):
     if fix is None:
         return None
     return {name: getattr(fix, name, None) for name in
-            ("k", "k_float", "inliers", "dx", "dy", "scale", "second", "detail")}
+            ("k", "k_float", "inliers", "dx", "dy", "scale", "second",
+             "second_k", "second_dx", "detail")}
 
 
 def _save(shots, iteration, k, img, log, suffix=""):
@@ -630,6 +673,37 @@ def stationary_runs(wps):
     return runs
 
 
+def stop_spans(wps):
+    """{last index of each stationary run: the FIRST index of that run}.
+
+    The SAME SPOT as an index range, which is what the stop-tie rule needs.
+    `stationary_runs` cannot answer it: it DROPS frames whose heading is None
+    -- the compass abstains on 6-15% of frames inside the bar (OPEN-15) -- so
+    its lists have holes (the user's drive records the run ending at 88 as
+    65..80, 82, 84..88), and a hole is not a different place. A span cannot be
+    broken by one. Same stationarity rule as `plan_indices`, so the keys are
+    exactly the plan's turn-only targets.
+    """
+    spans, run = {}, []
+    for i, w in enumerate(wps):
+        if i == 0:
+            continue
+        lx = getattr(w, "lx", None) or 0.0
+        ly = getattr(w, "ly", None)
+        unknown = "stick:unknown" in (getattr(w, "note", "") or "")
+        stationary = (not unknown and ly is not None
+                      and abs(ly) <= STATIONARY_STICK and abs(lx) <= STATIONARY_STICK)
+        if stationary:
+            run.append(i)
+            continue
+        if run:
+            spans[run[-1]] = run[0]
+            run = []
+    if run:
+        spans[run[-1]] = run[0]
+    return spans
+
+
 def plan_min_iterations(plan, window=None):
     """Fewest iterations for a plan: one per turn-only target, and the push
     targets at ADVANCE_MAX per iteration."""
@@ -778,6 +852,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     # arithmetic beside it cannot be told from a navigation failure.
     plan = plan_indices(wps)
     runs = stationary_runs(wps) if STOP_PAN_FROM_RUN else {}
+    # Built unconditionally: every stop of every walk asks the tie rule below
+    # which indices are the SAME SPOT as this stop, and `runs` is gated by the
+    # shipped-False pan flag.
+    spans = stop_spans(wps)
     n_turn = sum(1 for _, push, _ in plan if not push)
     n_push = len(plan) - n_turn
     min_iters = plan_min_iterations(plan)     # the loop iterates per TARGET (audit)
@@ -1019,7 +1097,34 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             fix_t = chain.locate(img, target_k)
             inl_t = 0 if fix_t is None else (getattr(fix_t, "inliers", 0) or 0)
             sec_t = 0 if fix_t is None else (getattr(fix_t, "second", 0) or 0)
-            tied = fix_t is not None and sec_t >= STOP_TIE_FRAC * max(1, inl_t)
+            # Hoisted: `tied` reads the winner's index and offset now, and
+            # `real` and the aligned block below read the same two locals.
+            kt = None if fix_t is None else int(getattr(fix_t, "k", target_k))
+            dxt = 0.0 if fix_t is None else (getattr(fix_t, "dx", 0.0) or 0.0)
+            # A TIE NEEDS SEPARATION (see STOP_TIE_FRAC). Three conditions, all
+            # required: a close count, the winner and the runner-up NOT BOTH
+            # inside this stop's own stationary-run span, and a dx that
+            # disagrees. `second_k` is None on a Fix built before it existed
+            # (or by a caller that cannot say) -- that is NOT separation, so
+            # no tie.
+            #
+            # BOTH indices, not just the runner-up's. Batch 5e trial 6 -- the
+            # frame STOP_TIE_FRAC exists for -- has the WINNER past the span
+            # (132 of 116..129) and the near-tied runner-up AT the stop (128).
+            # A runner-up-only test called that "not a tie", verified the stop
+            # and strafed 0.54 s LEFT on the winner's -386 px: it trusted the
+            # candidate past the stop, which is the bug. Two indices inside one
+            # span are one spot 0.25 s apart; anything else is two places.
+            sec_k = None if fix_t is None else getattr(fix_t, "second_k", None)
+            sec_dx = 0.0 if fix_t is None else (getattr(fix_t, "second_dx", 0.0) or 0.0)
+            run_lo = spans.get(target_k, target_k)
+            sec_here = sec_k is not None and run_lo <= sec_k <= target_k
+            win_here = kt is not None and run_lo <= kt <= target_k
+            separated = sec_k is not None and not (sec_here and win_here)
+            apart = abs(sec_dx - dxt) > STOP_TIE_DX_PX
+            tied = (fix_t is not None
+                    and sec_t >= STOP_TIE_FRAC * max(1, inl_t)
+                    and separated and apart)
             verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS and not tied
             if not verified:
                 # Maybe we are already PAST this stop (batch 3 trial 1 stood
@@ -1045,8 +1150,6 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # waypoint. A junk fit at any index is no evidence: batch 5b
             # trials 2, 5 and 6 read 6-12-inlier fits at k >= stop as "past",
             # skipped the retry that fixes a short stop, and were lost.
-            kt = None if fix_t is None else int(getattr(fix_t, "k", target_k))
-            dxt = 0.0 if fix_t is None else (getattr(fix_t, "dx", 0.0) or 0.0)
             real = fix_t is not None and inl_t >= WEAK_MIN_INLIERS and not tied
             # A REAL fit at the stop's OWN index with a large offset is the
             # stop seen from beside the user's path (batch 5c trial 3: the bar
@@ -1083,6 +1186,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
                     if f2 is not None and i2 >= FIX_MIN_INLIERS and (best is None or i2 > best[1]):
                         best = (h2, i2, f2)
+                    if best is not None and best[1] >= STRONG_MIN_INLIERS:
+                        break            # same rule as the look-around below
                 turn_to(heading)
                 last_cmd = heading
                 if best is not None:
@@ -1111,6 +1216,16 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
                     if f2 is not None and i2 >= FIX_MIN_INLIERS and (best is None or i2 > best[1]):
                         best = (ddeg, i2, f2)
+                    if best is not None and best[1] >= STRONG_MIN_INLIERS:
+                        # STOP LOOKING. STRONG_MIN_INLIERS (165) is above the
+                        # wrong-place MAXIMUM of the live gate census (164,
+                        # overnight/census/live_gate_census.json), so the other
+                        # direction cannot change this verdict -- it can only
+                        # cost a turn, a capture and a locate. The loop used to
+                        # sample every direction whatever the first one said,
+                        # and `turned-looked` is +20.9 s a trial
+                        # (rule_costs/notes.md).
+                        break
                 turn_to(heading)
                 last_cmd = heading
                 if best is not None:
