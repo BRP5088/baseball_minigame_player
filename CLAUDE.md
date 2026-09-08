@@ -754,8 +754,18 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         fit's dx after a looked 129 stop, off arm median -352
                                                                         [-383..-264] on 5 of 5, on arm +72 [-96..+150] on 5 of 5
                                                                         (yaws -12.6..-22.9 deg) -- no overlap. SHIPPED ON (patch45).
-    da361ef  07:43         25     running                             patch45: STOP_LOOK_YAW = True, plain 25 -- the first full
-                                                                        batch with the rescue AND the yaw
+    da361ef  07:43         25     21            81.4 s      11        patch45: STOP_LOOK_YAW = True, plain 25 -- the first full
+                                                                        batch with the rescue AND the yaw. 18 yaw firings; THE
+                                                                        RESCUE'S FIRST WIN (t18: lost at 129, backed out, saw the
+                                                                        portrait room at 180 inliers, re-approached, arrived). Four
+                                                                        losses: the stairs NPC (t1), the blind stretch past 129
+                                                                        (t20), and TWO post-yaw over-corrections (t13, t17): when
+                                                                        the look's fit lands 2-3 waypoints AHEAD of the stop the
+                                                                        un-yaw formula over-turns (fits at 128-130: 12/13 arrived,
+                                                                        residual |~90| px; at 131-132: 2/4, residual +150..+230).
+                                                                        Yaw at the stairs stop: 3 of 4 arrived. The morning's first
+                                                                        candidate: yaw only on a fit at the stop's own index +-1
+    da361ef  08:28 (again)  25     running                             repeatability of the rescue + yaw build
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED

@@ -1,8 +1,8 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 08:05. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 08:30. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
-## MORNING SUMMARY (written 08:05, the night's last state; everything below it is the detail)
+## MORNING SUMMARY (written 08:05, updated 08:30; everything below it is the detail)
 
 **Where it stands.** The closed loop arrives at the dealer's prompt 20-23 of 25 on every batch since
 02:00 (b16 22, b17 22, b18 20, b19 23; the A/B 18/20; b21 running at 5/6). Walk median 78-89 s; the
@@ -30,15 +30,25 @@ NPC in the portrait room. Every failure has a reader's note in `agent_progress/c
 lateral-offset or scale gate at the 129 stop; a scene-change gate on blind pushes; a stuck-progress
 reset (too rare). Details and raw numbers: `agent_progress/closed-loop/review/census_after_129_notes.md`.
 
-**Running now:** the twenty-first launch, plain 25 on da361ef (rescue + yaw), monitors on trial
-lines, rescue firings and STOP YAW firings. **Next, in order:** (1) read b21's tally and its readers;
-(2) the same yaw for a HEAD-ON stop fit with a large |dx| (the offset shows there too: b20 t2 had
-132 inliers at dx -325 and strafed) -- HANDOFF item (e) in full, A/B it the same way; (3) the yaw
-over-corrects by ~5-8 deg on 4 of 8 firings (pixels at 25 deg off-axis subtend fewer degrees) --
-measure before touching the gain; (4) the wanderers: nothing in the journals separates them; the
-frames do, and the human answer in every reader is "sidestep around the person, do not push into
-them" -- the escape ladder's strafes (0.6 s) never clear a pinned character (bar stretch: back 0/27,
-right 5/69).
+**Batch 21 (da361ef, rescue + yaw ON, 07:43-08:27): 21 of 25, walk median 81.4 s, best streak 11.**
+18 yaw firings, 5 rescue firings, and THE RESCUE'S FIRST WIN (t18: lost at the bar entrance, it
+backed out, saw the portrait room at 180 inliers, re-approached the stop and arrived). The four
+losses: the stairs NPC (t1), the blind stretch past 129 after a correct yaw (t20), and two post-yaw
+OVER-CORRECTIONS (t13, t17) -- `yaw_firings_census.out`: when the look's fit lands at the stop's own
+index or one either side (13 firings) the residual is ~90 px and 12 of 13 arrived; when it lands 2-3
+waypoints AHEAD (4 firings) the yaw over-turns by 8-12 deg (residual +150..+230) and 2 of 4 arrived.
+The un-yaw formula assumes the fit is AT the stop.
+
+**Running now:** the twenty-second launch, the same build again (08:28), monitors on trial lines,
+rescue firings and STOP YAW firings. **Next, in order:** (1) THE YAW REFINEMENT: apply the yaw only
+when the look's fit is at the stop's index +-1 (fall back to the strafe otherwise), or derive it from
+the fit's own recorded heading -- a structural condition, not a tuned number; verify on the journals
+(15 firings on disk), A/B with `--flag`; (2) the same yaw for a HEAD-ON stop fit with a large |dx|
+(b20 t2: 132 inliers at dx -325, strafed) -- item (e) in full; (3) the wanderers: nothing in the
+journals separates them; the frames do, and the human answer in every reader is "sidestep around the
+person, do not push into them" -- the escape ladder's strafes (0.6 s) never clear a pinned character
+(bar stretch: back 0/27, right 5/69); (4) the rescue's strong gate: b21 t13's best look read 155
+against 165 -- one case, do not move the gate on it, but keep counting.
 
 ## Now
 
