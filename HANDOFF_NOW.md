@@ -1,22 +1,31 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 21:50. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 22:02. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
-- **THE 25, NINTH launch, RUNNING (21:47:39, commit 80182ac).** On top of the batch-6 round (d7ac88d) and the
-  audit round (3df1727) it carries: the look-around strafe capped at one ordinary correction (5bdb479; batch 7
-  trial 1's 0.6 s strafe at stop 166 was the double cap), FOUR same-side junk fits (6-14 inliers) steer once
-  (census: 0/24 arriving trials, 5 failing), and the judge's pan-from-run behind `STOP_PAN_FROM_RUN = False`
-  (off in this run; its A/B is 10 v 10 interleaved, arm set in the trial child). Monitor armed on
-  `overnight/chain_trials.log` (per-trial lines, crashes, final tally). Eighth launch (5bdb479): 2/2 arrived,
-  155 s / 104 s, `overnight/chain_trials_batch8.*`. Seventh: 1/2 (`_batch7.*`; the failure is the strafe-cap
-  one, reviewed in `agent_progress/closed-loop/review/notes_cur_t01.md`). Sixth: 4/7 valid (`_batch6.*`).
-  Earlier tonight: batch 4 8/10; 5b 2/6; 5c 2/3; 5e 6/14. `overnight/chain_trials.py --chain route_user_1853
-  --trials 25`, 180 s cap, STUCK after 12 non-advancing iterations, LOST after 9 blind. Each stop's cause and
-  fix is in `git log -- chain_walk.py`. Reviews, audits, the judge's plan and the Snoopy mutation sweep:
-  `agent_progress/closed-loop/{review,audit,panel,snoopy_sweep}/`. Review a trial: `tools/trial_sheet.py <n>`
-  then a reader (the user's standing rule: a reader on EVERY failed trial; look at the turns first).
+- **THE PAN A/B, RUNNING (21:59:30, commit 2f27596):** `overnight/chain_trials.py --chain route_user_1853
+  --trials 20 --arms off,on` — `STOP_PAN_FROM_RUN` off/on interleaved, 10 trials an arm, the arm applied INSIDE
+  the trial child from `BASEBALL_CHAIN_PAN`, per-arm tally and a Fisher exact in `overnight/chain_trials.json`
+  (`arms`, `tally`, `fisher_p`; each run row carries `arm` and `pan`). The judge's first item. Monitor on
+  `overnight/chain_trials.log`. **Why now, not after the 25:** the ninth launch (80182ac, pan off,
+  `overnight/chain_trials_batch9.*`) went 1 of 5 valid — trials 1, 2, 4 lost or stuck at k=171-173 right after the
+  bar-tables stop 166, trial 5 lost at 200 — against the eighth launch's 2/2 an hour earlier with one fewer rule;
+  session variance that size (§10.5) means only an interleaved A/B says anything, and its off arm IS the control
+  measurement the 25 was giving. The stop-166 census over every journal tonight (the table is in this session's
+  notes; rebuild it from `overnight/chain_journals/*.jsonl`, rows with target 166): head-on verification at 166
+  succeeded in nearly every trial of batches 4-5e and has FAILED in 8 of the last 9 since batch 6 (d7ac88d), the
+  ±25 look then verifies it with 55-147 inliers, and in trial 2 the look's un-yawed strafe (+78 px, right) and
+  the next head-on fit (-230 px, left) disagreed by 300 px — the un-yaw arithmetic on a 25-degree look is not
+  trustworthy, which is what matching each look against ITS OWN frame removes. The readers on trials 1, 2, 4, 5
+  (`agent_progress/closed-loop/review/notes_cur_t0*.md`) are the frame-level account; trial 1's reader says NPC
+  in view at the stop (Pete), then a sideways veer into the pool-table corner while the estimate blind-advanced.
+  Batch 9 trial 6 is INVALID by my own hand: a patch script wrote `chain_trials.py` while the batch ran (rule 21;
+  the script wrote one file before the next file's anchor assert fired — rule 19 means ALL asserts before ANY
+  write) and the next child hit a SyntaxError. Eighth launch (5bdb479): 2/2, 155 s / 104 s
+  (`_batch8.*`). Seventh: 1/2 (`_batch7.*`). Sixth: 4/7 valid. Earlier: batch 4 8/10; 5b 2/6; 5c 2/3; 5e 6/14.
+  Each stop's cause and fix: `git log -- chain_walk.py`. Review a trial: `tools/trial_sheet.py <n>` then a
+  reader (the user's standing rule: a reader on EVERY failed trial; look at the turns first).
 - **Open candidates, none built** (the judge's PLAN.md order stands): (1) the pan A/B; (2) the reader's
   secondary finding from batch 7 trial 1 — `escape()`'s jump/back/left/right rung counter is never reset
   between stops, so at a late wedge only the sidestep rungs remain while jump/back had already worked twice
