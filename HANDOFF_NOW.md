@@ -2,6 +2,24 @@
 
 **Updated 2026-09-08 12:27 -- THE USER IS RESTARTING THE MAC. NOTHING IS RUNNING. Read this block first.**
 
+## SAVED STATE and IN-FLIGHT WORK (20:10)
+
+- **Tag `nav-40-of-40` = 2c8fea7**, the build that arrived 40/40. `git checkout nav-40-of-40`.
+- **The route is committed** (5f868c8): `chains/route_user_1853/`, 206 files, with `STATE.md`. It
+  had been untracked -- the working directory was the only copy.
+- **The chiaki binary** (frame-dump build) is backed up at
+  `chiaki-ng-build/chiaki.app.backup-20260908-framedump/`; rebuildable from `chiaki-patch/`.
+- **In flight, both as patch SCRIPTS not yet applied:** patch58 (`run_cycles._walk_to_table` ->
+  chain_walk + reload; the continuous loop's one defect; money-path skeptic assigned) and patch59
+  (gate the escape ladder on the push before/after match count that crawl mode validated --
+  blocked 148-166 inliers vs moved 10-28, n=6 each; ships OFF; removes the bar detours the user
+  sees). Land order does not matter: no shared files.
+- **Then:** `drafts/pending_after_ab/scratch_saved/smoke_cycle.sh` -- ONE cycle, key from
+  `~/.zshrc.secrets` (now also loaded by `~/.zshenv` for non-interactive shells), real money
+  capped at BASEBALL_API_BUDGET=200 (~$2.40). `progress.json` balance corrected 12 -> 246 from the
+  pause menu; `run_cycles` uses `progress_testing.json` (246, no match in progress).
+- **The user's rule for the streak:** a reload BREAKS it. `tools/verify_streak.py` prints both.
+
 ## THE GOAL IS MET (19:20) — 40 consecutive arrivals in one batch, target 25
 
 Batch 28 (`overnight/chain_trials_batch28_goal.*`, build 2c8fea7, `--trials 40 --attempts 2`):
