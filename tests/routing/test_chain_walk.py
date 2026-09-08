@@ -1244,6 +1244,11 @@ class TurnEarlyWhenBlindNearAStop(unittest.TestCase):
         self.assertEqual(acts.count("turn-early"), 1,
                          f"one early turn per blockage, not {acts}")
         self.assertIn("turned-unverified", acts)
+        # An early stop takes NO retry pushes along the old heading (they
+        # walked into the NPC three more times live): back, wait, accept.
+        seg = acts[acts.index("turn-early"):acts.index("turned-unverified")]
+        self.assertNotIn("turn-retry", seg, seg)
+        self.assertEqual(seg, ["turn-early", "turn-back", "turn-wait"], seg)
         after = acts[acts.index("turned-unverified"):]
         self.assertIn("escape:jump", after,
                       "the ladder takes over once the early turn is spent")

@@ -731,6 +731,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     k_prev_iter = 0
     unverified_turn = False     # the last stop was accepted unverified
     turned_early = False        # this blockage has already taken its early turn
+    early_stop = False          # the current stop was reached by turn-early: no retry pushes
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
@@ -922,6 +923,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     misses = 0
                     stalls = 0
                     turn_retries = 0
+                    early_stop = False
                     record({"iteration": iteration, "k": k, "target": target_k,
                             "fix": _fix_row(wide), "action": "relocalised",
                             "lateral": None, "at_end": False,
@@ -1032,6 +1034,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls = 0
                 turn_retries = 0
+                early_stop = False
                 unverified_turn = True          # accepted on thin evidence
                 why = "past"
                 record({"iteration": iteration, "k": k, "target": target_k,
@@ -1066,8 +1069,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-wait: nothing fits "
                     f"head-on or either side; waited {STOP_WAIT_SEC:.0f}s for whatever is there to move")
                 continue
+            # A stop reached by turn-early gets NO retry pushes: the retries are
+            # for evidence of being short, and an early turn was taken BECAUSE
+            # nothing fits (an NPC in the face). Pushing along the old heading
+            # there walked into her three more times (third A/B, trial 3).
             if (not verified and turn_retries < TURN_RETRY_MAX
-                    and walk_heading is not None):
+                    and walk_heading is not None and not early_stop):
                 turn_retries += 1
                 turn_to(walk_heading)
                 last_cmd = walk_heading
@@ -1088,6 +1095,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             turn_retries = 0
             waited_here = False
             backed_here = False
+            early_stop = False
             unverified_turn = not verified
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
@@ -1199,6 +1207,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 # blockage: see UNEVIDENCED_ACTIONS.
                 pi = near_stop_j
                 turned_early = True
+                early_stop = True
                 misses = 0
                 stalls = 0
                 action = "turn-early"
