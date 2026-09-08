@@ -1,11 +1,11 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 08:30. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 09:14. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
-## MORNING SUMMARY (written 08:05, updated 08:30; everything below it is the detail)
+## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
 **Where it stands.** The closed loop arrives at the dealer's prompt 20-23 of 25 on every batch since
-02:00 (b16 22, b17 22, b18 20, b19 23; the A/B 18/20; b21 running at 5/6). Walk median 78-89 s; the
+02:00 (b16 22, b17 22, b18 20, b19 23; the A/B 18/20; b21 21, b22 22; b23 running since 09:12). Walk median 78-89 s; the
 fastest walk on record 62.7 s (b18 t3). Best true streak tonight 21 (b12). The 25-in-a-row goal needs
 ~97% a trial; the loop is at ~88%, and the remaining losses are NOT one controller bug -- they are
 WANDERERS: a patron in the tables aisle (stuck at 173, twice), an NPC that took up a spot at the top of
@@ -18,8 +18,9 @@ NPC in the portrait room. Every failure has a reader's note in `agent_progress/c
   bar-entrance stop); `at_table()` reads the "$50" fee token last -- 0 of 7,885 route frames, and it
   DECIDED 2 of batch 16's 22 arrivals.
 - patch43+43b: a LOST RESCUE (back out 1.0 s, look 0/-25/+25 over the whole chain, once per walk,
-  only where the walk was already lost). Fired 5 times, found nothing 5 times (the character pinned
-  against an NPC or in an unmapped room each time), cost no arrival anything.
+  only where the walk was already lost). Over three batches: 14 firings, 3 believed, 3 ARRIVED (each
+  time the estimate had run 40-50 waypoints ahead of a character still in the portrait room), 11 found
+  nothing (pinned against an NPC or in an unmapped room); cost no arrival anything.
 - patch44+45: STOP_LOOK_YAW -- at a stop verified by the look-around, TURN by the offset instead
   of sidestepping. The census behind it: after the old strafe the scene still sat ~300 px left of
   the heading on 93 of 96 arrivals (the sidestep did nothing; the offset is a heading error). The A/B
@@ -39,8 +40,16 @@ index or one either side (13 firings) the residual is ~90 px and 12 of 13 arrive
 waypoints AHEAD (4 firings) the yaw over-turns by 8-12 deg (residual +150..+230) and 2 of 4 arrived.
 The un-yaw formula assumes the fit is AT the stop.
 
-**Running now:** the twenty-second launch, the same build again (08:28), monitors on trial lines,
-rescue firings and STOP YAW firings. **Next, in order:** (1) THE YAW REFINEMENT: apply the yaw only
+**Batch 22 (da361ef again, 08:28-09:11): 22 of 25, walk median 79.2 s, best streak 13.** 16 yaw
+firings. THE RESCUE WON TWICE MORE (t15 and t18: the estimate said the bar tables at 166, the +25 look
+found the portrait room at 118 / 121 on 171 / 188 inliers -- the case patch43b's whole-chain window
+exists for -- both re-walked the bar stretch and arrived, t18 at 176.5 s against the 180 s walk cap,
+which is now the rescue's ceiling). Rescue tally over three batches: 14 firings, 3 believed, 3
+arrived, 11 found nothing. The three losses: past 129 after a correct yaw (t6), and the office
+stretch twice (t20, t23: lost at 88 after the blind corridor, the wrong-door / stairs-NPC family).
+
+**Running now:** the twenty-third launch, the same build a third time (09:12), monitors on trial
+lines, rescue firings and STOP YAW firings. **Next, in order:** (1) THE YAW REFINEMENT: apply the yaw only
 when the look's fit is at the stop's index +-1 (fall back to the strafe otherwise), or derive it from
 the fit's own recorded heading -- a structural condition, not a tuned number; verify on the journals
 (15 firings on disk), A/B with `--flag`; (2) the same yaw for a HEAD-ON stop fit with a large |dx|

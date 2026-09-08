@@ -765,7 +765,15 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         residual |~90| px; at 131-132: 2/4, residual +150..+230).
                                                                         Yaw at the stairs stop: 3 of 4 arrived. The morning's first
                                                                         candidate: yaw only on a fit at the stop's own index +-1
-    da361ef  08:28 (again)  25     running                             repeatability of the rescue + yaw build
+    da361ef  08:28 (again)  25     22            79.2 s      13        repeatability of the rescue + yaw build: 22/25. 16 yaw
+                                                                        firings; the rescue fired 5 times and WON TWICE (t15, t18:
+                                                                        the estimate at 166, the +25 look found the portrait room
+                                                                        at 118/121 on 171/188 inliers, both re-walked and arrived,
+                                                                        t18 at 176.5 s against the 180 s walk cap). Losses: past
+                                                                        129 (t6), the office stretch twice (t20, t23, lost at 88
+                                                                        after the corridor). Rescue tally over three batches: 14
+                                                                        firings, 3 believed, 3 arrived
+    da361ef  09:12 (third)  25     running                             the same build again
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
