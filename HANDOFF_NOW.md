@@ -102,6 +102,15 @@ The loop for the night, in order, repeated:
    the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
    arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
    detector miss (patch40's fixture).
+   (o') b12 trial 22's reader (`notes_cur_t22_1788847674.md`) refines it: turn-early fired TWICE in the
+   trial, both times on pure GEOMETRY (the oval-mirror/sconce wall between the portrait room and the bar
+   entrance), not an NPC; the 129 stop's -25 look fit at 182 inliers but its un-yawed strafe (-332 px) took
+   the character INTO that wall (the reader: by the user's rule the 129 turn did not land where 129 was
+   recorded); the second early turn jumped the pointer 136 -> 166 and `early_stop` correctly suppressed the
+   retries, so the stop was accepted on zero evidence with the frames pixel-identical before and after.
+   The rewind (patch41) is the fix for the acceptance; the un-yaw arithmetic of a 25-degree look remains the
+   weak instrument at stops (the pan matches each look against its own frame and needs no un-yaw; the A/B
+   found no arrival difference and faster walks — worth re-running the pan A/B on this build).
    (o) b12 trial 22 (01:5x, the streak ended at 21): IDENTICAL to b11 trial 25 — the 129 stop verified by a
    look (182 inliers), a 27-inlier fit at 130 read dx -392, two blind pushes (133, 136), then turn-early fired
    at 136 for the 166 stop because NEAR_STOP_TARGETS counts PLAN ENTRIES (139, 142, 166) while the 143-166 pan
