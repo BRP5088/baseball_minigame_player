@@ -109,6 +109,17 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (s') b14 trial 6's reader (`notes_b14_t06.md`): the blind view was the COAT RACK beside the standing patron
+   in the shop alcove (k 104-109), a geometry wedge the ladder never clears; the fit SCALE had climbed
+   monotonically 1.1 -> 4.0 over ~46 waypoints (street -> shop) with inliers falling, crossing WALL_SCALE one
+   iteration before blindness — the estimate lagging a character that was closer to every waypoint than the
+   recorded pose, pushed at full length into the wall. The recorded human held one steady moderate push there.
+   Candidate (unbuilt, n=1 + the reader's argument): throttle or shorten the push when a credible fit's scale
+   says the character is already closer than the reference (>= PAST_SCALE), instead of pushing the full 0.4 s.
+   b14 trial 14: reached 204 without the prompt with the view pressed against the WINDOW past the dealer
+   (scores 0.07-0.12, 0 words: not a detector miss). Tail-scale census (tonight's builds): arrivals' max tail
+   scale median 1.50, p90 1.98; the three end-fails 1.74-1.82 — inside the arrivals' distribution, no rule on
+   scale at the end (§10.4). Reader pending.
    (s) b14 trial 6 (03:1x): THE REWIND'S FIRST LIVE FIRING. Last credible fit at k=103 (it34); nothing fit
    for the next 22 iterations. Blind 104-109, turn-early at 109 for 129, back, wait, then turned-unverified
    REWOUND k to 103 (rewound_to=103 in the row) — mechanically right — and the re-approach walked the same
