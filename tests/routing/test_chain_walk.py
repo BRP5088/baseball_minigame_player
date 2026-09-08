@@ -84,7 +84,7 @@ def _rows_on_disk(path):
 class Fix:
     """What chain.locate() hands back. Attribute access only, like the real one."""
 
-    def __init__(self, k, scale=1.0, dx=0.0, dy=0.0, inliers=120, second=20,
+    def __init__(self, k, scale=1.0, dx=0.0, dy=0.0, inliers=120, second=5,
                  k_float=None, detail="stub"):
         self.k = k
         self.scale = scale
@@ -184,6 +184,10 @@ class Rig:
     def now(self):
         return self.t
 
+    def sleep(self, secs):
+        self.t += secs
+        self.events.append(("sleep", secs))
+
     def capture(self):
         self.captures += 1
         self.t += self.CAPTURE_SEC
@@ -218,7 +222,8 @@ class Rig:
         return chain_walk.walk(
             self.chain, self.capture, lambda: 87.0, log=lambda *a: None,
             turn_to=self.turn_to, push=self.push, strafe=self.strafe,
-            jump=self.jump, at_table=self.at_table, now=self.now, **kw)
+            jump=self.jump, at_table=self.at_table, now=self.now,
+            sleep=self.sleep, **kw)
 
     def count(self, name):
         return sum(1 for e in self.events if e[0] == name)
@@ -401,7 +406,7 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(chain_walk.WEAK_MIN_INLIERS, 15)
         self.assertEqual(chain_walk.BLIND_MAX, 6)
         junk = Fix(k=2, inliers=7)
-        thin = Fix(k=2, inliers=20)
+        thin = Fix(k=5, inliers=20)     # names a LATER waypoint (audit)
         # Every locate past k=0 that is not credible is followed by a look-
         # back locate, which consumes the next scripted entry: main/look-back
         # pairs, so the thin fit is the SIXTH call.
@@ -504,14 +509,14 @@ class IndexAdvance(unittest.TestCase):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        # it2: head-on None, look left None, look right None -> retry push;
-        # it3: head-on credible -> turned
-        ch = FakeChain(5, [Fix(k=1), None, None, None, Fix(k=3, inliers=90), Fix(k=3), Fix(k=4)], default=None)
+        # it2: head-on None, looks None, None -> WAIT once (an NPC may move);
+        # it3: still nothing -> retry push; it4: head-on credible -> turned
+        ch = FakeChain(5, [Fix(k=1), None, None, None, None, None, None, Fix(k=3, inliers=90), Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
-        rig = Rig(ch, table_at=8)
+        rig = Rig(ch, table_at=11)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:3], ["advanced", "turn-retry", "turned"])
+        self.assertEqual(acts[:4], ["advanced", "turn-wait", "turn-retry", "turned"])
 
     def test_a_junk_fit_at_a_later_waypoint_is_not_evidence_of_being_past(self):
         wps = [Wp(0, 90.0)]
@@ -536,12 +541,13 @@ class IndexAdvance(unittest.TestCase):
         ch = FakeChain(43, [Fix(k=1)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=24.05)
+        res = always_turning(rig.go, time_cap=28.05)
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[1:4], ["turn-retry"] * 3)
-        self.assertEqual(acts[4], "turned-unverified")
-        self.assertEqual(acts[5:7], ["blind-advance"] * 2)
-        self.assertEqual(acts[7], "miss", "an unverified turn allows two blind pushes, not six")
+        self.assertEqual(acts[1], "turn-wait")
+        self.assertEqual(acts[2:5], ["turn-retry"] * 3)
+        self.assertEqual(acts[5], "turned-unverified")
+        self.assertEqual(acts[6:8], ["blind-advance"] * 2)
+        self.assertEqual(acts[8], "miss", "an unverified turn allows two blind pushes, not six")
 
     def test_a_real_fit_at_the_stop_with_a_large_offset_strafes_toward_the_scene(self):
         # Batch 5c trial 3: 26 inliers at the stop's own index, dx -297: the
@@ -566,7 +572,7 @@ class IndexAdvance(unittest.TestCase):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 40, start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        ch = FakeChain(43, [Fix(k=1), Fix(k=5, inliers=20)], default=None)   # a thin fit PAST the stop
+        ch = FakeChain(43, [Fix(k=1), Fix(k=7, inliers=20)], default=None)   # a thin fit PAST the stop's window
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=12.05)
@@ -581,7 +587,7 @@ class IndexAdvance(unittest.TestCase):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
         # it2: head-on a THIN but real fit (20 inliers, over WEAK_MIN 15 and
         # under FIX_MIN 29) at a LATER waypoint: evidence of being past
-        ch = FakeChain(5, [Fix(k=1), Fix(k=4, inliers=20), Fix(k=3), Fix(k=4)], default=None)
+        ch = FakeChain(5, [Fix(k=1), Fix(k=8, inliers=20), Fix(k=3), Fix(k=4)], default=None)   # beyond the stop's window
         ch.waypoints = wps
         rig = Rig(ch, table_at=7)
         res = rig.go()
@@ -596,7 +602,7 @@ class IndexAdvance(unittest.TestCase):
         # portrait room at 160-188 inliers while the plan said "doorway" and
         # the old rule waited for the whole budget before looking.
         self.assertEqual(chain_walk.WIDE_AHEAD, 60)
-        strong = Fix(k=31, inliers=140, second=130)   # the runner-up is the neighbour
+        strong = Fix(k=31, inliers=170, second=160)   # the runner-up is the neighbour
         ch = FakeChain(60, default=None, wide=strong)
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=6.05)
@@ -607,8 +613,8 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(ch.locate_calls[3], 31, "the next locate starts from the relocalised k")
 
     def test_a_wide_fix_under_the_strong_count_is_not_believed(self):
-        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 120)
-        ch = FakeChain(60, default=None, wide=Fix(k=31, inliers=110, second=20))
+        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 165)   # above the live wrong-place max of 164
+        ch = FakeChain(60, default=None, wide=Fix(k=31, inliers=150, second=20))
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=8.05)
         acts = [f["action"] for f in res["fixes"]]
@@ -623,7 +629,7 @@ class IndexAdvance(unittest.TestCase):
         for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 8, start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
         ch = FakeChain(12, [Fix(k=1), Fix(k=3, inliers=8)], default=None,
-                       wide=Fix(k=9, inliers=150))
+                       wide=Fix(k=9, inliers=170))
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=4.05)
@@ -667,6 +673,165 @@ class IndexAdvance(unittest.TestCase):
         self.assertTrue(res["failure"].startswith("stuck at k=0"), res["failure"])
         self.assertEqual(len(res["fixes"]), 12)
         self.assertLess(res["seconds"], 60.0)
+
+    def test_three_consistent_thin_fits_steer_once_by_their_median(self):
+        # Batch 5e trials 13-14: five thin fits in a row, all with the scene
+        # 120-320 px LEFT, refused every time. Three agreeing thin fits now
+        # strafe LEFT once by their median; a lone thin fit still never does.
+        self.assertEqual(chain_walk.CONSISTENT_N, 3)
+        fixes = [Fix(k=1, inliers=20, dx=-150.0), Fix(k=2, inliers=18, dx=-204.0),
+                 Fix(k=3, inliers=17, dx=-219.0), Fix(k=4, inliers=19, dx=-300.0)]
+        ch = FakeChain(30, fixes, default=None)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=4.05)
+        strafes = rig.strafes()
+        self.assertEqual(len(strafes), 1, "exactly one strafe, on the third agreeing fit")
+        self.assertLess(strafes[0][1], 0.0, "the scene is LEFT: strafe left")
+        lat = [f["lateral"] for f in res["fixes"] if f.get("lateral")]
+        self.assertEqual(lat[0]["dx"], -204.0, "the median of the three")
+        self.assertEqual(lat[0]["consistent"], 3)
+
+    def test_thin_fits_that_disagree_on_side_do_not_steer(self):
+        fixes = [Fix(k=1, inliers=20, dx=-150.0), Fix(k=2, inliers=18, dx=+204.0),
+                 Fix(k=3, inliers=17, dx=-219.0), Fix(k=4, inliers=19, dx=-300.0)]
+        ch = FakeChain(30, fixes, default=None)
+        rig = Rig(ch, table_at=None)
+        always_turning(rig.go, time_cap=4.05)
+        self.assertEqual(rig.strafes(), [])
+
+    def test_a_credible_fit_near_the_stop_with_a_large_offset_also_aligns(self):
+        # Trial 13: a 30-inlier fit at 41 (the stop is 39, within WINDOW) with
+        # dx -128 was 'turned' with the offset thrown away.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(6, [Fix(k=1), Fix(k=4, inliers=30, dx=-128.0), Fix(k=3), Fix(k=4), Fix(k=5)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=7)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[1], "turned-aligned")
+        self.assertLess(rig.strafes()[0][1], 0.0)
+
+    def test_the_plan_pointer_rewinds_after_a_regression(self):
+        # Audit: k regressed to 4 but the pointer stayed at the target past 6,
+        # so reached() was impossible from then on. After the regression the
+        # next target must be the first plan entry past the NEW k.
+        fixes = [Fix(k=1), Fix(k=2), Fix(k=3), Fix(k=4), Fix(k=5), Fix(k=6),
+                 None, Fix(k=4, inliers=80), Fix(k=5), Fix(k=6), Fix(k=7)]
+        ch = FakeChain(30, fixes, default=None)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=10.05)
+        rows = res["fixes"]
+        self.assertEqual(rows[6]["action"], "regressed")
+        self.assertEqual(rows[7]["target"], 5, "the target after regressing to 4 is 5, not the old 7")
+        self.assertEqual([r["action"] for r in rows[7:10]], ["advanced"] * 3)
+
+    def test_a_thin_advance_goes_no_further_than_the_fit_names(self):
+        # Audit: a 20-inlier fit AT k (scale 0.8) used to advance k to the target.
+        # A thin fit that always names 5: advances one TARGET per iteration
+        # until k reaches 5, never beyond what the fit names.
+        ch = FakeChain(30, default=Fix(k=5, inliers=20))
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=7.05)
+        acts = [f["action"] for f in res["fixes"]]
+        ks = [f["k"] for f in res["fixes"]]
+        self.assertEqual(acts[:5], ["advanced-weak"] * 5)
+        self.assertEqual(ks[:5], [1, 2, 3, 4, 5])
+        self.assertEqual(acts[5], "blind-advance", "at 5 the fit names nothing ahead: blindness")
+        # A thin fit that names the CURRENT waypoint (scale 0.8, not even there)
+        # is blindness from the first push (audit: it used to advance three).
+        ch2 = FakeChain(30, default=Fix(k=0, inliers=20, scale=0.8))
+        rig2 = Rig(ch2, table_at=None)
+        res2 = always_turning(rig2.go, time_cap=3.05)
+        self.assertEqual([f["action"] for f in res2["fixes"]][:3], ["blind-advance"] * 3)
+
+    def test_a_thin_advance_stops_at_the_waypoint_the_fit_names_not_the_target(self):
+        # Push targets three frames apart (stick 0.35 at 0.25 s = 0.0875 u a
+        # frame against 0.18 u a push): targets 1, 4, 7... From k=1 the target
+        # is 4; a thin fit naming 2 advances to 2, NOT to 4. (The mutant that
+        # jumps to the target survived a test whose fit always named the
+        # target's own waypoint.)
+        wps = [Wp(0, 90.0)]
+        for i in range(1, 12):
+            w = Wp(i, 90.0); w.lx = 0.0; w.ly = -0.35; wps.append(w)
+        plan = chain_walk.plan_indices(wps)
+        self.assertEqual([i for i, p, _ in plan if p][:3], [1, 4, 7])
+        ch = FakeChain(12, [Fix(k=1), Fix(k=2, inliers=20)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=2.05)
+        rows = res["fixes"]
+        self.assertEqual((rows[0]["action"], rows[0]["k"]), ("advanced", 1))
+        self.assertEqual((rows[1]["action"], rows[1]["k"], rows[1]["target"]), ("advanced-weak", 2, 4))
+
+    def test_a_well_aligned_thin_fit_at_the_stop_verifies_without_a_strafe(self):
+        # Audit: a 20-inlier fit at the stop with dx 10 used to cost three
+        # retry pushes while dx 300 verified. Both verify; only the large one strafes.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(5, [Fix(k=1), Fix(k=2, inliers=20, dx=10.0), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=6)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned"])
+        self.assertEqual(rig.strafes(), [])
+        self.assertNotIn("turn-retry", acts)
+
+    def test_a_totally_occluded_stop_waits_once_before_retrying(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        # it2: head-on None, looks None,None -> WAIT; it3: head-on credible -> turned
+        ch = FakeChain(5, [Fix(k=1), None, None, None, Fix(k=2, inliers=90), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=8)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:3], ["advanced", "turn-wait", "turned"])
+        self.assertIn(("sleep", chain_walk.STOP_WAIT_SEC), rig.events)
+        self.assertEqual(rig.count("push"), 3, "one before the stop, none during the wait, two after")
+
+    def test_no_lateral_correction_in_the_iteration_after_an_escape_sidestep(self):
+        # Audit: the aligner undid the escape sidestep on the very next iteration.
+        fixes = [Fix(k=0, scale=0.5)] * 4 + [Fix(k=0, scale=0.5, dx=300.0)] + [Fix(k=0, scale=0.5)] * 6
+        ch = FakeChain(30, fixes, default=Fix(k=0, scale=0.5))
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=12.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[3], "escape:jump")
+        # the 8th action is the sidestep; the fix right after it carries dx 300
+        fixes2 = [Fix(k=0, scale=0.5)] * 7 + [Fix(k=0, scale=0.5, dx=300.0)] + [Fix(k=0, scale=0.5)] * 6
+        ch2 = FakeChain(30, fixes2, default=Fix(k=0, scale=0.5))
+        rig2 = Rig(ch2, table_at=None)
+        res2 = always_turning(rig2.go, time_cap=12.05)
+        acts2 = [f["action"] for f in res2["fixes"]]
+        self.assertEqual(acts2[7], "escape:left")
+        self.assertIsNone(res2["fixes"][8]["lateral"], "no lateral undo right after the sidestep")
+
+    def test_a_tied_fit_at_a_stop_is_ambiguity_not_verification(self):
+        # Batch 5e trial 6: 33 inliers against a runner-up of 33 at the bar
+        # stop was 'verified' and the loop was short of the doorway.
+        self.assertEqual(chain_walk.STOP_TIE_FRAC, 0.9)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        # it2: head-on a TIED 33/33 fit at the stop -> not verified; looks None -> wait
+        ch = FakeChain(5, [Fix(k=1), Fix(k=2, inliers=33, second=33), None, None,
+                           Fix(k=2, inliers=90, second=30), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=9)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:3], ["advanced", "turn-wait", "turned"])
+
+    def test_the_escape_ladder_cycles_so_a_jump_comes_round_again(self):
+        rig = Rig(FakeChain(30, default=Fix(k=0, scale=0.5)), table_at=None)
+        res = without_stuck(lambda **kw: always_turning(rig.go, **kw), time_cap=60.0)
+        acts = [f["action"] for f in res["fixes"] if f["action"].startswith("escape")]
+        self.assertEqual(acts[:4], ["escape:jump", "escape:left", "escape:right", "escape:jump"])
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds

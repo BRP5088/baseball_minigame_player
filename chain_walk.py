@@ -162,6 +162,13 @@ LOST_MAX = 9
 # still sees the room -- pushing at a door, circling a stop. Arrivals advance
 # at least every few iterations; twelve without is ~20 s of nothing.
 NO_PROGRESS_MAX = 12
+# CONSISTENT THIN FITS STEER. A single weak fix never steers (its dx is junk:
+# -847 px at 7 inliers). But CONSISTENT_N consecutive fits of at least
+# WEAK_MIN_INLIERS whose dx all exceed the tolerance on the SAME side are
+# evidence one junk fit cannot give: batch 5e trials 13-14 drifted right of the
+# stairs with five fits in a row at 15-30 inliers reading -120, -159, -204,
+# -219, -323 px and were refused all five times. Strafe once by their median.
+CONSISTENT_N = 3
 # A turn stop is verified against its own frame after the turn; if nothing
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
@@ -173,6 +180,14 @@ TURN_RETRY_MAX = 3
 # the user's path, with the counter just visible at the left edge; the stop's
 # frame fitted nothing head-on, the loop turned and walked into the wall.
 STOP_LOOK_DEG = (-25.0, 25.0)
+# A stop whose frame and both looks fit NOTHING is most likely an NPC in the
+# face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
+# again before spending retry pushes into whatever is there.
+STOP_WAIT_SEC = 2.0
+# A stop fit whose runner-up is within this fraction of it is AMBIGUOUS, not
+# verification: batch 5e trial 6 'verified' the bar-entrance stop on 33 inliers
+# against a runner-up of 33 with dx -386, and was short of the doorway.
+STOP_TIE_FRAC = 0.9
 # A retry (turn back, one more push) needs EVIDENCE of being short: the stop's
 # frame fitting an EARLIER waypoint, however thinly. A frame that fits nothing
 # is an occluded view or a stop already passed (batch 4 trial 8: Wanda the
@@ -196,7 +211,15 @@ WIDE_AHEAD = 60
 # The wide search runs from the FIRST blind push and inside turn retries, not
 # only after the budget: by then that trial was nose to nose with an NPC and
 # then against a wall, with nothing left to match. Provisional; logged.
-STRONG_MIN_INLIERS = 120
+STRONG_MIN_INLIERS = 165
+# LIVE census (overnight/census/live_gate_census.json, 2026-09-07 21:2x, 1,858
+# in-window fits from batches 4-5 and 468 far matches on the same frames):
+#   true fits, arriving trials   p05 13  p25 49  median 98  p95 179
+#   wrong-place matches (30 away) p25 0   median 6  p75 15   p95 126  max 164
+# No count separates these populations; the sequence window does the work.
+# 165 sits above the wrong-place MAXIMUM because a wrong relocalisation moves
+# the estimate by up to 60; FIX_MIN 29 and WEAK_MIN 15 stay, documented as
+# unseparable rather than moved without a population to move them to.
 # |stick| at or under this is "not walking": the tap records the COMMANDED value
 # and a settle or a turn is exactly 0.0. Frames whose ly is None (no tap, or a
 # chain older than this field) count as walking, so nothing is silently skipped.
@@ -280,12 +303,12 @@ def _fix_row(fix):
             ("k", "k_float", "inliers", "dx", "dy", "scale", "second", "detail")}
 
 
-def _save(shots, iteration, k, img, log):
+def _save(shots, iteration, k, img, log, suffix=""):
     if not shots:
         return
     try:
         os.makedirs(shots, exist_ok=True)
-        img.save(os.path.join(shots, f"it_{iteration:03d}_k{k}.jpg"), quality=88)
+        img.save(os.path.join(shots, f"it_{iteration:03d}_k{k}{suffix}.jpg"), quality=88)
     except Exception as e:                    # never let bookkeeping end a walk
         log(f"    could not save frame {iteration}: {type(e).__name__}: {e}")
 
@@ -470,7 +493,7 @@ def _timeout_diagnosis(res, n, min_iters, time_cap):
 def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
          journal=None, iteration_sec_floor=None, end_iterations=None,
          turn_to=None, push=None, strafe=None, jump=None, at_table=None,
-         now=time.time):
+         now=time.time, sleep=time.sleep):
     """Servo along `chain` until the dealer prompt is on screen.
 
     Returns {arrived, seconds, pushes, k_final, iterations, waypoints,
@@ -550,7 +573,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     plan = plan_indices(wps)
     n_turn = sum(1 for _, push, _ in plan if not push)
     n_push = len(plan) - n_turn
-    min_iters = max(min_iterations(n), plan_min_iterations(plan))
+    min_iters = plan_min_iterations(plan)     # the loop iterates per TARGET (audit)
     res["waypoints"] = n
     res["plan_targets"] = len(plan)
     res["plan_pushes"] = n_push
@@ -582,6 +605,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     lost = 0                    # iterations with nothing credible, budget spent
     turn_retries = 0            # retries spent on the current turn stop
     since_advance = 0           # iterations since k last rose
+    dx_run = []                 # dx of the last fits (>= WEAK_MIN_INLIERS), for the consistency rule
+    escaped_prev = False        # the previous iteration escaped: no lateral undo this one
+    waited_here = False         # the current stop has had its one wait
     k_prev_iter = 0
     unverified_turn = False     # the last stop was accepted unverified
     walk_heading = None         # the last heading a push was made along
@@ -626,12 +652,15 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         None, wait, jump (§8(g)).
         """
         nonlocal escapes
-        which = escapes
+        which = escapes % 3          # the ladder CYCLES: jump, left, right, jump, ...
         escapes += 1
         if which == 0:
+            # Jump comes round again: the one arrival that beat the patron
+            # wedge (batch 5c trial 2) had a jump; batch 5e trial 7, whose jump
+            # had fired earlier in the street, got only sidesteps there.
             jump()
             return "escape:jump"
-        side = LEFT if which % 2 == 1 else RIGHT
+        side = LEFT if which == 1 else RIGHT
         strafe(side * ESCAPE_STRAFE_MAG, ESCAPE_STRAFE_SEC)
         return "escape:left" if side < 0 else "escape:right"
 
@@ -740,7 +769,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # turn back, push once more along the walking heading, and retry.
             fix_t = chain.locate(img, target_k)
             inl_t = 0 if fix_t is None else (getattr(fix_t, "inliers", 0) or 0)
-            verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS
+            sec_t = 0 if fix_t is None else (getattr(fix_t, "second", 0) or 0)
+            tied = fix_t is not None and sec_t >= STOP_TIE_FRAC * max(1, inl_t)
+            verified = fix_t is not None and inl_t >= FIX_MIN_INLIERS and not tied
             if not verified:
                 # Maybe we are already PAST this stop (batch 3 trial 1 stood
                 # in the portrait room while the plan still said "doorway").
@@ -766,21 +797,25 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # skipped the retry that fixes a short stop, and were lost.
             kt = None if fix_t is None else int(getattr(fix_t, "k", target_k))
             dxt = 0.0 if fix_t is None else (getattr(fix_t, "dx", 0.0) or 0.0)
-            real = fix_t is not None and inl_t >= WEAK_MIN_INLIERS
+            real = fix_t is not None and inl_t >= WEAK_MIN_INLIERS and not tied
             # A REAL fit at the stop's OWN index with a large offset is the
             # stop seen from beside the user's path (batch 5c trial 3: the bar
             # doorway 297 px to the left, the loop right of it): strafe toward
             # the scene, once, and count the stop as seen. Sign per
             # pose.offset: dx < 0 = scene left = camera right = strafe LEFT.
             aligned = None
-            if real and kt == target_k and abs(dxt) > LATERAL_TOL_PX:
-                secs = min(LATERAL_CAP_SEC * 2, abs(dxt) / (LATERAL_GAIN * LATERAL_MAG))
-                if secs >= LATERAL_MIN_SEC:
+            if real and abs(kt - target_k) <= WINDOW:
+                # A real fit within the stop's window IS the stop seen (audit:
+                # the old guard verified only when the offset was LARGE and
+                # sent a well-aligned thin fit into three retry pushes).
+                verified = True
+                if abs(dxt) > LATERAL_TOL_PX:
+                    secs = min(LATERAL_CAP_SEC * 2, abs(dxt) / (LATERAL_GAIN * LATERAL_MAG))
+                    secs = max(secs, LATERAL_MIN_SEC)
                     side = RIGHT if dxt > 0 else LEFT
                     strafe(side * LATERAL_MAG, secs)
                     aligned = {"side": "right" if side > 0 else "left",
                                "seconds": round(secs, 3), "dx": round(dxt)}
-                    verified = True
             past_ev = not verified and real and kt is not None and kt > target_k
             looked = None
             if not verified and not past_ev and heading is not None:
@@ -790,7 +825,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 for ddeg in STOP_LOOK_DEG:
                     turn_to((heading + ddeg) % 360.0)
                     img2 = capture()
-                    _save(shots, iteration, k, img2, log)
+                    _save(shots, iteration, k, img2, log,
+                          suffix=f"_look{int(ddeg):+d}")
                     f2 = chain.locate(img2, target_k)
                     i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
                     if f2 is not None and i2 >= FIX_MIN_INLIERS and (best is None or i2 > best[1]):
@@ -834,6 +870,17 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     f"{'nothing' if fix_t is None else f'waypoint {int(fix_t.k)} at {inl_t} inliers'}"
                     f", no evidence of being short")
                 continue
+            if (not verified and (fix_t is None or tied) and looked is None
+                    and turn_retries == 0 and not waited_here):
+                waited_here = True
+                sleep(STOP_WAIT_SEC)
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": None, "action": "turn-wait", "lateral": None,
+                        "at_end": False, "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turn-wait: nothing fits "
+                    f"head-on or either side; waited {STOP_WAIT_SEC:.0f}s for whatever is there to move")
+                continue
             if (not verified and turn_retries < TURN_RETRY_MAX
                     and walk_heading is not None):
                 turn_retries += 1
@@ -854,6 +901,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             misses = 0
             stalls = 0
             turn_retries = 0
+            waited_here = False
             unverified_turn = not verified
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
@@ -887,6 +935,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 if int(back.k) < k:
                     k = max(0, int(back.k))
                     regressed = True
+                    # The plan pointer is otherwise monotone: without this,
+                    # the target stays > WINDOW ahead of k after a regression
+                    # and reached() is impossible (audit: 4 of 6 regressions).
+                    pi = 0
 
         escaped = False
         if regressed:
@@ -895,7 +947,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             blind = 0
             lost = 0
             action = "regressed"
-        elif weak and inl >= WEAK_MIN_INLIERS:
+        elif weak and inl >= WEAK_MIN_INLIERS and int(fix.k) > k:
             # WEAK BUT CONSISTENT: a thin fit that names the target (or its
             # neighbours) is corroboration, not blindness. Trial 1c spent the
             # whole blind budget on 18-23-inlier fits of the corridor that
@@ -906,7 +958,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             stalls = 0
             lost = 0
             # The blind budget is neither spent nor restored by a thin fit.
-            k = min(target_k, n - 1)
+            # Advance no further than the thin fit itself names (audit: 84 of
+            # 230 thin advances carried a fit BEHIND the target).
+            k = min(int(fix.k), target_k, n - 1)
             action = "advanced-weak"
         elif fix is None or weak:
             # THE SENSOR IS BLIND (nothing fit, or nothing credible). Dead-
@@ -922,6 +976,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             if wide is not None:
                 k = min(int(wide.k), n - 1)
                 fix = wide
+                weak = False
                 blind = 0
                 lost = 0
                 misses = 0
@@ -1003,7 +1058,23 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         # and would fight the escape it just paid for.
         lateral = None
         dx = None if (fix is None or weak) else getattr(fix, "dx", None)
-        if dx is not None and not escaped and abs(dx) > LATERAL_TOL_PX:
+        # The consistency rule: track dx of every fit of at least WEAK_MIN
+        # inliers; when the last CONSISTENT_N all exceed the tolerance on the
+        # same side, steer by their median as if it were one credible dx.
+        inl_now = 0 if fix is None else (getattr(fix, "inliers", 0) or 0)
+        if fix is not None and inl_now >= WEAK_MIN_INLIERS and getattr(fix, "dx", None) is not None:
+            dx_run.append(float(fix.dx))
+            dx_run = dx_run[-CONSISTENT_N:]
+        else:
+            dx_run = []
+        consistent = None
+        if dx is None and not escaped and len(dx_run) >= CONSISTENT_N \
+                and all(abs(v) > LATERAL_TOL_PX for v in dx_run) \
+                and len({v > 0 for v in dx_run}) == 1:
+            consistent = sorted(dx_run)[len(dx_run) // 2]
+            dx = consistent
+            dx_run = []
+        if dx is not None and not escaped and not escaped_prev and abs(dx) > LATERAL_TOL_PX:
             secs = min(LATERAL_CAP_SEC, abs(dx) / (LATERAL_GAIN * LATERAL_MAG))
             if secs < LATERAL_MIN_SEC:
                 secs = LATERAL_MIN_SEC     # a shorter push does not move at all
@@ -1012,10 +1083,13 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             lateral = {"dx": float(dx),
                        "side": "right" if side > 0 else "left",
                        "seconds": round(secs, 3)}
+            if consistent is not None:
+                lateral["consistent"] = CONSISTENT_N
 
         # `at_end` is what tells a terminal stall from a mid-chain one in
         # the journal: at the last waypoint k == target and no push can
         # advance it, so the two need different readings.
+        escaped_prev = escaped
         row = {"iteration": iteration, "k": k, "target": target_k,
                "fix": _fix_row(fix), "action": action, "lateral": lateral,
                "at_end": at_end,
