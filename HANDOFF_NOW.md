@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 07:58. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 07:45. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,7 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE STOP_LOOK_YAW A/B IS DONE (07:52): SHIP IT.** `overnight/chain_trials_ab_stop_yaw.*`,
+- **THE STOP_LOOK_YAW A/B IS DONE (07:40): SHIPPED at 07:43 as commit da361ef, the twenty-first launch (plain 25) running on it.** `overnight/chain_trials_ab_stop_yaw.*`,
   `agent_progress/closed-loop/review/ab_stop_yaw_score.out`:
 
       arm    arrived   walk median   129 looked   first credible dx after the stop

@@ -754,6 +754,8 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         fit's dx after a looked 129 stop, off arm median -352
                                                                         [-383..-264] on 5 of 5, on arm +72 [-96..+150] on 5 of 5
                                                                         (yaws -12.6..-22.9 deg) -- no overlap. SHIPPED ON (patch45).
+    da361ef  07:43         25     running                             patch45: STOP_LOOK_YAW = True, plain 25 -- the first full
+                                                                        batch with the rescue AND the yaw
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
