@@ -93,6 +93,15 @@ The loop for the night, in order, repeated:
    lesson: an UNVERIFIED stop (three failed verifications) should REWIND to the last credible k and
    relocalise, not advance the pointer to the stop on faith (unverified stops arrive 1 in 14 at 129, 0 in 6
    at 166). Candidate for a builder round after patch37.
+   (l) IN BUILD (workflow `stop-unverified-rewind`, `drafts/pending_after_ab/apply_patch41.py` when done, notes
+   `agent_progress/closed-loop/stop_rewind/`): b11 trial 13 (reader `notes_cur_t13_1788843745.md`) — at the
+   196 stop an NPC filled the frame, the fit was 13 inliers / runner-up 11 (under WEAK_MIN, neither None nor
+   tied), so turn-back/turn-wait were skipped and three retry pushes carried the character through a side
+   doorway into an unmapped corridor; turned-unverified then stamped k = 196. Three rules: a thin fit at a
+   stop counts as nothing; a retry needs a CREDIBLE fit at an earlier index; an unverified stop REWINDS to
+   the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
+   arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
+   detector miss (patch40's fixture).
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
