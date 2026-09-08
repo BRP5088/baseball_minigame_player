@@ -1,10 +1,30 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 22:16. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 22:34. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
-- **THE PAN A/B, SECOND ATTEMPT, RUNNING (22:13:30, commit 45436a0):** same harness and arms as below, on
+- **THE PAN A/B, SECOND ATTEMPT, STOPPED 22:24:47 at 7 trials (`overnight/chain_trials_ab_pan_try2.*`): pan off
+  1/4, pan on 1/2, 1 INVALID (the chiaki game window vanished mid-walk for a few seconds; chiaki itself never
+  restarted).** Trials 5, 6, 7 were all lost at Wanda (k=112) with the FULL ladder — jump, back, a 0.6 s left
+  detour — and the frames after the rungs show the camera pressed into dark geometry, so the sidestep is not
+  the instrument there; the turn is (the user, from the stream: "you walked too close to her and should have
+  turned left. It's okay that you got super close, you just didn't turn left enough"). **The turn-early rule
+  is being built** (workflow: an Opus builder, two Sonnet skeptics, a fix round) as a PENDING patch script,
+  `drafts/pending_after_ab/apply_patch33.py`, notes in `agent_progress/closed-loop/turn_early/`; it lands
+  when the console is idle (it is), then the A/B relaunches: `--trials 20 --arms off,on`.
+  **Trial 3 (pan off) walked right past the dealer's table to the windows** (the user saw it; reader:
+  `agent_progress/closed-loop/review/notes_ab2_t03.md`): the 196 stop's head-on fit failed, the -25 look
+  matched 199 at 117 inliers (runner-up 100), then every fit read the scene 460-591 px LEFT at 7-61 inliers
+  while the loop strafed left at the cap eight times, and the plan ran to 204 by count. **Two censuses over
+  all 83 journals, so nobody rebuilds them:** (1) the accepted fit's SCALE at a verified stop does NOT predict
+  arrival — at 196, scale < 0.9 arrived 6/8 and >= 0.9 24/26; a "short by scale" rule is refuted (§10.4).
+  (2) "the strafe is not taking" (three same-side corrections, |dx| > 150, never shrinking 20%) occurs in 23
+  of 83 trials, 11 of which arrived — no signal in general, and the common site (k=129-136, bar entrance) is
+  benign; but at the END (k >= 197) with |dx| > 450 it occurred 3 times tonight and none found the prompt,
+  against one arrival with 286-342 px. Candidate, n = 3: a large offset at the end that strafing does not
+  reduce means the character is passing the table on the wrong side; stop pushing and turn toward the scene.
+- **THE PAN A/B, SECOND ATTEMPT, LAUNCH RECORD (22:13:30, commit 45436a0):** same harness and arms as below, on
   top of the ladder round. **The first attempt (21:59-22:05, 2f27596) was stopped at 4 trials (off 0/2, on
   1/2; `overnight/chain_trials_ab_pan_try1.*`): Wanda Fuller, an NPC, stood on the route at k=112 in the
   portrait room and trials 1-3 walked into her face in BOTH arms** (frames: `overnight/chain_frames/
