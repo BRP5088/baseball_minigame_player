@@ -149,6 +149,13 @@ LOST_MAX = 9
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
 TURN_RETRY_MAX = 3
+# LOOK AROUND AT AN UNVERIFIED STOP before believing "occluded / past": yaw
+# these many degrees each way, match the stop's frame at each, and if a
+# credible fit appears take its lateral offset as a correction. Batch 5 trial
+# 2 (2026-09-07 20:08) stood beside the bar doorway, displaced to the right of
+# the user's path, with the counter just visible at the left edge; the stop's
+# frame fitted nothing head-on, the loop turned and walked into the wall.
+STOP_LOOK_DEG = (-25.0, 25.0)
 # A retry (turn back, one more push) needs EVIDENCE of being short: the stop's
 # frame fitting an EARLIER waypoint, however thinly. A frame that fits nothing
 # is an occluded view or a stop already passed (batch 4 trial 8: Wanda the
@@ -724,6 +731,41 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     continue
             short = (not verified and fix_t is not None
                      and int(getattr(fix_t, "k", target_k)) < target_k)
+            looked = None
+            if not verified and not short and heading is not None:
+                # LOOK AROUND before believing the stop is occluded or passed:
+                # a lateral displacement puts the stop's scene off to one side.
+                best = None
+                for ddeg in STOP_LOOK_DEG:
+                    turn_to((heading + ddeg) % 360.0)
+                    img2 = capture()
+                    _save(shots, iteration, k, img2, log)
+                    f2 = chain.locate(img2, target_k)
+                    i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
+                    if f2 is not None and i2 >= FIX_MIN_INLIERS and (best is None or i2 > best[1]):
+                        best = (ddeg, i2, f2)
+                turn_to(heading)
+                last_cmd = heading
+                if best is not None:
+                    ddeg, i2, f2 = best
+                    looked = {"deg": ddeg, "inliers": i2}
+                    verified = True
+                    fix_t, inl_t = f2, i2
+                    # The scene sat to one side: strafe toward it once. At
+                    # 18.6-20.8 px/deg (§8(j)) a 25 deg look is ~500 px, and
+                    # the fit's own dx (in the looked frame) refines it; sign
+                    # per pose.offset: dx > 0 -> RIGHT. Capped.
+                    # Yawing LEFT by d moves the scene RIGHT in the image by
+                    # ~19.7 px/deg; un-yaw it: the scene's offset from the
+                    # walking heading is dx + ddeg * 19.7 (ddeg < 0 = left).
+                    dx2 = getattr(f2, "dx", 0.0) or 0.0
+                    px = dx2 + ddeg * 19.7
+                    secs = min(LATERAL_CAP_SEC * 2, abs(px) / (LATERAL_GAIN * LATERAL_MAG))
+                    if secs >= LATERAL_MIN_SEC:
+                        side = RIGHT if px > 0 else LEFT
+                        strafe(side * LATERAL_MAG, secs)
+                        looked["strafe"] = {"side": "right" if side > 0 else "left",
+                                            "seconds": round(secs, 3), "px": round(px)}
             if not verified and not short:
                 k = target_k
                 misses = 0
@@ -761,8 +803,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             stalls = 0
             turn_retries = 0
             action = "turned" if verified else "turned-unverified"
+            if looked is not None:
+                action = "turned-looked"
             record({"iteration": iteration, "k": k, "target": target_k,
-                    "fix": _fix_row(fix_t), "action": action, "lateral": None,
+                    "fix": _fix_row(fix_t), "action": action, "lateral": looked,
                     "at_end": False, "seconds": round(now() - it_t0, 2),
                     "elapsed": round(now() - t0, 2)})
             log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action}"

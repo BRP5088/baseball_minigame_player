@@ -457,15 +457,42 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
 
+    def test_an_unverified_stop_looks_left_and_right_before_giving_up(self):
+        # Head-on the stop's frame fits nothing; looking 25 deg LEFT it fits
+        # credibly with the scene 60 px right of centre in that view -> the
+        # stop is verified, one strafe LEFT (the scene is ~430 px left of the
+        # walking heading), then the plan goes on. No retry push.
+        self.assertEqual(chain_walk.STOP_LOOK_DEG, (-25.0, 25.0))
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        # locates: it1 push -> Fix(1); it2 stop head-on -> None; look -25 -> credible
+        # (dx +60); look +25 -> None; it3 push -> Fix(3); it4 -> Fix(4)
+        ch = FakeChain(5, [Fix(k=1), None, Fix(k=2, inliers=90, dx=60.0), None,
+                           Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=7)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-looked"])
+        turns = [round(e[1]) for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns, [90, 0, 335, 25, 0], "look left, look right, back to the stop")
+        strafes = rig.strafes()
+        self.assertEqual(len(strafes), 1)
+        self.assertLess(strafes[0][1], 0.0, "the scene was to the LEFT: strafe left")
+        self.assertNotIn("turn-retry", acts)
+        self.assertEqual(res["fixes"][1]["lateral"]["deg"], -25.0)
+
     def test_a_stop_whose_frame_fits_nothing_is_occluded_not_short(self):
         # Batch 4 trial 8: an NPC in the face. No fit at the stop -> no retry
         # push; turn and go on.
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        ch = FakeChain(5, [Fix(k=1), None, Fix(k=3), Fix(k=4)], default=None)
+        # it2: head-on None, look left None, look right None -> occluded
+        ch = FakeChain(5, [Fix(k=1), None, None, None, Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
-        rig = Rig(ch, table_at=5)
+        rig = Rig(ch, table_at=7)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:2], ["advanced", "turned-occluded"])
@@ -476,9 +503,10 @@ class IndexAdvance(unittest.TestCase):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        ch = FakeChain(5, [Fix(k=1), Fix(k=3, inliers=9), Fix(k=3), Fix(k=4)], default=None)
+        # it2: head-on a junk fit at the stop's own index, looks None, None
+        ch = FakeChain(5, [Fix(k=1), Fix(k=3, inliers=9), None, None, Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
-        rig = Rig(ch, table_at=5)
+        rig = Rig(ch, table_at=7)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[1], "turned-past")
