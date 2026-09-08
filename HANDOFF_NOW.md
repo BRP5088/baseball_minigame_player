@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 10:22. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 11:08. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
@@ -64,7 +64,28 @@ heading error) the strafes could not close, stuck (`big_dx_midchain_census`: suc
 249 trials, 4 arrived -- a mid-chain end turn is REFUSED at that n); t12 a +29 deg yaw at the 196 stop
 then the end of the chain without the prompt (one case).
 
-**Running now (10:19): THE FIT-GATE A/B, commit ef717b1 = da361ef + patch46,** `--arms off,on --flag
+**THE FIT-GATE A/B IS INCONCLUSIVE (10:19-11:05, two launches, 19 valid): off 7/10, on 7/9, walk 89 vs
+91 s.** The gate fired twice in nine on-arm trials (one arrived, one lost to the stairs NPC); the off arm
+yawed on a far fit twice (both arrived). Two firings a side read nothing; the population is ~10% of trials
+and a decisive A/B needs ~100. STOP_YAW_NEAR_FIT_ONLY stays OFF; the code stays for the prior census (fits
+2-3 ahead: 3 of 7 lost). `overnight/chain_trials_ab_fitgate_part{1,2}.*`.
+
+**THE GAME WINDOW WENT OFF SCREEN SIX TIMES BETWEEN 10:30 AND 11:05** and each time the running walk died:
+chiaki runs fullscreen in its own Space; when the user switches to the Space with Chrome / Activity Monitor
+the window leaves the on-screen list (`input_controller.game_window_rect` lists on-screen windows only),
+`compass.fast_capture` raises NoGameWindow, the child dies. Caught live at 10:51:12. The old harness burnt
+the trial number in one second each time (20 numbers lost); **patch48 (landed 10:40)** makes the child wait
+up to 120 s for the window and the parent re-run an INVALID number twice, keeping the INVALID rows marked
+`window_retry`. A window-ID capture from another Space was probed and RETURNS NOTHING (macOS does not
+composite inactive Spaces), so the rule stands: chiaki's Space stays in front while a batch runs. The
+proper fix is a frame dump inside the chiaki patch (screen-independent capture) -- a rig project, queued.
+
+**Running now (11:06): THE DOOR-STEP A/B, commit 0226268 = ef717b1 + patch47 + patch48,** `--arms off,on
+--flag DOOR_STOP_EXTRA_PUSH --trials 20` (10 a side). Score: arrival per arm; the 39 stop's verifying
+action and fit SCALE per arm (looked stops sit at 0.87, head-on at 1.03; the step should move the on arm's
+looked share down and its scale toward 1.0); stairs losses per arm.
+
+**THE FIT-GATE A/B (10:19), for the record: commit ef717b1 = da361ef + patch46,** `--arms off,on --flag
 STOP_YAW_NEAR_FIT_ONLY --trials 20` (10 a side). Score: arrival per arm; the residual after the 129
 correction by the look-fit's offset (`yaw_firings_census.py` extended: rows with `yaw_skipped` are the
 on arm's fallbacks); the 39 stop's outcome in the on arm (its +3 fits now strafe). patch47 (the door

@@ -782,10 +782,21 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         stairs NPC (t5); 129 taken unverified then fits with dx
                                                                         +640 the strafes could not close (t9); a +29 deg yaw at the
                                                                         196 stop then the end without the prompt (t12)
-    ef717b1  10:19   A/B 20 (10/arm) running                             patch46 STOP_YAW_NEAR_FIT_ONLY, `--arms off,on --flag
-                                                                        STOP_YAW_NEAR_FIT_ONLY`: the yaw only when the look fits the
+    ef717b1  10:19   A/B     off 7/10    89 s                          patch46 STOP_YAW_NEAR_FIT_ONLY, `--arms off,on --flag
+             (2 launches)    on  7/9     91 s                          STOP_YAW_NEAR_FIT_ONLY`: the yaw only when the look fits the
                                                                         stop's index +-1, else the old strafe (fits 2-3 ahead
-                                                                        over-turned and lost 3 of 7)
+                                                                        over-turned and lost 3 of 7). INCONCLUSIVE: the gate fired
+                                                                        twice in nine on-arm trials (1 arrived, 1 lost to the stairs
+                                                                        NPC); the off arm yawed on a far fit twice (both arrived).
+                                                                        Ships OFF. 20 trial numbers were burnt by the game window
+                                                                        going off screen (the user's Space switches) -> patch48: the
+                                                                        harness waits up to 120 s and re-runs the number twice
+    0226268  11:06   A/B 20 (10/arm) running                             patch47 DOOR_STOP_EXTRA_PUSH, `--arms off,on --flag
+                                                                        DOOR_STOP_EXTRA_PUSH`: one more push toward the office door
+                                                                        before the stairs turn (the user's observation from the
+                                                                        stream; looked door stops sit at fit scale 0.87 and fail 3x
+                                                                        as often as head-on ones at 1.03). Instrument: the 39 stop's
+                                                                        fit scale and how it verifies, per arm
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
