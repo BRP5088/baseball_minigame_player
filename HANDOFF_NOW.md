@@ -102,6 +102,13 @@ The loop for the night, in order, repeated:
    the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
    arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
    detector miss (patch40's fixture).
+   (p) b13 trial 5 (02:3x): the prompt PLAINLY on screen at the end (frame it_072_k204, the same pose as the
+   patch40 fixture) and the detector still blind: score 0.147-0.191 with ONE OCR word — under the 0.20
+   conjunction. The OCR reads "Play ($50)" on every one of those frames at 3x, and at 4x reads two words on
+   two of three. "$50" is a token no route frame should carry. An OCR CENSUS over all 7,885 route frames +
+   81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
+   (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
+   supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
    (o') b12 trial 22's reader (`notes_cur_t22_1788847674.md`) refines it: turn-early fired TWICE in the
    trial, both times on pure GEOMETRY (the oval-mirror/sconce wall between the portrait room and the bar
    entrance), not an NPC; the 129 stop's -25 look fit at 182 inliers but its un-yawed strafe (-332 px) took
