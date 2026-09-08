@@ -19,8 +19,10 @@ def main(tn, log=os.path.join(ROOT, "overnight", "chain_trials.log")):
     line = next((l for l in open(log) if re.match(r"\[ *%d\] " % tn, l)), None)
     if line is None:
         raise SystemExit(f"no line for trial {tn} in {log}")
-    m = re.match(r"\[ *(\d+)\] (\w+)\s+k=(\d+)/\d+\s+it=(\d+)\s+pushes=(\d+)\s+seconds=([\d.]+).*?failure=(.*)", line.strip())
-    outcome, k, it, pushes, secs, failure = m.group(2), int(m.group(3)), int(m.group(4)), int(m.group(5)), float(m.group(6)), m.group(7)
+    m = re.match(r"\[ *(\d+)\] (\w+)\s+(?:(pan-\w+)\s+)?k=(\d+)/\d+\s+it=(\d+)\s+pushes=(\d+)\s+seconds=([\d.]+).*?failure=(.*)", line.strip())
+    if m is None:
+        raise SystemExit(f"cannot parse the trial line: {line.strip()}")
+    outcome, arm, k, it, pushes, secs, failure = m.group(2), m.group(3), int(m.group(4)), int(m.group(5)), int(m.group(6)), float(m.group(7)), m.group(8)
     journals = sorted(glob.glob(os.path.join(ROOT, "overnight", "chain_journals", f"route_user_1853_t{tn:02d}_*.jsonl")),
                       key=lambda p: int(re.search(r"_(\d{10})\.jsonl$", p).group(1)))
     j = journals[-1]
@@ -44,7 +46,7 @@ def main(tn, log=os.path.join(ROOT, "overnight", "chain_trials.log")):
     acts = {}
     for r in rows:
         acts[r["action"]] = acts.get(r["action"], 0) + 1
-    print(json.dumps({"batch": "cur", "trial": f"{tn:02d}", "outcome": outcome, "k": k, "seconds": secs, "failure": failure[:90],
+    print(json.dumps({"batch": "cur", "trial": f"{tn:02d}", "arm": arm, "outcome": outcome, "k": k, "seconds": secs, "failure": failure[:90],
                       "actions": acts, "sheet": os.path.relpath(sheet, ROOT), "journal": os.path.relpath(j, ROOT)}, separators=(",", ":")))
 
 
