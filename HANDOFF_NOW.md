@@ -4,13 +4,14 @@
 
 ## Now
 
-- **Batch 2 of closed-loop trials RUNNING (launched 19:36)**: `overnight/chain_trials.py --chain route_user_1853
-  --trials 10` -> `overnight/chain_trials.json` / `.log`, frames `overnight/chain_frames/t*/`, journals
-  `overnight/chain_journals/route_user_1853_t*.jsonl`. Batch 1 (archived as `overnight/chain_trials_batch1.*`):
-  2 ARRIVED (98 s, 121 s), 2 TIMED OUT at the door turn taken short; stopped at 4 of 10, fix landed (3ae35aa):
-  verified turn stops with retry, real weak gate, LOST early exit. Review a trial with
-  `tools/turn_review.py <shots dir> <journal>` -- look at the turns first. The user is at dinner; the run needs
-  no supervision.
+- **THE 25 IS RUNNING (launched 20:05:44)**: `overnight/chain_trials.py --chain route_user_1853 --trials 25`
+  -> `overnight/chain_trials.json` / `.log`, frames `overnight/chain_frames/t*/`, journals
+  `overnight/chain_journals/route_user_1853_t*.jsonl`. The requirement is 25 CONSECUTIVE arrivals; count the
+  longest run of ARRIVED lines. Batches so far (archived as `overnight/chain_trials_batch{1..4}.*`):
+  batch 1 2/4 (turn at the door taken short), batch 2 0/2 and batch 3 0/2 (lost at the street crossing),
+  batch 4 8/10 at 90-121 s (both misses: a stop whose frame fitted nothing, retried into an NPC). Each fixed
+  in `chain_walk.py`, the last one d9fbba8. Review a trial: `tools/turn_review.py <shots dir> <journal>`,
+  pair them by time (the journal name carries the epoch; the shots dir its ms). The user is at dinner.
 - **CLOSED-LOOP TRIALS RUNNING** (relaunched after trial 1's lesson): `overnight/chain_trials.py --chain
   route_user_1853 --trials 10` -> `overnight/chain_trials.json`, `.log`, frames `overnight/chain_frames/t*/`,
   journals `overnight/chain_journals/`. Chain = the USER's own drive (`chains/route_user_1853`, 205 waypoints,
