@@ -37,6 +37,13 @@ echo "\n== PERCEPTION PROFILE (the 0.9s nobody has ever split)"
 .venv/bin/python -B tools/profile_perception.py --chain route_user_1853 -n 20 \
   2>&1 | tee "overnight/census/perception_profile_$B.txt"
 
+echo "\n== SETTLE RESPONSE (the 700ms of fixed sleeps, never measured)"
+echo "   NOTE this PUSHES THE STICK. It needs the character standing ON the"
+echo "   chain, so it runs straight after a reset, not from wherever the last"
+echo "   trial died. If it says it cannot fit the current frame, reset first."
+.venv/bin/python -B tools/settle_response.py --chain route_user_1853 --pushes 6 \
+  2>&1 | tee "overnight/census/settle_response_$B.txt"
+
 echo "\nDONE. Next launch is a decision, not a default:"
 echo "  - frame dump GO?   swap at this boundary, then a plain 25 on the new binary"
 echo "  - frame dump NO?   another plain 25 on 2d31263 to accumulate patch51 firings"
