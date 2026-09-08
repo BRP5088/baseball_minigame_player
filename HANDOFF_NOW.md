@@ -109,6 +109,18 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (q) READY: `drafts/pending_after_ab/apply_patch41.py` STOP-UNVERIFIED REWIND (workflow done 02:5x; notes
+   `agent_progress/closed-loop/stop_rewind/`): a thin fit (< WEAK_MIN_INLIERS) at a stop counts as nothing
+   (back-off and looks first); a retry needs a CREDIBLE fit at an earlier index (in practice only a credible
+   tie can be both credible and unverified, since any credible fit in the stop's window verifies — the
+   audit's design; retries become rare); an unverified stop REWINDS k to the last credible k
+   (STOP_REWIND_MAX 2 per stop, a livelock bound not a measurement) and re-approaches with a full blind
+   budget. Skeptic 1 replayed b11 t13's numbers (13/11 then 6 at scale 0.21) and b11 t12's; skeptic 2 found
+   the rewind starving its own re-approach (unverified_turn -> END_BLIND_MAX 2 for the whole re-approach) —
+   fixed; the recheck reproduced the fix with its own scenario: 150 tests, eight builder mutants + the
+   skeptics' own caught. Dry-run on a cp copy of the current checkout: both test files green. Lands at the
+   thirteenth launch's end. Unmeasured live: the seconds a rewind costs (a step back, a wait, up to two
+   pushes) — report by cause.
    (o') b12 trial 22's reader (`notes_cur_t22_1788847674.md`) refines it: turn-early fired TWICE in the
    trial, both times on pure GEOMETRY (the oval-mirror/sconce wall between the portrait room and the bar
    entrance), not an NPC; the 129 stop's -25 look fit at 182 inliers but its un-yawed strafe (-332 px) took
