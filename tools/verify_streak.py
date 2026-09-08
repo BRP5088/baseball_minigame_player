@@ -31,6 +31,16 @@ def audit(d):
     rows = []
     for r in d.get("runs", []):
         bad = []
+        # AN INVALID TRIAL NEITHER BREAKS NOR EXTENDS A STREAK -- this project's
+        # convention, and it matters because the goal is 25 IN A ROW WITHIN ONE
+        # BATCH. An invalid means the trial could not be measured (the game
+        # window went behind Mission Control, the stream dropped), not that the
+        # walk failed. Counting it as a break would have cost a real streak of
+        # 17 today, reported as 16.
+        if r.get("outcome") == "INVALID":
+            rows.append((r.get("trial"), None, ["INVALID — not measured; "
+                                                "neither breaks nor extends"]))
+            continue
         if r.get("outcome") != "ARRIVED":
             bad.append(f"outcome {r.get('outcome')}")
         if not r.get("arrived"):
@@ -44,9 +54,27 @@ def audit(d):
         rows.append((r.get("trial"), not bad, bad))
     best = run = 0
     for _, ok, _ in rows:
+        if ok is None:          # INVALID: skipped entirely
+            continue
         run = run + 1 if ok else 0
         best = max(best, run)
     return rows, best
+
+
+def both_numbers(d):
+    """(trials, arrived, first-walk arrivals) -- the retry's honest pair.
+
+    A run that allows a reload after a lost walk must report the FIRST walk's
+    rate too, or it hides a regression: a controller that fell from 87% to 70%
+    would still show ~91% with two attempts and look healthy. The first attempt
+    is its own control, measured in the same session.
+    """
+    runs = d.get("runs", [])
+    scored = [r for r in runs if r.get("outcome") in ("ARRIVED", "FAILED")]
+    arrived = sum(1 for r in scored if r.get("outcome") == "ARRIVED")
+    firsts = [r.get("first_walk_arrived") for r in scored]
+    known = [f for f in firsts if f is not None]
+    return len(scored), arrived, (sum(1 for f in known if f), len(known))
 
 
 def selftest():
@@ -59,6 +87,11 @@ def selftest():
     bad = dict(good(2), at_table_recheck=False)
     rows, best = audit({"runs": [good(1), bad, good(3), good(4)]})
     assert best == 2, (rows, best)
+    # An INVALID between two arrivals must JOIN them, not split them.
+    inv = {"trial": 2, "outcome": "INVALID", "arrived": False}
+    rows, best = audit({"runs": [good(1), inv, good(3), good(4)]})
+    assert best == 3, (rows, best)
+    assert rows[1][1] is None and "INVALID" in rows[1][2][0], rows[1]
     assert any("did not hold" in c for _, _, cs in rows for c in cs)
     # ...and a missing recheck is not a pass
     missing = {k: v for k, v in good(1).items() if k != "at_table_recheck"}
@@ -88,6 +121,15 @@ def selftest():
     # arrivals in the record legitimately stop at 197-203 of 205.
     rows, best = audit({"runs": [good(1), dict(good(2), k_final=197), good(3)]})
     assert best == 3, (rows, best)
+    # both_numbers: a retried arrival must NOT inflate the first-walk rate.
+    n, arr, (fok, fn) = both_numbers({"runs": [
+        dict(good(1), first_walk_arrived=True),
+        dict(good(2), first_walk_arrived=False),      # arrived only on the retry
+        {"trial": 3, "outcome": "FAILED", "first_walk_arrived": False}]})
+    assert (n, arr) == (3, 2), (n, arr)
+    assert (fok, fn) == (1, 3), (fok, fn)
+    n2, arr2, (fok2, fn2) = both_numbers({"runs": [good(1)]})
+    assert fn2 == 0, "a single-attempt run records no first-walk field"
     rows, best = audit({"runs": []})
     assert best == 0 and rows == []
     print("selftest OK: a clean run, a false recheck breaking it, a missing "
@@ -102,7 +144,16 @@ if __name__ == "__main__":
     rows, best = audit(d)
     cfg = d.get("config", {})
     flags = {k: v for k, v in cfg.items() if isinstance(v, bool)}
+    n, arrived, (first_ok, first_n) = both_numbers(d)
     print(f"{path}: {len(rows)} trials, LONGEST FULLY-VERIFIED STREAK {best}")
+    if n:
+        print(f"  trial arrival     {arrived}/{n} = {arrived/n:.0%}")
+    if first_n:
+        print(f"  FIRST-WALK arrival {first_ok}/{first_n} = {first_ok/first_n:.0%}"
+              f"   <- the control; compare this with history, not the line above")
+    elif n:
+        print("  first-walk arrival: not recorded (a single-attempt run, where "
+              "the two are the same number)")
     print(f"  flags on this build: {flags or 'NONE RECORDED — patch53 adds them'}")
     for t, ok, bad in rows:
         if not ok:
