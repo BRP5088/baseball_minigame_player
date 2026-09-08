@@ -1,0 +1,584 @@
+chain trials: 25 of route_user_1853 (walk cap 400s + setup budget 180s = external ceiling 580s)
+  config {'PUSH_MAG': 0.45, 'PUSH_SEC': 0.4, 'MISS_MAX': 3, 'STALL_MAX': 4, 'WINDOW': 3, 'LATERAL_GAIN': 2400.0, 'LATERAL_MAG': 0.3, 'LATERAL_CAP_SEC': 0.3, 'LATERAL_TOL_PX': 35.0, 'TABLE_CHECK_TAIL': None, 'END_PUSH_UNITS': 0.05, 'end_iteration_budget': 1}
+  205 waypoints -> >= 204 iterations (k rises by at most 3 each), so the 400s cap allows 1.96s per iteration. An iteration is one turn, one push, three captures and a locate — if that budget looks impossible, the chain is too dense and every trial will TIME OUT for a reason that is not navigation.
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 81.7) -> YES
+      |   world back after 3.2s, spawn bearing 87 (E)
+      |   setup 13.1s (reset 10.6s, Chain.load 2.5s for 205 waypoints) of a 180s budget
+      |   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 204 iteration(s). The 400s cap allows 1.96s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+      |         turn to 271.3: TURNED to 270.0 (err +1.3) in 2 push(es)
+      |     it   1  k=  3 ->   3  turned to 271.3168428039934  (195 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   2  k=  4 ->   4  advanced        fix={'k': 6, 'k_float': 6.0, 'inliers': 45, 'dx': -22.399993896484375, 'dy': -6.0, 'scale': 1.1544180697809105, 'second': 27, 'detail': 'k=6 (6.00) inliers=45 second=27 dx=-22 scale=1.154 window=[2,6] fitted=[2, 3, 4, 5, 6]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.3, best 20.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   3  k=  7 ->   7  blind-advance   fix={'k': 4, 'k_float': 4.0, 'inliers': 12, 'dx': -28.400009155273438, 'dy': 47.72901916503906, 'scale': 1.676262131975825, 'second': 10, 'detail': 'k=4 (4.00) inliers=12 second=10 dx=-28 scale=1.676 window=[3,7] fitted=[3, 4, 5, 6, 7]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 12.4, best 12.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   4  k= 10 ->  10  blind-advance   fix={'k': 8, 'k_float': 8.0, 'inliers': 11, 'dx': -47.477142333984375, 'dy': 51.494476318359375, 'scale': 1.4335728845031488, 'second': 10, 'detail': 'k=8 (8.00) inliers=11 second=10 dx=-47 scale=1.434 window=[6,10] fitted=[6, 7, 8, 9, 10]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 10.6, best 10.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   5  k= 13 ->  13  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 8.6, best 8.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   6  k= 16 ->  16  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 9.0, best 9.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   7  k= 19 ->  19  blind-advance   fix=None
+      |         turn to 1.6: TURNED to 0.8 (err +0.8) in 2 push(es)
+      |     it   8  k= 39 ->  39  turned to 1.6055901753868653  (121 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 18.2, best 18.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   9  k= 40 ->  40  advanced        fix={'k': 40, 'k_float': 40.0, 'inliers': 42, 'dx': 18.0, 'dy': 337.27685546875, 'scale': 1.1322363118093837, 'second': 37, 'detail': 'k=40 (40.00) inliers=42 second=37 dx=+18 scale=1.132 window=[38,42] fitted=[38, 39, 40, 41, 42]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.8, best 20.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  10  k= 40 ->  43  stalled         fix={'k': 41, 'k_float': 41.0, 'inliers': 30, 'dx': 32.12799072265625, 'dy': 359.25128173828125, 'scale': 1.2392277896802453, 'second': 29, 'detail': 'k=41 (41.00) inliers=30 second=29 dx=+32 scale=1.239 window=[39,43] fitted=[39, 40, 41, 42, 43]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 35.3, best 35.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  11  k= 43 ->  43  advanced        fix={'k': 43, 'k_float': 43.0, 'inliers': 41, 'dx': 43.96038818359375, 'dy': 318.4000244140625, 'scale': 1.3313822113326945, 'second': 36, 'detail': 'k=43 (43.00) inliers=41 second=36 dx=+44 scale=1.331 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 31.2, best 31.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  12  k= 43 ->  46  stalled         fix={'k': 44, 'k_float': 44.0, 'inliers': 41, 'dx': 29.27996826171875, 'dy': 297.6000671386719, 'scale': 1.4445996044032643, 'second': 35, 'detail': 'k=44 (44.00) inliers=41 second=35 dx=+29 scale=1.445 window=[42,46] fitted=[42, 43, 44, 45, 46]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 24.7, best 24.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 1.5, best 1.5, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  13  k= 46 ->  46  advanced        fix={'k': 46, 'k_float': 46.0, 'inliers': 40, 'dx': 40.05999755859375, 'dy': 233.65444946289062, 'scale': 1.5429967067094503, 'second': 39, 'detail': 'k=46 (46.00) inliers=40 second=39 dx=+40 scale=1.543 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.11s, change 2.4, best 2.4, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  14  k= 49 ->  49  advanced        fix={'k': 49, 'k_float': 49.0, 'inliers': 113, 'dx': 78.3323974609375, 'dy': 185.71173095703125, 'scale': 1.5892996692410422, 'second': 72, 'detail': 'k=49 (49.00) inliers=113 second=72 dx=+78 scale=1.589 window=[45,49] fitted=[45, 46, 47, 48, 49]'}  strafe right 0.11s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.15s, change 2.4, best 2.4, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  15  k= 49 ->  52  stalled         fix={'k': 51, 'k_float': 51.0, 'inliers': 76, 'dx': 107.5057373046875, 'dy': 135.76004028320312, 'scale': 1.6907826563195187, 'second': 72, 'detail': 'k=51 (51.00) inliers=76 second=72 dx=+108 scale=1.691 window=[48,52] fitted=[48, 49, 50, 51, 52]'}  strafe right 0.15s
+      |         chain push: 1 chunk(s) of 0.40s, change 23.4, best 23.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 3.6, best 3.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  16  k= 52 ->  52  advanced        fix={'k': 52, 'k_float': 52.0, 'inliers': 33, 'dx': 214.9749755859375, 'dy': 11.278167724609375, 'scale': 1.9814382782560076, 'second': 22, 'detail': 'k=52 (52.00) inliers=33 second=22 dx=+215 scale=1.981 window=[48,52] fitted=[48, 49, 50, 51, 52]'}  strafe right 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 26.6, best 26.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  17  k= 55 ->  55  advanced        fix={'k': 55, 'k_float': 55.0, 'inliers': 34, 'dx': -10.91998291015625, 'dy': 242.93603515625, 'scale': 1.0058830911653438, 'second': 15, 'detail': 'k=55 (55.00) inliers=34 second=15 dx=-11 scale=1.006 window=[51,55] fitted=[51, 52, 53, 54, 55]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 28.2, best 28.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  18  k= 58 ->  58  advanced        fix={'k': 58, 'k_float': 58.0, 'inliers': 96, 'dx': -9.5999755859375, 'dy': 278.4000244140625, 'scale': 1.077484318498507, 'second': 96, 'detail': 'k=58 (58.00) inliers=96 second=96 dx=-10 scale=1.077 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 27.2, best 27.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  19  k= 58 ->  61  stalled         fix={'k': 59, 'k_float': 59.0, 'inliers': 129, 'dx': -9.0, 'dy': 295.4400329589844, 'scale': 1.1299527698589715, 'second': 119, 'detail': 'k=59 (59.00) inliers=129 second=119 dx=-9 scale=1.130 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 23.5, best 23.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  20  k= 58 ->  61  stalled         fix={'k': 60, 'k_float': 60.0, 'inliers': 123, 'dx': -9.5999755859375, 'dy': 307.72235107421875, 'scale': 1.1863459811138735, 'second': 95, 'detail': 'k=60 (60.00) inliers=123 second=95 dx=-10 scale=1.186 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 16.1, best 16.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  21  k= 61 ->  61  advanced        fix={'k': 61, 'k_float': 61.0, 'inliers': 112, 'dx': -8.709075927734375, 'dy': 313.564208984375, 'scale': 1.2264272263237943, 'second': 100, 'detail': 'k=61 (61.00) inliers=112 second=100 dx=-9 scale=1.226 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  22  k= 64 ->  64  advanced        fix={'k': 64, 'k_float': 64.0, 'inliers': 100, 'dx': -6.0999755859375, 'dy': 281.8184814453125, 'scale': 1.2018320857845413, 'second': 98, 'detail': 'k=64 (64.00) inliers=100 second=98 dx=-6 scale=1.202 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+      |     it  23  k= 88 ->  88  turned (skipped, same heading) to 1.3495539744498237  (92 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 3.2, best 3.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  24  k= 89 ->  89  advanced        fix={'k': 91, 'k_float': 91.0, 'inliers': 92, 'dx': 53.74774169921875, 'dy': -30.393600463867188, 'scale': 1.1468023595066958, 'second': 76, 'detail': 'k=91 (91.00) inliers=92 second=76 dx=+54 scale=1.147 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 15.0, best 15.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  25  k= 89 ->  92  stalled         fix={'k': 90, 'k_float': 90.0, 'inliers': 76, 'dx': -14.860748291015625, 'dy': -30.492507934570312, 'scale': 1.3520408410501303, 'second': 68, 'detail': 'k=90 (90.00) inliers=76 second=68 dx=-15 scale=1.352 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  26  k= 89 ->  92  stalled         fix={'k': 91, 'k_float': 91.0, 'inliers': 86, 'dx': -17.681884765625, 'dy': -32.735198974609375, 'scale': 1.4290112936908286, 'second': 73, 'detail': 'k=91 (91.00) inliers=86 second=73 dx=-18 scale=1.429 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 17.7, best 17.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  27  k= 92 ->  92  advanced        fix={'k': 92, 'k_float': 92.0, 'inliers': 85, 'dx': -22.521575927734375, 'dy': -26.150360107421875, 'scale': 1.484506312224832, 'second': 68, 'detail': 'k=92 (92.00) inliers=85 second=68 dx=-23 scale=1.485 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.6, best 20.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  28  k= 94 ->  94  advanced        fix={'k': 95, 'k_float': 95.0, 'inliers': 119, 'dx': -29.0994873046875, 'dy': 1.69207763671875, 'scale': 1.5001789605538738, 'second': 86, 'detail': 'k=95 (95.00) inliers=119 second=86 dx=-29 scale=1.500 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 24.2, best 24.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  29  k= 96 ->  96  advanced        fix={'k': 97, 'k_float': 97.0, 'inliers': 94, 'dx': -30.486068725585938, 'dy': 0.15826416015625, 'scale': 1.588083458721528, 'second': 84, 'detail': 'k=97 (97.00) inliers=94 second=84 dx=-30 scale=1.588 window=[93,97] fitted=[93, 94, 95, 96, 97]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 27.9, best 27.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  30  k= 98 ->  98  advanced        fix={'k': 99, 'k_float': 99.0, 'inliers': 107, 'dx': -33.94061279296875, 'dy': -12.863983154296875, 'scale': 1.6937493676410538, 'second': 90, 'detail': 'k=99 (99.00) inliers=107 second=90 dx=-34 scale=1.694 window=[95,99] fitted=[95, 96, 97, 98, 99]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 27.0, best 27.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 11.5, best 11.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  31  k=100 -> 100  advanced        fix={'k': 101, 'k_float': 101.0, 'inliers': 107, 'dx': -42.10552978515625, 'dy': -25.180755615234375, 'scale': 1.7977388423296967, 'second': 88, 'detail': 'k=101 (101.00) inliers=107 second=88 dx=-42 scale=1.798 window=[97,101] fitted=[97, 98, 99, 100, 101]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.3, best 20.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 12.9, best 12.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  32  k=102 -> 102  advanced        fix={'k': 102, 'k_float': 102.0, 'inliers': 103, 'dx': -101.84317016601562, 'dy': -32.622344970703125, 'scale': 2.0295456558832075, 'second': 99, 'detail': 'k=102 (102.00) inliers=103 second=99 dx=-102 scale=2.030 window=[99,103] fitted=[99, 100, 101, 102, 103]'}  strafe left 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.0, best 20.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.13s, change 3.0, best 3.0, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  33  k=104 -> 104  advanced        fix={'k': 105, 'k_float': 105.0, 'inliers': 99, 'dx': -92.69595336914062, 'dy': -49.261383056640625, 'scale': 2.1032936419259656, 'second': 77, 'detail': 'k=105 (105.00) inliers=99 second=77 dx=-93 scale=2.103 window=[101,105] fitted=[101, 102, 103, 104, 105]'}  strafe left 0.13s
+      |         chain push: 1 chunk(s) of 0.40s, change 17.0, best 17.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.18s, change 13.6, best 13.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  34  k=107 -> 107  advanced        fix={'k': 107, 'k_float': 107.0, 'inliers': 67, 'dx': -126.00534057617188, 'dy': -73.07638549804688, 'scale': 2.282426276822396, 'second': 64, 'detail': 'k=107 (107.00) inliers=67 second=64 dx=-126 scale=2.282 window=[103,107] fitted=[103, 104, 105, 106, 107]'}  strafe left 0.17s
+      |         chain push: 1 chunk(s) of 0.40s, change 23.7, best 23.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  35  k=109 -> 109  advanced        fix={'k': 110, 'k_float': 110.0, 'inliers': 35, 'dx': 0.480926513671875, 'dy': -31.54168701171875, 'scale': 3.2728664954899753, 'second': 11, 'detail': 'k=110 (110.00) inliers=35 second=11 dx=+0 scale=3.273 window=[106,110] fitted=[106, 107, 108, 109, 110]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 36.9, best 36.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  36  k=112 -> 112  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 38.1, best 38.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  37  k=114 -> 114  blind-advance   fix=None
+      |         turn to 303.3: TURNED to 305.1 (err -1.8) in 1 push(es)
+      |         turn to 278.3: TURNED to 279.6 (err -1.3) in 1 push(es)
+      |         turn to 328.3: TURNED to 327.0 (err +1.4) in 1 push(es)
+      |         turn to 303.3: TURNED to 303.6 (err -0.3) in 2 push(es)
+      |         chain strafe: 1 chunk(s) of 0.46s, change 19.9, best 19.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  38  k=129 -> 129  turned-looked to 303.34476843910807  (183 inliers at the stop)
+      |         turn to 299.8: NO-OP, already inside 4.0 deg (at 303.6, err -3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 15.0, best 15.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.24s, change 14.3, best 14.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  39  k=129 -> 130  stalled         fix={'k': 128, 'k_float': 128.0, 'inliers': 77, 'dx': -172.1088104248047, 'dy': -39.199981689453125, 'scale': 1.305257560561236, 'second': 74, 'detail': 'k=128 (128.00) inliers=77 second=74 dx=-172 scale=1.305 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe left 0.24s
+      |         chain push: 1 chunk(s) of 0.40s, change 14.3, best 14.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 9.0, best 9.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  40  k=129 -> 130  stalled         fix={'k': 129, 'k_float': 129.0, 'inliers': 89, 'dx': -257.3337707519531, 'dy': -60.2559814453125, 'scale': 1.5556770002012998, 'second': 78, 'detail': 'k=129 (129.00) inliers=89 second=78 dx=-257 scale=1.556 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 14.7, best 14.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.20s, change 20.7, best 20.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  41  k=130 -> 130  advanced        fix={'k': 132, 'k_float': 132.0, 'inliers': 89, 'dx': -145.26715087890625, 'dy': -53.183990478515625, 'scale': 1.4378205977236733, 'second': 87, 'detail': 'k=132 (132.00) inliers=89 second=87 dx=-145 scale=1.438 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe left 0.20s
+      |         turn to 298.3: TURNED to 300.8 (err -2.6) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 22.3, best 22.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 22.1, best 22.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  42  k=133 -> 133  advanced-past   fix={'k': 130, 'k_float': 130.0, 'inliers': 77, 'dx': -281.56060791015625, 'dy': -119.93437194824219, 'scale': 2.271033150921802, 'second': 62, 'detail': 'k=130 (130.00) inliers=77 second=62 dx=-282 scale=2.271 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 28.1, best 28.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 32.9, best 32.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  43  k=133 -> 136  stalled         fix={'k': 135, 'k_float': 135.0, 'inliers': 51, 'dx': -274.6587219238281, 'dy': -167.75682067871094, 'scale': 2.6740057312944185, 'second': 46, 'detail': 'k=135 (135.00) inliers=51 second=46 dx=-275 scale=2.674 window=[132,136] fitted=[132, 133, 134, 135, 136]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 36.2, best 36.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  44  k=136 -> 136  blind-advance   fix={'k': 136, 'k_float': 136.0, 'inliers': 13, 'dx': -209.67454528808594, 'dy': -196.6727294921875, 'scale': 3.4736224057983853, 'second': 8, 'detail': 'k=136 (136.00) inliers=13 second=8 dx=-210 scale=3.474 window=[132,136] fitted=[132, 133, 134, 135, 136]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 47.0, best 47.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  45  k=139 -> 139  advanced-weak   fix={'k': 137, 'k_float': 137.0, 'inliers': 27, 'dx': 167.0, 'dy': -63.59999084472656, 'scale': 1.155412350755489, 'second': 17, 'detail': 'k=137 (137.00) inliers=27 second=17 dx=+167 scale=1.155 window=[135,139] fitted=[135, 136, 137, 138, 139]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 50.9, best 50.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  46  k=142 -> 142  advanced        fix={'k': 142, 'k_float': 142.0, 'inliers': 42, 'dx': 9.244903564453125, 'dy': -35.984710693359375, 'scale': 1.430772739972296, 'second': 30, 'detail': 'k=142 (142.00) inliers=42 second=30 dx=+9 scale=1.431 window=[138,142] fitted=[138, 139, 140, 141, 142]'}
+      |         turn to 2.2: TURNED to 3.9 (err -1.6) in 1 push(es)
+      |     it  47  k=166 -> 166  turned to 2.2489998976495684  (121 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 18.8, best 18.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.28s, change 21.7, best 21.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  48  k=167 -> 167  advanced        fix={'k': 167, 'k_float': 167.0, 'inliers': 91, 'dx': 202.38348388671875, 'dy': -73.43997192382812, 'scale': 1.2273301145542264, 'second': 84, 'detail': 'k=167 (167.00) inliers=91 second=84 dx=+202 scale=1.227 window=[165,169] fitted=[165, 166, 167, 168, 169]'}  strafe right 0.28s
+      |         turn to 4.3: NO-OP, already inside 4.0 deg (at 3.9, err +0.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 27.3, best 27.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.28s, change 25.0, best 25.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  49  k=167 -> 169  stalled         fix={'k': 168, 'k_float': 168.0, 'inliers': 104, 'dx': 202.35845947265625, 'dy': -85.10731506347656, 'scale': 1.4724341235631682, 'second': 95, 'detail': 'k=168 (168.00) inliers=104 second=95 dx=+202 scale=1.472 window=[166,170] fitted=[166, 167, 168, 169, 170]'}  strafe right 0.28s
+      |         chain push: 1 chunk(s) of 0.40s, change 21.4, best 21.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.17s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  50  k=169 -> 169  advanced        fix={'k': 170, 'k_float': 170.0, 'inliers': 101, 'dx': 121.59600830078125, 'dy': -94.98236083984375, 'scale': 1.494643326855269, 'second': 88, 'detail': 'k=170 (170.00) inliers=101 second=88 dx=+122 scale=1.495 window=[166,170] fitted=[166, 167, 168, 169, 170]'}  strafe right 0.17s
+      |         turn to 2.2: NO-OP, already inside 4.0 deg (at 4.0, err -1.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 26.2, best 26.2, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 16.1, best 16.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  51  k=171 -> 171  advanced        fix={'k': 171, 'k_float': 171.0, 'inliers': 64, 'dx': -97.3084716796875, 'dy': -114.15998840332031, 'scale': 1.395915745084056, 'second': 60, 'detail': 'k=171 (171.00) inliers=64 second=60 dx=-97 scale=1.396 window=[168,172] fitted=[168, 169, 170, 171, 172]'}  strafe left 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 31.2, best 31.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  52  k=173 -> 173  advanced        fix={'k': 173, 'k_float': 173.0, 'inliers': 56, 'dx': 14.392059326171875, 'dy': -128.12503051757812, 'scale': 1.7406309914397047, 'second': 53, 'detail': 'k=173 (173.00) inliers=56 second=53 dx=+14 scale=1.741 window=[170,174] fitted=[170, 171, 172, 173, 174]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 32.7, best 32.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 11.6, best 11.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  53  k=176 -> 176  advanced        fix={'k': 176, 'k_float': 176.0, 'inliers': 65, 'dx': 48.57763671875, 'dy': -143.27197265625, 'scale': 1.723771303131831, 'second': 47, 'detail': 'k=176 (176.00) inliers=65 second=47 dx=+49 scale=1.724 window=[172,176] fitted=[172, 173, 174, 175, 176]'}  strafe right 0.10s
+      |         turn to 89.5: TURNED to 90.1 (err -0.7) in 1 push(es)
+      |     it  54  k=196 -> 196  turned to 89.491477293153  (111 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 30.9, best 30.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.23s, change 24.2, best 24.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  55  k=196 -> 197  stalled         fix={'k': 196, 'k_float': 196.0, 'inliers': 118, 'dx': 166.22674560546875, 'dy': -25.959976196289062, 'scale': 1.1752721456566095, 'second': 108, 'detail': 'k=196 (196.00) inliers=118 second=108 dx=+166 scale=1.175 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe right 0.23s
+      |         chain push: 1 chunk(s) of 0.40s, change 46.0, best 46.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.16s, change 29.9, best 29.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  56  k=197 -> 197  advanced        fix={'k': 198, 'k_float': 198.0, 'inliers': 113, 'dx': 117.37924194335938, 'dy': 5.299285888671875, 'scale': 1.7386104132844376, 'second': 90, 'detail': 'k=198 (198.00) inliers=113 second=90 dx=+117 scale=1.739 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe right 0.16s
+      |         chain push: 1 chunk(s) of 0.40s, change 49.6, best 49.6, hazards none — one push, so `best` IS the whole leg's travel
+      |   chain_walk: ARRIVED at iteration 57, k=197 (target 200 of 204), 51 push(es)
+[ 1] ARRIVED   k=197/205  it=57  pushes=51  seconds=96.7 (walk 81.84, setup 13.1)  failure=None
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 83.2) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   setup 13.3s (reset 10.7s, Chain.load 2.6s for 205 waypoints) of a 180s budget
+      |   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 204 iteration(s). The 400s cap allows 1.96s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+      |         turn to 271.3: TURNED to 269.4 (err +1.9) in 2 push(es)
+      |     it   1  k=  3 ->   3  turned to 271.3168428039934  (195 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 22.0, best 22.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   2  k=  4 ->   4  advanced        fix={'k': 6, 'k_float': 6.0, 'inliers': 49, 'dx': -14.0, 'dy': -8.79998779296875, 'scale': 1.1855547375888682, 'second': 32, 'detail': 'k=6 (6.00) inliers=49 second=32 dx=-14 scale=1.186 window=[2,6] fitted=[2, 3, 4, 5, 6]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.1, best 20.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   3  k=  7 ->   7  advanced-weak   fix={'k': 7, 'k_float': 7.0, 'inliers': 17, 'dx': 11.750396728515625, 'dy': 30.067230224609375, 'scale': 1.3636048054297158, 'second': 9, 'detail': 'k=7 (7.00) inliers=17 second=9 dx=+12 scale=1.364 window=[3,7] fitted=[3, 4, 5, 6, 7]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 14.3, best 14.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   4  k= 10 ->  10  blind-advance   fix={'k': 10, 'k_float': 10.0, 'inliers': 12, 'dx': -19.301040649414062, 'dy': 34.836517333984375, 'scale': 1.3769618486592157, 'second': 10, 'detail': 'k=10 (10.00) inliers=12 second=10 dx=-19 scale=1.377 window=[6,10] fitted=[7, 8, 9, 10]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 10.7, best 10.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   5  k= 13 ->  13  blind-advance   fix={'k': 13, 'k_float': 13.0, 'inliers': 6, 'dx': -56.17438507080078, 'dy': 43.64549255371094, 'scale': 1.3907639997679884, 'second': 6, 'detail': 'k=13 (13.00) inliers=6 second=6 dx=-56 scale=1.391 window=[9,13] fitted=[9, 11, 12, 13]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 9.0, best 9.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   6  k= 16 ->  16  blind-advance   fix={'k': 16, 'k_float': 16.0, 'inliers': 7, 'dx': -93.69599914550781, 'dy': 52.0, 'scale': 1.295104752436931, 'second': 6, 'detail': 'k=16 (16.00) inliers=7 second=6 dx=-94 scale=1.295 window=[12,16] fitted=[14, 16]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 8.2, best 8.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   7  k= 19 ->  19  blind-advance   fix=None
+      |         turn to 1.6: TURNED to 2.0 (err -0.3) in 2 push(es)
+      |     it   8  k= 39 ->  39  turned-past to 1.6055901753868653: the stop's frame fits waypoint 42 at 23 inliers, no evidence of being short
+      |         chain push: 1 chunk(s) of 0.40s, change 18.5, best 18.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 11.1, best 11.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   9  k= 40 ->  40  advanced        fix={'k': 41, 'k_float': 41.0, 'inliers': 38, 'dx': -40.459991455078125, 'dy': 298.79998779296875, 'scale': 1.2496982457243444, 'second': 37, 'detail': 'k=41 (41.00) inliers=38 second=37 dx=-40 scale=1.250 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 21.1, best 21.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  10  k= 43 ->  43  advanced-weak   fix={'k': 40, 'k_float': 40.0, 'inliers': 22, 'dx': -19.338531494140625, 'dy': 359.63720703125, 'scale': 1.1424302286590917, 'second': 21, 'detail': 'k=40 (40.00) inliers=22 second=21 dx=-19 scale=1.142 window=[39,43] fitted=[39, 40, 41, 42, 43]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 31.9, best 31.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  11  k= 46 ->  46  advanced        fix={'k': 46, 'k_float': 46.0, 'inliers': 43, 'dx': -34.8480224609375, 'dy': 283.0713806152344, 'scale': 1.1869488555237553, 'second': 39, 'detail': 'k=46 (46.00) inliers=43 second=39 dx=-35 scale=1.187 window=[42,46] fitted=[42, 43, 44, 45, 46]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 28.7, best 28.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 10.9, best 10.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  12  k= 49 ->  49  advanced        fix={'k': 49, 'k_float': 49.0, 'inliers': 153, 'dx': -50.39996337890625, 'dy': 272.20001220703125, 'scale': 1.1292849222262389, 'second': 148, 'detail': 'k=49 (49.00) inliers=153 second=148 dx=-50 scale=1.129 window=[45,49] fitted=[45, 46, 47, 48, 49]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 6.4, best 6.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  13  k= 49 ->  52  stalled         fix={'k': 51, 'k_float': 51.0, 'inliers': 183, 'dx': -40.31072998046875, 'dy': 256.7117919921875, 'scale': 1.1551722767680772, 'second': 174, 'detail': 'k=51 (51.00) inliers=183 second=174 dx=-40 scale=1.155 window=[48,52] fitted=[48, 49, 50, 51, 52]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 14.0, best 14.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  14  k= 52 ->  52  advanced        fix={'k': 52, 'k_float': 52.0, 'inliers': 172, 'dx': 0.880035400390625, 'dy': 232.36802673339844, 'scale': 1.230027713843326, 'second': 138, 'detail': 'k=52 (52.00) inliers=172 second=138 dx=+1 scale=1.230 window=[48,52] fitted=[48, 49, 50, 51, 52]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  15  k= 55 ->  55  advanced        fix={'k': 55, 'k_float': 55.0, 'inliers': 135, 'dx': -31.91998291015625, 'dy': 222.48001098632812, 'scale': 1.1726468290880272, 'second': 119, 'detail': 'k=55 (55.00) inliers=135 second=119 dx=-32 scale=1.173 window=[51,55] fitted=[51, 52, 53, 54, 55]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.9, best 20.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  16  k= 58 ->  58  advanced        fix={'k': 58, 'k_float': 58.0, 'inliers': 114, 'dx': -28.79998779296875, 'dy': 292.37762451171875, 'scale': 1.0078872039903528, 'second': 90, 'detail': 'k=58 (58.00) inliers=114 second=90 dx=-29 scale=1.008 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 30.0, best 30.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  17  k= 61 ->  61  advanced        fix={'k': 61, 'k_float': 61.0, 'inliers': 150, 'dx': -26.0, 'dy': 295.61248779296875, 'scale': 1.0019932976498631, 'second': 122, 'detail': 'k=61 (61.00) inliers=150 second=122 dx=-26 scale=1.002 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 29.1, best 29.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  18  k= 61 ->  64  stalled         fix={'k': 63, 'k_float': 63.269051582399875, 'inliers': 134, 'dx': -25.199981689453125, 'dy': 293.8208923339844, 'scale': 1.0145584158963208, 'second': 127, 'detail': 'k=63 (63.27) inliers=134 second=127 dx=-25 scale=1.015 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  19  k= 64 ->  64  advanced        fix={'k': 64, 'k_float': 64.0, 'inliers': 124, 'dx': -25.920013427734375, 'dy': 298.0, 'scale': 1.020320398497103, 'second': 120, 'detail': 'k=64 (64.00) inliers=124 second=120 dx=-26 scale=1.020 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+      |     it  20  k= 88 ->  88  turned (skipped, same heading) to 1.3495539744498237  (113 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 20.1, best 20.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  21  k= 88 ->  89  stalled         fix={'k': 88, 'k_float': 88.0, 'inliers': 100, 'dx': -10.79998779296875, 'dy': 15.240966796875, 'scale': 1.050959877154819, 'second': 98, 'detail': 'k=88 (88.00) inliers=100 second=98 dx=-11 scale=1.051 window=[87,91] fitted=[87, 88, 89, 90, 91]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 16.0, best 16.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 4.0, best 4.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  22  k= 88 ->  89  stalled         fix={'k': 87, 'k_float': 87.0, 'inliers': 90, 'dx': -51.920013427734375, 'dy': -30.72382354736328, 'scale': 1.186177888951213, 'second': 89, 'detail': 'k=87 (87.00) inliers=90 second=89 dx=-52 scale=1.186 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 8.6, best 8.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  23  k= 88 ->  89  stalled         fix={'k': 88, 'k_float': 88.0, 'inliers': 85, 'dx': -41.47198486328125, 'dy': -26.783966064453125, 'scale': 1.2240496876132763, 'second': 81, 'detail': 'k=88 (88.00) inliers=85 second=81 dx=-41 scale=1.224 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  24  k= 89 ->  89  advanced        fix={'k': 91, 'k_float': 91.0, 'inliers': 64, 'dx': -34.59452819824219, 'dy': -39.14398193359375, 'scale': 1.2946113790354963, 'second': 62, 'detail': 'k=91 (91.00) inliers=64 second=62 dx=-35 scale=1.295 window=[87,91] fitted=[87, 88, 89, 90, 91]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 17.5, best 17.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 10.1, best 10.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  25  k= 89 ->  92  stalled         fix={'k': 89, 'k_float': 89.0, 'inliers': 78, 'dx': -39.839996337890625, 'dy': -27.508773803710938, 'scale': 1.438442428585894, 'second': 75, 'detail': 'k=89 (89.00) inliers=78 second=75 dx=-40 scale=1.438 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.1, best 20.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 9.0, best 9.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  26  k= 92 ->  92  advanced        fix={'k': 92, 'k_float': 92.0, 'inliers': 80, 'dx': -38.00398254394531, 'dy': -29.30682373046875, 'scale': 1.5476667677329206, 'second': 79, 'detail': 'k=92 (92.00) inliers=80 second=79 dx=-38 scale=1.548 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  27  k= 94 ->  94  advanced        fix={'k': 95, 'k_float': 95.0, 'inliers': 136, 'dx': -31.29864501953125, 'dy': 1.36505126953125, 'scale': 1.4897906785288193, 'second': 109, 'detail': 'k=95 (95.00) inliers=136 second=109 dx=-31 scale=1.490 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  28  k= 96 ->  96  advanced        fix={'k': 97, 'k_float': 97.0, 'inliers': 103, 'dx': -30.199981689453125, 'dy': 1.040008544921875, 'scale': 1.5080921111693275, 'second': 76, 'detail': 'k=97 (97.00) inliers=103 second=76 dx=-30 scale=1.508 window=[93,97] fitted=[93, 94, 95, 96, 97]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 2.9, best 2.9, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  29  k= 98 ->  98  advanced        fix={'k': 98, 'k_float': 98.0, 'inliers': 105, 'dx': -42.268768310546875, 'dy': -10.229705810546875, 'scale': 1.6435162607122926, 'second': 93, 'detail': 'k=98 (98.00) inliers=105 second=93 dx=-42 scale=1.644 window=[95,99] fitted=[95, 96, 97, 98, 99]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 26.7, best 26.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 10.4, best 10.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  30  k=100 -> 100  advanced        fix={'k': 101, 'k_float': 101.0, 'inliers': 109, 'dx': -40.792236328125, 'dy': -24.0882568359375, 'scale': 1.7937450463900202, 'second': 93, 'detail': 'k=101 (101.00) inliers=109 second=93 dx=-41 scale=1.794 window=[97,101] fitted=[97, 98, 99, 100, 101]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 21.6, best 21.6, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.16s, change 14.4, best 14.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  31  k=102 -> 102  advanced        fix={'k': 102, 'k_float': 102.0, 'inliers': 102, 'dx': -115.66717529296875, 'dy': -31.475830078125, 'scale': 2.025788230210697, 'second': 98, 'detail': 'k=102 (102.00) inliers=102 second=98 dx=-116 scale=2.026 window=[99,103] fitted=[99, 100, 101, 102, 103]'}  strafe left 0.16s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.4, best 19.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.13s, change 12.2, best 12.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  32  k=104 -> 104  advanced        fix={'k': 105, 'k_float': 105.0, 'inliers': 101, 'dx': -92.54876708984375, 'dy': -47.35821533203125, 'scale': 2.0796549879481865, 'second': 72, 'detail': 'k=105 (105.00) inliers=101 second=72 dx=-93 scale=2.080 window=[101,105] fitted=[101, 102, 103, 104, 105]'}  strafe left 0.13s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.4, best 20.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  33  k=107 -> 107  advanced        fix={'k': 107, 'k_float': 107.0, 'inliers': 70, 'dx': -15.547378540039062, 'dy': -77.91446685791016, 'scale': 2.398695874307412, 'second': 54, 'detail': 'k=107 (107.00) inliers=70 second=54 dx=-16 scale=2.399 window=[103,107] fitted=[103, 104, 105, 106, 107]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 22.9, best 22.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 21.6, best 21.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  34  k=109 -> 109  advanced        fix={'k': 110, 'k_float': 110.0, 'inliers': 32, 'dx': -44.503265380859375, 'dy': -28.668304443359375, 'scale': 3.2344004436050096, 'second': 11, 'detail': 'k=110 (110.00) inliers=32 second=11 dx=-45 scale=3.234 window=[106,110] fitted=[106, 107, 108, 109, 110]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 46.3, best 46.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  35  k=112 -> 112  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 27.6, best 27.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  36  k=114 -> 114  blind-advance   fix={'k': 114, 'k_float': 114.0, 'inliers': 6, 'dx': 192.81431579589844, 'dy': -157.63363647460938, 'scale': 0.2897963956927449, 'second': 0, 'detail': 'k=114 (114.00) inliers=6 second=0 dx=+193 scale=0.290 window=[111,115] fitted=[114]'}
+      |         turn to 303.3: TURNED to 303.5 (err -0.2) in 2 push(es)
+      |     it  37  k=129 -> 129  turned to 303.34476843910807  (37 inliers at the stop)
+      |         turn to 299.8: NO-OP, already inside 4.0 deg (at 303.5, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 14.5, best 14.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  38  k=130 -> 130  blind-advance   fix=None
+      |         turn to 298.3: TURNED to 297.5 (err +0.8) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 9.5, best 9.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  39  k=133 -> 133  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 4.1, best 4.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  40  k=136 -> 136  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 3.5, best 3.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  41  k=139 -> 139  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 3.2, best 3.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  42  k=139 -> 142  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 2.9, best 2.9, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  43  k=139 -> 142  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 2.3, best 2.3, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  44  k=139 -> 142  escape:jump     fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 8.2, best 8.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  45  k=139 -> 142  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 6.6, best 6.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  46  k=139 -> 142  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 5.9, best 5.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 19.8, best 19.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  47  k=139 -> 142  escape:left     fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 21.9, best 21.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.25s, change 23.3, best 23.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  48  k=139 -> 142  stalled         fix={'k': 141, 'k_float': 140.40584463480437, 'inliers': 190, 'dx': -181.4400177001953, 'dy': -25.91998291015625, 'scale': 0.9459193091666384, 'second': 169, 'detail': 'k=141 (140.41) inliers=190 second=169 dx=-181 scale=0.946 window=[138,142] fitted=[138, 139, 140, 141, 142]'}  strafe left 0.25s
+      |         chain push: 1 chunk(s) of 0.40s, change 30.6, best 30.6, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.20s, change 29.2, best 29.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  49  k=142 -> 142  advanced        fix={'k': 142, 'k_float': 142.0, 'inliers': 189, 'dx': -140.40000915527344, 'dy': -31.0, 'scale': 1.0825438272449524, 'second': 153, 'detail': 'k=142 (142.00) inliers=189 second=153 dx=-140 scale=1.083 window=[138,142] fitted=[138, 139, 140, 141, 142]'}  strafe left 0.20s
+      |         turn to 2.2: TURNED to 3.2 (err -0.9) in 2 push(es)
+      |     it  50  k=166 -> 166  turned to 2.2489998976495684  (136 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 34.4, best 34.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  51  k=167 -> 167  advanced        fix={'k': 167, 'k_float': 167.0, 'inliers': 122, 'dx': -11.32000732421875, 'dy': -82.57998657226562, 'scale': 1.1761536383789022, 'second': 120, 'detail': 'k=167 (167.00) inliers=122 second=120 dx=-11 scale=1.176 window=[165,169] fitted=[165, 166, 167, 168, 169]'}
+      |         turn to 4.3: NO-OP, already inside 4.0 deg (at 2.9, err +1.3) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 30.1, best 30.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.12s, change 16.1, best 16.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  52  k=169 -> 169  advanced        fix={'k': 169, 'k_float': 169.0, 'inliers': 110, 'dx': -84.36319732666016, 'dy': -90.35999298095703, 'scale': 1.2403408355621253, 'second': 101, 'detail': 'k=169 (169.00) inliers=110 second=101 dx=-84 scale=1.240 window=[166,170] fitted=[166, 167, 168, 169, 170]'}  strafe left 0.12s
+      |         turn to 2.2: NO-OP, already inside 4.0 deg (at 3.0, err -0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 28.1, best 28.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  53  k=171 -> 171  advanced        fix={'k': 172, 'k_float': 172.0, 'inliers': 105, 'dx': -1.39996337890625, 'dy': -98.8800048828125, 'scale': 1.25053668412393, 'second': 102, 'detail': 'k=172 (172.00) inliers=105 second=102 dx=-1 scale=1.251 window=[168,172] fitted=[168, 169, 170, 171, 172]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 25.5, best 25.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.12s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  54  k=173 -> 173  advanced        fix={'k': 174, 'k_float': 174.0, 'inliers': 107, 'dx': -85.10055541992188, 'dy': -97.8739013671875, 'scale': 1.2443519608875782, 'second': 83, 'detail': 'k=174 (174.00) inliers=107 second=83 dx=-85 scale=1.244 window=[170,174] fitted=[170, 171, 172, 173, 174]'}  strafe left 0.12s
+      |         chain push: 1 chunk(s) of 0.40s, change 29.7, best 29.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  55  k=173 -> 176  stalled         fix={'k': 175, 'k_float': 175.0, 'inliers': 76, 'dx': -57.396942138671875, 'dy': -110.24636840820312, 'scale': 1.4739138936374003, 'second': 73, 'detail': 'k=175 (175.00) inliers=76 second=73 dx=-57 scale=1.474 window=[172,176] fitted=[172, 173, 174, 175, 176]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 32.9, best 32.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  56  k=176 -> 176  advanced        fix={'k': 176, 'k_float': 176.0, 'inliers': 73, 'dx': -12.59515380859375, 'dy': -131.1759796142578, 'scale': 1.746243382262177, 'second': 46, 'detail': 'k=176 (176.00) inliers=73 second=46 dx=-13 scale=1.746 window=[172,176] fitted=[172, 173, 174, 175, 176]'}
+      |         turn to 89.5: TURNED to 89.2 (err +0.2) in 1 push(es)
+      |     it  57  k=196 -> 196  turned to 89.491477293153  (114 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 30.0, best 30.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.27s, change 25.9, best 25.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  58  k=196 -> 197  stalled         fix={'k': 196, 'k_float': 196.0, 'inliers': 117, 'dx': 192.4000244140625, 'dy': -16.934356689453125, 'scale': 1.2131424816271899, 'second': 112, 'detail': 'k=196 (196.00) inliers=117 second=112 dx=+192 scale=1.213 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe right 0.27s
+      |         chain push: 1 chunk(s) of 0.40s, change 37.8, best 37.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.17s, change 27.1, best 27.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  59  k=197 -> 197  advanced        fix={'k': 199, 'k_float': 199.0, 'inliers': 110, 'dx': 120.43203735351562, 'dy': -18.728775024414062, 'scale': 1.4261663958302582, 'second': 90, 'detail': 'k=199 (199.00) inliers=110 second=90 dx=+120 scale=1.426 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe right 0.17s
+      |         chain push: 1 chunk(s) of 0.40s, change 49.5, best 49.5, hazards none — one push, so `best` IS the whole leg's travel
+      |   chain_walk: ARRIVED at iteration 60, k=197 (target 200 of 204), 54 push(es)
+[ 2] ARRIVED   k=197/205  it=60  pushes=54  seconds=94.2 (walk 79.25, setup 13.3)  failure=None
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 81.4) -> YES
+      |   world back after 3.2s, spawn bearing 87 (E)
+      |   setup 13.1s (reset 10.6s, Chain.load 2.6s for 205 waypoints) of a 180s budget
+      |   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 204 iteration(s). The 400s cap allows 1.96s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+      |         turn to 271.3: TURNED to 272.0 (err -0.6) in 2 push(es)
+      |     it   1  k=  3 ->   3  turned to 271.3168428039934  (195 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 20.5, best 20.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   2  k=  4 ->   4  advanced        fix={'k': 6, 'k_float': 6.0, 'inliers': 31, 'dx': 8.4000244140625, 'dy': 16.600006103515625, 'scale': 1.0915681757127635, 'second': 21, 'detail': 'k=6 (6.00) inliers=31 second=21 dx=+8 scale=1.092 window=[2,6] fitted=[2, 3, 4, 5, 6]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 19.4, best 19.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   3  k=  7 ->   7  advanced-weak   fix={'k': 7, 'k_float': 7.0, 'inliers': 17, 'dx': -38.81781005859375, 'dy': 27.37152099609375, 'scale': 1.2474106348080187, 'second': 16, 'detail': 'k=7 (7.00) inliers=17 second=16 dx=-39 scale=1.247 window=[3,7] fitted=[3, 4, 5, 6, 7]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 15.9, best 15.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   4  k= 10 ->  10  blind-advance   fix={'k': 10, 'k_float': 10.0, 'inliers': 13, 'dx': 30.45709228515625, 'dy': 29.552032470703125, 'scale': 1.4022674722557824, 'second': 11, 'detail': 'k=10 (10.00) inliers=13 second=11 dx=+30 scale=1.402 window=[6,10] fitted=[7, 8, 9, 10]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 13.5, best 13.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   5  k= 13 ->  13  blind-advance   fix={'k': 13, 'k_float': 13.0, 'inliers': 11, 'dx': -141.53567504882812, 'dy': 37.6234130859375, 'scale': 1.2246656085413379, 'second': 6, 'detail': 'k=13 (13.00) inliers=11 second=6 dx=-142 scale=1.225 window=[9,13] fitted=[10, 11, 13]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 9.0, best 9.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   6  k= 16 ->  16  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 7.5, best 7.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   7  k= 19 ->  19  blind-advance   fix=None
+      |         turn to 1.6: TURNED to 358.1 (err +3.5) in 1 push(es)
+      |     it   8  k= 39 ->  39  turned to 1.6055901753868653  (142 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 19.4, best 19.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.13s, change 11.9, best 11.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   9  k= 39 ->  40  stalled         fix={'k': 39, 'k_float': 39.0, 'inliers': 32, 'dx': 93.46141052246094, 'dy': 369.14190673828125, 'scale': 1.1922884938374747, 'second': 31, 'detail': 'k=39 (39.00) inliers=32 second=31 dx=+93 scale=1.192 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe right 0.13s
+      |         chain push: 1 chunk(s) of 0.40s, change 36.2, best 36.2, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 18.8, best 18.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  10  k= 40 ->  40  advanced        fix={'k': 41, 'k_float': 41.0, 'inliers': 39, 'dx': 102.24005126953125, 'dy': 347.20001220703125, 'scale': 1.3620378603339773, 'second': 37, 'detail': 'k=41 (41.00) inliers=39 second=37 dx=+102 scale=1.362 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe right 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 29.3, best 29.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 12.7, best 12.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  11  k= 40 ->  43  stalled         fix={'k': 40, 'k_float': 40.0, 'inliers': 42, 'dx': 99.37203979492188, 'dy': 329.36962890625, 'scale': 1.5256206103754963, 'second': 40, 'detail': 'k=40 (40.00) inliers=42 second=40 dx=+99 scale=1.526 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 32.0, best 32.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  12  k= 43 ->  43  advanced-weak   fix={'k': 43, 'k_float': 43.0, 'inliers': 28, 'dx': 113.92825317382812, 'dy': 291.357666015625, 'scale': 1.6830202104284742, 'second': 28, 'detail': 'k=43 (43.00) inliers=28 second=28 dx=+114 scale=1.683 window=[39,43] fitted=[39, 40, 41, 42, 43]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 15.7, best 15.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.18s, change 3.1, best 3.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  13  k= 46 ->  46  advanced        fix={'k': 46, 'k_float': 46.0, 'inliers': 34, 'dx': 131.90328979492188, 'dy': 207.8143310546875, 'scale': 1.785735822622393, 'second': 33, 'detail': 'k=46 (46.00) inliers=34 second=33 dx=+132 scale=1.786 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.18s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 4.6, best 4.6, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  14  k= 46 ->  49  stalled         fix={'k': 48, 'k_float': 48.0, 'inliers': 54, 'dx': 215.73898315429688, 'dy': 103.08450317382812, 'scale': 2.021396437556105, 'second': 45, 'detail': 'k=48 (48.00) inliers=54 second=45 dx=+216 scale=2.021 window=[45,49] fitted=[45, 46, 47, 48, 49]'}  strafe right 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  15  k= 49 ->  49  blind-advance   fix={'k': 49, 'k_float': 49.0, 'inliers': 9, 'dx': 62.2080078125, 'dy': 204.0, 'scale': 1.1625735678429974, 'second': 9, 'detail': 'k=49 (49.00) inliers=9 second=9 dx=+62 scale=1.163 window=[45,49] fitted=[48, 49]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 29.8, best 29.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  16  k= 67 ->  52  relocalised     fix={'k': 67, 'k_float': 61.33323732519631, 'inliers': 154, 'dx': 55.99998474121094, 'dy': 289.7640075683594, 'scale': 0.8490339742963046, 'second': 153, 'detail': 'k=67 (61.33) inliers=154 second=153 dx=+56 scale=0.849 window=[49,110] fitted=[49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]'}
+      |     it  17  k= 88 ->  88  turned (skipped, same heading) to 1.3495539744498237  (157 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 29.8, best 29.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 20.0, best 20.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  18  k= 88 ->  89  stalled         fix={'k': 88, 'k_float': 88.0, 'inliers': 142, 'dx': 52.5, 'dy': 14.51519775390625, 'scale': 0.9029503797811803, 'second': 136, 'detail': 'k=88 (88.00) inliers=142 second=136 dx=+52 scale=0.903 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 23.5, best 23.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 18.0, best 18.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  19  k= 89 ->  89  advanced        fix={'k': 91, 'k_float': 91.0, 'inliers': 107, 'dx': 41.760009765625, 'dy': 9.360015869140625, 'scale': 0.925729002406912, 'second': 104, 'detail': 'k=91 (91.00) inliers=107 second=104 dx=+42 scale=0.926 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 25.3, best 25.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 3.3, best 3.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  20  k= 89 ->  92  stalled         fix={'k': 89, 'k_float': 91.38117782161093, 'inliers': 95, 'dx': 57.0, 'dy': 17.418243408203125, 'scale': 1.0573538111404044, 'second': 88, 'detail': 'k=89 (91.38) inliers=95 second=88 dx=+57 scale=1.057 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 7.3, best 7.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  21  k= 89 ->  92  stalled         fix={'k': 88, 'k_float': 88.0, 'inliers': 103, 'dx': 63.93597412109375, 'dy': 20.399993896484375, 'scale': 1.0849291137601123, 'second': 94, 'detail': 'k=88 (88.00) inliers=103 second=94 dx=+64 scale=1.085 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 16.9, best 16.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  22  k= 89 ->  92  stalled         fix={'k': 90, 'k_float': 90.0, 'inliers': 77, 'dx': 4.800018310546875, 'dy': -53.25006103515625, 'scale': 1.2125617283972887, 'second': 72, 'detail': 'k=90 (90.00) inliers=77 second=72 dx=+5 scale=1.213 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  23  k= 89 ->  92  escape:jump     fix={'k': 89, 'k_float': 89.0, 'inliers': 84, 'dx': 34.12152099609375, 'dy': -28.353012084960938, 'scale': 1.1896092910962721, 'second': 79, 'detail': 'k=89 (89.00) inliers=84 second=79 dx=+34 scale=1.190 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 21.1, best 21.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  24  k= 92 ->  92  advanced        fix={'k': 92, 'k_float': 92.0, 'inliers': 78, 'dx': 31.200027465820312, 'dy': -41.05033874511719, 'scale': 1.2110975095944547, 'second': 76, 'detail': 'k=92 (92.00) inliers=78 second=76 dx=+31 scale=1.211 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 18.2, best 18.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  25  k= 92 ->  94  stalled         fix={'k': 93, 'k_float': 93.0, 'inliers': 89, 'dx': 27.78631591796875, 'dy': -33.5999755859375, 'scale': 1.3988446589446146, 'second': 85, 'detail': 'k=93 (93.00) inliers=89 second=85 dx=+28 scale=1.399 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 18.9, best 18.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  26  k= 94 ->  94  advanced        fix={'k': 95, 'k_float': 95.0, 'inliers': 105, 'dx': 30.0589599609375, 'dy': -1.52056884765625, 'scale': 1.3933245997165813, 'second': 90, 'detail': 'k=95 (95.00) inliers=105 second=90 dx=+30 scale=1.393 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 22.1, best 22.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  27  k= 96 ->  96  advanced        fix={'k': 97, 'k_float': 97.0, 'inliers': 129, 'dx': 33.696075439453125, 'dy': 3.11041259765625, 'scale': 1.4350043308543008, 'second': 111, 'detail': 'k=97 (97.00) inliers=129 second=111 dx=+34 scale=1.435 window=[93,97] fitted=[93, 94, 95, 96, 97]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 24.4, best 24.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  28  k= 98 ->  98  advanced        fix={'k': 99, 'k_float': 99.0, 'inliers': 130, 'dx': 30.740036010742188, 'dy': -1.7215728759765625, 'scale': 1.4753994006969497, 'second': 95, 'detail': 'k=99 (99.00) inliers=130 second=95 dx=+31 scale=1.475 window=[95,99] fitted=[95, 96, 97, 98, 99]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 29.1, best 29.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 14.0, best 14.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  29  k=100 -> 100  advanced        fix={'k': 101, 'k_float': 101.0, 'inliers': 139, 'dx': 42.10565185546875, 'dy': -14.591949462890625, 'scale': 1.641848246051759, 'second': 128, 'detail': 'k=101 (101.00) inliers=139 second=128 dx=+42 scale=1.642 window=[97,101] fitted=[97, 98, 99, 100, 101]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 25.0, best 25.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  30  k=102 -> 102  advanced        fix={'k': 103, 'k_float': 103.0, 'inliers': 145, 'dx': 6.74884033203125, 'dy': -25.5999755859375, 'scale': 1.7517753148512099, 'second': 109, 'detail': 'k=103 (103.00) inliers=145 second=109 dx=+7 scale=1.752 window=[99,103] fitted=[99, 100, 101, 102, 103]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.1, best 20.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  31  k=104 -> 104  advanced        fix={'k': 105, 'k_float': 105.0, 'inliers': 115, 'dx': 2.14886474609375, 'dy': -33.025482177734375, 'scale': 1.8384550255509753, 'second': 107, 'detail': 'k=105 (105.00) inliers=115 second=107 dx=+2 scale=1.838 window=[101,105] fitted=[101, 102, 103, 104, 105]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 18.0, best 18.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.15s, change 13.9, best 13.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  32  k=107 -> 107  advanced        fix={'k': 107, 'k_float': 107.0, 'inliers': 92, 'dx': -105.14923095703125, 'dy': -49.004791259765625, 'scale': 1.991265974139822, 'second': 84, 'detail': 'k=107 (107.00) inliers=92 second=84 dx=-105 scale=1.991 window=[103,107] fitted=[103, 104, 105, 106, 107]'}  strafe left 0.15s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.2, best 20.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  33  k=109 -> 109  advanced        fix={'k': 110, 'k_float': 110.0, 'inliers': 84, 'dx': -19.653533935546875, 'dy': 1.785247802734375, 'scale': 2.4567030318154783, 'second': 48, 'detail': 'k=110 (110.00) inliers=84 second=48 dx=-20 scale=2.457 window=[106,110] fitted=[106, 107, 108, 109, 110]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 27.0, best 27.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  34  k=112 -> 112  advanced-weak   fix={'k': 110, 'k_float': 110.0, 'inliers': 17, 'dx': -7.102264404296875, 'dy': 23.48272705078125, 'scale': 4.061629784866859, 'second': 12, 'detail': 'k=110 (110.00) inliers=17 second=12 dx=-7 scale=4.062 window=[108,112] fitted=[110, 111, 112]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 44.9, best 44.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  35  k=114 -> 114  blind-advance   fix=None
+      |         turn to 303.3: TURNED to 303.7 (err -0.3) in 1 push(es)
+      |     it  36  k=129 -> 129  turned-past to 303.34476843910807: the stop's frame fits waypoint 129 at 26 inliers, no evidence of being short
+      |         turn to 299.8: NO-OP, already inside 4.0 deg (at 303.7, err -3.9) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 22.7, best 22.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  37  k=130 -> 130  blind-advance   fix=None
+      |         turn to 298.3: TURNED to 299.6 (err -1.4) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 13.4, best 13.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  38  k=133 -> 133  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 1.7, best 1.7, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  39  k=136 -> 136  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 1.5, best 1.5, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  40  k=139 -> 139  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 1.3, best 1.3, hazards SHORT — one push, so `best` IS the whole leg's travel
+      |     it  41  k=142 -> 142  blind-advance   fix=None
+      |         turn to 2.2: TURNED to 1.4 (err +0.8) in 2 push(es)
+      |         turn to 337.2: TURNED to 337.2 (err +0.0) in 2 push(es)
+      |         turn to 27.2: TURNED to 25.8 (err +1.4) in 1 push(es)
+      |         turn to 2.2: TURNED to 4.6 (err -2.3) in 1 push(es)
+      |         turn to 298.3: TURNED to 297.9 (err +0.3) in 2 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 3.5, best 3.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  42  k=142 -> 166  turn-retry 1/3: the stop's frame did not fit (0 inliers); one more push along 298.3
+      |         turn to 2.2: TURNED to 359.9 (err +2.3) in 1 push(es)
+      |         turn to 337.2: TURNED to 338.1 (err -0.9) in 2 push(es)
+      |         turn to 27.2: TURNED to 26.6 (err +0.7) in 1 push(es)
+      |         turn to 2.2: TURNED to 3.3 (err -1.1) in 1 push(es)
+      |         turn to 298.3: TURNED to 299.3 (err -1.0) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 3.5, best 3.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  43  k=142 -> 166  turn-retry 2/3: the stop's frame did not fit (0 inliers); one more push along 298.3
+      |         turn to 2.2: TURNED to 3.2 (err -1.0) in 2 push(es)
+      |         turn to 337.2: TURNED to 337.0 (err +0.2) in 2 push(es)
+      |         turn to 27.2: TURNED to 25.6 (err +1.7) in 1 push(es)
+      |         turn to 2.2: TURNED to 4.3 (err -2.1) in 1 push(es)
+      |         turn to 298.3: TURNED to 295.0 (err +3.3) in 4 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 4.1, best 4.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  44  k=142 -> 166  turn-retry 3/3: the stop's frame did not fit (0 inliers); one more push along 298.3
+      |         turn to 2.2: TURNED to 0.3 (err +1.9) in 2 push(es)
+      |         turn to 337.2: TURNED to 336.6 (err +0.7) in 1 push(es)
+      |         turn to 27.2: TURNED to 25.1 (err +2.2) in 1 push(es)
+      |         turn to 2.2: TURNED to 4.4 (err -2.2) in 1 push(es)
+      |     it  45  k=166 -> 166  turned-unverified to 2.2489998976495684  (0 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 4.9, best 4.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  46  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 4.7, best 4.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  47  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 5.4, best 5.4, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 9.2, best 9.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  48  k=166 -> 167  escape:left     fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 4.7, best 4.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  49  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 5.5, best 5.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  50  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 7.8, best 7.8, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 38.2, best 38.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  51  k=166 -> 167  escape:right    fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 17.3, best 17.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  52  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  53  k=166 -> 167  miss            fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 17.0, best 17.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 33.9, best 33.9, hazards none — one push, so `best` IS the whole leg's travel
+      |   chain_walk: LOST — 9 iterations with nothing credible after the blind budget at k=166 of 204
+[ 3] FAILED    k=166/205  it=54  pushes=49  seconds=110.3 (walk 95.47, setup 13.1)  failure=lost at k=166 of 204: 9 iterations with no credible fix after 6 blind advances
+      |   pause menu open (selected 'Resume')
+      |   selected: Load Last Save
+      |   confirmation dialog up (delta 82.6) -> YES
+      |   world back after 3.3s, spawn bearing 87 (E)
+      |   setup 13.2s (reset 10.6s, Chain.load 2.6s for 205 waypoints) of a 180s budget
+      |   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 204 iteration(s). The 400s cap allows 1.96s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+      |         turn to 271.3: TURNED to 275.2 (err -3.9) in 2 push(es)
+      |     it   1  k=  3 ->   3  turned to 271.3168428039934  (80 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 20.0, best 20.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 10.8, best 10.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   2  k=  4 ->   4  advanced        fix={'k': 6, 'k_float': 6.0, 'inliers': 29, 'dx': -55.24072265625, 'dy': 19.906585693359375, 'scale': 1.139496137867713, 'second': 23, 'detail': 'k=6 (6.00) inliers=29 second=23 dx=-55 scale=1.139 window=[2,6] fitted=[2, 3, 4, 5, 6]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 20.3, best 20.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   3  k=  7 ->   7  blind-advance   fix={'k': 7, 'k_float': 7.0, 'inliers': 14, 'dx': -116.97552490234375, 'dy': 33.82084655761719, 'scale': 1.3948146149603577, 'second': 13, 'detail': 'k=7 (7.00) inliers=14 second=13 dx=-117 scale=1.395 window=[3,7] fitted=[3, 4, 5, 6, 7]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 14.8, best 14.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   4  k= 10 ->  10  blind-advance   fix={'k': 10, 'k_float': 10.0, 'inliers': 11, 'dx': 56.6400146484375, 'dy': 67.67999267578125, 'scale': 1.2529603784555379, 'second': 8, 'detail': 'k=10 (10.00) inliers=11 second=8 dx=+57 scale=1.253 window=[6,10] fitted=[6, 7, 8, 9, 10]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 9.5, best 9.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   5  k= 13 ->  13  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 7.0, best 7.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   6  k= 16 ->  16  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 5.5, best 5.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   7  k= 19 ->  19  blind-advance   fix=None
+      |         turn to 1.6: TURNED to 359.0 (err +2.6) in 1 push(es)
+      |         turn to 336.6: TURNED to 336.7 (err -0.1) in 1 push(es)
+      |         turn to 26.6: TURNED to 29.0 (err -2.4) in 1 push(es)
+      |         turn to 1.6: TURNED to 0.5 (err +1.1) in 2 push(es)
+      |         turn to 271.3: TURNED to 273.6 (err -2.3) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 7.5, best 7.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it   8  k= 19 ->  39  turn-retry 1/3: the stop's frame did not fit (0 inliers); one more push along 271.3
+      |         turn to 1.6: TURNED to 1.5 (err +0.1) in 2 push(es)
+      |     it   9  k= 39 ->  39  turned to 1.6055901753868653  (131 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 15.0, best 15.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 11.2, best 11.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  10  k= 40 ->  40  advanced        fix={'k': 42, 'k_float': 42.0, 'inliers': 51, 'dx': -55.93743133544922, 'dy': 330.72003173828125, 'scale': 1.3393344299414656, 'second': 46, 'detail': 'k=42 (42.00) inliers=51 second=46 dx=-56 scale=1.339 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 42.3, best 42.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.11s, change 12.4, best 12.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  11  k= 40 ->  43  stalled         fix={'k': 40, 'k_float': 40.0, 'inliers': 50, 'dx': 81.02981567382812, 'dy': 299.1452941894531, 'scale': 1.342697203276788, 'second': 48, 'detail': 'k=40 (40.00) inliers=50 second=48 dx=+81 scale=1.343 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.11s
+      |         chain push: 1 chunk(s) of 0.40s, change 32.9, best 32.9, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.13s, change 12.1, best 12.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  12  k= 40 ->  43  stalled         fix={'k': 40, 'k_float': 40.0, 'inliers': 55, 'dx': 94.280029296875, 'dy': 280.03570556640625, 'scale': 1.5309156428777193, 'second': 49, 'detail': 'k=40 (40.00) inliers=55 second=49 dx=+94 scale=1.531 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.13s
+      |         chain push: 1 chunk(s) of 0.40s, change 28.5, best 28.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 5.8, best 5.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  13  k= 43 ->  43  advanced-past   fix={'k': 40, 'k_float': 40.0, 'inliers': 43, 'dx': 101.341552734375, 'dy': 262.7805480957031, 'scale': 1.7259561026033208, 'second': 40, 'detail': 'k=40 (40.00) inliers=43 second=40 dx=+101 scale=1.726 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 16.2, best 16.2, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 6.4, best 6.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  14  k= 46 ->  46  advanced        fix={'k': 46, 'k_float': 46.0, 'inliers': 39, 'dx': 102.274658203125, 'dy': 153.94189453125, 'scale': 1.8018885278765377, 'second': 28, 'detail': 'k=46 (46.00) inliers=39 second=28 dx=+102 scale=1.802 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.14s
+      |         chain push: 1 chunk(s) of 0.40s, change 19.5, best 19.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.18s, change 3.7, best 3.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  15  k= 49 ->  49  advanced        fix={'k': 49, 'k_float': 49.0, 'inliers': 49, 'dx': 131.256103515625, 'dy': 73.50726318359375, 'scale': 1.8948453393937346, 'second': 38, 'detail': 'k=49 (49.00) inliers=49 second=38 dx=+131 scale=1.895 window=[45,49] fitted=[45, 46, 47, 48, 49]'}  strafe right 0.18s
+      |         chain push: 1 chunk(s) of 0.40s, change 22.7, best 22.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.24s, change 4.3, best 4.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  16  k= 52 ->  52  advanced        fix={'k': 52, 'k_float': 52.0, 'inliers': 38, 'dx': 173.51605224609375, 'dy': 0.4458160400390625, 'scale': 2.002217683204908, 'second': 33, 'detail': 'k=52 (52.00) inliers=38 second=33 dx=+174 scale=2.002 window=[48,52] fitted=[48, 49, 50, 51, 52]'}  strafe right 0.24s
+      |         chain push: 1 chunk(s) of 0.40s, change 28.2, best 28.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  17  k= 55 ->  55  advanced-weak   fix={'k': 55, 'k_float': 55.0, 'inliers': 24, 'dx': -24.999969482421875, 'dy': 199.00001525878906, 'scale': 1.0168797603241149, 'second': 12, 'detail': 'k=55 (55.00) inliers=24 second=12 dx=-25 scale=1.017 window=[51,55] fitted=[53, 54, 55]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 29.5, best 29.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  18  k= 58 ->  58  advanced        fix={'k': 58, 'k_float': 58.0, 'inliers': 106, 'dx': -23.619491577148438, 'dy': 234.35842895507812, 'scale': 1.0906434463705383, 'second': 91, 'detail': 'k=58 (58.00) inliers=106 second=91 dx=-24 scale=1.091 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 28.7, best 28.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  19  k= 58 ->  61  stalled         fix={'k': 59, 'k_float': 59.0, 'inliers': 117, 'dx': -24.240020751953125, 'dy': 252.97923278808594, 'scale': 1.1553701910148408, 'second': 107, 'detail': 'k=59 (59.00) inliers=117 second=107 dx=-24 scale=1.155 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  20  k= 58 ->  61  stalled         fix={'k': 60, 'k_float': 60.0, 'inliers': 113, 'dx': -25.57440185546875, 'dy': 264.8000183105469, 'scale': 1.2179768743716837, 'second': 101, 'detail': 'k=60 (60.00) inliers=113 second=101 dx=-26 scale=1.218 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  21  k= 61 ->  61  advanced        fix={'k': 61, 'k_float': 61.0, 'inliers': 113, 'dx': -26.399993896484375, 'dy': 265.7526550292969, 'scale': 1.274102241679128, 'second': 85, 'detail': 'k=61 (61.00) inliers=113 second=85 dx=-26 scale=1.274 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 17.4, best 17.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  22  k= 64 ->  64  advanced        fix={'k': 64, 'k_float': 64.0, 'inliers': 130, 'dx': -20.295181274414062, 'dy': 226.43719482421875, 'scale': 1.1500460537063388, 'second': 114, 'detail': 'k=64 (64.00) inliers=130 second=114 dx=-20 scale=1.150 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+      |     it  23  k= 88 ->  88  turned (skipped, same heading) to 1.3495539744498237  (101 inliers at the stop)
+      |         chain push: 1 chunk(s) of 0.40s, change 17.3, best 17.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 8.3, best 8.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  24  k= 89 ->  89  advanced        fix={'k': 89, 'k_float': 89.0, 'inliers': 83, 'dx': 51.36004638671875, 'dy': -69.39999389648438, 'scale': 1.1849042857490937, 'second': 78, 'detail': 'k=89 (89.00) inliers=83 second=78 dx=+51 scale=1.185 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe right 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 16.5, best 16.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 11.2, best 11.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  25  k= 89 ->  92  stalled         fix={'k': 89, 'k_float': 89.0, 'inliers': 84, 'dx': -49.268707275390625, 'dy': -71.25599670410156, 'scale': 1.3943689895543574, 'second': 71, 'detail': 'k=89 (89.00) inliers=84 second=71 dx=-49 scale=1.394 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 18.7, best 18.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 8.5, best 8.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  26  k= 89 ->  92  stalled         fix={'k': 91, 'k_float': 91.0, 'inliers': 79, 'dx': -37.199981689453125, 'dy': -73.34396362304688, 'scale': 1.519154918184307, 'second': 77, 'detail': 'k=91 (91.00) inliers=79 second=77 dx=-37 scale=1.519 window=[88,92] fitted=[88, 89, 90, 91, 92]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 21.4, best 21.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  27  k= 89 ->  92  stalled         fix={'k': 91, 'k_float': 91.0, 'inliers': 85, 'dx': -33.01165771484375, 'dy': -65.06875610351562, 'scale': 1.7437968786214382, 'second': 76, 'detail': 'k=91 (91.00) inliers=85 second=76 dx=-33 scale=1.744 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 25.4, best 25.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  28  k= 92 ->  92  advanced-weak   fix={'k': 92, 'k_float': 92.0, 'inliers': 15, 'dx': -30.22607421875, 'dy': -55.279937744140625, 'scale': 1.811220073505088, 'second': 15, 'detail': 'k=92 (92.00) inliers=15 second=15 dx=-30 scale=1.811 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 28.2, best 28.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  29  k= 94 ->  94  advanced-weak   fix={'k': 95, 'k_float': 95.0, 'inliers': 28, 'dx': -35.738800048828125, 'dy': -73.05915832519531, 'scale': 1.9809683738087493, 'second': 15, 'detail': 'k=95 (95.00) inliers=28 second=15 dx=-36 scale=1.981 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 25.7, best 25.7, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.10s, change 13.9, best 13.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  30  k= 96 ->  96  advanced        fix={'k': 97, 'k_float': 97.0, 'inliers': 81, 'dx': -36.58551025390625, 'dy': -68.22137451171875, 'scale': 2.130326209948076, 'second': 53, 'detail': 'k=97 (97.00) inliers=81 second=53 dx=-37 scale=2.130 window=[93,97] fitted=[93, 94, 95, 96, 97]'}  strafe left 0.10s
+      |         chain push: 1 chunk(s) of 0.40s, change 15.3, best 15.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  31  k= 98 ->  98  advanced        fix={'k': 99, 'k_float': 99.0, 'inliers': 87, 'dx': -16.590606689453125, 'dy': -73.79995727539062, 'scale': 2.0951457307424226, 'second': 64, 'detail': 'k=99 (99.00) inliers=87 second=64 dx=-17 scale=2.095 window=[95,99] fitted=[95, 96, 97, 98, 99]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 21.7, best 21.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  32  k=100 -> 100  advanced        fix={'k': 100, 'k_float': 100.0, 'inliers': 70, 'dx': -9.006729125976562, 'dy': -93.27000427246094, 'scale': 2.4900565559092036, 'second': 60, 'detail': 'k=100 (100.00) inliers=70 second=60 dx=-9 scale=2.490 window=[97,101] fitted=[97, 98, 99, 100, 101]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 20.3, best 20.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.26s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  33  k=102 -> 102  advanced        fix={'k': 103, 'k_float': 103.0, 'inliers': 37, 'dx': -188.42266845703125, 'dy': -132.89137268066406, 'scale': 2.7918402174557118, 'second': 35, 'detail': 'k=103 (103.00) inliers=37 second=35 dx=-188 scale=2.792 window=[99,103] fitted=[99, 100, 101, 102, 103]'}  strafe left 0.26s
+      |         chain push: 1 chunk(s) of 0.40s, change 24.3, best 24.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  34  k=104 -> 104  blind-advance   fix={'k': 105, 'k_float': 105.0, 'inliers': 6, 'dx': 121.09884643554688, 'dy': -150.34091186523438, 'scale': 3.4221605420068673, 'second': 0, 'detail': 'k=105 (105.00) inliers=6 second=0 dx=+121 scale=3.422 window=[101,105] fitted=[105]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 47.5, best 47.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  35  k=107 -> 107  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 25.5, best 25.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  36  k=109 -> 109  blind-advance   fix={'k': 107, 'k_float': 107.0, 'inliers': 6, 'dx': -192.1002655029297, 'dy': -119.02798461914062, 'scale': 0.004428431756605876, 'second': 0, 'detail': 'k=107 (107.00) inliers=6 second=0 dx=-192 scale=0.004 window=[106,110] fitted=[107]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 30.0, best 30.0, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  37  k=112 -> 112  blind-advance   fix=None
+      |         chain push: 1 chunk(s) of 0.40s, change 36.7, best 36.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  38  k=114 -> 114  blind-advance   fix={'k': 114, 'k_float': 114.0, 'inliers': 11, 'dx': 52.88861083984375, 'dy': -44.0968017578125, 'scale': 3.195752757595235, 'second': 9, 'detail': 'k=114 (114.00) inliers=11 second=9 dx=+53 scale=3.196 window=[111,115] fitted=[112, 113, 114, 115]'}
+      |         turn to 303.3: TURNED to 303.5 (err -0.1) in 1 push(es)
+      |     it  39  k=129 -> 129  turned-past to 303.34476843910807: the stop's frame fits waypoint 129 at 22 inliers, no evidence of being short
+      |         turn to 299.8: NO-OP, already inside 4.0 deg (at 303.5, err -3.7) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 32.5, best 32.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 23.2, best 23.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  40  k=130 -> 130  advanced        fix={'k': 131, 'k_float': 131.0, 'inliers': 36, 'dx': -390.0, 'dy': -62.899986267089844, 'scale': 1.1206573974742515, 'second': 34, 'detail': 'k=131 (131.00) inliers=36 second=34 dx=-390 scale=1.121 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe left 0.30s
+      |         turn to 298.3: TURNED to 297.9 (err +0.3) in 1 push(es)
+      |         chain push: 1 chunk(s) of 0.40s, change 14.0, best 14.0, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 12.8, best 12.8, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  41  k=130 -> 133  stalled         fix={'k': 132, 'k_float': 132.0, 'inliers': 193, 'dx': -263.52001953125, 'dy': -75.74398803710938, 'scale': 1.2090995339382775, 'second': 120, 'detail': 'k=132 (132.00) inliers=193 second=120 dx=-264 scale=1.209 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 13.1, best 13.1, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 6.4, best 6.4, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  42  k=130 -> 133  stalled         fix={'k': 131, 'k_float': 131.0, 'inliers': 148, 'dx': -235.23199462890625, 'dy': -97.52400207519531, 'scale': 1.4466035284118457, 'second': 141, 'detail': 'k=131 (131.00) inliers=148 second=141 dx=-235 scale=1.447 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 21.2, best 21.2, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.30s, change 25.7, best 25.7, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  43  k=133 -> 133  advanced-past   fix={'k': 130, 'k_float': 130.0, 'inliers': 104, 'dx': -229.0540008544922, 'dy': -114.8225326538086, 'scale': 1.8210141639416768, 'second': 101, 'detail': 'k=130 (130.00) inliers=104 second=101 dx=-229 scale=1.821 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe left 0.30s
+      |         chain push: 1 chunk(s) of 0.40s, change 32.3, best 32.3, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.29s, change 33.1, best 33.1, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  44  k=136 -> 136  advanced        fix={'k': 136, 'k_float': 136.0, 'inliers': 158, 'dx': -208.05599975585938, 'dy': -138.01597595214844, 'scale': 1.8068511974635348, 'second': 80, 'detail': 'k=136 (136.00) inliers=158 second=80 dx=-208 scale=1.807 window=[132,136] fitted=[132, 133, 134, 135, 136]'}  strafe left 0.29s
+      |         chain push: 1 chunk(s) of 0.40s, change 39.3, best 39.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  45  k=139 -> 139  advanced-weak   fix={'k': 137, 'k_float': 137.0, 'inliers': 24, 'dx': 218.36672973632812, 'dy': -126.0230712890625, 'scale': 1.5840598182865662, 'second': 19, 'detail': 'k=137 (137.00) inliers=24 second=19 dx=+218 scale=1.584 window=[135,139] fitted=[135, 136, 137, 138, 139]'}
+      |         chain push: 1 chunk(s) of 0.40s, change 42.5, best 42.5, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  46  k=142 -> 142  advanced-weak   fix={'k': 142, 'k_float': 142.0, 'inliers': 26, 'dx': 122.98117065429688, 'dy': -101.40171813964844, 'scale': 1.430937836887969, 'second': 23, 'detail': 'k=142 (142.00) inliers=26 second=23 dx=+123 scale=1.431 window=[138,142] fitted=[138, 139, 140, 141, 142]'}
+      |         turn to 2.2: TURNED to 3.7 (err -1.4) in 1 push(es)
+      |     it  47  k=166 -> 166  turned-past to 2.2489998976495684: the stop's frame fits waypoint 169 at 19 inliers, no evidence of being short
+      |         chain push: 1 chunk(s) of 0.40s, change 26.9, best 26.9, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  48  k=167 -> 167  advanced-weak   fix={'k': 165, 'k_float': 165.0, 'inliers': 18, 'dx': 172.70001220703125, 'dy': -120.69998931884766, 'scale': 1.0880841805359707, 'second': 17, 'detail': 'k=165 (165.00) inliers=18 second=17 dx=+173 scale=1.088 window=[165,169] fitted=[165, 166, 167, 168, 169]'}
+      |         turn to 4.3: NO-OP, already inside 4.0 deg (at 3.5, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  49  k=169 -> 169  advanced-weak   fix={'k': 170, 'k_float': 167.7289656444701, 'inliers': 23, 'dx': 158.97601318359375, 'dy': -120.95999145507812, 'scale': 1.0433184582293316, 'second': 17, 'detail': 'k=170 (167.73) inliers=23 second=17 dx=+159 scale=1.043 window=[166,170] fitted=[166, 167, 168, 169, 170]'}
+      |         turn to 2.2: NO-OP, already inside 4.0 deg (at 3.6, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+      |         chain push: 1 chunk(s) of 0.40s, change 22.5, best 22.5, hazards none — one push, so `best` IS the whole leg's travel
+      |         chain strafe: 1 chunk(s) of 0.14s, change 44.2, best 44.2, hazards none — one push, so `best` IS the whole leg's travel
+      |     it  50  k=171 -> 171  advanced        fix={'k': 172, 'k_float': 170.55732022525416, 'inliers': 95, 'dx': 98.63995361328125, 'dy': -119.760009765625, 'scale': 0.8754348965632962, 'second': 82, 'detail': 'k=172 (170.56) inliers=95 second=82 dx=+99 scale=0.875 window=[168,172] fitted=[168, 169, 170, 171, 172]'}  strafe right 0.14s

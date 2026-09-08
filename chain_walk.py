@@ -745,9 +745,24 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # waypoint. A junk fit at any index is no evidence: batch 5b
             # trials 2, 5 and 6 read 6-12-inlier fits at k >= stop as "past",
             # skipped the retry that fixes a short stop, and were lost.
-            past_ev = (not verified and fix_t is not None
-                       and inl_t >= WEAK_MIN_INLIERS
-                       and int(getattr(fix_t, "k", target_k)) >= target_k)
+            kt = None if fix_t is None else int(getattr(fix_t, "k", target_k))
+            dxt = 0.0 if fix_t is None else (getattr(fix_t, "dx", 0.0) or 0.0)
+            real = fix_t is not None and inl_t >= WEAK_MIN_INLIERS
+            # A REAL fit at the stop's OWN index with a large offset is the
+            # stop seen from beside the user's path (batch 5c trial 3: the bar
+            # doorway 297 px to the left, the loop right of it): strafe toward
+            # the scene, once, and count the stop as seen. Sign per
+            # pose.offset: dx < 0 = scene left = camera right = strafe LEFT.
+            aligned = None
+            if real and kt == target_k and abs(dxt) > LATERAL_TOL_PX:
+                secs = min(LATERAL_CAP_SEC * 2, abs(dxt) / (LATERAL_GAIN * LATERAL_MAG))
+                if secs >= LATERAL_MIN_SEC:
+                    side = RIGHT if dxt > 0 else LEFT
+                    strafe(side * LATERAL_MAG, secs)
+                    aligned = {"side": "right" if side > 0 else "left",
+                               "seconds": round(secs, 3), "dx": round(dxt)}
+                    verified = True
+            past_ev = not verified and real and kt is not None and kt > target_k
             looked = None
             if not verified and not past_ev and heading is not None:
                 # LOOK AROUND before believing the stop is occluded or passed:
@@ -788,6 +803,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls = 0
                 turn_retries = 0
+                unverified_turn = True          # accepted on thin evidence
                 why = "past"
                 record({"iteration": iteration, "k": k, "target": target_k,
                         "fix": _fix_row(fix_t), "action": f"turned-{why}",
@@ -823,8 +839,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
                 action = "turned-looked"
+            if aligned is not None:
+                action = "turned-aligned"
             record({"iteration": iteration, "k": k, "target": target_k,
-                    "fix": _fix_row(fix_t), "action": action, "lateral": looked,
+                    "fix": _fix_row(fix_t), "action": action,
+                    "lateral": looked if looked is not None else aligned,
                     "at_end": False, "seconds": round(now() - it_t0, 2),
                     "elapsed": round(now() - t0, 2)})
             log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action}"

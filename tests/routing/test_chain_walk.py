@@ -531,6 +531,38 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[5:7], ["blind-advance"] * 2)
         self.assertEqual(acts[7], "miss", "an unverified turn allows two blind pushes, not six")
 
+    def test_a_real_fit_at_the_stop_with_a_large_offset_strafes_toward_the_scene(self):
+        # Batch 5c trial 3: 26 inliers at the stop's own index, dx -297: the
+        # doorway is LEFT of the loop. One strafe LEFT, stop counted as seen,
+        # no retry, no blind march.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(5, [Fix(k=1), Fix(k=2, inliers=26, dx=-297.0), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=6)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-aligned"])
+        strafes = rig.strafes()
+        self.assertEqual(len(strafes), 1)
+        self.assertLess(strafes[0][1], 0.0, "dx < 0: the scene is left, strafe LEFT")
+        self.assertNotIn("turn-retry", acts)
+        self.assertEqual(res["fixes"][1]["lateral"]["dx"], -297)
+
+    def test_a_past_acceptance_caps_blind_pushes_like_any_unverified_turn(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 40, start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(43, [Fix(k=1), Fix(k=5, inliers=20)], default=None)   # a thin fit PAST the stop
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=12.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[1], "turned-past")
+        self.assertEqual(acts[2:4], ["blind-advance"] * 2)
+        self.assertEqual(acts[4], "miss", "two blind pushes after a 'past' acceptance, not six")
+
     def test_a_stop_whose_frame_fits_a_later_waypoint_is_passed_not_short(self):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
