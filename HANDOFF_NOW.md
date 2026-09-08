@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 11:08. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 11:50. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
@@ -80,7 +80,26 @@ up to 120 s for the window and the parent re-run an INVALID number twice, keepin
 composite inactive Spaces), so the rule stands: chiaki's Space stays in front while a batch runs. The
 proper fix is a frame dump inside the chiaki patch (screen-independent capture) -- a rig project, queued.
 
-**Running now (11:06): THE DOOR-STEP A/B, commit 0226268 = ef717b1 + patch47 + patch48,** `--arms off,on
+**THE DOOR-STEP A/B WON (11:06-11:48, 10 a side): SHIPPED ON at 11:45 (patch50, commit a780ed6).**
+`overnight/chain_trials_ab_doorstep.*`: on arm 10/10 with the 39 stop verified head-on on every trial
+(66 inliers, fit scale 1.04 [1.01..1.11]); off arm 9/10 with looked 3 / aligned 6 / unverified 1 (the
+loss, scale 0.80), 38 inliers, scale 0.96. The user's own observation from the stream ("take 1 more
+step towards the door ... saves you from rubbing against the banister"), built as one extra push along
+the corridor before the stairs turn, measured by the stop's own fit. Three window kills were re-run by
+patch48 and counted nothing.
+
+**Running now (11:46): the twenty-sixth launch, commit a780ed6, plain 25 -- rescue + yaw + door step
+all ON.** **In build (workflow `chiaki-frame-dump`, since 11:13):** a decoded-frame dump inside the chiaki
+patch (an mmap file chiaki writes at ~20 Hz; `compass.fast_capture` reads it first and falls back to the
+screen), so capture never depends on the window being on screen -- the user asked for it now rather
+than later. It lands only at a batch boundary through the builder's swap script (restart_chiaki.sh with
+the new build; never over a running binary). **Then, the user's next design (endorsed 11:35): LOOK WHILE
+PUSHING** -- sample the dump at 20 Hz during a push and end the push early when the picture stops
+changing (pinned) or the target scene arrives; stop-or-continue first, steering after, A/B'd like the
+rest. The user's words: "same-ish idea [as the graveyard's steering while walking] but this
+implementation is much better."
+
+**THE DOOR-STEP A/B (11:06) for the record: commit 0226268 = ef717b1 + patch47 + patch48,** `--arms off,on
 --flag DOOR_STOP_EXTRA_PUSH --trials 20` (10 a side). Score: arrival per arm; the 39 stop's verifying
 action and fit SCALE per arm (looked stops sit at 0.87, head-on at 1.03; the step should move the on arm's
 looked share down and its scale toward 1.0); stairs losses per arm.

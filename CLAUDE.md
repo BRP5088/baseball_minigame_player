@@ -791,12 +791,17 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         Ships OFF. 20 trial numbers were burnt by the game window
                                                                         going off screen (the user's Space switches) -> patch48: the
                                                                         harness waits up to 120 s and re-runs the number twice
-    0226268  11:06   A/B 20 (10/arm) running                             patch47 DOOR_STOP_EXTRA_PUSH, `--arms off,on --flag
-                                                                        DOOR_STOP_EXTRA_PUSH`: one more push toward the office door
-                                                                        before the stairs turn (the user's observation from the
-                                                                        stream; looked door stops sit at fit scale 0.87 and fail 3x
-                                                                        as often as head-on ones at 1.03). Instrument: the 39 stop's
-                                                                        fit scale and how it verifies, per arm
+    0226268  11:06   A/B     off 9/10                                  patch47 DOOR_STOP_EXTRA_PUSH, `--arms off,on --flag
+             (10/arm)        on 10/10                                  DOOR_STOP_EXTRA_PUSH`: one more push toward the office door
+                                                                        before the stairs turn -- THE USER'S OBSERVATION FROM THE
+                                                                        STREAM. The instrument decided it: the 39 stop verified
+                                                                        HEAD-ON on 10 of 10 on-arm trials (66 inliers, fit scale
+                                                                        1.04 [1.01..1.11]) against looked 3 / aligned 6 / unverified
+                                                                        1 (the loss) on the off arm (38 inliers, scale 0.96 with a
+                                                                        0.80 tail). SHIPPED ON (patch50). Also landed: patch48, the
+                                                                        harness waits for a missing game window and re-runs the
+                                                                        trial number instead of burning it
+    a780ed6  11:46         25     running                             the door step ON, plain 25: rescue + yaw + door step
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
