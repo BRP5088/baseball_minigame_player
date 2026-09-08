@@ -243,8 +243,18 @@ The loop for the night, in order, repeated:
   9 of 12, walk median 80.6 s [71..97], best streak 3** (`overnight/chain_trials_batch15.*`, gitignored).
   Its three failures: t4 and t9 lost at 109 after REWINDING from the 129 stop (the b15 t4 reader,
   `notes_cur_t04_1788853535.md`: face-to-chest with an NPC at the turn point, the rewind walks back into
-  her, no action on the re-approach re-arms turn-early, miss/escape/lost in the coat-rack corner); t5 lost at
-  169 (reader pending). The census that decided it: across b12-b14 every trial that took 129 UNVERIFIED
+  her, no action on the re-approach re-arms turn-early, miss/escape/lost in the coat-rack corner); t5 "lost at
+  169" was never past the portrait room: a WIDE relocalisation at it40 named k=144 on 187 inliers with the
+  runner-up at 185 for k=132 (a 1% margin, the bar's tables all alike to ORB) while the character stood
+  against an NPC at ~109; the 166 stop was then "verified" against a scene it could not match, two 6-inlier
+  blind rows carried the target to 169, and the ladder cleared an obstacle the localiser had stopped
+  looking at (`notes_cur_t05_1788853639.md` if written; the reader's return is in the workflow journal
+  wf_bcc598e3-3ed). REFUTED AS A RULE, by census (`agent_progress/closed-loop/review/reloc_tie_census.*`,
+  140 wide relocalisations carrying a runner-up): a near tie (runner-up >= 0.9x, >= 6 waypoints away) fired
+  5 times -- 4 were RIGHT (ratios 0.93-0.995, arrived) and 1 was t5's (0.989). One population; no margin
+  separates them (the audit said the same of stop ties). Wide-relocalisation errors stay rare and unfixed
+  by a constant: 4 of ~140 with runner-up data, "3 of 109" before that. The census that decided the
+  rewind: across b12-b14 every trial that took 129 UNVERIFIED
   arrived (11/11); in b15 every trial that rewound there was lost (0/3). One rule, one round, reverted by
   its own measurement.
 - **THE 25, FIFTEENTH LAUNCH, STOPPED 04:00 after trial 12 (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
