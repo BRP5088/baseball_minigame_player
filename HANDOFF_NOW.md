@@ -45,6 +45,16 @@ The loop for the night, in order, repeated:
    helped carried 1.1-1.2; wall-scale fits: fast runs 0-2, slow 3-6, no overlap at n=5). Verified on a cp
    scratch copy with the module under test proven: 118 tests, mutants "gate removed" and "WALL_SCALE 3.5"
    caught. Lands with (a) at the batch end.
+   (g) WASTE INVESTIGATORS, DONE (00:30) — both proposals REFUTED by their skeptics with fresh counts
+   (`agent_progress/closed-loop/waste/{bar-counter,street-and-wanda-wall}.md`). Bar counter 129-142: the
+   lateral correction fires LEFT on 393 of 419 fits over the evening while the human's stick was flat there,
+   and does not converge; but "hold a non-converging correction" would fire on a third to half of all
+   corrections route-wide (the region's shrink rate 67% is BETTER than the portrait room's 49%). SURVIVES: skip
+   or discount a lateral correction whose fit has scale >= WALL_SCALE (an existing measured constant), A/B'd
+   on the census columns across all eight regions. Street 43/58-64: escape:jump fires on fix.k jitter with
+   climbing scale and changes nothing, but relaxing the 'past' rule would prevent only 7 of 46 such jumps
+   (12% at the k=61 hotspot); nothing to build. The HUD-in-ORB lead is closed: chain.py reuses
+   places._as_gray, which drops the compass, the quest list (left 28%) and the coin before ORB.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
