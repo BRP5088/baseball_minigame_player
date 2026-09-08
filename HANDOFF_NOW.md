@@ -1,17 +1,28 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 late evening. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is being built.**
+**Updated 2026-09-07 21:50. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
-- **THE 25, seventh launch, RUNNING (21:30:34)** with the batch-6 round (d7ac88d: one blind push near a wall before a stop, a
-  backward step at wedged stops, a jump/back/left/right ladder) on top of the audit round (3df1727). Sixth launch: 4/7 valid
-  (`overnight/chain_trials_batch6.*`), both bar-entrance losses were the portrait-wall wedge. Earlier: `overnight/chain_trials.py
-  --chain route_user_1853 --trials 25`, 180 s cap, STUCK after 12 non-advancing iterations, LOST after 9
-  blind. Earlier launches tonight, archived as `overnight/chain_trials_batch{4,5,5b,5c,5d,5e}.*`: batch 4 8/10;
-  5b 2/6; 5c 2/3; 5e 6/14. Each stop's cause and fix is in `git log -- chain_walk.py`. Reviews and audits:
-  `agent_progress/closed-loop/{review,audit,panel,snoopy_sweep}/`. Review a trial: `tools/turn_review.py
-  <shots dir> <journal>` (pair by time; look at the turns first). The user is awake and watching.
+- **THE 25, NINTH launch, RUNNING (21:47:39, commit 80182ac).** On top of the batch-6 round (d7ac88d) and the
+  audit round (3df1727) it carries: the look-around strafe capped at one ordinary correction (5bdb479; batch 7
+  trial 1's 0.6 s strafe at stop 166 was the double cap), FOUR same-side junk fits (6-14 inliers) steer once
+  (census: 0/24 arriving trials, 5 failing), and the judge's pan-from-run behind `STOP_PAN_FROM_RUN = False`
+  (off in this run; its A/B is 10 v 10 interleaved, arm set in the trial child). Monitor armed on
+  `overnight/chain_trials.log` (per-trial lines, crashes, final tally). Eighth launch (5bdb479): 2/2 arrived,
+  155 s / 104 s, `overnight/chain_trials_batch8.*`. Seventh: 1/2 (`_batch7.*`; the failure is the strafe-cap
+  one, reviewed in `agent_progress/closed-loop/review/notes_cur_t01.md`). Sixth: 4/7 valid (`_batch6.*`).
+  Earlier tonight: batch 4 8/10; 5b 2/6; 5c 2/3; 5e 6/14. `overnight/chain_trials.py --chain route_user_1853
+  --trials 25`, 180 s cap, STUCK after 12 non-advancing iterations, LOST after 9 blind. Each stop's cause and
+  fix is in `git log -- chain_walk.py`. Reviews, audits, the judge's plan and the Snoopy mutation sweep:
+  `agent_progress/closed-loop/{review,audit,panel,snoopy_sweep}/`. Review a trial: `tools/trial_sheet.py <n>`
+  then a reader (the user's standing rule: a reader on EVERY failed trial; look at the turns first).
+- **Open candidates, none built** (the judge's PLAN.md order stands): (1) the pan A/B; (2) the reader's
+  secondary finding from batch 7 trial 1 — `escape()`'s jump/back/left/right rung counter is never reset
+  between stops, so at a late wedge only the sidestep rungs remain while jump/back had already worked twice
+  in the same trial; (3) the Snoopy sweep's 14 surviving mutants are being pinned by a background agent
+  (tests only, `agent_progress/closed-loop/sweep_pins/progress.md`; mutants confirmed on Snoopy, never here);
+  (4) watch `STRONG_MIN_INLIERS` 165 (8 of 17 live relocalisations sat below it).
 - **CLOSED-LOOP TRIALS RUNNING** (relaunched after trial 1's lesson): `overnight/chain_trials.py --chain
   route_user_1853 --trials 10` -> `overnight/chain_trials.json`, `.log`, frames `overnight/chain_frames/t*/`,
   journals `overnight/chain_journals/`. Chain = the USER's own drive (`chains/route_user_1853`, 205 waypoints,
