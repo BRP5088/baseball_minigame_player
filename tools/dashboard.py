@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, seventh launch", "state": "running",
+    {"title": "THE 25, ninth launch (80182ac)", "state": "running",
+     "detail": "Eighth launch 2/2 (155 s, 104 s), seventh 1/2. New in this one: the look-around strafe is one ordinary correction (batch 7's failure was a doubled one), four same-side junk fits steer once (0 of 24 arriving trials had four; 5 failing ones did), and the pan-from-run sits behind a flag, off, for its own A/B. Every failed trial gets a screenshot reader the moment it lands; the ninth's trial 1 (lost at k=173, the bar-tables stop again) is being read now."},
+    {"title": "THE 25, seventh launch", "state": "done",
      "detail": "Sixth launch went 4 of 7 valid; both bar-entrance losses were the same event, read by two agents from the frames: the loop walked nose-first into the big portrait at the end of the portrait room and had no backward move. Now a blind sensor near a wall gets one push before the stop, a wedged stop steps back before waiting or retrying, and the escape ladder is jump, back, left, right. Every failed trial now gets a screenshot reader the moment it lands."},
     {"title": "Arrival review: did they wander?", "state": "done",
      "detail": "13 arrivals read frame by frame: 12 minor detours, 1 wandered-and-lucky, 0 off the route. Every detour was a wedge at a real obstacle: the exit-door threshold and the bartender's counter with two NPCs and two steins."},
@@ -65,8 +67,48 @@ def newest_run():
     return max(have)[1]
 
 
+def _chain_rows():
+    """The closed-loop batch (overnight/chain_trials.json) as one-arm rows."""
+    j = json.load(open(os.path.join(ROOT, "overnight", "chain_trials.json")))
+    rows, durations = [], []
+    for r in j.get("runs", []):
+        outcome = (r.get("outcome") or ("ARRIVED" if r.get("arrived") else "FAILED")).lower()
+        secs = (r.get("setup_seconds") or 0) + (r.get("seconds") or 0)
+        durations.append(secs)
+        rows.append({"trial": r.get("trial", len(rows) + 1), "arm": "closed-loop", "outcome": outcome,
+                     "why": (r.get("failure") or "")[:90],
+                     "leg_s": r.get("walk_seconds"), "setup_s": r.get("setup_seconds"),
+                     "located": f"k={r.get('k_final')}/{r.get('waypoints')}",
+                     "recheck": r.get("at_table_recheck"),
+                     "kinds": [f"{r.get('pushes')} pushes, {r.get('iterations')} it"],
+                     "prompt_on_screen": None})
+    val = [r for r in rows if r["outcome"] != "invalid"]
+    arrived = [r["outcome"] == "arrived" for r in val]
+    streak = best = 0
+    for a in arrived:
+        streak = streak + 1 if a else 0
+        best = max(best, streak)
+    tallies = {"closed-loop": {"valid": len(val), "arrived": sum(arrived), "invalid": len(rows) - len(val),
+                               "prompt_on_screen": best, "executed": streak}}
+    total = j.get("trials", 25)
+    remaining = total - len(rows)
+    med = statistics.median(durations) if durations else 150
+    def fmt(s):
+        return f"{s/60:.0f} min" if s < 3600 else f"{s/3600:.1f} h"
+    eta = f"about {fmt(remaining * med)}" if remaining else "finished"
+    name = f"THE 25: closed loop on the user's chain ({j.get('chain', '?')}), {j.get('time_cap')} s cap"
+    return rows, tallies, {"total": total, "done": len(rows), "remaining": remaining, "eta": eta,
+                           "median_trial_s": round(med), "name": name, "harness": "overnight/chain_trials.py",
+                           "arms": ["closed-loop"], "note": "prompt-on-screen column = best streak; executed = current streak"}
+
+
 def rows_and_tallies():
     import glob
+    chain_p = os.path.join(ROOT, "overnight", "chain_trials.json")
+    if os.path.exists(chain_p) and os.path.getmtime(chain_p) >= max(
+            os.path.getmtime(os.path.join(ROOT, "overnight", r[0])) for r in RUNS
+            if os.path.exists(os.path.join(ROOT, "overnight", r[0]))):
+        return _chain_rows()
     from PIL import Image
     import table_prompt as tp
     import prompt_ocr_ab as ocr
