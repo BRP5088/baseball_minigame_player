@@ -76,6 +76,50 @@ LATERAL_MIN_SEC = pose.ALIGN_MIN_SEC
 LATERAL_CAP_SEC = 0.3           # never lunge; a narrow passage punishes overshoot
 LATERAL_TOL_PX = pose.ALIGN_TOL_PX       # 35.0 = 1.8 deg at 18.6-20.8 px/deg
 
+# PIXELS PER DEGREE OF YAW at the live 1920-wide capture. CLAUDE.md §8(j):
+# 18.6-20.8 px/deg over 7 pure camera-turn pairs with the character stationary,
+# corroborated by camera_fov.json (1920 / 102 deg = 18.8). This is the value the
+# stop look-around's un-yaw already used as a bare literal; it is NAMED here so
+# that un-yaw and the end turn below cannot drift into two different numbers.
+PX_PER_DEG = 19.7
+
+# AT THE END, TURN TOWARD THE DEALER INSTEAD OF STRAFING.
+#
+# chains/route_user_1853 ends with a turn-only stop at 196 (heading 89.5) and
+# pushes at 197, 200, 203, 204 toward the dealer, who sits across a table. The
+# prompt is offered on PROXIMITY and is screen-fixed (OPEN-22), and at_table()
+# ends the walk the instant it is True.
+#
+# Four trials on 2026-09-07 22:00-23:20 verified the 196 stop and then read the
+# dealer's scene 460-777 px to the LEFT of where the reference has it (dx -777,
+# -490, -481, -512 at 112, 52, 48, 41 inliers: the t03_1788833772 and
+# t01_1788837390 journals, iterations 49-59 and 50-57, and two earlier ones).
+# Every one strafed LEFT at LATERAL_CAP_SEC without the offset shrinking, pushed
+# along the recorded 89.5 into the bar counter, and ran the plan out by count.
+# None found the prompt. The user, watching: "they made it to the mini game
+# table but weren't close enough to get the prompt ... They turned directly into
+# the bar and just kept getting stuck." A person facing that turns to FACE the
+# dealer and walks up to her.
+#
+# A 0.3 s sidestep is ~324 px at the closed-loop gain and CANNOT close 777 px
+# five times over; a 39 deg turn closes it once, and a turn moves the character
+# NOTHING -- the same argument that puts turn-early ahead of every escape rung,
+# and GRAVEYARD's own summary that the only two navigation changes which ever
+# survived move nothing.
+#
+# THE THRESHOLD SITS BETWEEN TWO SMALL POPULATIONS (§10.4): the one arrival at
+# that spot carried |dx| 286-342, and every one of the four failures 460 or
+# more. n = 4 failures and 1 arrival, so 400 is a gap between two THIN
+# populations, not a calibrated gate -- it is recorded in the journal row on
+# every firing so the next run measures it.
+END_TURN_PX = 400.0
+# The largest offset seen is 777 px = 39.4 deg, so one iteration may never turn
+# further than this: a wrong match with a huge dx must not spin the camera.
+END_TURN_MAX_DEG = 45.0
+# ... and at most this many end turns in a walk, for the same reason. After
+# three, the ordinary lateral correction takes over.
+END_TURN_MAX = 3
+
 TIME_CAP = 400.0                # the spec's "timed out" boundary; the harness
                                 # kills the child at 420s from OUTSIDE (§10.14)
 
@@ -363,6 +407,55 @@ def _near_stop(pi, plan):
         if not plan[j][1]:
             return j
     return None
+
+
+def _last_stop_index(plan):
+    """The plan index of the LAST turn-only stop, or None if the plan has none.
+
+    THE END TURN FIRES ONLY PAST THIS ENTRY. Past the last stop the plan is a
+    straight approach and the only thing that matters is being close enough for
+    the prompt, so aiming the remaining pushes at the scene is free. Before it,
+    a large dx is the lateral displacement the strafe exists for, and turning
+    would aim every subsequent push off the recorded line -- the "steering while
+    walking" family GRAVEYARD closed. A plan with no turn-only stop at all
+    returns None, and then only `at_end` opens the rule.
+    """
+    last = None
+    for j, (_, push_target, _) in enumerate(plan):
+        if not push_target:
+            last = j
+    return last
+
+
+def _turn_report(reported):
+    """What `turn_to` SAID about a turn, or None if it said nothing at all.
+
+    `slow_traverse.turn_to` returns `(heading_now, hazards)`: no hazards when
+    the camera arrived, one UNDERTURNED when the turn ran without converging or
+    when the compass could not be read (`heading_now` None, and then NOTHING
+    was sent). Every call site in walk() throws that away, which costs little
+    for a heading the next iteration re-commands -- turn_to is ABSOLUTE and
+    closed-loop, so an underturn is simply re-attempted.
+
+    THE END TURN IS THE ONE SITE THAT MAKES IT PERSISTENT: its yaw rides every
+    remaining heading and spends one of END_TURN_MAX slots, so a turn that did
+    not happen would be counted as one that did. IT IS STILL NOT A GATE. §3:
+    the compass abstains reliably INSIDE THE BAR, which is exactly where this
+    rule fires, and turn_to reports UNDERTURNED whenever it cannot read one --
+    refusing the turn on that report would switch the rule off precisely where
+    it exists to work, which is §10.1's shape. This module's rule for an
+    unmeasured gate is a knob defaulted off with the QUANTITY LOGGED; this is
+    the quantity, and the next live run is what could earn the gate.
+
+    A caller whose turn_to returns something else (the test rig's stub returns
+    None) reports None, and the journal row is left exactly as it was.
+    """
+    if not isinstance(reported, tuple) or len(reported) != 2:
+        return None
+    now, hazards = reported
+    return {"reached": None if now is None else round(float(now), 1),
+            "hazards": [getattr(h, "kind", None) or str(h)
+                        for h in (hazards or ())]}
 
 
 def _fix_row(fix):
@@ -736,6 +829,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
                              None)
+    last_stop_j = _last_stop_index(plan)   # the end turn fires only past this
+    end_yaw = 0.0               # degrees added to every remaining tail heading
+    end_turns = 0               # end turns spent this walk (END_TURN_MAX)
 
     def finish(failure=None):
         res["seconds"] = round(now() - t0, 2)
@@ -868,6 +964,19 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             target_k, do_push, heading = n - 1, True, plan_last_heading
         else:
             target_k, do_push, heading = plan[pi]
+        if end_yaw and heading is not None:
+            # THE END TURN RIDES ON EVERY REMAINING HEADING, including the end
+            # budget's pushes along the plan's final heading. Each target of
+            # the tail carries its own recorded heading and the loop turns to
+            # it before pushing, so without this the very next push would undo
+            # the turn toward the dealer and the loop would walk into the bar
+            # again. It accumulates across end turns. The ONE thing that clears
+            # it is a look-back REGRESSION, which is the loop saying the
+            # position that measured the dx was not where it thought (see the
+            # `regressed` branch); short of that the walk either arrives or
+            # ends, and there is nothing after the final approach to restore
+            # the recorded line for.
+            heading = (heading + end_yaw) % 360.0
 
         turned = False
         if heading is not None and (
@@ -1014,10 +1123,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     # the fit's own dx (in the looked frame) refines it; sign
                     # per pose.offset: dx > 0 -> RIGHT. Capped.
                     # Yawing LEFT by d moves the scene RIGHT in the image by
-                    # ~19.7 px/deg; un-yaw it: the scene's offset from the
-                    # walking heading is dx + ddeg * 19.7 (ddeg < 0 = left).
+                    # PX_PER_DEG; un-yaw it: the scene's offset from the walking
+                    # heading is dx + ddeg * PX_PER_DEG (ddeg < 0 = left). This
+                    # is the relation the END TURN inverts; ONE literal, named.
                     dx2 = getattr(f2, "dx", 0.0) or 0.0
-                    px = dx2 + ddeg * 19.7
+                    px = dx2 + ddeg * PX_PER_DEG
                     # ONE ordinary correction, not a double one: batch 7 trial
                     # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
                     # strafe RIGHT that three credible head-on fits then undid
@@ -1146,6 +1256,18 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             stalls = 0
             blind = 0
             lost = 0
+            # A REGRESSION REFUTES THE END TURN'S OWN MEASUREMENT, so the yaw
+            # it took goes with it. The look-back has just said the character
+            # is BEHIND where the loop thought, which is the position the dx
+            # that earned the turn was measured from; the regression branch
+            # also rewinds the plan pointer to 0, and without this the offset
+            # would ride the recorded mid-chain headings from there (a
+            # demonstrated 0.0 commanded as 329.5, five waypoints from the
+            # start) -- the "steering while walking" family GRAVEYARD closed.
+            # The BUDGET is deliberately NOT restored: a walk that regresses
+            # and re-approaches gets the turns it has left, never a fresh
+            # three per regression.
+            end_yaw = 0.0
             action = "regressed"
         elif weak and inl >= WEAK_MIN_INLIERS and int(fix.k) > k:
             # WEAK BUT CONSISTENT: a thin fit that names the target (or its
@@ -1338,6 +1460,53 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # has moved DETOUR_TARGETS past the blockage.
             lateral = {"held": "detour", "dx": float(dx), "side": "held", "seconds": 0.0}
             dx = None
+        # TURN TOWARD THE SCENE INSTEAD OF STRAFING, ON THE FINAL APPROACH.
+        #
+        # It sits HERE, immediately above the strafe and below everything that
+        # can contest a dx, because it REPLACES that strafe and must answer to
+        # the same three gates -- a skeptic demonstrated all three bypasses on
+        # 2026-09-08, and each was worse than the sidestep it replaced: a bad
+        # sidestep costs one iteration, a bad end turn rides every remaining
+        # heading and spends one of END_TURN_MAX slots.
+        #
+        #   - `not escaped and not escaped_prev`: an escape's jump or sidestep
+        #     has moved the character since this dx was measured. The old
+        #     placement fired `escape:jump` and a 30.5 deg turn off the same
+        #     pre-escape frame in one iteration. Deferred, not lost: the first
+        #     clean iteration still turns.
+        #   - BELOW the detour hold, which sets dx to None: three rungs had
+        #     just sidestepped LEFT around a blockage and the next fit's +600
+        #     turned the camera back into it, permanently.
+        #   - the position and budget tests below.
+        #
+        # dx here is what the strafe would have acted on: a credible fit's dx,
+        # the CONSISTENT_N thin-fit median, or the JUNK run's. It cannot fire on
+        # a turn-only target: those `continue` long before this point.
+        # See END_TURN_PX for the four trials.
+        if (dx is not None and abs(dx) > END_TURN_PX and heading is not None
+                and not escaped and not escaped_prev
+                and end_turns < END_TURN_MAX
+                and not regressed
+                and (at_end or (last_stop_j is not None and pi > last_stop_j))):
+            # D = dx / PX_PER_DEG, from the stop look-around's own un-yaw: a
+            # frame measured at heading h + D reads dx_at_h - D * PX_PER_DEG,
+            # so this is the yaw that puts the scene back in the middle. A
+            # NEGATIVE dx (the scene sits LEFT of where the reference has it)
+            # turns LEFT, i.e. DECREASING heading -- pose.offset's convention.
+            ddeg = round(max(-END_TURN_MAX_DEG,
+                             min(END_TURN_MAX_DEG, float(dx) / PX_PER_DEG)), 1)
+            end_yaw += ddeg
+            end_turns += 1
+            new_heading = (heading + ddeg) % 360.0
+            said = _turn_report(turn_to(new_heading))
+            last_cmd = new_heading
+            lateral = {"end_turn": ddeg, "dx": float(dx),
+                       "heading": new_heading, "n": end_turns}
+            if said is not None:
+                # WHAT THE TURN REPORTED, RECORDED AND GATING NOTHING; see
+                # _turn_report for why a hazard must not refuse the turn.
+                lateral["turn"] = said
+            dx = None           # a turn, not a sidestep: nothing strafes here
         if dx is not None and not escaped and not escaped_prev and abs(dx) > LATERAL_TOL_PX:
             secs = min(LATERAL_CAP_SEC, abs(dx) / (LATERAL_GAIN * LATERAL_MAG))
             if secs < LATERAL_MIN_SEC:
@@ -1360,7 +1529,19 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                "seconds": round(now() - it_t0, 2),
                "elapsed": round(now() - t0, 2)}
         record(row)
+        # An end turn has no `side` and no `seconds`; the old one-line format
+        # would have raised KeyError on it, and padding the dict with a
+        # "strafe left 0.00s" that never happened is §10.1's no-op that reads
+        # as a success. It gets its own words instead.
+        if lateral and "end_turn" in lateral:
+            note = (f"  END TURN {lateral['end_turn']:+.1f} deg to heading "
+                    f"{lateral['heading']:.1f} on dx {lateral['dx']:.0f} px "
+                    f"({end_turns}/{END_TURN_MAX}) — no strafe"
+                    + (f", turn_to said {lateral['turn']}"
+                       if "turn" in lateral else ""))
+        elif lateral:
+            note = f"  strafe {lateral['side']} {lateral['seconds']:.2f}s"
+        else:
+            note = ""
         log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action:14s}"
-            f"  fix={_fix_row(fix)}"
-            + (f"  strafe {lateral['side']} {lateral['seconds']:.2f}s"
-               if lateral else ""))
+            f"  fix={_fix_row(fix)}" + note)

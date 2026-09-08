@@ -77,14 +77,6 @@ STROKE_BRIGHT = 175
 STROKE_LOCAL = 140
 STROKE_WIN = 11
 MIN_CONTRAST = 6.0        # std-dev of the raw patch; below this there is no text
-# A DARK capture is retried with its brightness normalised: the mask keeps a
-# pixel above STROKE_BRIGHT, and dim white text in a frame whose mean is ~75
-# never reaches it (ab4 trial 10 stood at the prompt for three iterations
-# reading False; gain 1.2 read True). Gain = min(DARK_GAIN_CAP, DARK_MEAN /
-# mean), applied only when the mean is under DARK_MEAN. Measured: 21/21
-# arrival frames against 18/21 raw, 0 new false positives on 500 route frames.
-DARK_MEAN = 90.0
-DARK_GAIN_CAP = 1.5
 
 
 def _raw_patch(img):
@@ -261,23 +253,7 @@ def at_table(img):
     # correlation and loses the strokes. ink() stays as a signal for the sweep.
     if score(img) >= MATCH_MIN:
         return True
-    if ocr_says_prompt(img):
-        return True
-    normalised = _normalised_if_dark(img)
-    return normalised is not None and score(normalised) >= MATCH_MIN
-
-
-def _normalised_if_dark(img):
-    """The frame with its brightness scaled toward DARK_MEAN, or None when it
-    is not dark (mean >= DARK_MEAN) -- the raw verdict then stands."""
-    arr = np.asarray(img.convert("RGB") if hasattr(img, "convert") else img)
-    mean = float(arr.mean())
-    if mean >= DARK_MEAN or mean <= 0:
-        return None
-    gain = min(DARK_GAIN_CAP, DARK_MEAN / mean)
-    return Image.fromarray(np.clip(arr.astype(np.float32) * gain, 0, 255).astype(np.uint8))
-
-
+    return ocr_says_prompt(img)
 # THE STROKE MASK CANNOT SEE WHITE TEXT OVER A BRIGHT BACKGROUND, BY
 # CONSTRUCTION. It keeps a pixel only if it is > STROKE_BRIGHT and its 11x11
 # neighbourhood averages < STROKE_LOCAL -- the rule that removes the dealer's

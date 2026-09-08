@@ -31,6 +31,12 @@ clause per test, because each is somewhere this project has been wrong before:
       by progress the sensor actually SAW, before any escape rung -- the NPC on
       the turn point (2026-09-07), whose whole cost was that the loop never
       reached the turn
+  (n) PAST THE LAST STOP a huge dx is a TURN toward the dealer, not a sidestep,
+      and the yaw it takes rides on every remaining heading -- the four trials
+      that stood beside the table strafing at the cap against dx -460 to -777.
+      It answers to every gate the strafe it replaces answers to: no end turn
+      in an iteration that escaped or whose predecessor did, none on a dx the
+      detour hold is suppressing, and a look-back regression drops the yaw
 
 THE STRAFE SIGN, WHICH IS THE ONE THING HERE THAT COULD SILENTLY DO THE
 OPPOSITE OF WHAT IT SAYS. `slow_traverse.walk_leg` sends `left_x = to_axis(lx)`
@@ -1488,6 +1494,397 @@ class Lateral(unittest.TestCase):
         self.assertIsNone(res["fixes"][3]["lateral"])
         self.assertIsNotNone(res["fixes"][0]["lateral"])
         self.assertEqual(res["fixes"][0]["lateral"]["side"], "right")
+
+
+class EndTurnTowardTheDealer(unittest.TestCase):
+    """(n) ON THE FINAL APPROACH A HUGE dx IS A TURN, NOT A SIDESTEP.
+
+    2026-09-07 22:00-23:20. chains/route_user_1853 ends with a turn-only stop at
+    196 (heading 89.5) and pushes at 197, 200, 203, 204 toward the dealer across
+    a table. Four trials verified the 196 stop and then read her scene 460-777
+    px to the LEFT of where the reference has it (dx -777, -490, -481, -512 at
+    112, 52, 48, 41 inliers), strafed LEFT at LATERAL_CAP_SEC every time without
+    the offset shrinking, pushed along the recorded 89.5 into the bar counter,
+    and ran the plan out by count. None found the prompt; the one arrival at
+    that spot had |dx| 286-342. The user: "they made it to the mini game table
+    but weren't close enough to get the prompt to start the game. They turned
+    directly into the bar and just kept getting stuck."
+
+    THE SIGN IS THE THING THAT COULD SILENTLY DO THE OPPOSITE. It comes from the
+    stop look-around's own un-yaw, `px = dx2 + ddeg * PX_PER_DEG` with
+    `turn_to(heading + ddeg)`: a frame measured at h + D reads
+    `dx_at_h - D * PX_PER_DEG`, so D = dx / PX_PER_DEG and a NEGATIVE dx turns
+    LEFT (decreasing heading). Every expected heading below is a LITERAL, so an
+    inverted sign fails instead of tracking the code (§10.11).
+
+    THE LAST FOUR TESTS ARE THE INTERACTION SUITE, one per bypass a skeptic
+    demonstrated on 2026-09-08 against the first draft of this rule. They matter
+    more than their size suggests: a wrong SIDESTEP costs one iteration, while a
+    wrong END TURN rides every remaining heading for the rest of the walk and
+    spends one of only three slots.
+    """
+
+    # 15 walking frames at 0.35 stick compile to push targets 1, 4, 7, 10, 13
+    # (0.0875 u a frame against PLAN_STEP_UNITS 0.180), then ONE stationary
+    # frame is the turn-only stop at 16, then the tail -- the same shape as the
+    # real chain's 196 stop and its 197..204 approach.
+    @staticmethod
+    def _wps(tail_headings, walk_frames=15, stop_heading=89.5, walk_heading=0.0):
+        wps = [Wp(0, walk_heading)]
+        rows = ([(walk_heading, -0.35)] * walk_frames + [(stop_heading, 0.0)]
+                + [(h, -0.35) for h in tail_headings])
+        for i, (h, ly) in enumerate(rows, start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        return wps
+
+    @staticmethod
+    def _rig(wps, fixes, table_at=None, lookback=None):
+        ch = FakeChain(len(wps), fixes, default=None, lookback=lookback)
+        ch.waypoints = wps
+        return Rig(ch, table_at=table_at)
+
+    # The six fixes that walk the plan to the stop and verify it: one per push
+    # target, then the stop's own frame at 16.
+    TO_THE_STOP = (1, 4, 7, 10, 13, 16)
+
+    def test_the_constants_are_the_measured_ones_and_there_is_ONE_px_per_deg(self):
+        # §10.11: pin the literals, not the constants they guard.
+        self.assertEqual(chain_walk.END_TURN_PX, 400.0)
+        self.assertEqual(chain_walk.END_TURN_MAX_DEG, 45.0)
+        self.assertEqual(chain_walk.END_TURN_MAX, 3)
+        self.assertEqual(chain_walk.PX_PER_DEG, 19.7)
+        # 400 sits between the two measured populations at that spot (§10.4):
+        # the arrival's |dx| 286-342, the four failures' 460-777.
+        self.assertLess(342.0, chain_walk.END_TURN_PX)
+        self.assertLess(chain_walk.END_TURN_PX, 460.0)
+        with open(os.path.join(_ROOT, "chain_walk.py")) as fh:
+            src = fh.read()
+        self.assertIn("ddeg * PX_PER_DEG", src,
+                      "the stop look-around must un-yaw with the NAME")
+        self.assertEqual(src.count("19.7"), 1,
+                         "px-per-degree must appear as ONE literal, in "
+                         "PX_PER_DEG — the un-yaw and the end turn invert the "
+                         "same relation and must not drift apart")
+
+    def test_last_stop_index_names_the_LAST_turn_only_entry(self):
+        plan = chain_walk.plan_indices(self._wps([89.5] * 6))
+        self.assertEqual([(i, p) for i, p, _ in plan][:7],
+                         [(1, True), (4, True), (7, True), (10, True),
+                          (13, True), (16, False), (17, True)])
+        self.assertEqual(chain_walk._last_stop_index(plan), 5)
+        # A plan with no stop at all opens the rule only at_end.
+        self.assertIsNone(chain_walk._last_stop_index(
+            [(1, True, 0.0), (2, True, 0.0)]))
+
+    def test_past_the_last_stop_a_huge_dx_TURNS_and_does_not_strafe(self):
+        # The tail: targets 17 (heading 89.5) and 20 (heading 95.0). The fit at
+        # 17 reads the dealer 600 px LEFT -- the trials' -481 to -777 -- so the
+        # loop turns LEFT by 600 / 19.7 = 30.5 deg to 59.0 and does not strafe;
+        # the NEXT push then turns to 95.0 - 30.5 = 64.5, not to 95.0.
+        wps = self._wps([89.5] * 3 + [95.0] * 10)
+        rig = self._rig(wps, [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-600.0), Fix(k=20)], table_at=10)
+        res = rig.go()
+        self.assertTrue(res["arrived"])
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 59.0, 64.5],
+                         "walk east, turn at the stop, TURN TOWARD THE SCENE, "
+                         "then carry the offset onto the next recorded heading")
+        self.assertEqual(rig.strafes(), [],
+                         "a turn replaces the sidestep; it does not join it")
+        row = res["fixes"][6]
+        self.assertEqual(row["iteration"], 7)
+        self.assertEqual(row["action"], "advanced")
+        self.assertEqual(row["lateral"], {"end_turn": -30.5, "dx": -600.0,
+                                          "heading": 59.0, "n": 1})
+        # ANTI-VACUITY: this dx is far past the lateral tolerance, so the old
+        # build DID strafe here (that is the failure) -- the empty strafe list
+        # above is the rule working, not a walk that never corrects anything.
+        self.assertGreater(600.0, chain_walk.LATERAL_TOL_PX)
+        self.assertEqual(chain_walk._last_stop_index(
+            chain_walk.plan_indices(wps)), 5)
+
+    def test_a_positive_dx_turns_RIGHT(self):
+        # The mirror image: dx > 0 is the scene sitting RIGHT of where the
+        # reference has it, so the camera turns RIGHT (increasing heading).
+        rig = self._rig(self._wps([89.5] * 3 + [95.0] * 10),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=+600.0), Fix(k=20)], table_at=10)
+        rig.go()
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 120.0, 125.5])
+
+    def test_the_turn_is_capped_at_END_TURN_MAX_DEG(self):
+        # A wrong match with an enormous dx must not spin the camera: 2000 px
+        # would be 101.5 deg, and the cap holds it to 45.
+        self.assertGreater(2000.0 / chain_walk.PX_PER_DEG,
+                           chain_walk.END_TURN_MAX_DEG,
+                           "the fixture must exceed the cap to be a real test")
+        rig = self._rig(self._wps([89.5] * 3 + [95.0] * 10),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-2000.0), Fix(k=20)], table_at=10)
+        res = rig.go()
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 44.5, 50.0])
+        self.assertEqual(res["fixes"][6]["lateral"]["end_turn"], -45.0)
+
+    def test_below_END_TURN_PX_the_ordinary_lateral_correction_runs(self):
+        # 300 px is the arrival's own band (286-342). Nothing turns; the
+        # sidestep happens exactly as it did before this rule existed, and the
+        # next push goes to the RECORDED 95.0 with no offset on it.
+        rig = self._rig(self._wps([89.5] * 3 + [95.0] * 10),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-300.0), Fix(k=20)], table_at=10)
+        res = rig.go()
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 95.0])
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)])
+        self.assertEqual(res["fixes"][6]["lateral"],
+                         {"dx": -300.0, "side": "left", "seconds": 0.3})
+        self.assertNotIn("end_turn", res["fixes"][6]["lateral"])
+
+    def test_the_same_dx_MID_CHAIN_strafes_and_never_turns(self):
+        # THE CONTROL, and the whole reason the rule is gated on position: the
+        # identical -600 px five targets BEFORE the last stop is the lateral
+        # displacement the strafe exists for. Turning there would aim every
+        # later push off the recorded line -- GRAVEYARD's closed "steering
+        # while walking" family.
+        wps = self._wps([89.5] * 3 + [95.0] * 10)
+        rig = self._rig(wps, [Fix(k=1), Fix(k=4), Fix(k=7), Fix(k=10),
+                              Fix(k=13, dx=-600.0), Fix(k=16)], table_at=8)
+        res = rig.go()
+        self.assertTrue(res["arrived"])
+        self.assertEqual([r["lateral"] for r in res["fixes"]
+                          if r["lateral"] and "end_turn" in r["lateral"]], [],
+                         "no end turn may fire before the last stop")
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)])
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5], "the recorded headings, unoffset")
+        # ANTI-VACUITY: the pointer really was before the last stop when that
+        # dx arrived (target 13 is plan entry 4; the stop is entry 5), so the
+        # rule was WITHHELD, not simply unreachable in this fixture.
+        self.assertEqual(res["fixes"][4]["target"], 13)
+        self.assertEqual(chain_walk._last_stop_index(
+            chain_walk.plan_indices(wps)), 5)
+
+    def test_the_END_BUDGET_pushes_along_the_final_heading_PLUS_the_offset(self):
+        # Past the plan there are no targets left and the loop pushes along
+        # `plan_last_heading` inside the end budget. That heading must carry the
+        # offset too, or the last push of the walk -- the one nearest the
+        # prompt -- goes back to aiming at the bar. always_turning so the turn
+        # is visible on every iteration rather than skipped as a repeat.
+        wps = self._wps([89.5] * 3 + [110.0] * 2)
+        rig = self._rig(wps, [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-600.0), Fix(k=20), Fix(k=21)])
+        res = always_turning(rig.go)
+        self.assertIsNotNone(res["failure"])
+        self.assertTrue(res["failure"].startswith("reached the last waypoint"),
+                        res["failure"])
+        self.assertTrue(res["fixes"][-1]["at_end"])
+        turns = [e[1] for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns[-3:], [79.5, 79.5, 79.5],
+                         "110.0 - 30.5: the two tail targets AND the end "
+                         "budget's push along the plan's final heading")
+        self.assertNotIn(110.0, turns,
+                         "the recorded final heading was never commanded bare "
+                         "once the end turn had been taken")
+
+    def test_a_regression_in_the_end_phase_takes_no_fresh_end_turn(self):
+        # The recheck skeptic's probe: one end turn at 17 (-30.5), then at
+        # the last target the sensor sees nothing and the look-back names
+        # waypoint 1 with dx +600 -- a REGRESSION. at_end was computed before
+        # the regression reset the pointer, so without 'not regressed' the
+        # block fired a second, bogus end turn off the stale tail heading and
+        # the offset rode onto the recorded 0.0 of the next push (329.5).
+        wps = self._wps([89.5] * 6)
+        fixes = [Fix(k=1), Fix(k=4), Fix(k=7), Fix(k=10), Fix(k=13), Fix(k=16),
+                 Fix(k=17, dx=-600.0), Fix(k=20), Fix(k=22)]
+        ch = FakeChain(len(wps), fixes, default=None, lookback=Fix(k=1, dx=600.0, inliers=120))
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = without_stuck(rig.go, time_cap=30.0)
+        rows = res["fixes"]
+        reg = [r for r in rows if r["action"] == "regressed"]
+        self.assertEqual(len(reg), 1, [r["action"] for r in rows[:12]])
+        self.assertNotIn("end_turn", reg[0]["lateral"] or {}, reg[0]["lateral"])
+        self.assertEqual(sum(1 for r in rows if r.get("lateral") and "end_turn" in r["lateral"]), 1)
+        turns = [round(e[1], 1) for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns[:4], [0.0, 89.5, 59.0, 0.0],
+                         "after the regression the next turn is the RECORDED heading: %r" % turns[:6])
+
+    def test_END_TURN_MAX_caps_the_turns_and_the_strafe_returns_after(self):
+        # Three end turns, accumulating: 89.5 -> 59.0 -> 28.5 -> 358.0. The
+        # fourth huge dx gets the ordinary correction, because a match that
+        # keeps reading 600 px off after three turns is not a heading error.
+        rig = self._rig(self._wps([89.5] * 20),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-600.0), Fix(k=20, dx=-600.0),
+                           Fix(k=23, dx=-600.0), Fix(k=26, dx=-600.0)],
+                        table_at=12)
+        res = rig.go()
+        self.assertTrue(res["arrived"])
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 59.0, 28.5, 358.0],
+                         "the offset ACCUMULATES across end turns")
+        turned = [r["lateral"] for r in res["fixes"]
+                  if r["lateral"] and "end_turn" in r["lateral"]]
+        self.assertEqual([t["n"] for t in turned], [1, 2, 3])
+        self.assertEqual(chain_walk.END_TURN_MAX, 3)
+        # The fourth: no turn, and the sidestep the rule had been replacing.
+        self.assertEqual(res["fixes"][9]["lateral"],
+                         {"dx": -600.0, "side": "left", "seconds": 0.3})
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)])
+
+    # --- the interaction suite: the three gates the strafe already had -------
+
+    def test_an_iteration_that_ESCAPED_takes_no_end_turn(self):
+        """THE ESCAPE COLLISION. `escape:jump` and a 30.5 deg turn fired off the
+        SAME pre-escape frame: the jump's displacement is not in that dx, which
+        is precisely why the ordinary strafe is gated on `not escaped and not
+        escaped_prev`. An end turn is worse than the strafe it replaces there,
+        because it rides every later heading and spends one of three slots.
+
+        The fixture stalls three times on a dx BELOW the tolerance (so nothing
+        corrects and nothing turns), and the fourth stall -- the one that trips
+        STALL_MAX and escapes -- is the one carrying -600.
+        """
+        rig = self._rig(self._wps([89.5] * 20),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=16, scale=0.5, dx=0.0)] * 3
+                        + [Fix(k=16, scale=0.5, dx=-600.0)] * 3, table_at=14)
+        res = rig.go()
+        rows = {r["iteration"]: r for r in res["fixes"]}
+        self.assertEqual(chain_walk.STALL_MAX, 4)
+        self.assertEqual(rows[10]["action"], "escape:jump",
+                         "the fixture must really escape on that iteration")
+        self.assertIsNone(rows[10]["lateral"],
+                          "no end turn in the iteration that escaped")
+        self.assertEqual(rows[11]["action"], "stalled")
+        self.assertIsNone(rows[11]["lateral"],
+                          "nor in the one after it: escaped_prev, the same "
+                          "gate the strafe has")
+        # DEFERRED, NOT LOST: the first clean iteration takes the turn.
+        self.assertEqual(rows[12]["lateral"],
+                         {"end_turn": -30.5, "dx": -600.0, "heading": 59.0,
+                          "n": 1})
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 59.0])
+        # ANTI-VACUITY: the dx and the position both opened the rule on
+        # iteration 10 -- it was the escape that closed it, not the fixture.
+        self.assertGreater(600.0, chain_walk.END_TURN_PX)
+        self.assertEqual(rows[10]["target"], 17)
+        self.assertEqual(chain_walk._last_stop_index(
+            chain_walk.plan_indices(rig.chain.waypoints)), 5)
+
+    def test_a_REGRESSION_drops_the_end_yaw_before_it_rides_a_MID_CHAIN_heading(self):
+        """THE REGRESSION LEAK. The end turn fires only past the last stop, but
+        the OFFSET was applied to whatever heading the current plan pointer
+        named -- and the look-back regression branch sets `pi = 0`. Demonstrated:
+        after one end turn at the tail, a regression to waypoint 1 commanded the
+        recorded mid-chain 0.0 as 329.5, which is the "steering while walking"
+        family GRAVEYARD closed. A regression is the loop saying the position
+        that measured the dx was wrong, so the yaw goes with it.
+        """
+        wps = self._wps([89.5] * 3 + [95.0] * 10)
+        rig = self._rig(wps, [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-600.0),
+                           Fix(k=17, scale=0.5, inliers=5)]
+                        + [Fix(k=4)] * 4, table_at=10,
+                        lookback=Fix(k=1, inliers=120))
+        res = rig.go()
+        rows = {r["iteration"]: r for r in res["fixes"]}
+        # The end turn happened (iteration 7), then a thin fit at 17 sent the
+        # look-back back to waypoint 1 (iteration 8).
+        self.assertEqual(rows[7]["lateral"], {"end_turn": -30.5, "dx": -600.0,
+                                              "heading": 59.0, "n": 1})
+        self.assertEqual(rows[8]["action"], "regressed")
+        self.assertEqual(rows[8]["k"], 1)
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 59.0, 64.5, 0.0],
+                         "0.0 is the RECORDED mid-chain heading: the offset "
+                         "died with the position that earned it (the leak "
+                         "commanded 329.5 here)")
+        # ANTI-VACUITY: the offset really was live on the iteration before the
+        # regression -- 95.0 - 30.5 = 64.5 above -- so this is the yaw being
+        # dropped, not a walk that never took one.
+        self.assertEqual(rows[9]["target"], 4)
+        self.assertTrue(res["arrived"])
+
+    def test_the_DETOUR_HOLD_is_not_bypassed_by_the_end_turn(self):
+        """THE DETOUR-HOLD BYPASS. Three escape rungs sidestep LEFT around a
+        blockage and hold any correction toward the RIGHT until the plan has
+        moved DETOUR_TARGETS past it. Spliced above that hold, the end turn read
+        the very dx the hold had suppressed and turned the camera 30.5 deg back
+        toward the obstacle -- permanently, since the yaw rides every later
+        heading. The rule now sits below the hold, which has already set dx to
+        None, and the row still reads `held: detour`.
+
+        The +600 arrives two iterations after the escape, so neither `escaped`
+        nor `escaped_prev` is what suppresses it: this pins the HOLD.
+        """
+        rig = self._rig(self._wps([89.5] * 20),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=16, scale=0.5, dx=0.0)] * 13
+                        + [Fix(k=16, scale=0.5, dx=+600.0)], table_at=22)
+        res = rig.go()
+        rows = {r["iteration"]: r for r in res["fixes"]}
+        self.assertEqual(rows[18]["action"], "escape:left",
+                         "the fixture must reach the sidestep rung that arms "
+                         "the detour hold")
+        self.assertEqual(rows[19]["action"], "stalled",
+                         "and the +600 must land clear of escaped_prev")
+        self.assertEqual(rows[20]["lateral"],
+                         {"held": "detour", "dx": 600.0, "side": "held",
+                          "seconds": 0.0},
+                         "held, exactly as it was before this rule existed")
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5],
+                         "no camera turn back toward the obstacle the detour "
+                         "had just gone around")
+        self.assertEqual(rig.strafes(), [("strafe", -0.45, 0.6)],
+                         "the escape's own sidestep, and nothing after it")
+        # ANTI-VACUITY: the same +600 with no detour armed DOES turn right --
+        # test_a_positive_dx_turns_RIGHT -- and the hold is live here because
+        # k has not reached detour_until.
+        self.assertEqual(rows[20]["k"], 16)
+        self.assertEqual(chain_walk.DETOUR_TARGETS, 3)
+
+    def test_what_turn_to_REPORTED_is_recorded_and_gates_nothing(self):
+        """The end turn is the one site that turns a turn_to into PERSISTENT
+        state, so what turn_to said goes in the row. It is NOT a gate: §3 says
+        the compass abstains reliably inside the bar, which is exactly where
+        this rule fires, and slow_traverse.turn_to reports UNDERTURNED whenever
+        it cannot read a heading — refusing the turn on that would switch the
+        rule off precisely where it exists to work (§10.1).
+        """
+        class _Hazard:
+            kind = "UNDERTURNED"
+
+        rig = self._rig(self._wps([89.5] * 3 + [95.0] * 10),
+                        [Fix(k=i) for i in self.TO_THE_STOP]
+                        + [Fix(k=17, dx=-600.0), Fix(k=20)], table_at=10)
+        plain = rig.turn_to
+
+        def reporting_turn_to(heading, _plain=plain):
+            _plain(heading)
+            return None, [_Hazard()]      # slow_traverse's shape: (now, hazards)
+
+        rig.turn_to = reporting_turn_to
+        res = rig.go()
+        self.assertEqual(res["fixes"][6]["lateral"],
+                         {"end_turn": -30.5, "dx": -600.0, "heading": 59.0,
+                          "n": 1,
+                          "turn": {"reached": None,
+                                   "hazards": ["UNDERTURNED"]}})
+        self.assertEqual([e[1] for e in rig.events if e[0] == "turn"],
+                         [0.0, 89.5, 59.0, 64.5],
+                         "the hazard is recorded and the turn still happens")
+        # A stub that reports nothing (the plain Rig, and every other test in
+        # this class) leaves the row exactly as it was — no invented key.
+        self.assertIsNone(chain_walk._turn_report(None))
+        self.assertIsNone(chain_walk._turn_report((1, 2, 3)))
+        self.assertEqual(chain_walk._turn_report((59.04, [])),
+                         {"reached": 59.0, "hazards": []})
 
 
 class TimeCap(unittest.TestCase):
