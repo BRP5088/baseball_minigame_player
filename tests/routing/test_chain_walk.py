@@ -137,6 +137,18 @@ class FakeImage:
             fh.write(str(self.n))
 
 
+def without_stuck(go, *a, **kw):
+    """Run a walk with the no-progress rule OFF, for tests whose subject is the
+    time cap on a scenario that never advances (the stuck rule would end it
+    first, correctly, and hide the thing under test)."""
+    old = chain_walk.NO_PROGRESS_MAX
+    chain_walk.NO_PROGRESS_MAX = 10 ** 6
+    try:
+        return go(*a, **kw)
+    finally:
+        chain_walk.NO_PROGRESS_MAX = old
+
+
 def always_turning(go, *a, **kw):
     """Run a walk with the turn-skip OFF, so every iteration costs the fake
     clock the same 1.0s (turn 0.5 + push 0.4 + capture 0.1) that the cap
@@ -644,6 +656,18 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[5:7], ["blind-advance"] * 2)
         self.assertEqual(acts[7], "miss", "the third blind push inside the tail is refused")
 
+    def test_twelve_iterations_without_an_advance_end_the_walk_as_stuck(self):
+        # Credible fixes that never reach the target (pushing at a door): the
+        # sensor sees the room, LOST never fires, but nothing advances.
+        self.assertEqual(chain_walk.NO_PROGRESS_MAX, 12)
+        ch = FakeChain(30, default=Fix(k=0, scale=0.5))
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=400.0)
+        self.assertFalse(res["arrived"])
+        self.assertTrue(res["failure"].startswith("stuck at k=0"), res["failure"])
+        self.assertEqual(len(res["fixes"]), 12)
+        self.assertLess(res["seconds"], 60.0)
+
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds
         # nothing; the look-back from k-2 fits at 4 with 80 inliers -> k = 4.
@@ -791,7 +815,7 @@ class TimeCap(unittest.TestCase):
 
     def test_time_cap_fails_and_says_so(self):
         rig = Rig(FakeChain(6, default=Fix(k=0, scale=0.5)), table_at=None)
-        res = rig.go(time_cap=10.0)
+        res = without_stuck(rig.go, time_cap=10.0)
         self.assertFalse(res["arrived"])
         self.assertEqual(res["failure"], "timed out")
         self.assertGreaterEqual(res["seconds"], 10.0)
@@ -983,7 +1007,7 @@ class IterationArithmetic(unittest.TestCase):
         # must walk and time out normally, or the check above would be a gate
         # that silently refuses live runs.
         rig = Rig(FakeChain(100, default=Fix(k=0, scale=0.5)), table_at=None)
-        res = rig.go(time_cap=10.0)
+        res = without_stuck(rig.go, time_cap=10.0)
         self.assertEqual(res["failure"], "timed out")
         self.assertGreater(res["pushes"], 0)
 
@@ -1070,9 +1094,9 @@ class HarnessScoring(unittest.TestCase):
         # the reset and Chain.load's ORB pass BEFORE walk() starts its clock;
         # at the old 420s ceiling against a 400s cap, walk() would have been
         # killed at ~350s and could never have reported its own timeout.
-        self.assertEqual(chain_trials.TIME_CAP, 400.0)
+        self.assertEqual(chain_trials.TIME_CAP, 180.0)
         self.assertEqual(chain_trials.SETUP_BUDGET, 180.0)
-        self.assertEqual(chain_trials.CEILING, 580)
+        self.assertEqual(chain_trials.CEILING, 360)
         self.assertEqual(chain_trials.CEILING - chain_trials.TIME_CAP,
                          chain_trials.SETUP_BUDGET,
                          "the ceiling must be the cap PLUS the setup budget")

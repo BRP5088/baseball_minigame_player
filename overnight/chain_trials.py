@@ -70,7 +70,10 @@ TRIALS = _harness.TRIALS         # 10; n=3 has power 0.00 here
 # the sensor's own +-1 waypoint placement error, so a fix that says "at the end"
 # one waypoint early is not scored as a walk that landed off the prompt.
 END_ITERATIONS = 3
-TIME_CAP = 400.0                 # walk()'s own cap — the ">400 s" of the spec,
+# 180 s: every arrival so far took 90-126 s (batches 4-5, n=21) and nothing that ran
+# past 150 s ever arrived; the user watched a wanderer burn the old 400 s cap and
+# asked for a tighter one (2026-09-07 20:35). Over the cap scores TIMED_OUT.
+TIME_CAP = 180.0                 # walk()'s own cap — the ">400 s" of the spec,
                                  # and it clocks THE WALK, nothing before it
 
 # Everything the child spends before walk() starts its clock: interpreter start

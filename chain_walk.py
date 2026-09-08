@@ -156,6 +156,12 @@ WEAK_MIN_INLIERS = 15
 # before the walk declares itself LOST (three escape cycles). Off the route
 # nothing can match; burning the rest of the cap only delays the next trial.
 LOST_MAX = 9
+# NO PROGRESS: this many consecutive iterations without k advancing (stalls,
+# misses, escapes, retries, all of it) ends the walk as STUCK, whatever the
+# sensor sees. LOST covers a blind sensor; this covers a wanderer whose sensor
+# still sees the room -- pushing at a door, circling a stop. Arrivals advance
+# at least every few iterations; twelve without is ~20 s of nothing.
+NO_PROGRESS_MAX = 12
 # A turn stop is verified against its own frame after the turn; if nothing
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
@@ -575,6 +581,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     blind = 0                   # consecutive pushes made with no credible fix
     lost = 0                    # iterations with nothing credible, budget spent
     turn_retries = 0            # retries spent on the current turn stop
+    since_advance = 0           # iterations since k last rose
+    k_prev_iter = 0
     unverified_turn = False     # the last stop was accepted unverified
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
@@ -650,6 +658,17 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 f"of {n - 1} — TIMED OUT")
             return finish("timed out")
 
+        # NO PROGRESS: k has not risen for NO_PROGRESS_MAX iterations.
+        if k > k_prev_iter:
+            since_advance = 0
+        elif iteration > 0:
+            since_advance += 1
+        k_prev_iter = k
+        if since_advance >= NO_PROGRESS_MAX:
+            log(f"  chain_walk: STUCK — k={k} of {n - 1} has not advanced in "
+                f"{since_advance} iterations")
+            return finish(f"stuck at k={k} of {n - 1}: no advance in "
+                          f"{since_advance} iterations")
         # THE PLAN POINTER: the next target is the first plan entry past k.
         while pi < len(plan) and plan[pi][0] <= k:
             pi += 1
