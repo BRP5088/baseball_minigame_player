@@ -708,10 +708,17 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         bar-entrance stop 129 -- taken unverified (b12-14) 11/11
                                                                         arrived; rewound (b15) 0/3, each lost at 109 re-walking
                                                                         into the NPC it had just met
-    078a912  04:02         25     running                             STOP_REWIND_MAX 0 (rules A/B stay); at_table() reads the
+    078a912  04:02         25     22            82.5 s      11        STOP_REWIND_MAX 0 (rules A/B stay); at_table() reads the
                                                                         "$50" fee token last: 0 of 7,885 route frames, 58 of 81
                                                                         prompt frames, the three b13-t5 "FAILED at the prompt"
-                                                                        frames all read it
+                                                                        frames all read it. The three failures, each read: all
+                                                                        PINNED in the portrait room / bar entrance (a framed
+                                                                        portrait, the bar-entrance corner after the 129 look's
+                                                                        strafe, the photographer NPC then a wrong 191-inlier wide
+                                                                        relocalisation), the ladder moving nothing
+    078a912  04:51 (again)  25     running                             repeatability; patch43 (a LOST rescue: back out 1.0 s, look
+                                                                        0/-25/+25 over the whole chain behind k at the strong
+                                                                        gate, once per walk) lands at this batch's end if READY
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED

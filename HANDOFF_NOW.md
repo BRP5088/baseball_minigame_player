@@ -234,7 +234,31 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, SIXTEENTH LAUNCH, RUNNING (04:02, commit 078a912 = a8ff495 + patch42), plain `--trials 25`.**
+- **THE 25, SEVENTEENTH LAUNCH, RUNNING (04:51, commit 078a912 again), plain `--trials 25`: a repeatability
+  run while patch43 is built.** **Sixteenth launch (078a912 = a8ff495 + patch42): 22 of 25, 0 invalid, walk
+  median 82.5 s [74..115], best streak 11** (`overnight/chain_trials_batch16.*`): the rewind's removal
+  restored the b14 rate, no better; the fee token is defence, not a lever. Its three failures, each read
+  (`agent_progress/closed-loop/review/notes_cur_t12_1788856027.md`, `notes_b16_t16.md`,
+  `notes_b16_t19.md`): t12 the 129 look fitted at 186 inliers, the un-yaw strafe LEFT (asked -371 px, capped
+  0.3 s) put the character into the bar-entrance corner, 20 rows with no fit at all, pinned; t16 walked
+  face-first into a framed PORTRAIT at k~104, turn-early/back/wait, 129 stamped on a 6-inlier fit, pinned
+  against the canvas; t19 walked INTO the photographer NPC at k 112-114 (the user's "you walk into
+  Wanda"), a WIDE relocalisation then matched k=136 on 191 inliers -- WRONG, the frames match chain 0120
+  -- and the bounded stop windows could never find the truth again. All three: the escape ladder moved
+  nothing. **Censuses that REFUSED a rule tonight** (`agent_progress/closed-loop/review/
+  census_after_129_notes.md`, scripts and raw output beside it): a runner-up margin on wide
+  relocalisations (5 ties, 4 right); the look's dx at 129 (one population); the scale climb in the
+  portrait room (arrivals climb to 3-4x as often as failures); a scene-change gate on blind pushes
+  (§10.4). **What the journals DO say:** a blind run >= 4 after 129 then 166 taken unverified arrives 0 of
+  9, lost before 166 0 of 11, while every arrival with such a run VERIFIED 166 (21); the ladder in the bar
+  stretch: jump 14/55, back 0/27, left 36/106, right 5/69 recover a fix within 3 rows. **BUILDING (workflow
+  `lost-rescue-builder`, Opus builder + two Sonnet skeptics + fix + recheck): patch43, a LOST rescue** --
+  at `lost >= LOST_MAX`, once per walk (`LOST_RESCUE_MAX` 1): back out 2 x BACK_SEC = 1.0 s, look at
+  0/-25/+25 deg, believe a fit >= STRONG_MIN_INLIERS (165), resume from it; else end "lost" exactly as
+  today. Costs an arriving trial nothing; every firing is a measurement on a trial already lost. AMENDMENT
+  for the fix round (from t19): the looks must search the WHOLE chain behind k (0 .. k + WIDE_AHEAD), not
+  last_cred_k - 6, because a wrong wide relocalisation makes last_cred_k the wrong place.
+- **THE 25, SIXTEENTH LAUNCH, DONE 04:50 (04:02, commit 078a912 = a8ff495 + patch42), plain `--trials 25`.**
   patch42: `STOP_REWIND_MAX` 2 -> 0 (the rewind mechanism and its tests stay, at budget 2 for themselves;
   rules A and B untouched) and `at_table()` reads the "$50" / "(50)" fee token LAST, on the census band
   `FEE_BOX` (0.30, 0.58, 0.72, 0.70) at 3x, both polarities -- 0 of 7,885 route frames, 58 of 81 prompt
