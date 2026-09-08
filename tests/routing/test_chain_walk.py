@@ -426,9 +426,10 @@ class IndexAdvance(unittest.TestCase):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
         self.assertEqual(chain_walk.plan_indices(wps),
                          [(1, True, 90.0), (3, False, 0.0), (4, True, 0.0), (5, True, 0.0)])
-        # locate calls in order: it1 push -> Fix(k=1); it2 turn-verify -> weak;
-        # it3 (after the retry push) turn-verify -> credible; it4 push -> Fix(4)
-        ch = FakeChain(6, [Fix(k=1), Fix(k=3, inliers=8), Fix(k=3, inliers=90),
+        # locate calls in order: it1 push -> Fix(k=1); it2 turn-verify -> a thin
+        # fit to the EARLIER waypoint 2 (evidence of being short); it3 (after
+        # the retry push) turn-verify -> credible; it4 push -> Fix(4)
+        ch = FakeChain(6, [Fix(k=1), Fix(k=2, inliers=8), Fix(k=3, inliers=90),
                            Fix(k=4), Fix(k=5)])
         ch.waypoints = wps
         rig = Rig(ch, table_at=6)
@@ -443,16 +444,45 @@ class IndexAdvance(unittest.TestCase):
         self.assertTrue(res["arrived"])
 
     def test_a_turn_stop_is_accepted_unverified_after_the_retries(self):
+        # Every verify fits an EARLIER waypoint thinly: three retries, then
+        # the turn is accepted unverified.
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        ch = FakeChain(4, [Fix(k=1)], default=None)
+        ch = FakeChain(4, [Fix(k=1)], default=Fix(k=1, inliers=9))
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=8.05)
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
+
+    def test_a_stop_whose_frame_fits_nothing_is_occluded_not_short(self):
+        # Batch 4 trial 8: an NPC in the face. No fit at the stop -> no retry
+        # push; turn and go on.
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(5, [Fix(k=1), None, Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=5)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-occluded"])
+        self.assertNotIn("turn-retry", acts)
+        self.assertEqual(rig.count("push"), 3, "no retry push: 1 + 2 walking + the arrival push")
+
+    def test_a_stop_whose_frame_fits_a_later_waypoint_is_passed_not_short(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(5, [Fix(k=1), Fix(k=3, inliers=9), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=5)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[1], "turned-past")
+        self.assertNotIn("turn-retry", acts)
 
     def test_after_the_blind_budget_a_strong_fix_far_ahead_relocalises(self):
         # One blind advance (k -> 1); from the NEXT blind iteration on the wide

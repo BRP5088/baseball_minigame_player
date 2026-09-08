@@ -149,6 +149,11 @@ LOST_MAX = 9
 # credible fits, the loop turns back, pushes once more along the walking
 # heading and retries, this many times, before accepting the turn unverified.
 TURN_RETRY_MAX = 3
+# A retry (turn back, one more push) needs EVIDENCE of being short: the stop's
+# frame fitting an EARLIER waypoint, however thinly. A frame that fits nothing
+# is an occluded view or a stop already passed (batch 4 trial 8: Wanda the
+# camera mouse in the loop's face at the bar-entrance stop; three retry pushes
+# walked into her and past the spot). Then: turn and go on.
 # WIDE RE-LOCALISATION once the blind budget is spent: search this many chain
 # indices AHEAD of k for a STRONG fix before counting misses. Batch 2 trials 1
 # and 2 (2026-09-07 19:4x): at the office exit the scene is a distant facade
@@ -717,6 +722,24 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  relocalised "
                         f"past the stop: {wide.inliers} inliers at {wide.k}")
                     continue
+            short = (not verified and fix_t is not None
+                     and int(getattr(fix_t, "k", target_k)) < target_k)
+            if not verified and not short:
+                k = target_k
+                misses = 0
+                stalls = 0
+                turn_retries = 0
+                why = "occluded" if fix_t is None else "past"
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix_t), "action": f"turned-{why}",
+                        "lateral": None, "at_end": False,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  turned-{why} "
+                    f"to {heading}: the stop's frame fits "
+                    f"{'nothing' if fix_t is None else f'waypoint {int(fix_t.k)} at {inl_t} inliers'}"
+                    f", no evidence of being short")
+                continue
             if (not verified and turn_retries < TURN_RETRY_MAX
                     and walk_heading is not None):
                 turn_retries += 1
