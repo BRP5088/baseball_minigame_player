@@ -4,9 +4,9 @@ and refuse to press at all when the floor stop was not confirmed.
 WHY THIS EXISTS. STAIRS_APPROACH.md (2026-09-06) measured the one pitch that
 makes leg 2 work: home DOWN to the floor stop, then 22 presses UP. The project
 already holds two other pitch numbers that contradict it (PITCH_STEPS_FROM_BOTTOM
-= 14 and level_pitch's "4 positions"), and level_pitch's own docstring records
-that a caller branching on its result "was branching on a constant". So the
-things worth pinning are the ones a plausible edit would silently break:
+= 14 and level_pitch's "4 positions"), and level_pitch presses on ANYWAY when
+the home is not confirmed, merely reporting it (patch57). So the things worth
+pinning are the ones a plausible edit would silently break:
 
   (a) the ORDER (home first, then count) and the COUNT (22, as a literal --
       CLAUDE.md 10.11: never assert against the constant being guarded);

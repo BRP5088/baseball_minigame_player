@@ -116,7 +116,7 @@ class Fix:
         self.second_dx = second_dx
         self.scale = scale
         self.dx = dx
-        self.dy = dy               # chain.Fix carries it; recorded, never acted on
+        self.dy = dy               # the pitch correction reads it (patch57)
         self.inliers = inliers
         self.second = second
         self.k_float = float(k) if k_float is None else k_float
@@ -245,6 +245,13 @@ class Rig:
         self.t += secs
         self.events.append(("strafe", lx, secs))
 
+    def pitch(self, action, secs):
+        # patch57. Recorded like every other console call, so a test can assert
+        # that NOTHING touches the pitch with the flag off -- or with it on and
+        # the calibration still unmeasured, which is what ships.
+        self.t += secs
+        self.events.append(("pitch", action, secs))
+
     def jump(self):
         self.t += self.JUMP_SEC
         self.events.append(("jump",))
@@ -262,7 +269,7 @@ class Rig:
             self.chain, self.capture, lambda: 87.0, log=lambda *a: None,
             turn_to=self.turn_to, push=self.push, strafe=self.strafe,
             jump=self.jump, at_table=self.at_table, now=self.now,
-            sleep=self.sleep, back=self.back, **kw)
+            sleep=self.sleep, back=self.back, pitch=self.pitch, **kw)
 
     def count(self, name):
         return sum(1 for e in self.events if e[0] == name)
@@ -2194,6 +2201,371 @@ class Escapes(unittest.TestCase):
                 pushed = False
 
 
+
+class PitchCorrection(unittest.TestCase):
+    """patch57: the VERTICAL offset -- REPORTED, not acted on, until two
+    quantities have been measured.
+
+    Every fit carries dy and the loop threw it away (`grep -n '.dy'
+    chain_walk.py` returned nothing before this patch). The user, watching the
+    reticle drift on the stream: "can correction be made so drift doesn't
+    essentially exist since it's corrected for it".
+
+    WHY IT ONLY REPORTS. A fixed-step bang-bang rule needs its step to be no
+    larger than its dead-band or it hunts, and the project's own three readings
+    of the pitch actuator (8, 20 and 36 presses for the whole vertical travel:
+    input_controller.py:993, :1009-1014, STAIRS_APPROACH.md) put ONE press at
+    30, 54 or 135 px against a 28 px floor -- at or above it under every
+    reading. The sign was never measured either: chain.Fix documents `dx SIGN`
+    and no dy one. So PITCH_STEP_PX and PITCH_DOWN_DY_SIGN ship None, and while
+    either is None NOTHING IS PRESSED, whatever PITCH_MODE says. These tests
+    pin that, and pin the acting mechanism by supplying a calibration OF THEIR
+    OWN -- the STOP_REWIND_MAX precedent, "the mechanism stays; its tests run
+    it for themselves".
+
+    THE TARGET IS THE RECORDING, NOT LEVEL. dy is measured against the
+    waypoint's own frame, so dy -> 0 holds the pitch the drive held there. The
+    between-waypoint medians run +318 px to -134 px (the drive's own pitch,
+    signal) and the between-walk spread at one waypoint is 86 px (the drift,
+    the correctable part) -- 1,674 credible fits over 40 journals.
+    """
+
+    # A calibration a test supplies for itself: 30 px per press is the SMALLEST
+    # of the project's three readings, and -1 is the optics hypothesis. Neither
+    # is shipped; both are here so the acting path can be driven at all.
+    STEP_PX, DOWN_SIGN = 30.0, -1
+
+    def _rig(self, dy, inliers=120, n=4, table_at=3):
+        return Rig(FakeChain(n, [Fix(k=1, scale=1.0, dy=dy, inliers=inliers)]),
+                   table_at=table_at)
+
+    def _set(self, **kw):
+        for name, value in kw.items():
+            prev = getattr(chain_walk, name)
+            setattr(chain_walk, name, value)
+            self.addCleanup(setattr, chain_walk, name, prev)
+
+    def _report(self, dy, inliers=120):
+        """The SHIPPED on-arm: the flag on, both calibrations still None."""
+        self._set(PITCH_CORRECT=True)
+        rig = self._rig(dy, inliers)
+        return rig, rig.go()
+
+    def _act(self, dy, inliers=120, **over):
+        """The flag on AND calibrated, which is the only way to press."""
+        cal = {"PITCH_CORRECT": True, "PITCH_MODE": "act",
+               "PITCH_STEP_PX": self.STEP_PX,
+               "PITCH_DOWN_DY_SIGN": self.DOWN_SIGN}
+        cal.update(over)
+        self._set(**cal)
+        rig = self._rig(dy, inliers)
+        return rig, rig.go()
+
+    def _off(self, dy, inliers=120):
+        rig = self._rig(dy, inliers)
+        return rig, rig.go()
+
+    @staticmethod
+    def _pitches(rig):
+        return [e for e in rig.events if e[0] == "pitch"]
+
+    @staticmethod
+    def _rows(res):
+        return [r["pitch"] for r in res["fixes"] if "pitch" in r]
+
+    def test_the_flag_ships_OFF_and_these_are_the_literals(self):
+        # §10.11: a test that asserts against the constant it guards rises with
+        # it and passes forever. Every one of these is pinned as a literal, and
+        # each is justified where it is defined.
+        self.assertIs(chain_walk.PITCH_CORRECT, False)
+        self.assertEqual(chain_walk.PITCH_MODE, "report")
+        self.assertIsNone(chain_walk.PITCH_STEP_PX,
+                          "px per press is UNMEASURED; tools/pitch_probe.py "
+                          "measures it, and until then nothing may press")
+        self.assertIsNone(chain_walk.PITCH_DOWN_DY_SIGN,
+                          "the sign is UNMEASURED -- chain.Fix documents dx "
+                          "and no dy -- and backwards it DOUBLES the error")
+        self.assertIsNone(chain_walk.PITCH_SEC_PER_DEG)
+        self.assertEqual(chain_walk.PITCH_TOL_MIN_PX, 28.0)
+        self.assertEqual(chain_walk.PITCH_PX_PER_DEG, 15.5)  # derived, not 19.7
+        self.assertNotEqual(chain_walk.PITCH_PX_PER_DEG, chain_walk.PX_PER_DEG,
+                            "the vertical figure is DERIVED from the fov, never "
+                            "assumed equal to the measured yaw one")
+        self.assertEqual(chain_walk.PITCH_PRESS_SEC, 0.05)
+        self.assertEqual(chain_walk.PITCH_POST_DELAY, 0.30)
+        self.assertEqual(chain_walk.PITCH_CAP_SEC, 0.30)
+        self.assertEqual(chain_walk.PITCH_ACTIONS, ("look_up", "look_down"))
+
+    # ---- the dead-band is the ACTUATOR's step, which is the anti-hunt rule --
+
+    def test_the_dead_band_is_never_smaller_than_one_press(self):
+        # THE STABILITY CONDITION, and the whole reason the first draft was
+        # wrong: a fixed step S outside a dead-band D overshoots to the other
+        # side unless S <= D. Making the band the step makes that impossible at
+        # ANY measured step -- so this is a property, checked across the three
+        # readings the project actually has (30 / 54 / 135 px per press) and
+        # well past them.
+        self.assertEqual(chain_walk.pitch_dead_band(),
+                         chain_walk.PITCH_TOL_MIN_PX,
+                         "uncalibrated, the floor is all there is")
+        for step in (30.0, 54.0, 135.0, 1.0, 500.0):
+            self._set(PITCH_STEP_PX=step)
+            band = chain_walk.pitch_dead_band()
+            self.assertGreaterEqual(band, step,
+                                    f"a {step} px step needs a band >= it")
+            self.assertGreaterEqual(band, chain_walk.PITCH_TOL_MIN_PX)
+        # ... and the floor is a FLOOR, not the answer: a big step raises it.
+        self._set(PITCH_STEP_PX=135.0)
+        self.assertEqual(chain_walk.pitch_dead_band(), 135.0)
+
+    def test_a_calibrated_step_widens_the_band_a_walk_uses(self):
+        # Not just the pure function: the LOOP must ask for the band each time.
+        # 100 px is outside the 28 px floor and inside a 135 px step.
+        _, loose = self._report(+100.0)
+        self.assertEqual(len(self._rows(loose)), 1)
+        self._set(PITCH_STEP_PX=135.0)
+        rig, tight = self._rig(+100.0, 120), None
+        tight = rig.go()
+        self.assertEqual(self._rows(tight), [],
+                         "inside a 135 px band, 100 px is not an error")
+
+    # ---- the flag OFF ----------------------------------------------------
+
+    def test_OFF_the_vertical_offset_is_INVISIBLE(self):
+        big, _ = self._off(+400.0)
+        none, _ = self._off(0.0)
+        self.assertEqual(self._pitches(big), [], "nothing may touch the pitch")
+        self.assertEqual(big.events, none.events,
+                         "with the flag off a 400 px vertical offset must "
+                         "change NOTHING about the walk")
+
+    def test_OFF_no_row_carries_a_pitch_key(self):
+        _, res = self._off(+400.0)
+        self.assertEqual(self._rows(res), [],
+                         "a row padded with a correction that never happened is "
+                         "§10.1's no-op that reads as a success")
+        # ANTI-VACUITY: the same fixture ON does write one, so this is not
+        # passing because the fixture could never produce a correction.
+        _, on_res = self._report(+400.0)
+        self.assertEqual(len(self._rows(on_res)), 1)
+
+    # ---- the SHIPPED on-arm: it reports and presses nothing --------------
+
+    def test_the_shipped_on_arm_REPORTS_AND_PRESSES_NOTHING(self):
+        rig, res = self._report(+400.0)
+        self.assertEqual(self._pitches(rig), [],
+                         "with PITCH_STEP_PX and PITCH_DOWN_DY_SIGN unmeasured "
+                         "the rule may not send a single press")
+        row, = self._rows(res)
+        self.assertIs(row["acted"], False)
+        self.assertIsNone(row["action"], "it must not name a direction it "
+                                         "cannot justify")
+        self.assertIsNone(row["seconds"])
+        self.assertEqual(set(row["blocked"]),
+                         {"step_px_unmeasured", "down_sign_unmeasured",
+                          "report_mode"})
+        # ... and it reports what it MEASURED, which is the point of the mode.
+        self.assertEqual(row["dy"], 400.0)
+        self.assertAlmostEqual(row["deg"], round(400.0 / 15.5, 1), places=6)
+        self.assertEqual(row["band"], 28.0)
+        self.assertEqual(row["hypothesis"], "look_down",
+                         "the optics ARGUMENT, labelled as one so the probe's "
+                         "measured sign can be checked against it")
+
+    def test_the_MODE_ALONE_CANNOT_UNLOCK_A_PRESS(self):
+        # The safety argument of the whole first version. Setting the mode is
+        # exactly the edit someone in a hurry makes; it must not be enough.
+        self._set(PITCH_CORRECT=True, PITCH_MODE="act")
+        rig = self._rig(+400.0)
+        res = rig.go()
+        self.assertEqual(self._pitches(rig), [])
+        row, = self._rows(res)
+        self.assertIs(row["acted"], False)
+        self.assertEqual(set(row["blocked"]),
+                         {"step_px_unmeasured", "down_sign_unmeasured"})
+        # HALF a calibration is still no calibration.
+        self._set(PITCH_STEP_PX=self.STEP_PX)
+        rig2 = self._rig(+400.0)
+        rig2.go()
+        self.assertEqual(self._pitches(rig2), [],
+                         "the step alone, without the sign, may not press")
+
+    # ---- the flag ON and CALIBRATED --------------------------------------
+
+    def test_the_MEASURED_sign_decides_the_direction_not_the_hypothesis(self):
+        # PITCH_DOWN_DY_SIGN is the sign of the CHANGE look_down makes to dy,
+        # so look_down reduces |dy| exactly when that change opposes dy. Driven
+        # BOTH WAYS: if the code fell back to `hypothesis` (dy > 0 -> look_down)
+        # the second half of this test fails, which is the only way to tell the
+        # measured convention from the guessed one.
+        rig, res = self._act(+400.0, PITCH_DOWN_DY_SIGN=-1)
+        got = self._pitches(rig)
+        self.assertEqual(len(got), 1, "exactly one correction per iteration")
+        self.assertEqual(got[0][1], "look_down")
+        self.assertEqual(got[0][2], chain_walk.PITCH_PRESS_SEC)
+        row, = self._rows(res)
+        self.assertIs(row["acted"], True)
+        self.assertEqual(row["blocked"], ())
+        self.assertEqual(row["action"], "look_down")
+        self.assertEqual(row["step_px"], self.STEP_PX)
+        self.assertIsNone(row["gain"], "the row says which control law ran")
+
+    def test_the_OPPOSITE_measured_sign_inverts_the_direction(self):
+        rig, res = self._act(+400.0, PITCH_DOWN_DY_SIGN=+1)
+        got = self._pitches(rig)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][1], "look_up",
+                         "with look_down measured to INCREASE dy, a positive "
+                         "dy must be answered with look_up")
+        row, = self._rows(res)
+        self.assertEqual(row["action"], "look_up")
+        self.assertEqual(row["hypothesis"], "look_down",
+                         "and the hypothesis still says what the optics "
+                         "argument predicted, so the two can be compared")
+
+    def test_a_NEGATIVE_offset_is_answered_the_other_way(self):
+        rig, res = self._act(-400.0, PITCH_DOWN_DY_SIGN=-1)
+        self.assertEqual([e[1] for e in self._pitches(rig)], ["look_up"])
+        self.assertEqual(self._rows(res)[0]["action"], "look_up")
+
+    def test_inside_the_dead_band_nothing_is_sent_and_nothing_is_said(self):
+        rig, res = self._act(+20.0)
+        self.assertEqual(self._pitches(rig), [],
+                         "|dy| under the dead-band must not be corrected")
+        self.assertEqual(self._rows(res), [],
+                         "and must not write a row either -- a row for an "
+                         "offset nobody would act on is noise in the census")
+        # ... and just OUTSIDE it, it fires: the dead-band is a boundary, not a
+        # reason nothing ever happens. 31 px clears the 30 px calibrated band.
+        rig2, _ = self._act(+31.0)
+        self.assertEqual(len(self._pitches(rig2)), 1)
+
+    def test_a_THIN_fit_never_steers_the_camera(self):
+        # FIX_MIN_INLIERS is the chain's own true-position p05; a fit under it
+        # "neither advances nor steers", and that now includes the camera. A
+        # thin fit's offsets are junk (-847 px at 7 inliers).
+        thin, thin_res = self._act(+400.0,
+                                   inliers=chain_walk.FIX_MIN_INLIERS - 1)
+        self.assertEqual(self._pitches(thin), [])
+        self.assertEqual(self._rows(thin_res), [])
+        credible, _ = self._act(+400.0, inliers=chain_walk.FIX_MIN_INLIERS)
+        self.assertEqual(len(self._pitches(credible)), 1,
+                         "the SAME fixture one inlier up must fire, or the test "
+                         "above passes for the wrong reason")
+
+    def test_an_unmeasurable_fix_is_never_corrected(self):
+        self._set(PITCH_CORRECT=True, PITCH_MODE="act",
+                  PITCH_STEP_PX=self.STEP_PX,
+                  PITCH_DOWN_DY_SIGN=self.DOWN_SIGN)
+        rig = Rig(FakeChain(4, [None]), table_at=3)
+        rig.go()
+        self.assertEqual(self._pitches(rig), [])
+
+    def test_an_ESCAPE_blocks_the_PRESS_and_KEEPS_the_row(self):
+        # Reached through a REAL plan, not by poking a flag: a credible fit
+        # that never advances k stalls, and STALL_MAX stalls fire the ladder
+        # and set `escaped`. The strafe skips such an iteration outright
+        # because a sidestep displaces the character between the measurement
+        # and the action; whether the jump rung's hop is pitch-neutral is
+        # unknown, so the press waits and the ROW IS STILL WRITTEN -- which is
+        # what keeps those iterations out of the census as a silent confound.
+        self._set(PITCH_CORRECT=True, PITCH_MODE="act",
+                  PITCH_STEP_PX=self.STEP_PX,
+                  PITCH_DOWN_DY_SIGN=self.DOWN_SIGN)
+        stuck = Fix(k=1, scale=0.5, dy=+400.0, inliers=120)
+        rig = Rig(FakeChain(6, default=stuck), table_at=None)
+        res = rig.go()
+        rows = self._rows(res)
+        self.assertGreater(rig.count("jump"), 0,
+                           "the fixture must actually reach the escape ladder")
+        blocked = [r for r in rows if "escaped" in r["blocked"]]
+        self.assertGreaterEqual(len(blocked), 2,
+                                "the escaping iteration and the one after it")
+        for r in blocked:
+            self.assertIs(r["acted"], False)
+            self.assertIsNone(r["action"])
+            self.assertEqual(r["dy"], 400.0, "the measurement is still there")
+        # ANTI-VACUITY: most iterations of this same walk DO act, so the block
+        # above is the escape and not a walk that never corrects at all.
+        self.assertTrue(any(r["acted"] for r in rows))
+        acted = [e for e in rig.events if e[0] == "pitch"]
+        self.assertEqual(len(acted), sum(1 for r in rows if r["acted"]))
+
+    def test_the_hold_is_CAPPED_and_FLOORED_once_a_gain_exists(self):
+        # The cap is unreachable while PITCH_SEC_PER_DEG is None (one press is
+        # the whole command), so it is driven here at a gain of its own -- the
+        # STOP_REWIND_MAX precedent. Without this the cap is a guard that
+        # cannot fire.
+        self.assertEqual(chain_walk.PITCH_CAP_SEC, 0.30)     # the literals
+        self.assertEqual(chain_walk.PITCH_PRESS_SEC, 0.05)
+        gain = 0.01                                          # s per degree
+        # BOTH BOUNDS MUST BIND AT ONE GAIN or one of the two assertions below
+        # is about a quantity the law never produced: 5000 px is 322.6 deg is
+        # 3.2 s uncapped, and 31 px is 2.0 deg is 0.020 s unfloored.
+        uncapped = abs(5000.0 / chain_walk.PITCH_PX_PER_DEG) * gain
+        unfloored = abs(31.0 / chain_walk.PITCH_PX_PER_DEG) * gain
+        self.assertGreater(uncapped, 0.6,
+                           "the fixture must exceed even a DOUBLED cap, or the "
+                           "assertion below holds whatever the cap is")
+        self.assertLess(unfloored, chain_walk.PITCH_PRESS_SEC / 2.0,
+                        "and fall well under even a HALVED floor")
+        big, _ = self._act(+5000.0, PITCH_SEC_PER_DEG=gain)
+        self.assertEqual(self._pitches(big)[0][2], 0.30)
+        small, _ = self._act(+31.0, PITCH_SEC_PER_DEG=gain)
+        self.assertEqual(self._pitches(small)[0][2], chain_walk.PITCH_PRESS_SEC)
+        # ... and BETWEEN them the law is proportional, so the two bounds are
+        # bounds and not the whole function: 155 px is 10 deg is 0.10 s.
+        mid, _ = self._act(+155.0, PITCH_SEC_PER_DEG=gain)
+        self.assertAlmostEqual(self._pitches(mid)[0][2], 0.1, places=3)
+
+    def test_the_character_is_never_moved_by_this_rule(self):
+        # THE WHOLE SAFETY ARGUMENT (GRAVEYARD: every failed change moved the
+        # character; both survivors move nothing). A dy of 400 with dx zero
+        # must produce a pitch press and NOT a strafe, a push or a jump.
+        rig, _ = self._act(+400.0)
+        self.assertEqual(len(self._pitches(rig)), 1)
+        self.assertEqual(rig.strafes(), [])
+        self.assertEqual(rig.count("jump"), 0)
+        off, _ = self._off(+400.0)
+        self.assertEqual(rig.count("push"), off.count("push"),
+                         "the rule must not add or remove a single push")
+
+    # ---- the pure function, where every guard can be driven --------------
+
+    def test_the_predicate_refuses_a_thin_fit_and_a_missing_dy(self):
+        f = chain_walk.pitch_correction
+        self.assertIsNone(f(400.0, chain_walk.FIX_MIN_INLIERS - 1))
+        self.assertIsNone(f(None, 200))
+        self.assertIsNone(f(400.0, None))
+        self.assertIsNotNone(f(400.0, chain_walk.FIX_MIN_INLIERS))
+
+    def test_the_predicate_refuses_the_dead_band_on_both_sides(self):
+        f = chain_walk.pitch_correction
+        self.assertIsNone(f(+28.0, 200), "the boundary itself is inside")
+        self.assertIsNone(f(-28.0, 200))
+        self.assertEqual(f(+29.0, 200)["hypothesis"], "look_down")
+        self.assertEqual(f(-29.0, 200)["hypothesis"], "look_up")
+
+    def test_the_predicate_blocks_on_an_escape_and_still_answers(self):
+        self._set(PITCH_MODE="act", PITCH_STEP_PX=self.STEP_PX,
+                  PITCH_DOWN_DY_SIGN=self.DOWN_SIGN)
+        f = chain_walk.pitch_correction
+        free = f(+400.0, 200, escaped=False)
+        held = f(+400.0, 200, escaped=True)
+        self.assertIs(free["acted"], True)
+        self.assertEqual(free["action"], "look_down")
+        self.assertIs(held["acted"], False)
+        self.assertEqual(held["blocked"], ("escaped",))
+        self.assertEqual(held["dy"], free["dy"],
+                         "a blocked row still carries the measurement")
+
+    def test_the_predicate_reports_the_degrees_it_would_command(self):
+        # The journal's own instrument: dy in px AND the angle it implies, so a
+        # census can be taken in either unit without re-deriving px/deg.
+        got = chain_walk.pitch_correction(+310.0, 200)
+        self.assertAlmostEqual(got["deg"], 20.0, places=1)
+        self.assertEqual(got["dy"], 310.0)
+
 class Lateral(unittest.TestCase):
     """(e) one lateral push per iteration, gated, sized and SIGNED."""
 
@@ -2451,6 +2823,421 @@ class BarStopEarlyTurn(unittest.TestCase):
                          "pointed at a stop this plan does not have, it must "
                          "change nothing")
         self.assertNotIn("bar_turned_early", res)
+
+
+
+class _OneShotWide(FakeChain):
+    """FakeChain whose `wide` answer is served EXACTLY ONCE.
+
+    A constant `wide` cannot show what a found blind-look hands back: the
+    ordinary forward search would relocalise on every blind iteration
+    afterwards and no blind run would ever form. One shot lets the look find
+    something and the walk then go honestly blind again.
+    """
+
+    def locate(self, img, k_hint, window=3):
+        if window >= chain_walk.WIDE_AHEAD:
+            self.wide_calls.append(k_hint)
+            served, self.wide = self.wide, None
+            return served
+        return super().locate(img, k_hint, window=window)
+
+
+
+class BlindLookAround(unittest.TestCase):
+    """patch56: LOOK instead of pushing blind AGAIN.
+
+    The user, watching the stream: "the bar area seems to be an area the player
+    struggles to detect and know when to turn towards the jukebox. This causes
+    them to ram into the bar"; and "they also walk into the wall behind Wanda.
+    they also walk into wanda."
+
+    The turn at 166 is not the problem -- 57 of 58 walks serviced it on a
+    credible fit. The loss is after it. Read from its own journal rows rather
+    than its summary line, the motivating failure is: the stop taken
+    `turned-unverified` on 7 inliers, TWO blind advances, a weak fit, then
+    eleven iterations of misses and escape rungs. (Its failure string says
+    "after 6 blind advances"; that 6 is chain_walk's own hardcoded BLIND_MAX
+    literal, not a count -- a separate pre-existing bug, left alone because the
+    harnesses parse that string.)
+
+    THE THING THAT ACTUALLY CHANGES, and it is not the push count: where the
+    off-arm's iteration is (turn, push, capture), the on-arm's is (turn -25,
+    capture, turn +25, capture, turn back) and NO push. A sibling patch today
+    shipped a first test asserting a push DISAPPEARED from the walk; it does
+    not, because the loop still has to travel. Here the assertion is on the
+    ITERATION'S OWN events, which is where the substitution really happens.
+
+    THE CHAIN: 40 waypoints, one heading, a walking stick on every row, so
+    plan_indices emits pushes only and the walk is one long blind stretch. The
+    fake sensor answers None to everything, and `wide` is the single knob that
+    decides what a look (or the forward search) finds.
+    """
+
+    N = 40
+    HEADING = 90.0
+
+    def _wps(self):
+        wps = []
+        for i in range(self.N):
+            w = Wp(i, self.HEADING)
+            w.lx = 0.0
+            w.ly = 0.0 if i == 0 else -0.35
+            wps.append(w)
+        return wps
+
+    def _rig(self, wide=None, wps=None, cls=FakeChain, fixes=(),
+             lookback="script"):
+        wps = self._wps() if wps is None else wps
+        ch = cls(len(wps), fixes, default=None, wide=wide, lookback=lookback)
+        ch.waypoints = wps
+        return Rig(ch, table_at=None)
+
+    def _run(self, on, after=1, cap=1, **kw):
+        """One walk at one arm. Returns (rig, result)."""
+        keep = (chain_walk.BLIND_LOOK_AROUND, chain_walk.BLIND_LOOK_AFTER,
+                chain_walk.BLIND_LOOK_MAX)
+        (chain_walk.BLIND_LOOK_AROUND, chain_walk.BLIND_LOOK_AFTER,
+         chain_walk.BLIND_LOOK_MAX) = on, after, cap
+        try:
+            rig = self._rig(**kw)
+            return rig, rig.go(time_cap=200.0)
+        finally:
+            (chain_walk.BLIND_LOOK_AROUND, chain_walk.BLIND_LOOK_AFTER,
+             chain_walk.BLIND_LOOK_MAX) = keep
+
+    @staticmethod
+    def _looks(res):
+        return [r for r in res["fixes"] if "blind_look" in r]
+
+    @staticmethod
+    def _actions(res):
+        return [r.get("action") for r in res["fixes"]]
+
+    # ---- what ships -------------------------------------------------------
+
+    def test_it_ships_OFF_and_every_constant_is_a_borrowed_one(self):
+        # Literals, never the constant guarding itself (10.11).
+        self.assertIs(chain_walk.BLIND_LOOK_AROUND, False)
+        self.assertEqual(chain_walk.BLIND_LOOK_AFTER, 2)
+        self.assertEqual(chain_walk.BLIND_LOOK_AFTER, chain_walk.END_BLIND_MAX)
+        self.assertEqual(chain_walk.BLIND_LOOK_MAX, 1)
+        self.assertEqual(chain_walk.BLIND_LOOK_MAX, chain_walk.LOST_RESCUE_MAX)
+        self.assertEqual(chain_walk.BLIND_LOOK_ACTION, "blind-look")
+        self.assertEqual(chain_walk.BLIND_LOOK_FOUND_ACTION, "relocalised-look")
+        # It invents NO physical constant: the angles, the gate and the span
+        # are the ones the stop look-around and the forward search already use.
+        self.assertEqual(chain_walk.STOP_LOOK_DEG, (-25.0, 25.0))
+        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 165)
+        self.assertEqual(chain_walk.WIDE_AHEAD, 60)
+
+    def test_the_found_action_still_counts_as_PROGRESS(self):
+        # It is spelled "relocalised-look" so it resets the escape ladder and
+        # re-arms turn-early exactly as the forward search's own relocalisation
+        # does -- PROGRESS_ACTIONS is tested with str.startswith -- while still
+        # being greppable apart from it in a journal.
+        self.assertTrue(
+            chain_walk.BLIND_LOOK_FOUND_ACTION.startswith(
+                chain_walk.PROGRESS_ACTIONS))
+        self.assertNotIn(chain_walk.BLIND_LOOK_FOUND_ACTION,
+                         chain_walk.UNEVIDENCED_ACTIONS)
+        self.assertNotEqual(chain_walk.BLIND_LOOK_FOUND_ACTION, "relocalised")
+        # ... and a look that found NOTHING is not progress.
+        self.assertFalse(
+            chain_walk.BLIND_LOOK_ACTION.startswith(chain_walk.PROGRESS_ACTIONS))
+
+    # ---- the flag off changes nothing -------------------------------------
+
+    def test_OFF_the_walk_is_byte_for_byte_what_it_is_today(self):
+        off_rig, off_res = self._run(False, after=1)
+        # Nothing of this rule reaches the journal or the result.
+        self.assertEqual(self._looks(off_res), [])
+        self.assertNotIn("blind_looks", off_res)
+        # ... and the machinery is inert when it is ON but not DUE, which is
+        # the only way to show offline that the TRIGGER, not the flag alone,
+        # is doing the gating: a mutant dropping the blind-count clause fails
+        # here.
+        never_rig, never_res = self._run(True, after=10 ** 6)
+        self.assertEqual(never_rig.events, off_rig.events)
+        self.assertEqual(self._looks(never_res), [])
+        # ANTI-VACUITY: the walk this compares must actually go blind and push,
+        # or two identical empty event lists would pass.
+        self.assertGreater(off_rig.count("push"), 3)
+        self.assertIn("blind-advance", self._actions(off_res))
+
+    # ---- the substitution -------------------------------------------------
+
+    def test_ON_the_iteration_LOOKS_and_makes_NO_push(self):
+        # THE ASSERTION IS ON THE FIRST DIVERGENCE BETWEEN THE ARMS, not on
+        # "does a +-25 turn appear anywhere": the LOST RESCUE at the end of
+        # this walk turns the same two angles about the same heading, so
+        # searching the whole event list finds ITS turns in BOTH arms and an
+        # `assertNotIn` there passes for nobody. Up to the first difference the
+        # two arms are identical by construction; AT it the off-arm pushes and
+        # the on-arm looks. That is the substitution, exactly.
+        off_rig, _ = self._run(False, after=1)
+        on_rig, on_res = self._run(True, after=1, cap=1)
+        self.assertEqual(len(self._looks(on_res)), 1, "one firing at cap 1")
+        i = next((j for j, (a, b) in enumerate(zip(off_rig.events,
+                                                   on_rig.events)) if a != b),
+                 None)
+        self.assertIsNotNone(i, "the arms must diverge at all")
+        self.assertEqual(off_rig.events[:i], on_rig.events[:i])
+        self.assertEqual(off_rig.events[i][0], "push",
+                         "what the off-arm does here is a blind push")
+        window = on_rig.events[i:i + 5]
+        self.assertEqual([e[0] for e in window],
+                         ["turn", "capture", "turn", "capture", "turn"],
+                         f"the on-arm turns, looks, turns, looks and turns "
+                         f"back -- and pushes NOTHING: {window}")
+        self.assertEqual(window[0], ("turn", (self.HEADING - 25.0) % 360.0))
+        self.assertEqual(window[2], ("turn", (self.HEADING + 25.0) % 360.0))
+        self.assertEqual(window[4], ("turn", self.HEADING),
+                         "back on the line it was going to walk")
+        self.assertNotIn("push", [e[0] for e in window])
+        # AND THE LOOK **IS** THE ITERATION. The event window alone cannot say
+        # this: the very next event is a push either way -- the next
+        # iteration's, when the rule ends in `continue`, or this one's, when it
+        # does not. A mutant turning that `continue` into `pass` therefore
+        # survived the window assertion entirely; the difference it makes is
+        # that the iteration then records TWO rows, the look's and the push's,
+        # which is also the invariant tools/trial_sheet.py:row_for relies on.
+        itn = self._looks(on_res)[0]["iteration"]
+        self.assertEqual(
+            [r["action"] for r in on_res["fixes"] if r["iteration"] == itn],
+            ["blind-look"],
+            "the look REPLACES the push, so nothing else happens in its "
+            "iteration and it is that iteration's only row")
+
+    def test_the_journal_NAMES_it_and_records_WHERE_and_WHAT_it_saw(self):
+        # A working path and a no-op path must not have identical output
+        # (10.1): a look that finds nothing still writes a row, and the row
+        # says how many views it took, how blind the walk was, WHERE it was and
+        # what the best of them scored. `from_k` and `iteration` are not
+        # decoration -- the pre-registered instrument credits a firing to the
+        # post-166 stretch only if it can see where the firing happened.
+        _, on_res = self._run(True, after=1, cap=1)
+        row = self._looks(on_res)[0]
+        self.assertEqual(row["action"], "blind-look")
+        self.assertIsNone(row["fix"], "nothing fit, so there is no fit to show")
+        look = row["blind_look"]
+        self.assertEqual(look["looks"], 2, "both directions, nothing found")
+        self.assertEqual(look["blind"], 1, "the blind count that triggered it")
+        self.assertEqual(look["in_stretch"], 1, "the first look of its stretch")
+        self.assertIsNone(look["to_k"])
+        self.assertIsNone(look["deg"])
+        self.assertIsNone(look["inliers"])
+        self.assertEqual(look["from_k"], row["k"])
+        self.assertIsInstance(row["iteration"], int)
+        # ... and what it cleared, which at a firing is always already nothing.
+        self.assertEqual(look["cleared"], {"lost": 0, "misses": 0, "stalls": 0})
+        # It is distinguishable from an ordinary blind push, which is the whole
+        # point of recording it.
+        self.assertNotEqual(row["action"], "blind-advance")
+        self.assertIn("blind-advance", self._actions(on_res))
+
+    def test_a_look_that_FINDS_something_carries_the_walk_on(self):
+        # `wide` is what any WIDE_AHEAD-window search returns, so this is a
+        # strong fit seen from a turned camera.
+        found = Fix(k=5, inliers=200, scale=1.0)
+        # ONE SHOT, because a found look ENDS the blind stretch and so hands
+        # the budget straight back: with a constant `wide` this walk looks,
+        # relocalises, goes blind, looks, relocalises ... three times over.
+        # That is correct -- every one of those looks found the route -- but it
+        # is not what this test is about.
+        rig, res = self._run(True, after=1, cap=1, wide=found, cls=_OneShotWide)
+        row = self._looks(res)[0]
+        self.assertEqual(row["action"], "relocalised-look")
+        self.assertEqual(row["blind_look"]["to_k"], 5)
+        self.assertEqual(row["blind_look"]["inliers"], 200)
+        self.assertEqual(row["blind_look"]["deg"], -25.0,
+                         "the FIRST direction that fits is believed; "
+                         "STRONG_MIN_INLIERS is above the wrong-place maximum")
+        self.assertEqual(row["blind_look"]["looks"], 1,
+                         "the second direction is not paid for")
+        self.assertEqual(row["k"], 5, "the estimate moved to what it saw")
+        self.assertEqual(row["fix"]["inliers"], 200)
+        self.assertEqual(row["blind_look"]["in_stretch"], 1)
+        # Exactly one look FOUND anything -- the shot -- and the result's
+        # counter is the walk's total, so it agrees with the journal.
+        self.assertEqual([r["action"] for r in self._looks(res)].count(
+            "relocalised-look"), 1)
+        self.assertEqual(res["blind_looks"], len(self._looks(res)))
+
+    def test_a_FOUND_look_hands_back_a_FULL_blind_budget(self):
+        # THE DOWNSTREAM EFFECT OF THE RESET, which is the only way to test it:
+        # the row's own `blind` field is captured BEFORE the reset by design,
+        # so no assertion on the row can see `blind = 0` at all. What it does
+        # is give the walk its whole dead-reckoning budget back -- exactly what
+        # the forward search's `relocalised` does -- so BLIND_MAX blind
+        # advances follow the look, not BLIND_MAX - 1.
+        found = Fix(k=5, inliers=200, scale=1.0)
+        _, res = self._run(True, after=1, cap=1, wide=found, cls=_OneShotWide)
+        acts = self._actions(res)
+        self.assertIn("relocalised-look", acts)
+        after = acts[acts.index("relocalised-look") + 1:]
+        self.assertEqual(after.count("blind-advance"), chain_walk.BLIND_MAX,
+                         f"a full budget after the look, not a spent one: "
+                         f"{after}")
+        # ANTI-VACUITY: the budget really is what ran out (the walk then falls
+        # into the ladder), and BLIND_MAX is not trivially small.
+        self.assertGreater(chain_walk.BLIND_MAX, 1)
+        self.assertIn("miss", after)
+
+    # ---- the bound --------------------------------------------------------
+
+    def test_it_is_BOUNDED_and_does_not_look_again_forever(self):
+        # The walk stays blind for the rest of its life here, so without the
+        # bound the rule would look on every remaining iteration.
+        _, on_res = self._run(True, after=1, cap=1)
+        self.assertEqual(len(self._looks(on_res)), 1)
+        self.assertEqual(on_res["blind_looks"], 1)
+        # ANTI-VACUITY: many more iterations went by with the trigger satisfied.
+        self.assertGreater(on_res["iterations"], 5)
+        # ... and raising the cap raises the count, so the bound is the cap and
+        # not some other accident of this scenario.
+        _, many_res = self._run(True, after=1, cap=4)
+        self.assertEqual(len(self._looks(many_res)), 4)
+
+    def test_a_FAILED_look_needs_another_BLIND_PUSH_before_it_looks_again(self):
+        # NOT A TIGHT LOOP. A failed look touches neither `blind` nor `k`, so a
+        # plain `blind >= after` trigger is satisfied again on the very next
+        # iteration: four structurally identical manoeuvres back to back, same
+        # k, same heading, no push and therefore no new information between
+        # them. Measured with that form in a scratch copy, the four firings
+        # recorded `blind` as [1, 1, 1, 1]. With `blind >= after + looks` each
+        # look raises its own bar and only a blind PUSH can clear it.
+        _, res = self._run(True, after=1, cap=4)
+        rows = self._looks(res)
+        self.assertEqual([r["blind_look"]["blind"] for r in rows], [1, 2, 3, 4])
+        self.assertEqual([r["blind_look"]["in_stretch"] for r in rows],
+                         [1, 2, 3, 4])
+        # ... and between every pair of looks the walk really did push blind.
+        acts = self._actions(res)
+        cuts = [i for i, a in enumerate(acts) if a == "blind-look"]
+        for a, b in zip(cuts, cuts[1:]):
+            self.assertIn("blind-advance", acts[a + 1:b],
+                          f"nothing happened between two looks: {acts[a:b+1]}")
+
+    def test_the_budget_is_PER_BLIND_STRETCH_not_per_walk(self):
+        # THE HOLE A PER-WALK BUDGET HAS: a walk that goes blind for a couple
+        # of pushes anywhere early spends its only look there and reaches the
+        # stretch this rule was built for with none -- behaving as the off arm
+        # while still being scored as an on-arm trial. Here the sensor goes
+        # blind, the look fires and fails, a credible fit ends the stretch, and
+        # the walk goes blind again: the second stretch gets its own look.
+        # `lookback=None` so the look-back does not eat the script.
+        fixes = [None, Fix(k=9, inliers=120, scale=1.0), None]
+        _, res = self._run(True, after=1, cap=1, fixes=fixes, lookback=None)
+        rows = self._looks(res)
+        self.assertEqual(len(rows), 2,
+                         f"one look per blind stretch: {self._actions(res)}")
+        self.assertEqual([r["blind_look"]["in_stretch"] for r in rows], [1, 1])
+        # ANTI-VACUITY: the two looks really are separated by a credible fit
+        # that ended the first stretch, not by nothing.
+        acts = self._actions(res)
+        a, b = (i for i, x in enumerate(acts) if x == "blind-look")
+        self.assertTrue(any(x == "advanced" for x in acts[a + 1:b]),
+                        f"the stretch must actually have ENDED: {acts[a:b+1]}")
+
+    # ---- where it must NOT fire -------------------------------------------
+
+    def _wps_one_push_then_a_stop(self):
+        """ONE walking row, then a stationary run, then more walking -- so the
+        plan's first entry is a push and its second is a TURN-ONLY stop.
+
+        The spacing matters. An earlier version of this test put four walking
+        rows first, and it gave the `pushing` guard NO coverage at all: with
+        `wide` None the rule re-fired on the same pre-stop waypoint until the
+        look budget was spent, so by the stop's own iteration `looks == cap`
+        already refused it whatever the guard said, and a mutant dropping the
+        guard passed at every cap tried. With exactly one push before the stop,
+        the walk is blind at the stop with its budget untouched.
+        """
+        rows = [(self.HEADING, -0.35)] + [(0.0, 0.0)] * 2 \
+            + [(self.HEADING, -0.35)] * 8
+        wps = [Wp(0, self.HEADING)]
+        for i, (h, ly) in enumerate(rows, start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        return wps
+
+    def test_it_does_NOT_fire_at_a_TURN_ONLY_STOP(self):
+        # The stop's own look-around runs there and turns the same +-25 degrees,
+        # so the EVENTS cannot tell them apart -- the journal can.
+        wps = self._wps_one_push_then_a_stop()
+        plan = chain_walk.plan_indices(wps)
+        stops = [i for i, push, _ in plan if not push]
+        self.assertTrue(stops, "ANTI-VACUITY: this plan must contain a stop")
+        self.assertTrue(plan[0][1] and not plan[1][1],
+                        f"ANTI-VACUITY: one push, then the stop: {plan[:3]}")
+        _, res = self._run(True, after=1, cap=1, wps=wps)
+        serviced = [r["target"] for r in res["fixes"]]
+        self.assertTrue(set(stops) & set(serviced),
+                        "ANTI-VACUITY: the stop must actually be serviced")
+        self.assertEqual([r for r in self._looks(res)
+                          if r["target"] in stops], [],
+                         "a turn-only stop has its own look-around; this rule "
+                         "must not add a second one")
+
+    def test_it_does_NOT_fire_when_no_heading_can_be_read(self):
+        # Every waypoint's heading None: the plan carries None headings, the
+        # loop turns to nothing and only pushes. Looking about `None` would
+        # raise; the guard keeps the walk alive instead.
+        wps = [Wp(i, None) for i in range(self.N)]
+        for i, w in enumerate(wps):
+            w.lx = 0.0
+            w.ly = 0.0 if i == 0 else -0.35
+        _, res = self._run(True, after=1, cap=9, wps=wps)
+        self.assertEqual(self._looks(res), [])
+        self.assertGreater(res["iterations"], 3, "the walk still ran")
+
+    # ---- the predicate, where the defensive guards can be driven ----------
+
+    def test_the_predicate_fires_on_a_blind_pushing_iteration(self):
+        self.assertTrue(chain_walk._blind_look_due(
+            2, 0, 2, 1, True, False))
+
+    def test_the_predicate_REFUSES_before_the_trigger_count(self):
+        self.assertFalse(chain_walk._blind_look_due(
+            1, 0, 2, 1, True, False), "one blind push is not two")
+
+    def test_the_predicate_REFUSES_once_the_budget_is_spent(self):
+        self.assertFalse(chain_walk._blind_look_due(
+            6, 1, 2, 1, True, False), "cap 1, one look already taken")
+
+    def test_the_predicate_NEEDS_A_PUSH_BETWEEN_TWO_LOOKS(self):
+        # One look already taken in this stretch and `blind` unchanged since:
+        # nothing has happened, so there is nothing new to look at.
+        self.assertFalse(chain_walk._blind_look_due(
+            2, 1, 2, 4, True, False), "no blind push since the last look")
+        # ... and one more blind push makes it due again.
+        self.assertTrue(chain_walk._blind_look_due(
+            3, 1, 2, 4, True, False))
+
+    def test_the_predicate_REFUSES_a_ZERO_trigger(self):
+        # Unreachable through the shipped constant, and catastrophic: a walk
+        # that has never gone blind would look on every single iteration.
+        self.assertFalse(chain_walk._blind_look_due(
+            0, 0, 0, 1, True, False))
+
+    def test_the_predicate_REFUSES_a_ZERO_cap(self):
+        # The other way to disable it, and it must disable rather than wrap.
+        self.assertFalse(chain_walk._blind_look_due(
+            9, 0, 2, 0, True, False))
+
+    def test_the_predicate_REFUSES_a_TURN_ONLY_iteration(self):
+        self.assertFalse(chain_walk._blind_look_due(
+            9, 0, 2, 1, False, False), "the stop has its own look-around")
+
+    def test_the_predicate_REFUSES_past_the_END_of_the_plan(self):
+        # Hard to reach through a scripted walk and worth holding anyway: past
+        # the plan there is nothing ahead to find and the prompt check is
+        # already running every iteration.
+        self.assertFalse(chain_walk._blind_look_due(
+            9, 0, 2, 1, True, True))
 
 
 class SettleProbe(unittest.TestCase):
@@ -4933,6 +5720,46 @@ class DefaultConsoleWrappers(unittest.TestCase):
         self.assertLess(lat[0]["lx"], 0.0)
         self.assertEqual(lat[0]["lx"], -pose.STRAFE_MAG)
 
+    def test_the_pitch_correction_reaches_press_on_the_STICK_axis(self):
+        # patch57, and this class exists for exactly this reason: a stub can
+        # only pin the value chain_walk hands IT. Only input_controller.press
+        # pins that the correction lands on right_y with the right sign.
+        #
+        # It is driven at a CALIBRATION OF ITS OWN, because what ships presses
+        # nothing: PITCH_STEP_PX and PITCH_DOWN_DY_SIGN are None and the rule
+        # refuses. 30 px is the smallest of the project's three readings of the
+        # actuator; -1 is the optics hypothesis. Neither is shipped.
+        import input_controller as ic
+        for name, value in (("PITCH_CORRECT", True), ("PITCH_MODE", "act"),
+                            ("PITCH_STEP_PX", 30.0),
+                            ("PITCH_DOWN_DY_SIGN", -1)):
+            prev = getattr(chain_walk, name)
+            setattr(chain_walk, name, value)
+            self.addCleanup(setattr, chain_walk, name, prev)
+        self.table_at = 3
+        self._walk(FakeChain(4, [Fix(k=1, scale=1.0, dy=+400.0)]))
+        self.assertIn("look_down", self.presses,
+                      "look_down measured to REDUCE dy means a positive dy is "
+                      "answered with look_down")
+        self.assertNotIn("look_up", self.presses)
+        self.assertEqual(ic.STICK_AXES["look_down"][0], "right_y")
+        self.assertGreater(ic.STICK_AXES["look_down"][1], 0.0)
+        self.assertLess(ic.STICK_AXES["look_up"][1], 0.0,
+                        "the two actions must be opposite deflections of the "
+                        "same axis, or the sign above means nothing")
+
+    def test_the_SHIPPED_pitch_flag_reaches_press_NOT_AT_ALL(self):
+        # The same walk with only the flag on -- what a batch would actually
+        # run -- must send nothing to input_controller.press at all.
+        prev = chain_walk.PITCH_CORRECT
+        chain_walk.PITCH_CORRECT = True
+        self.addCleanup(setattr, chain_walk, "PITCH_CORRECT", prev)
+        self.table_at = 3
+        self._walk(FakeChain(4, [Fix(k=1, scale=1.0, dy=+400.0)]))
+        self.assertEqual(self.presses, [],
+                         "PITCH_STEP_PX and PITCH_DOWN_DY_SIGN are unmeasured, "
+                         "so the shipped on-arm reports and presses nothing")
+
     def test_the_escape_presses_CROSS_and_sidesteps_on_the_same_axis(self):
         self.table_at = 30                        # no prompt until the ladder has run
         self._walk(FakeChain(12, default=None))   # long enough to be blind, then miss
@@ -5416,11 +6243,28 @@ class NeverTouchesTheForbidden(unittest.TestCase):
             self.tree = ast.parse(fh.read())
 
     def test_the_only_button_pressed_is_cross(self):
-        pressed = [node.args[0].value for node in ast.walk(self.tree)
-                   if isinstance(node, ast.Call)
-                   and getattr(node.func, "attr", None) == "press"
-                   and node.args and isinstance(node.args[0], ast.Constant)]
+        calls = [node for node in ast.walk(self.tree)
+                 if isinstance(node, ast.Call)
+                 and getattr(node.func, "attr", None) == "press" and node.args]
+        pressed = [n.args[0].value for n in calls
+                   if isinstance(n.args[0], ast.Constant)]
         self.assertEqual(pressed, ["cross"])
+        # THE PITCH WRAPPER PRESSES A VARIABLE (patch57), so the constant scan
+        # above cannot see it -- exactly how a guard quietly stops covering the
+        # module it guards. Exactly one such call may exist, and the only values
+        # its argument can take are PITCH_ACTIONS: both are STICK AXES on the
+        # FIFO (right_y), neither is a button, so "one button, and it is Cross"
+        # still holds. A second variable press fails here until it is justified.
+        import input_controller as ic
+        variable = [n for n in calls if not isinstance(n.args[0], ast.Constant)]
+        self.assertEqual(len(variable), 1,
+                         "one press call takes a variable: the pitch wrapper")
+        self.assertEqual(chain_walk.PITCH_ACTIONS, ("look_up", "look_down"))
+        for action in chain_walk.PITCH_ACTIONS:
+            self.assertIn(action, ic.STICK_AXES,
+                          "the pitch actions are stick deflections")
+            self.assertNotIn(action, ic.BUTTON_BITS,
+                             "and neither of them is a button")
 
     def test_it_imports_nothing_that_could_reset_or_edit_the_map(self):
         mods = set()

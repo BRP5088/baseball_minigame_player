@@ -27,9 +27,9 @@ CONTRADICT EACH OTHER"):
     measured 2026-09-06      36 presses ceiling-to-floor, 22 floor-to-doorway
 
 At least two are wrong. This module deliberately does NOT route through
-level_pitch, for two reasons its own docstring supplies: it ALWAYS returns
-True ("any caller branching on the result was branching on a constant"), and
-when homing fails it presses down four more times and counts up anyway. That
+level_pitch, for a reason its own docstring supplies: when homing fails it
+presses down four more times and counts up ANYWAY, reporting the unconfirmed
+home (since patch57) rather than refusing to press. That
 is fine for a coarse "roughly level" that tolerates a press either way; it is
 not fine here, where the count was measured from a CONFIRMED floor stop.
 

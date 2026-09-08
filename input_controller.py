@@ -1080,27 +1080,37 @@ def level_pitch(capture, steps=None, log=None):
     Four positions in the entire range, so this is coarse but repeatable, and
     repeatable is what the walk needs.
 
-    Always returns True. Failing to home is NOT a failure here: the comment
-    below records why — being already parked at the stop is indistinguishable
-    from never reaching it, and both are recoverable by driving firmly to the
-    floor and counting up. The docstring used to promise "False means homing
-    failed and pitch is NOT known", which no code path could ever produce, so
-    any caller branching on the result was branching on a constant.
+    RETURNS WHETHER THE FLOOR STOP WAS CONFIRMED. False does not mean the
+    presses were skipped -- every press below still happens, in the same order,
+    and a False result is still a best effort at a level camera. It means
+    home_pitch never saw the stop, so the count-up started from an UNKNOWN
+    pitch and the caller must not assume a known one. doorway_pitch treats the
+    same verdict as decisive and refuses to press at all, because its 22 is
+    only meaningful from a confirmed stop; this function is the coarse variant
+    that presses anyway and SAYS SO.
+
+    Until patch57 it returned a literal True on every path while promising
+    "False means homing failed and pitch is NOT known", so any caller branching
+    on the result was branching on a constant. The promise came back rather
+    than the constant, because the information exists -- home_pitch's own
+    verdict -- and throwing it away is §10.1's measurement taken and discarded.
     """
     import time
     if steps is None:
         steps = PITCH_STEPS_FROM_BOTTOM
-    if home_pitch(capture, "look_down", log=log) is None:
+    homed = home_pitch(capture, "look_down", log=log) is not None
+    if not homed:
         # Already parked at the stop is indistinguishable from never reaching
-        # it, and both are fine here: pressing down again is harmless, so drive
-        # it firmly to the floor and count up from there.
+        # it, and both are recoverable here: pressing down again is harmless,
+        # so drive it firmly to the floor and count up from there -- and report
+        # the unconfirmed home, which is the one thing the caller cannot see.
         for _ in range(4):
             press("look_down", hold_seconds=PITCH_STEP_SEC, post_delay=0.25)
         time.sleep(0.5)
     for _ in range(steps):
         press("look_up", hold_seconds=PITCH_STEP_SEC, post_delay=0.30)
     time.sleep(0.5)
-    return True
+    return homed
 
 
 # The hardware half of the id. ioreg is a subprocess with a 5s timeout, and a

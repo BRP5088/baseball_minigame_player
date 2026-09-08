@@ -128,6 +128,103 @@ END_TURN_MAX_DEG = 45.0
 # three, the ordinary lateral correction takes over.
 END_TURN_MAX = 3
 
+# ---------------------------------------------------------------------------
+# THE VERTICAL OFFSET (patch57). Ships OFF, and in REPORT mode when turned on:
+# --flag PITCH_CORRECT writes what it WOULD have done and presses nothing.
+#
+# Every fit carries dy and the loop has never read it. dy is measured against
+# the WAYPOINT'S OWN FRAME, so dy -> 0 means "hold the pitch the recorded drive
+# held here" -- not "level the camera", which would fight the drive's own pitch
+# (the larger term: between-waypoint medians run +318 px to -134 px, while the
+# per-walk drift is an 86 px p10-p90 spread at one waypoint; 1,674 credible
+# fits over 40 journals).
+#
+# IT MOVES THE CAMERA AND NOTHING ELSE. GRAVEYARD's summary is that every
+# navigation change which failed MOVED THE CHARACTER, and both survivors move
+# nothing. In the shipped mode it does not move even the camera.
+PITCH_CORRECT = False
+# "report" writes the row and presses NOTHING. "act" presses -- but only if the
+# two measurements below exist; see pitch_correction. The mode alone can never
+# unlock a press.
+PITCH_MODE = "report"
+# ---------------------------------------------------------------------------
+# THE TWO MEASUREMENTS THAT GATE ACTING. Both UNMEASURED, both None, and while
+# either is None nothing is ever pressed. tools/pitch_probe.py measures both in
+# one two-minute standing-still run and prints the two lines to paste here.
+#
+# PITCH_STEP_PX -- how many px of dy ONE PITCH_PRESS_SEC press produces.
+# THE PROJECT'S OWN NUMBERS SAY IT IS BIG, and that is why this is a gate and
+# not a guess. STAIRS_APPROACH.md ("PITCH IS UNCONTROLLED IN PRODUCTION",
+# "Nobody currently knows how to command a specific pitch") records that three
+# readings of how many 0.05 s presses span the whole vertical travel disagree:
+# 8 (input_controller.py:993), 20 (input_controller.py:1009-1014) and 36
+# (STAIRS_APPROACH.md, live). Over a vertical fov of 69.57 deg at 15.5 px/deg
+# that is 30, 54 or 135 px PER PRESS -- every one of them at or above the 28 px
+# floor below. A fixed step S only avoids overshoot while S <= dead-band, so a
+# rule that fired one press outside a 28 px band would HUNT: press, cross the
+# band, press back. pose.py:145-151 has already measured that failure on the
+# lateral axis ("the loop OSCILLATED, growing each time: +175 -> -201 -> +211
+# -> -215"). Hence pitch_dead_band() below, which makes the band the step.
+PITCH_STEP_PX = None
+# PITCH_DOWN_DY_SIGN -- the SIGN of the change in dy that one look_down press
+# produces (-1 if look_down makes dy fall). NEVER MEASURED: chain.Fix spells
+# out a `dx SIGN` paragraph and there is no dy one, in chain.py or in pose.py,
+# and no site in this project has ever recorded a live dy against a pitch press
+# -- unlike the LATERAL axis, whose strafe/forward/back dx,dy table pose.py
+# measured. The optics ARGUMENT says -1 (a camera pitched up puts scene content
+# lower in an image whose y grows downward, so dy > 0 wants look_down), and
+# every row records that as `hypothesis` so the probe can be checked against it
+# rather than assumed to agree. Backwards, the rule DOUBLES the error.
+PITCH_DOWN_DY_SIGN = None
+# ---------------------------------------------------------------------------
+# PIXELS PER DEGREE OF PITCH. DERIVED, not measured, and deliberately NOT
+# assumed equal to PX_PER_DEG above (the yaw figure; this file states it once
+# and only once, which is why it is not repeated here): camera_fov.json gives
+# 102 deg across 1920, so a rectilinear pinhole has f = 960/tan(51 deg) =
+# 777.4 px and a vertical fov of 2*atan(540/777.4) = 69.57 deg, i.e.
+# 1080/69.57 = 15.52 px/deg -- the same whole-frame construction that gives the
+# horizontal 1920/102 = 18.82 which the measured 18.6-20.8 corroborates. Two
+# other readings exist and are quoted rather than hidden: the CENTRE gradient
+# f*pi/180 = 13.57 px/deg (equal on both axes, as a pinhole demands), and
+# PX_PER_DEG scaled by the fov ratio = 16.25. THEY DIFFER BY UP TO 20%
+# ((16.25-13.57)/13.57 = 0.197). Nothing that moves depends on this: the
+# dead-band is in PIXELS and the press is in SECONDS, so this constant only
+# colours the `deg` a journal row reports.
+PITCH_PX_PER_DEG = 15.5
+# A FLOOR under the dead-band, and it is a PLACEHOLDER, not a derivation. The
+# real rule is pitch_dead_band(): the ACTUATOR sets the tolerance, which is
+# what pose.py:155-165 actually says about its own 35 px ("TOLERANCE IS SET BY
+# THE ACTUATOR, not by the measurement ... 35px is where the loop can actually
+# finish"). An earlier draft mirrored the 35 px as "the same ANGLE, 1.8 deg" --
+# but 1.8 deg is an incidental unit conversion in that file, not the reason the
+# number was picked, so mirroring it imported a coincidence. This floor is of
+# the same ORDER and binds only if the measured step comes in under it.
+PITCH_TOL_MIN_PX = 28.0
+# The smallest hold this project has ever seen move the camera: a COPY of
+# input_controller.PITCH_STEP_SEC, which home_pitch and level_pitch both press
+# with. Copied rather than imported because chain_walk imports input_controller
+# only inside walk() (doorway_pitch.LOOK_UP_POST_DELAY is the same copy with
+# the same warning): if that literal changes, this must follow it by hand.
+PITCH_PRESS_SEC = 0.05
+PITCH_POST_DELAY = 0.30          # level_pitch's own look_up post_delay
+# NEVER LUNGE, mirroring LATERAL_CAP_SEC = 0.3: one iteration's correction is
+# capped at this hold however large the offset, so one bad fit cannot swing the
+# camera. With PITCH_SEC_PER_DEG None the cap is not the binding limit -- one
+# PITCH_PRESS_SEC hold is -- and it becomes binding the moment a gain is set.
+PITCH_CAP_SEC = 0.30
+# SECONDS OF right_y PER DEGREE: **UNMEASURED**. There is no vertical analogue
+# of turn_curve's table. None means BANG-BANG: one PITCH_PRESS_SEC hold in the
+# direction that reduces |dy|. It is NOT a third gate -- with the step and the
+# sign measured, the bang-bang rule is safe by the D >= S condition above --
+# but a second pitch_probe run at several hold lengths gives it, and the same
+# code then becomes proportional, capped and floored, with no further edit.
+PITCH_SEC_PER_DEG = None
+# The two STICK AXES this rule may press. Both are right_y deflections in
+# input_controller.STICK_AXES; NEITHER is in BUTTON_BITS, so the module still
+# presses exactly one BUTTON (Cross) and NeverTouchesTheForbidden checks both
+# halves. Indexed by the sign convention below, so the tuple is load-bearing.
+PITCH_ACTIONS = ("look_up", "look_down")
+
 TIME_CAP = 400.0                # the spec's "timed out" boundary; the harness
                                 # kills the child at 420s from OUTSIDE (§10.14)
 
@@ -517,6 +614,70 @@ DOOR_STOP_EXTRA_PUSHES = 1
 # toward 1.0.
 BAR_STOP_EARLY_TURN = False
 BAR_STOP_INDEX = 166
+# LOOK INSTEAD OF PUSHING BLIND AGAIN (patch56). The user, watching the stream:
+# "the bar area seems to be an area the player struggles to detect and know when
+# to turn towards the jukebox. This causes them to ram into the bar"; and "they
+# also walk into the wall behind Wanda. they also walk into wanda."
+#
+# The turn itself is NOT the problem -- over 58 walks the stop at 166 was
+# serviced on a credible fit in 57, median ZERO blind iterations before it. The
+# loss is AFTER it. Read from its own rows rather than its summary line, the
+# motivating failure (chain_trials.log:1085-1133) is: the 166 stop taken
+# `turned-unverified` on 7 inliers, TWO blind advances (the cap was 2 because
+# that unverified turn set it, not because the tail did), a weak fit, then
+# eleven iterations of misses and escape rungs, then lost. The "6 blind
+# advances" in its failure string is this file's own hardcoded {BLIND_MAX}
+# below and is not a count of anything -- a separate, pre-existing bug.
+#
+# Two blind pushes were still two pushes further into whatever it could not
+# see, and a frame of wall stays a frame of wall however many waypoints
+# `_strong_ahead` re-matches it against. Turning the camera is the one cheap
+# thing that changes the FRAME, and the loop already knows how -- at an
+# unverified stop and inside the lost rescue.
+#
+# On the BLIND_LOOK_AFTER'th consecutive blind push the iteration looks instead
+# of pushing: STOP_LOOK_DEG about the heading it was going to walk, the same
+# `_strong_ahead` on each view, and the walk carries on from a strong one. It
+# moves the character LESS than the push it replaces, which is the opposite of
+# every change in GRAVEYARD.
+#
+# Ships OFF; `--flag BLIND_LOOK_AROUND` measures it. Pre-registered instrument:
+# the number of consecutive `blind-advance` rows in the stretch past waypoint
+# 166 (shorter on the on-arm); how many `blind_look` rows carry
+# `relocalised-look` (zero refutes the mechanism outright); and WHERE each
+# firing happened -- `from_k`, reported per firing, because a look spent far
+# from 166 is not evidence about 166.
+BLIND_LOOK_AROUND = False
+# HOW MANY CONSECUTIVE BLIND PUSHES BEFORE THE FIRST LOOK. Borrowed, not
+# invented: END_BLIND_MAX is the loop's own answer to "how many blind pushes
+# before another is not worth the risk", from the one place it has already
+# decided that -- past the last stop, and after an unverified turn, which is
+# the state the motivating failure was in. It does NOT mean the budget runs out
+# here: in the common case that stretch is capped at BLIND_MAX (6), so this
+# looks on the second blind push with four still in hand. A look that finds
+# nothing therefore costs the walk none of its dead-reckoning, which is why the
+# trigger is small rather than "when the budget is nearly gone".
+# (Near a wall and a stop `_blind_cap` allows only ONE blind push, so `blind`
+# never reaches this and TURN-EARLY still owns that case, untouched.)
+BLIND_LOOK_AFTER = END_BLIND_MAX
+# ... and the BOUND: LOST_RESCUE_MAX's value, with LOST_MAX's own scope -- "One
+# full ladder per blockage". PER BLIND STRETCH, not per walk: the count resets
+# when `blind` returns to 0, which is exactly when a credible fit ended the
+# stretch. Per WALK was the first draft and it has a hole -- a walk that went
+# blind for two pushes ANYWHERE earlier would spend its only look there and
+# reach the bar with none, silently behaving as the off arm while still being
+# scored as an on-arm trial. The reset reads `blind`, which every branch that
+# ends a stretch already zeroes, so it is one line and not the six-site mirror
+# that argument assumed.
+BLIND_LOOK_MAX = 1
+# The journal's name for a look that found nothing, and for one that did. The
+# second starts with "relocalised" ON PURPOSE: `PROGRESS_ACTIONS` is tested with
+# str.startswith, so it resets the escape ladder and re-arms turn-early exactly
+# as the forward search's `relocalised` does, while still being greppable apart
+# from it. A no-op path and a working path must not have identical output
+# (10.1), which is why the failing look records a row at all.
+BLIND_LOOK_ACTION = "blind-look"
+BLIND_LOOK_FOUND_ACTION = "relocalised-look"
 # THE ACTION THE EXTRA PUSH RECORDS, and the reason it is a name and not a
 # bare literal: it is the FIRST row this module has ever written that shares
 # an iteration number with another row, and three readers select "one
@@ -674,6 +835,55 @@ def _turn_early_at(pi, plan, index, latched):
             and plan[pi + 1][0] == index)
 
 
+def _blind_look_due(blind, looks, after, cap, pushing, at_end):
+    """Should this iteration LOOK AROUND instead of pushing blind again?
+
+    Pure, so every guard can be driven directly. patch55 learned this the
+    expensive way: two of its guards were unreachable through anything the plan
+    builder emits, so mutants deleting them survived a walk-level test. Two of
+    the four here are the same shape -- `after >= 1` and `at_end` are hard or
+    impossible to reach through a scripted walk -- and they are held to their
+    stated meaning here instead.
+
+    `after` and `cap` are PARAMETERS, never module-level defaults: a knob
+    captured in a default cannot be redirected by a test or an A/B arm (10.18).
+
+      after >= 1   a zero trigger would look before the walk has gone blind at
+                   all, on a healthy walk, every iteration. `blind >= 0` is
+                   true of every walk, so this one is NOT redundant.
+      pushing      at a TURN-ONLY stop the stop's own look-around already runs,
+                   and two look-arounds in one iteration would fight.
+      not at_end   past the plan there is nothing ahead to find, the prompt
+                   check runs every iteration anyway, and turning the camera
+                   beside the dealer's table is where the walk can least afford
+                   to spend an iteration.
+      looks < cap  the budget for THIS blind stretch.
+
+    `blind >= after + looks`, NOT `blind >= after`: A LOOK THAT FINDS NOTHING
+    TOUCHES NEITHER `blind` NOR `k`, so the plain form is satisfied again on the
+    very next iteration and the rule fires in a tight loop -- the same
+    manoeuvre, the same k, the same heading, with no push and therefore no new
+    information between attempts. Measured in a scratch copy at after=1, cap=4:
+    the plain form gives four consecutive looks whose recorded `blind` reads
+    [1, 1, 1, 1]; this form gives [1, 2, 3, 4], each separated by a blind push.
+    It is dormant at the shipped cap of 1 -- which is exactly why it is written
+    here rather than trusted to the cap: a bound that only holds at one value of
+    its own constant is not a bound.
+
+    A FIFTH CLAUSE WAS WRITTEN AND DELETED: `cap >= 1`, to make a zero cap
+    disable the rule. `looks < cap` already refuses at cap 0 for every
+    non-negative `looks`, so it could not change an answer -- its mutant
+    survived the whole suite, which is how it was found. A guard that cannot
+    fire is the shape this project keeps finding, so it is gone and the test
+    that pins the BEHAVIOUR (cap 0 disables) stays.
+    """
+    return (after >= 1
+            and bool(pushing)
+            and not at_end
+            and looks < cap
+            and blind >= after + looks)
+
+
 def _near_stop(pi, plan):
     """The plan index of a TURN-ONLY stop within NEAR_STOP_TARGETS of `pi`, or None.
 
@@ -746,6 +956,112 @@ def _turn_report(reported):
     return {"reached": None if now is None else round(float(now), 1),
             "hazards": [getattr(h, "kind", None) or str(h)
                         for h in (hazards or ())]}
+
+
+def pitch_dead_band():
+    """The |dy| below which nothing is corrected, in pixels.
+
+    THE ACTUATOR SETS IT. A bang-bang rule that fires a fixed step S whenever
+    the error leaves a dead-band D can only fail to overshoot while S <= D:
+    from |dy| = D + e one press lands at D + e - S, which stays on the same
+    side of zero exactly when S <= D. Making the band the step therefore makes
+    the limit cycle impossible BY CONSTRUCTION, at whatever the step turns out
+    to be -- and it is the same reasoning pose.py:155-165 gives for its own
+    35 px ("TOLERANCE IS SET BY THE ACTUATOR, not by the measurement").
+
+    PITCH_STEP_PX is None until tools/pitch_probe.py has run, and then the
+    floor is all there is. That floor is a placeholder of the lateral
+    tolerance's order, not a derivation; see PITCH_TOL_MIN_PX.
+    """
+    if PITCH_STEP_PX is None:
+        return PITCH_TOL_MIN_PX
+    return max(PITCH_TOL_MIN_PX, abs(float(PITCH_STEP_PX)))
+
+
+def pitch_correction(dy, inliers, escaped=False):
+    """The pitch nudge one fit calls for, or None. PURE, so every guard here
+    can be driven directly rather than through a walk that may never reach it.
+
+    Returns None when there is nothing to say at all, or a row:
+
+        dy          the offset, px
+        deg         dy / PITCH_PX_PER_DEG -- a REPORT, nothing acts on it
+        band        the dead-band this row cleared
+        acted       whether a press was issued for it
+        blocked     why not, if not -- a tuple, possibly several reasons
+        hypothesis  the direction the OPTICS ARGUMENT predicts, always
+        action      the direction MEASURED to reduce |dy|, or None when the
+                    sign is unmeasured. Never the hypothesis.
+        seconds     the hold, or None
+        step_px, gain   the calibration in force, so a journal row says which
+                    control law produced it
+
+    THE RULES, each mirroring the lateral correction (see the constants):
+
+      1. a fit under FIX_MIN_INLIERS neither advances k nor steers -- and that
+         now includes the camera. A thin fit's offsets are junk (-847 px at 7
+         inliers), and this rule is why trial 1's 13-inlier fits are refused.
+      2. inside pitch_dead_band(), nothing at all -- not even a row. The band
+         is the actuator's own step once that is known.
+      3. ACTING NEEDS BOTH MEASUREMENTS. PITCH_STEP_PX and PITCH_DOWN_DY_SIGN
+         ship None and while either is None this returns a row that says so and
+         presses nothing, WHATEVER PITCH_MODE is. That is the whole safety
+         argument of the first version: the constant an invented gain would be
+         invented for is the one that unlocks acting, so it cannot be smuggled
+         in quietly -- its absence is in every row.
+      4. an ESCAPE this iteration or last blocks the press but NOT the row.
+         The strafe skips outright because a jump or sidestep displaces the
+         character between the measurement and the action; whether the jump
+         rung's hop is pitch-neutral is unknown, so this is conservative about
+         pressing and generous about recording.
+      5. the hold is capped at PITCH_CAP_SEC and floored at PITCH_PRESS_SEC.
+         With no gain measured the floor IS the command.
+
+    Every constant is read HERE, at call time, never captured in a default
+    argument (§10.18: `path=STORE` changed nothing and nothing said so).
+    """
+    if dy is None or inliers is None or inliers < FIX_MIN_INLIERS:
+        return None
+    dy = float(dy)
+    band = pitch_dead_band()
+    if abs(dy) <= band:
+        return None
+    blocked = []
+    if PITCH_STEP_PX is None:
+        blocked.append("step_px_unmeasured")
+    if PITCH_DOWN_DY_SIGN is None:
+        blocked.append("down_sign_unmeasured")
+    if PITCH_MODE != "act":
+        blocked.append("report_mode")
+    if escaped:
+        blocked.append("escaped")
+    row = {"dy": dy, "deg": round(dy / PITCH_PX_PER_DEG, 1),
+           "band": round(band, 1), "acted": not blocked,
+           "blocked": tuple(blocked),
+           # THE OPTICS ARGUMENT'S ANSWER, LABELLED AS ONE. dy > 0 means the
+           # scene moved DOWN the image since the waypoint, which is what a
+           # camera pitched UP does -- so look_down. That is an inference from
+           # pose.offset's median(dst - src) plus y-grows-downward, NOT a
+           # quoted convention: chain.Fix documents the dx sign and no other.
+           # It is here so pitch_probe's measured sign can be CHECKED against
+           # it; `action` below never falls back to it.
+           "hypothesis": PITCH_ACTIONS[1] if dy > 0 else PITCH_ACTIONS[0],
+           "action": None, "seconds": None,
+           "step_px": PITCH_STEP_PX, "gain": PITCH_SEC_PER_DEG}
+    if blocked:
+        return row
+    # PITCH_DOWN_DY_SIGN is the sign of the CHANGE look_down makes to dy, so
+    # look_down reduces |dy| exactly when that change opposes dy.
+    row["action"] = (PITCH_ACTIONS[1] if PITCH_DOWN_DY_SIGN * dy < 0
+                     else PITCH_ACTIONS[0])
+    gain = PITCH_SEC_PER_DEG
+    if gain is None:
+        secs = PITCH_PRESS_SEC
+    else:
+        secs = min(PITCH_CAP_SEC,
+                   max(PITCH_PRESS_SEC, abs(dy / PITCH_PX_PER_DEG) * gain))
+    row["seconds"] = round(secs, 3)
+    return row
 
 
 def _fix_row(fix):
@@ -1023,7 +1339,7 @@ def _timeout_diagnosis(res, n, min_iters, time_cap):
 def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
          journal=None, iteration_sec_floor=None, end_iterations=None,
          turn_to=None, push=None, strafe=None, jump=None, at_table=None,
-         now=time.time, sleep=time.sleep, back=None):
+         now=time.time, sleep=time.sleep, back=None, pitch=None):
     """Servo along `chain` until the dealer prompt is on screen.
 
     Returns {arrived, seconds, pushes, k_final, iterations, waypoints,
@@ -1056,6 +1372,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         back(mag, secs)         ONE continuous BACKWARD push
         strafe(lx, secs)        ONE continuous sidestep, lx > 0 = RIGHT
         jump()                  press Cross once
+        pitch(action, secs)     hold the RIGHT stick vertically for `secs`;
+                                `action` is one of PITCH_ACTIONS
         at_table(img) -> bool   is the BASEBALL CARDS prompt on screen
     """
     if time_cap is None:
@@ -1096,6 +1414,16 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # Cross IS the jump button (§8(g)). It is also the ONLY button this
             # module is allowed to press.
             return _ic.press("cross")
+    if pitch is None:
+        import input_controller as ic
+        def pitch(action, secs, _ic=ic):
+            # A STICK AXIS, NOT A BUTTON. input_controller.STICK_AXES maps
+            # look_up/look_down to right_y -/+0.8 and press() sends that over
+            # the FIFO as a timed hold, which is the path every stick on this
+            # project uses (§5: buttons go to the keyboard, sticks to the
+            # FIFO). post_delay copies level_pitch's own look_up press.
+            return _ic.press(action, hold_seconds=secs,
+                             post_delay=PITCH_POST_DELAY)
     if at_table is None:
         import table_prompt
         at_table = table_prompt.at_table
@@ -1182,6 +1510,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     early_stop = False          # the current stop was reached by turn-early: no retry pushes
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
+    blind_looks = 0             # BLIND_LOOK_AROUND firings in the CURRENT
+                                # blind stretch (the budget; reset with `blind`)
+    blind_looks_total = 0       # ... and over the whole walk, for the report
     bar_turned_early = False    # the once-per-walk latch for
                                 # BAR_STOP_EARLY_TURN
     door_stepped = False        # this SERVICING of DOOR_STOP_INDEX has had
@@ -1448,6 +1779,127 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     f"door-step {step_i}/{DOOR_STOP_EXTRA_PUSHES}: one more "
                     f"push along {walk_heading:.1f} before the stop turns "
                     f"(the frame after it fits {inl_d} inliers, scale {sc_d})")
+
+        # LOOK AROUND INSTEAD OF PUSHING BLIND AGAIN (BLIND_LOOK_AROUND).
+        #
+        # It sits HERE, before the turn and the push, because that is the only
+        # place a push can be replaced: `blind` is not known until after the
+        # push and the capture, so a rule that reads it inside the sensor branch
+        # can only ever ADD a look to an iteration that already pushed. This one
+        # reads the PREVIOUS iterations' `blind` and ends in `continue`, so the
+        # iteration turns twice, captures twice, turns back, and travels NOWHERE.
+        #
+        # WHAT CHANGES IN THE EVENT LIST, stated because getting this wrong is
+        # how a test passes for nobody: where the off-arm has (turn, push,
+        # capture), the on-arm has (turn -25, capture, turn +25, capture, turn
+        # back). No push. The character does not move; only the camera does.
+        #
+        # The belief is `_strong_ahead`, unchanged -- the SAME forward search the
+        # blind path already runs, on a DIFFERENT view. That is the whole idea:
+        # re-matching a frame of wall against sixty more waypoints cannot find
+        # the route, and turning the camera is the cheapest thing that changes
+        # the frame. It returns only fits at or above STRONG_MIN_INLIERS, which
+        # the live gate census puts above the wrong-place MAXIMUM, so the first
+        # direction that fits is believed and the second is not paid for.
+        #
+        # Neither `blind` nor `lost` is spent by a look, so the blind budget,
+        # the escape ladder and the LOST RESCUE below are all reachable exactly
+        # as before if it finds nothing. `blind_looks` is the bound.
+        #
+        # THE LOOKED FRAMES GET NO at_table() CHECK, and that is deliberate:
+        # neither look-around this copies checks its own frames either, and
+        # adding it HERE ALONE would hand the on-arm an arrival path the off-arm
+        # does not have, in the A/B whose primary outcome is arrival. One patch,
+        # all three sites, on a day nothing depends on the difference.
+        if BLIND_LOOK_AROUND and blind == 0 and blind_looks:
+            # THE BUDGET IS PER BLIND STRETCH, NOT PER WALK. `blind == 0` is
+            # the loop's own definition of "the sensor has seen something
+            # credible since": every branch that ends a blind stretch --
+            # `relocalised`, `regressed`, `advanced`, and this rule's own found
+            # path -- sets it. Without this line the first two-push blind run
+            # anywhere in the walk spends the only look, and the stretch this
+            # rule was built for gets none while the trial still counts as an
+            # on-arm trial. One line, because they all zero `blind` already.
+            blind_looks = 0
+        if (BLIND_LOOK_AROUND and heading is not None
+                and _blind_look_due(blind, blind_looks, BLIND_LOOK_AFTER,
+                                    BLIND_LOOK_MAX, do_push, at_end)):
+            blind_looks += 1
+            blind_looks_total += 1
+            res["blind_looks"] = blind_looks_total
+            base = heading
+            best = None                  # (degrees, inliers, fix)
+            looks = 0
+            for ddeg in STOP_LOOK_DEG:
+                turn_to((base + ddeg) % 360.0)
+                img2 = capture()
+                looks += 1
+                _save(shots, iteration, k, img2, log,
+                      suffix=f"_blindlook{int(ddeg):+d}")
+                f2 = _strong_ahead(chain, img2, k, n)
+                if f2 is not None:
+                    best = (ddeg, getattr(f2, "inliers", 0) or 0, f2)
+                    break            # already believed; see STRONG_MIN_INLIERS
+            # Back to the heading this iteration was going to walk, so the next
+            # iteration's turn is the no-op TURN_SKIP_DEG makes it and the push
+            # resumes on exactly the line it would have.
+            turn_to(base)
+            last_cmd = base
+            look_row = {"looks": looks, "blind": blind, "from_k": k,
+                        "to_k": None, "in_stretch": blind_looks,
+                        # WHAT THIS LOOK CLEARED, read BEFORE clearing it. The
+                        # argument says these three are always already zero at
+                        # a firing (a look fires the first time `blind` reaches
+                        # its trigger, which took that many `blind-advance`s,
+                        # each of which zeroes misses and stalls, from a
+                        # `blind == 0` that every producer pairs with
+                        # `lost == 0`). The one corner it does not cover is a
+                        # `_blind_cap` that shrinks mid-stretch while the look
+                        # is blocked by `do_push`. An argument is not a
+                        # measurement, so the row carries the values: a
+                        # non-zero `cleared` in any live journal says the
+                        # corner is real and those assignments do work.
+                        "cleared": {"lost": lost, "misses": misses,
+                                    "stalls": stalls},
+                        "deg": None if best is None else best[0],
+                        "inliers": None if best is None else best[1]}
+            if best is not None:
+                _, _, f2 = best
+                k = min(int(f2.k), n - 1)
+                last_cred_k = k
+                look_row["to_k"] = k
+                # Exactly the forward search's `relocalised` reset, field for
+                # field, because it is the same evidence at the same gate --
+                # and, like it, this does NOT clear end_yaw or stop_yaw: the
+                # character has not moved, so no correction measured at a
+                # position is refuted. The pointer re-derives from k at the top
+                # of the next iteration, and the stops it steps over drop their
+                # yaw there, as they do for every wide jump.
+                blind = 0
+                lost = 0
+                misses = 0
+                stalls = 0
+                action = BLIND_LOOK_FOUND_ACTION
+            else:
+                action = BLIND_LOOK_ACTION
+            record({"iteration": iteration, "k": k, "target": target_k,
+                    "fix": _fix_row(None if best is None else best[2]),
+                    "action": action, "lateral": None,
+                    "blind_look": look_row, "at_end": at_end,
+                    "seconds": round(now() - it_t0, 2),
+                    "elapsed": round(now() - t0, 2)})
+            if best is not None:
+                log(f"    it {iteration:3d}  k={look_row['from_k']:3d} -> "
+                    f"{target_k:3d}  {action}: {look_row['blind']} blind "
+                    f"push(es) in, looked {looks} time(s) about {base:.1f} "
+                    f"instead of pushing; {look_row['inliers']} inliers at "
+                    f"{look_row['deg']:+.0f} deg put k at {k}")
+            else:
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  "
+                    f"{action}: {blind} blind push(es) in, looked {looks} "
+                    f"time(s) about {base:.1f} instead of pushing; nothing at "
+                    f"{STRONG_MIN_INLIERS}+ inliers")
+            continue
 
         turned = False
         if heading is not None and (
@@ -2373,6 +2825,31 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             if consistent is not None:
                 lateral["consistent"] = consistent_n
 
+        # THE VERTICAL OFFSET (PITCH_CORRECT, ships OFF; REPORT mode when on).
+        #
+        # The mirror of the strafe above, on the axis the loop has always
+        # thrown away: the same credibility gate, a dead-band set by the same
+        # kind of reasoning, a cap of the same seconds, recorded in the same
+        # row. It moves the CAMERA and nothing else -- no push, no strafe, no
+        # plan pointer -- which is the only family of navigation change that
+        # has ever survived here (GRAVEYARD.md); and until PITCH_STEP_PX and
+        # PITCH_DOWN_DY_SIGN have been measured it moves nothing at all and
+        # says so in every row.
+        #
+        # `escaped or escaped_prev` blocks the PRESS and not the row: the
+        # strafe skips outright because a sidestep displaces the character
+        # between measurement and action, and whether the jump rung's hop is
+        # pitch-neutral is unknown. Recording the blocked rows is what keeps
+        # them out of the census as a confound instead of losing them.
+        pitch_row = None
+        if PITCH_CORRECT:
+            pitch_row = pitch_correction(
+                None if fix is None else getattr(fix, "dy", None),
+                0 if fix is None else (getattr(fix, "inliers", 0) or 0),
+                escaped=bool(escaped or escaped_prev))
+            if pitch_row is not None and pitch_row["acted"]:
+                pitch(pitch_row["action"], pitch_row["seconds"])
+
         # `at_end` is what tells a terminal stall from a mid-chain one in
         # the journal: at the last waypoint k == target and no push can
         # advance it, so the two need different readings.
@@ -2380,6 +2857,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         row = {"iteration": iteration, "k": k, "target": target_k,
                "fix": _fix_row(fix), "action": action, "lateral": lateral,
                "at_end": at_end,
+               **({"pitch": pitch_row} if pitch_row else {}),
                **({"settle": settle_rows} if settle_rows else {}),
                "seconds": round(now() - it_t0, 2),
                "elapsed": round(now() - t0, 2)}
@@ -2398,5 +2876,21 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             note = f"  strafe {lateral['side']} {lateral['seconds']:.2f}s"
         else:
             note = ""
+        if pitch_row:
+            # Its own words, never padded into the strafe's format: a row that
+            # says "strafe ... 0.00s" for a correction on a different axis is
+            # §10.1's no-op that reads as a success. And a REPORT says it
+            # reported -- "would" and the reasons, never a press that was not
+            # sent, because a log line that reads like an action taken is that
+            # same bug with better prose.
+            if pitch_row["acted"]:
+                note += (f"  PITCH {pitch_row['action']}"
+                         f" {pitch_row['seconds']:.2f}s"
+                         f" on dy {pitch_row['dy']:+.0f} px"
+                         f" ({pitch_row['deg']:+.1f} deg)")
+            else:
+                note += (f"  pitch WOULD correct dy {pitch_row['dy']:+.0f} px"
+                         f" ({pitch_row['deg']:+.1f} deg); SENT NOTHING: "
+                         + ",".join(pitch_row["blocked"]))
         log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action:14s}"
             f"  fix={_fix_row(fix)}" + note)
