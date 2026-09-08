@@ -102,6 +102,18 @@ The loop for the night, in order, repeated:
    the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
    arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
    detector miss (patch40's fixture).
+   (m) READY: `drafts/pending_after_ab/apply_patch37.py` STOP-TIE + LOOK-AROUND EARLY EXIT (workflow done
+   01:2x; notes `agent_progress/closed-loop/stop_tie/`): a stop fit is a tie only when the runner-up is a
+   DIFFERENT PLACE — outside the stop's stationary-run span (chain.py's Fix now carries second_k/second_dx,
+   optional, defaults None) AND more than STOP_TIE_DX_PX 120 px apart on dx — with the predicate SYMMETRIC
+   (both skeptics caught that the first version looked only at the runner-up; the motivating batch 5e t6 frame
+   had the WINNER past the run and the runner-up at the stop); the ±25 look-around and the pan exit on the
+   first look at >= STRONG_MIN_INLIERS. Replay of 37 stop fits over 7 trials: 28 ties under the shipped rule,
+   0 under the patch (all four early fast trials' stops included). Honest limit, in the constant's comment:
+   on this chain's recorded stops no true "different place" tie population exists, so the tie cannot fire
+   today — every threshold low enough to fire on this corpus fires on an arriving trial. Recheck: 178/178 on
+   the current HEAD, six builder mutants + skeptics' own caught. Dry-run with patch39 on a copy of the
+   current tree: both test files green. Lands at the eleventh launch's end with 39 and 40.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
