@@ -593,6 +593,75 @@ blind at once, and that is a mapping gap, not a detector failure.
 
 **This is the only section that reports status.**
 
+### THE CLOSED LOOP REPLACED DEAD RECKONING ON 2026-09-07, AT THE USER'S REQUEST
+
+**The user had asked for this design earlier and an earlier session built dead
+reckoning instead; that cost days. When the user proposes an architecture,
+build a spike of it before continuing the current plan.**
+
+Dead reckoning (§8(a) below: replay recorded bearing/duration, look only at a
+leg's end) sat at 5/10 per route through thirteen measured changes. The closed
+loop LOOKS AFTER EVERY PUSH and takes position from the screen, never from the
+stick. Built in one evening: `chain.py` (the sensor), `chain_record.py` (the
+recorder), `chain_walk.py` (the controller), `overnight/chain_trials.py` (the
+harness), `tools/chain_validate.py`, `tools/turn_review.py`; spec and build
+notes in `agent_progress/closed-loop/`. Three Opus builders, three skeptics,
+every module refuted at least once and fixed; 74 controller tests, every fix
+mutation-tested.
+
+**The chain is the user's own drive** (`chains/route_user_1853`, 205 frames at
+0.25 s, stick logged through pygame, compass on 94% of frames, stopped by
+`at_table()` at the prompt). A chain is compiled into a PLAN: push targets one
+push apart by the recorded stick's distance, and each stationary run collapsed
+to ONE turn-only stop. The sensor (`Chain.locate`) matches a frame against a
+window of waypoints around the last known index, ORB + Hamming + RANSAC,
+`dx` and scale from the fit. Offline on the drive's own held-out frames, closed
+hint: 82% within one waypoint, 96% within two, 4% abstain.
+
+**Measured, batch 4 (2026-09-07 19:47, the first with all six fixes below but
+the last): 8/10 ARRIVED at 90-121 s reset-to-prompt.** Dead reckoning's
+arrivals took 240-340 s. Batches 1-3 were stopped early because each failure
+was one spot with one fix (`overnight/chain_trials_batch{1..4}.*`). The 25 is
+running as this is written.
+
+**Six controller lessons, each from a trial's frames and each pinned by a test
+and mutants (`git log -- chain_walk.py`):**
+
+1. Advance the estimate to the TARGET it pushed toward, never past it. Trial 1
+   ran three waypoints ahead per push on 13-28-inlier fits and strafed into
+   the wall on junk offsets.
+2. Push targets spaced by the recorded stick's distance, not per frame; the
+   user's slow stick put four frames in one push and the estimate fell behind.
+3. A blind sensor (featureless door panel, dark wall) dead-reckons the target
+   for `BLIND_MAX` pushes before misses count; a fix under `FIX_MIN_INLIERS`
+   (29, the chain's own true-position p05) neither advances nor steers; a
+   thin fit (`WEAK_MIN_INLIERS` 15) advances but does not restore the budget.
+4. **Verify every turn stop against its own frame** (the user's call from the
+   stream: "the player didn't move far enough towards the door"). A frame
+   that fits an EARLIER waypoint means short: turn back, push once more,
+   retry (`TURN_RETRY_MAX` 3). A frame that fits NOTHING is occluded (an NPC
+   in the face) or already passed: turn and go on, no retry pushes.
+5. A wide forward search (`WIDE_AHEAD` 60, believed at `STRONG_MIN_INLIERS`
+   120, above the wrong-place p95 of 117) from the FIRST blind push and at
+   unverified stops. At the office exit the shop facade across the street
+   looks the same from the doorway and from halfway across; the loop crossed
+   in two pushes and stood at the portraits while the estimate said
+   "doorway". A margin over the runner-up was tried first and was wrong: in a
+   window of adjacent frames the runner-up is the neighbour.
+6. `LOST_MAX` 9: nine iterations with nothing credible after the budget ends
+   the walk at once (80 s) instead of burning the 400 s cap (trial 3 pushed
+   into a wall 312 times).
+
+**Review rule (the user's):** look at the TURNS first. `tools/turn_review.py
+<shots dir> <journal>` tiles the live frame at every stop beside the chain's
+frame there; a wrong scene after a turn means the character stopped short.
+Pair a journal with its shots by time.
+
+**Known hazards at 97%:** an NPC standing in the exit door (trial 1 stalled
+six pushes there before a jump cleared it); the user's camera pitch on the
+stairs (every fit there carries a 200-300 px vertical offset the loop ignores).
+
+
 ### (a) Where the route stands
 
 **RE-MEASURED 2026-09-07, AFTER the leg-1 revert. Arrival did NOT move.**
