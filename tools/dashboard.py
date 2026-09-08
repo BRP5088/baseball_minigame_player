@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, fourteenth launch: the rewind rule", "state": "running",
+    {"title": "THE 25, fifteenth launch: the same build again", "state": "running",
+     "detail": "Fourteenth launch 22 of 25 at a walk median of 82 s. Its three failures were three different spots (a coat rack in the shop, the window past the dealer, the stairs alcove); the rewind rule fired once and behaved as built. Readers and censuses found no rule worth building on one to three trials, so the build runs again while the '$50' census finishes for the detector."},
+    {"title": "THE 25, fourteenth launch: the rewind rule", "state": "done",
      "detail": "Thirteenth launch 23 of 25 at a walk median of 84 s: the 24 of 25 repeats on the same build. Its two failures were a detector miss with the prompt on screen and the third identical loss at the bar-tables stop. Landed now: a thin fit at a stop counts as nothing, a retry needs credible evidence of being short, and a stop that cannot be verified rewinds to the last credible position and re-approaches instead of being accepted on faith. A census over every route frame for the '$50' token is running for the detector."},
     {"title": "THE 25, thirteenth launch: the same build again", "state": "done",
      "detail": "Twelfth launch 24 of 25, walk median 86 s against 105 s the batch before, best streak 21. The one failure was the doorway pillar at the bar entrance followed by a stop accepted unverified; the rewind rule for that is in its final check and lands at this batch's end. This run measures whether 24 of 25 repeats on the same build."},

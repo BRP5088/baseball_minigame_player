@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 03:02. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 03:43. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -226,7 +226,15 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, FOURTEENTH LAUNCH, RUNNING (02:58:59, commit a8ff495 = 2220c83 + patch41 the rewind), plain
+- **THE 25, FIFTEENTH LAUNCH, RUNNING (03:40:24, a8ff495 again), plain `--trials 25`.** **Fourteenth launch
+  (a8ff495, the rewind): 22 of 25, walk median 82.2 s [72..116], best streak 10** (`overnight/
+  chain_trials_batch14.*`). Its three failures, each read: t6 the coat rack in the shop alcove (the rewind
+  fired correctly and the re-approach walked the same line), t14 the window past the dealer (a 206 px
+  offset at the 196 stop that strafes did not close), t15 the stairs alcove after the 39 stop's look. Three
+  different spots; the rewind is not implicated in any of them and its one live firing was mechanically
+  right. No new rule was built on them (censuses in (s'), (t), (u)). The $50-token OCR census is still
+  running; the detector's next step waits on it.
+- **THE 25, FOURTEENTH LAUNCH, DONE 03:40 (02:58:59, commit a8ff495 = 2220c83 + patch41 the rewind), plain
   `--trials 25`.** **Thirteenth launch (2220c83 again): 23/25 arrived, walk median 81.1 [70..104], best streak 15** (`overnight/
   chain_trials_batch13.*`): the twelfth's 24/25 at 86 s REPEATS. Its two failures: t5 the detector blind with
   the prompt on screen (score 0.15-0.19, one OCR word; the $50-token census decides the next detector step),
