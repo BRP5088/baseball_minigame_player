@@ -1,8 +1,40 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 23:33. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-07 23:52. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
+
+**OVERNIGHT PLAN (the user went to bed 2026-09-07 ~23:50; their instructions verbatim):** "I will let you iterate
+and figure out what changes need to be done so you make it to the mini game table more often. ideally it would
+be nice if you didn't walk into walls/the bar since your wasting time doing that. do it if you found that it
+does help. don't be afraid to spin up sub agents to investigate the failures. something I've noticed is that
+you walk into a wanda, the wall near wanda and the bar a lot."
+
+The loop for the night, in order, repeated:
+1. Let the running batch finish (the monitor's final tally line wakes the session). Record its tally here and
+   on the board (`tools/dashboard.py`, then write_db `dash/state`). Archive `overnight/chain_trials.{log,json}`
+   as `overnight/chain_trials_<name>.*` before any relaunch overwrites them.
+2. A reader on EVERY failed trial (`tools/trial_sheet.py <n>` -> the reader workflow script
+   `bar-failure-readers-wf_6cfd54f8-649.js` with the manifest; notes land in `agent_progress/closed-loop/review/`).
+3. Build the next rule from what the readers and the censuses show, as a PENDING patch script in
+   `drafts/pending_after_ab/` (an Opus builder + two Sonnet skeptics + a fix round, scratch trees made with
+   `cp` under the scratchpad, NEVER symlinks, module under test proven by `__file__`, every anchor asserted
+   before any write). Queue as of 23:50: (a) `apply_patch34.py` END-TURN (past the last stop, |dx| > 400 px ->
+   turn toward the scene, offset kept on the remaining pushes; being verified); (b) SHORT END STEPS: when the
+   fit says "at the endpoint" and there is no prompt, push in ~0.09 u steps with at_table() between them and
+   back off the moment the table leaves the view (ab3 trial 5: solid fit at 204, no prompt, then three full
+   scheduled pushes into a window); (c) the COLLISION census (`tools/collision_census.py`, being written):
+   where the time goes in escapes/stalls/misses by chain region -- the user's "Wanda, the wall near Wanda, the
+   bar" -- and a rule per cluster only where the frames show the same event.
+4. At the batch end: apply the verified patch(es), run the test file, mutants in the checkout (the console is
+   idle), commit, `ensure_stream.ensure_live()` (the PS5 may have dozed during the build; standing permission
+   to wake it), relaunch `overnight/chain_trials.py --chain route_user_1853 --trials 20 --arms off,on` while
+   the pan question is open; once the pan A/B has 10 valid an arm, decide the arm by Fisher/cost and run plain
+   `--trials 25`. Every change is ONE round; report arrival by cause, never just the rate.
+5. Keep this file, CLAUDE.md §8 and the board current after every batch. Never edit `chain_walk.py`,
+   `chain.py`, `overnight/chain_trials.py` or `overnight/_harness.py` while a batch runs (the child re-imports
+   them per trial). No mutation sweeps beside the console; the single test file is fine.
+
 
 - **THE PAN A/B, FOURTH ATTEMPT, RUNNING (23:31:17, commit 7fa0efa):** the retry-skip landed at the user's
   request ("don't wait, land the retry fix now and relaunch"): a stop reached by turn-early takes NO retry pushes
