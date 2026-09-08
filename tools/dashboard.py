@@ -75,21 +75,25 @@ def _chain_rows():
         outcome = (r.get("outcome") or ("ARRIVED" if r.get("arrived") else "FAILED")).lower()
         secs = (r.get("setup_seconds") or 0) + (r.get("seconds") or 0)
         durations.append(secs)
-        rows.append({"trial": r.get("trial", len(rows) + 1), "arm": "closed-loop", "outcome": outcome,
+        rows.append({"trial": r.get("trial", len(rows) + 1), "arm": r.get("arm") or "closed-loop", "outcome": outcome,
                      "why": (r.get("failure") or "")[:90],
                      "leg_s": r.get("walk_seconds"), "setup_s": r.get("setup_seconds"),
                      "located": f"k={r.get('k_final')}/{r.get('waypoints')}",
                      "recheck": r.get("at_table_recheck"),
                      "kinds": [f"{r.get('pushes')} pushes, {r.get('iterations')} it"],
                      "prompt_on_screen": None})
-    val = [r for r in rows if r["outcome"] != "invalid"]
-    arrived = [r["outcome"] == "arrived" for r in val]
-    streak = best = 0
-    for a in arrived:
-        streak = streak + 1 if a else 0
-        best = max(best, streak)
-    tallies = {"closed-loop": {"valid": len(val), "arrived": sum(arrived), "invalid": len(rows) - len(val),
-                               "prompt_on_screen": best, "executed": streak}}
+    arms = sorted({r["arm"] for r in rows}) or ["closed-loop"]
+    tallies = {}
+    for arm in arms:
+        rs = [r for r in rows if r["arm"] == arm]
+        val = [r for r in rs if r["outcome"] != "invalid"]
+        arrived = [r["outcome"] == "arrived" for r in val]
+        streak = best = 0
+        for a in arrived:
+            streak = streak + 1 if a else 0
+            best = max(best, streak)
+        tallies[arm] = {"valid": len(val), "arrived": sum(arrived), "invalid": len(rs) - len(val),
+                        "prompt_on_screen": best, "executed": streak}
     total = j.get("trials", 25)
     remaining = total - len(rows)
     med = statistics.median(durations) if durations else 150
@@ -99,7 +103,7 @@ def _chain_rows():
     name = f"THE 25: closed loop on the user's chain ({j.get('chain', '?')}), {j.get('time_cap')} s cap"
     return rows, tallies, {"total": total, "done": len(rows), "remaining": remaining, "eta": eta,
                            "median_trial_s": round(med), "name": name, "harness": "overnight/chain_trials.py",
-                           "arms": ["closed-loop"], "note": "prompt-on-screen column = best streak; executed = current streak"}
+                           "arms": arms, "note": "prompt-on-screen column = best streak; executed = current streak"}
 
 
 def rows_and_tallies():

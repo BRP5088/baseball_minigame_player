@@ -95,6 +95,10 @@ OUT = os.path.join(HERE, "chain_trials.json")
 SHOTS_ROOT = os.path.join(HERE, "chain_frames")
 JOURNAL_ROOT = os.path.join(HERE, "chain_journals")
 JOURNAL_ENV = "BASEBALL_CHAIN_JOURNAL"
+# `--arms off,on` interleaves STOP_PAN_FROM_RUN across trials. The arm reaches
+# the child through this variable and is applied INSIDE one_trial(), so process
+# death is the restore and no cleanup can reinstate a stale default (§10.17).
+PAN_ENV = "BASEBALL_CHAIN_PAN"
 
 ARRIVED, TIMED_OUT, FAILED, INVALID = "ARRIVED", "TIMED_OUT", "FAILED", "INVALID"
 
@@ -205,6 +209,11 @@ def one_trial(name):
     def log(m):
         print(m, flush=True)
 
+    pan = os.environ.get(PAN_ENV)
+    if pan is not None:
+        chain_walk.STOP_PAN_FROM_RUN = (pan == "on")
+        log(f"  arm: STOP_PAN_FROM_RUN = {chain_walk.STOP_PAN_FROM_RUN}")
+
     d = chain_dir(name)
     if not os.path.isdir(d):
         raise SystemExit(f"no such chain: {d}")
@@ -241,6 +250,7 @@ def one_trial(name):
     except Exception as exc:                                       # noqa: BLE001
         res["at_table_recheck"] = f"unreadable: {type(exc).__name__}"
     res["chain"] = name
+    res["pan"] = bool(chain_walk.STOP_PAN_FROM_RUN)
     res["waypoints"] = len(ch.waypoints)
     res["shots"] = shots_dir
     res["journal"] = journal
@@ -251,6 +261,19 @@ def one_trial(name):
     res["load_seconds"] = round(t_loaded - t_reset, 1)
     res["child_seconds"] = round(time.time() - t_start, 1)
     return res
+
+
+def fisher_exact(a, b, c, d):
+    """Two-sided Fisher exact p for [[a, b], [c, d]] (stdlib; the tables here
+    are tiny). Sums the probability of every table at least as extreme."""
+    import math
+    n = a + b + c + d
+    r1, c1 = a + b, a + c
+    def prob(x):
+        return (math.comb(r1, x) * math.comb(n - r1, c1 - x)) / math.comb(n, c1)
+    p_obs = prob(a)
+    lo, hi = max(0, c1 - (n - r1)), min(r1, c1)
+    return min(1.0, sum(prob(x) for x in range(lo, hi + 1) if prob(x) <= p_obs + 1e-12))
 
 
 def recover(path):
@@ -336,6 +359,13 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if "--trials" in sys.argv:
         args = [a for a in args if a != sys.argv[sys.argv.index("--trials") + 1]]
+    arms = []
+    if "--arms" in sys.argv:
+        spec = sys.argv[sys.argv.index("--arms") + 1]
+        args = [a for a in args if a != spec]
+        arms = spec.split(",")
+        if any(a not in ("off", "on") for a in arms):
+            raise SystemExit("--arms takes off/on values, e.g. --arms off,on")
     if not args:
         raise SystemExit(USAGE)
     name = args[0]
@@ -368,6 +398,7 @@ def main():
            "time_cap": TIME_CAP, "ceiling": CEILING,
            "setup_budget": SETUP_BUDGET,
            "config": config(),
+           "arms": arms,
            "runs": []}
     log(f"chain trials: {trials} of {name} "
         f"(walk cap {TIME_CAP:.0f}s + setup budget {SETUP_BUDGET:.0f}s = "
@@ -400,12 +431,18 @@ def main():
             journal = os.path.join(
                 JOURNAL_ROOT, f"{name}_t{i:02d}_{int(time.time())}.jsonl")
             os.environ[JOURNAL_ENV] = journal
+            arm = arms[(i - 1) % len(arms)] if arms else None
+            if arm is not None:
+                os.environ[PAN_ENV] = arm
             r, secs = _harness.run_trial(__file__, name, CEILING, log=log)
             outcome = classify(r, secs, log)
             row = trial_row(i, outcome, secs, r, journal=journal)
             row["journal"] = journal
+            if arm is not None:
+                row["arm"] = "pan-" + arm
             res["runs"].append(row)
-            log(f"[{i:2d}] {outcome:9s} "
+            armtxt = f"{row['arm']:8s} " if arm is not None else ""
+            log(f"[{i:2d}] {outcome:9s} {armtxt}"
                 f"k={row.get('k_final', '--')}/{row.get('waypoints', '--')}  "
                 f"it={row.get('iterations', '--')}  "
                 f"pushes={row.get('pushes', '--')}  "
@@ -428,6 +465,17 @@ def main():
         f"({res['invalid']} invalid, never counted as failures)")
     for kind in (TIMED_OUT, FAILED):
         log(f"  {kind}: {sum(1 for r in got if r['outcome'] == kind)}")
+    if arms:
+        tally = {}
+        for a in arms:
+            rs = [r for r in got if r.get("arm") == "pan-" + a]
+            tally[a] = (sum(1 for r in rs if r["outcome"] == ARRIVED), len(rs))
+            log(f"  pan-{a}: arrived {tally[a][0]}/{tally[a][1]} valid")
+        if len(arms) == 2:
+            (a1, n1), (a2, n2) = tally[arms[0]], tally[arms[1]]
+            res["fisher_p"] = fisher_exact(a1, n1 - a1, a2, n2 - a2)
+            log(f"  Fisher exact p = {res['fisher_p']:.4f}")
+        res["tally"] = {a: {"arrived": t[0], "valid": t[1]} for a, t in tally.items()}
     if got:
         # WALL seconds, every trial measured the same way — that is what makes
         # this comparable with dead reckoning's 243.7s per trial (§8(a)).
