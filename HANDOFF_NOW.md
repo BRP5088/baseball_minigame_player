@@ -109,6 +109,14 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (r) b13 trial 21 (03:2x): the THIRD identical failure on the 2220c83 build (b11 t25, b12 t22, b13 t21):
+   the 129 stop verified by a -25 look, an un-yawed LEFT strafe, blind pushes at 130-136 into the mirror
+   wall, turn-early at 136 for 166, accepted unverified, lost. CENSUS of the 129 stop since the tenth launch
+   (74 verifications): turned-looked 42 (37 arrived, 5 failed), turned-aligned 21 (20/1), turned-unverified
+   11 (11/0); 41 of the 42 looks strafed LEFT by 144-462 px and the three lost ones (-379, -332, -340) sit in
+   the MIDDLE of that distribution — the look strafe does not discriminate (§10.4: no rule on it). What
+   does: 2-3 blind pushes right after the stop and a turn-early, which arrivals never show. The lever is
+   therefore the rewind on the unverified 166 stop (patch41, landing at this batch's end), not the look.
    (q) READY: `drafts/pending_after_ab/apply_patch41.py` STOP-UNVERIFIED REWIND (workflow done 02:5x; notes
    `agent_progress/closed-loop/stop_rewind/`): a thin fit (< WEAK_MIN_INLIERS) at a stop counts as nothing
    (back-off and looks first); a retry needs a CREDIBLE fit at an earlier index (in practice only a credible
