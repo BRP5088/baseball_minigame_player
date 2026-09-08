@@ -227,6 +227,29 @@ WEAK_MIN_INLIERS = 15
 # rung depended on how many escapes the trial had spent earlier. Budgets of
 # MISS_MAX*4+1 and STALL_MAX*4+1 let all four rungs fire and be seen.
 LOST_MAX = 13
+# THE LOST RESCUE: ONE terminal rung, after the ladder and before the walk
+# ends. Every lost trial of 2026-09-08 is one shape (census_after_129_notes.md
+# and its readers): pinned against geometry or an NPC at k 100-140, the view
+# unchanged for thirteen iterations, and the ladder unable to open it — a
+# credible fix follows `escape:back` 0 of 27 times in the bar stretch, `right`
+# 5 of 69, `left` 36 of 106. What a human does there is back STRAIGHT OUT a
+# full step and look for the room they were facing. ONE per walk: a second
+# loss ends the walk exactly as before, so an arriving trial pays nothing.
+LOST_RESCUE_MAX = 1
+# Two of the existing step-backs, not a new physical constant: one BACK_SEC
+# has never freed a pin (0 of 27), and the readers describe backing out of a
+# doorway, not off a wall.
+LOST_RESCUE_BACK_SEC = 2 * BACK_SEC
+# ... and the looks search from a little BEHIND the last CREDIBLE sighting,
+# because when this fires the estimate is typically 20-60 waypoints ahead of
+# the character (turn-early and blind advances carried it there), so a window
+# around k is a window around somewhere the character has never been. The
+# window reaches WIDE_AHEAD past its start, which is the same span the wide
+# relocalisation searches.
+# None = the WHOLE chain behind the last credible k (patch43b). b16 t19: a
+# wrong 191-inlier wide relocalisation made last_cred_k 136 while the
+# character stood at ~120; a six-waypoint lookback could never find it.
+LOST_RESCUE_LOOKBACK = None
 # NO PROGRESS: this many consecutive iterations without k advancing (stalls,
 # misses, escapes, retries, all of it) ends the walk as STUCK, whatever the
 # sensor sees. LOST covers a blind sensor; this covers a wanderer whose sensor
@@ -912,6 +935,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     pi = 0                      # the plan pointer: first target past k
     blind = 0                   # consecutive pushes made with no credible fix
     lost = 0                    # iterations with nothing credible, budget spent
+    rescues = 0                 # LOST RESCUES spent this walk (LOST_RESCUE_MAX)
     turn_retries = 0            # retries spent on the current turn stop
     since_advance = 0           # iterations since k last rose
     dx_run = []                 # dx of the last fits (>= WEAK_MIN_INLIERS), for the consistency rule
@@ -1628,6 +1652,141 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     stalls = 0
                 else:
                     action = "weak"
+            if (lost >= LOST_MAX and rescues < LOST_RESCUE_MAX
+                    and now() - t0 + LOST_RESCUE_BACK_SEC < time_cap):
+                # THE LOST RESCUE (see LOST_RESCUE_MAX). Back out, look around
+                # the LAST CREDIBLE SIGHTING, and go on if something strong
+                # fits. It fires once per walk and only here, so it cannot
+                # touch a trial that is not already over.
+                #
+                # AND ONLY IF THE CAP CAN PAY FOR IT. This is the one rung that
+                # costs more than an iteration — a step back plus up to three
+                # turn-and-look pairs plus the turn back — and a rescue that
+                # finishes after the cap is worthless anyway, because the next
+                # top-of-loop check returns "timed out" before the walk can use
+                # it. Unguarded it ran the walk 3.20 s past a 25.4 s cap and
+                # still reported "lost" (probe_time_cap.py), so an external
+                # ceiling sized off `time_cap` had that much less slack here
+                # than on every other iteration (§10.14). The step back is the
+                # one part whose duration is known in advance; the looks are
+                # bounded below, inside the loop.
+                rescues += 1
+                h0 = last_cmd if last_cmd is not None else heading
+                from_k = k
+                back(PUSH_MAG, LOST_RESCUE_BACK_SEC)
+                # NOT `k`: when a walk is lost the estimate is ahead of the
+                # character, so the window that could contain the view is the
+                # one around the last thing the SENSOR actually saw.
+                start = (0 if LOST_RESCUE_LOOKBACK is None
+                         else max(last_cred_k - LOST_RESCUE_LOOKBACK, 0))
+                span = max(last_cred_k + WIDE_AHEAD - start, WIDE_AHEAD)
+                looks_plan = [(0.0, "_rescue_look0")]
+                for _d in STOP_LOOK_DEG:
+                    looks_plan.append((_d, "_rescue_lookL" if _d < 0
+                                       else "_rescue_lookR"))
+                looks = 0
+                best = None                  # (degrees, inliers, fix)
+                for ddeg, sfx in looks_plan:
+                    if now() - t0 >= time_cap:
+                        # The cap owns the walk. The step back is already paid
+                        # for and the first look always fits behind it (the
+                        # gate above reserved exactly that much), so this can
+                        # only ever drop the second and third.
+                        break
+                    if ddeg != 0.0:
+                        if h0 is None:
+                            continue         # nothing to yaw about
+                        turn_to((h0 + ddeg) % 360.0)
+                    img2 = capture()
+                    looks += 1
+                    _save(shots, iteration, k, img2, log, suffix=sfx)
+                    f2 = chain.locate(img2, start, window=span)
+                    i2 = 0 if f2 is None else (getattr(f2, "inliers", 0) or 0)
+                    if f2 is not None and (best is None or i2 > best[1]):
+                        best = (ddeg, i2, f2)
+                    if best is not None and best[1] >= STRONG_MIN_INLIERS:
+                        # Stop at the first BELIEVED look, exactly as the stop
+                        # look-around does: STRONG_MIN_INLIERS is above the
+                        # wrong-place maximum, so another direction can only
+                        # cost a turn, a capture and a locate.
+                        break
+                rescue = {"looks": looks, "from_k": from_k, "to_k": None,
+                          "deg": None if best is None else best[0],
+                          "inliers": None if best is None else best[1]}
+                if best is not None and best[1] >= STRONG_MIN_INLIERS:
+                    ddeg, i2, f2 = best
+                    k = min(int(f2.k), n - 1)
+                    last_cred_k = k
+                    rescue["to_k"] = k
+                    # The same re-aim the rewind and the look-back regression
+                    # make when they move k: the plan pointer re-derives as
+                    # the first entry past k.
+                    pi = 0
+                    while pi < len(plan) and plan[pi][0] <= k:
+                        pi += 1
+                    h2 = plan[pi][2] if pi < len(plan) else plan_last_heading
+                    if h2 is not None:
+                        turn_to(h2)
+                        last_cmd = h2
+                    lost = 0
+                    misses = 0
+                    stalls = 0
+                    blind = 0
+                    escapes = 0
+                    unverified_turn = False
+                    early_stop = False
+                    # THE RESCUE MOVED THE CHARACTER AND THE ESTIMATE, so two
+                    # more pieces of state measured before it are refuted with
+                    # it. Both were left standing in the first draft and both
+                    # were reproduced offline.
+                    #
+                    # end_yaw is the degrees an END TURN added to every
+                    # remaining tail heading, measured from a position this
+                    # rung has just contradicted and backed away from. Left
+                    # standing it rides the re-aimed heading too: a walk that
+                    # turned -30.5 at the tail and was correctly re-aimed to
+                    # 95.0 commanded 64.5 on the very next push
+                    # (probe_end_yaw.py). The `regressed` branch zeroes it for
+                    # the same reason and in the same words; like that branch,
+                    # this one does NOT restore the BUDGET (`end_turns`).
+                    end_yaw = 0.0
+                    # turned_early is the one-shot "turn toward the stop
+                    # instead of pushing into whatever is there". It is
+                    # re-armed by progress the sensor SAW — and this is that,
+                    # believed at the same STRONG_MIN_INLIERS as
+                    # `relocalised`, which re-arms it through PROGRESS_ACTIONS.
+                    # Left set, a walk rescued back BEFORE the stop it had
+                    # already turned early at could not take that cheap turn
+                    # again, fell into the rungs, and died lost one stop later
+                    # with no second rescue (probe_turned_early.py).
+                    turned_early = False
+                    action = "rescued"
+                    record({"iteration": iteration, "k": k, "target": target_k,
+                            "fix": _fix_row(f2), "action": action,
+                            "lateral": None, "rescue": rescue,
+                            "at_end": at_end,
+                            "seconds": round(now() - it_t0, 2),
+                            "elapsed": round(now() - t0, 2)})
+                    log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  "
+                        f"rescued: backed {LOST_RESCUE_BACK_SEC:.1f}s and "
+                        f"looked {looks} time(s) from {start}; {i2} inliers "
+                        f"at {ddeg:+.0f} deg put k at {k} (was {from_k})")
+                    continue
+                # Nothing strong: leave the camera where the walk had it and
+                # end exactly as before — the "lost" row and its wording are
+                # what every harness and reader parses.
+                if h0 is not None:
+                    turn_to(h0)
+                    last_cmd = h0
+                record({"iteration": iteration, "k": k, "target": target_k,
+                        "fix": _fix_row(fix), "action": "rescue-failed",
+                        "lateral": None, "rescue": rescue, "at_end": at_end,
+                        "seconds": round(now() - it_t0, 2),
+                        "elapsed": round(now() - t0, 2)})
+                log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  "
+                    f"rescue-failed: backed {LOST_RESCUE_BACK_SEC:.1f}s and "
+                    f"looked {looks} time(s) from {start}; best "
+                    f"{rescue['inliers']} inliers, under {STRONG_MIN_INLIERS}")
             if lost >= LOST_MAX:
                 record({"iteration": iteration, "k": k, "target": target_k,
                         "fix": _fix_row(fix), "action": "lost", "lateral": None,

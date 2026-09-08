@@ -531,8 +531,10 @@ class IndexAdvance(unittest.TestCase):
         self.assertTrue(res["failure"].startswith("lost at k="), res["failure"])
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:6], ["blind-advance"] * 6)
-        self.assertEqual(acts[-1], "lost")
-        self.assertEqual(len(acts), 6 + 13, "six blind, thirteen lost, then out")
+        self.assertEqual(acts[-2:], ["rescue-failed", "lost"])
+        self.assertEqual(len(acts), 6 + 13 + 1,
+                         "six blind, thirteen lost, one LOST RESCUE that "
+                         "found nothing, then out")
         self.assertLess(res["seconds"], 60.0, "gave up long before the cap")
 
     def test_a_turn_stop_that_does_not_match_is_retried_after_one_more_push(self):
@@ -3415,7 +3417,9 @@ class DefaultConsoleWrappers(unittest.TestCase):
         # rung's effect has been seen. Check the back rung reached walk_leg
         # with ly POSITIVE (backward on its axis) and both sidesteps landed.
         backs = [l for l in self.legs if l["ly"] > 0.0]
-        self.assertEqual(len(backs), 1, "the back rung is one walk_leg with ly > 0")
+        self.assertEqual([b["seconds"] for b in backs], [0.5, 1.0],
+                         "the ladder's back rung (BACK_SEC), then the LOST "
+                         "RESCUE's (2 x BACK_SEC), both with ly POSITIVE")
         self.assertEqual([e < 0 for e in esc], [True, False], "left, then right, before lost: %r" % esc)
 
     def test_the_default_prompt_check_is_table_prompt_at_table(self):
@@ -3459,6 +3463,428 @@ class NeverTouchesTheForbidden(unittest.TestCase):
             mods, {"time", "json", "math", "os", "pose", "slow_traverse",
                    "input_controller", "table_prompt"},
             "chain_walk must import nothing that resets, routes, or writes the map")
+
+
+class ScriptedWide(FakeChain):
+    """A FakeChain whose WIDE answers depend on the HINT.
+
+    The blind path's forward wide search is hinted at `k + 1`; the lost
+    rescue's looks are hinted BEHIND the last credible sighting. Keying the
+    script on the hint is what lets one test script the rescue's three looks
+    without the eighteen wide searches the blind phase makes first eating them
+    — and it is also how `test_the_rescue_searches_behind_the_last_credible_k`
+    can show WHERE the rescue looked rather than merely that it looked.
+    """
+
+    def __init__(self, *a, at_hint=None, **kw):
+        super().__init__(*a, **kw)
+        self.at_hint = {h: list(v) for h, v in (at_hint or {}).items()}
+        self.wide_windows = []
+
+    def locate(self, img, k_hint, window=3):
+        if window >= chain_walk.WIDE_AHEAD:
+            self.wide_calls.append(k_hint)
+            self.wide_windows.append(window)
+            queued = self.at_hint.get(k_hint)
+            if queued:
+                return queued.pop(0)
+            return self.wide
+        return super().locate(img, k_hint, window=window)
+
+
+class RescueRig(Rig):
+    """A Rig whose prompt appears once the RESCUE's step back has happened.
+
+    A capture number would be an arithmetic constant three tests would have to
+    agree on; "the prompt is on screen on the first frame after the walk backed
+    out and turned" is the thing the test means. The escape ladder's own back
+    rung is BACK_SEC (0.5 s), so it cannot trigger this.
+    """
+
+    def at_table(self, img):
+        v = any(e[0] == "back" and e[2] == chain_walk.LOST_RESCUE_BACK_SEC
+                for e in self.events)
+        self.events.append(("at_table", img.n, v))
+        return v
+
+
+class LostRescue(unittest.TestCase):
+    """(o) ONE terminal rung before a walk ends LOST: back out, look around the
+    LAST CREDIBLE sighting, and carry on if something strong fits.
+
+    Every lost trial of 2026-09-08 (census_after_129_notes.md, and the readers
+    notes_cur_t04_1788853535.md / notes_cur_t12_1788856027.md / notes_b16_t16.md)
+    is the same picture: pinned against geometry or an NPC at k 100-140, the
+    view unchanged for thirteen iterations, and the ladder unable to open it —
+    `escape:back` is followed by a credible fix 0 of 27 times in the bar
+    stretch. The estimate is 20-60 waypoints AHEAD of the character by then, so
+    the looks search around `last_cred_k`, never around `k`.
+
+    THE LAST FOUR TESTS ARE THE INTERACTION SUITE, one per defect two skeptics
+    demonstrated against the first draft on 2026-09-08. Each is the project's
+    own signature shape: a rung running where it cannot be paid for, and state
+    that outlives the measurement it was made from.
+    """
+
+    # A 30-waypoint chain of all-push targets: ten credible fits (k 1..10),
+    # then the sensor goes blind for good — six blind advances (k 11..16) and
+    # the thirteen LOST_MAX iterations that end the walk. `lookback=None` so
+    # the look-back does not eat the script; `default=None` is the blindness.
+    CREDIBLE = 10
+
+    def chain(self, at_hint=None):
+        return ScriptedWide(30, [Fix(k=i) for i in range(1, self.CREDIBLE + 1)],
+                            default=None, lookback=None, at_hint=at_hint)
+
+    def test_the_constants(self):
+        # Literals, not the constants themselves (§10.11): a test that reads
+        # the value it guards passes at any value.
+        self.assertEqual(chain_walk.LOST_RESCUE_MAX, 1)
+        self.assertEqual(chain_walk.LOST_RESCUE_BACK_SEC, 1.0)
+        self.assertEqual(chain_walk.LOST_RESCUE_BACK_SEC, 2 * chain_walk.BACK_SEC)
+        self.assertIsNone(chain_walk.LOST_RESCUE_LOOKBACK, "the whole chain behind (patch43b)")
+        self.assertEqual(chain_walk.LOST_MAX, 13)
+        self.assertEqual(chain_walk.STRONG_MIN_INLIERS, 165)
+        self.assertEqual(chain_walk.STOP_LOOK_DEG, (-25.0, 25.0))
+
+    def test_a_lost_walk_backs_out_looks_around_and_carries_on(self):
+        # The +25 look is the one that fits, at 170 inliers naming waypoint 13
+        # (three past the last credible sighting at 10). The walk takes it and
+        # arrives; without the rescue it would have ended at iteration 29.
+        ch = self.chain(at_hint={0: [Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=170)]})
+        rig = RescueRig(ch, table_at=None)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts.count("rescued"), 1, acts)
+        self.assertNotIn("lost", acts)
+        self.assertNotIn("rescue-failed", acts)
+        self.assertTrue(res["arrived"])
+        self.assertIsNone(res["failure"])
+        self.assertEqual(acts[-1], "arrived", acts[-4:])
+        row = res["fixes"][acts.index("rescued")]
+        self.assertEqual(row["rescue"], {"looks": 3, "deg": 25.0,
+                                         "inliers": 170, "from_k": 16,
+                                         "to_k": 13})
+        self.assertEqual(row["k"], 13, "k came from the look, not from the plan")
+        # ONE step back, of two BACK_SECs, before the looks.
+        backs = [e for e in rig.events if e[0] == "back" and e[2] == 1.0]
+        self.assertEqual(len(backs), 1)
+        self.assertEqual(backs[0][1], chain_walk.PUSH_MAG)
+        # The looks: the walking heading was 170.0 (the target 17's heading),
+        # so -25 and +25 are 145.0 and 195.0, and the rescue then aims at the
+        # plan entry past k=13 — target 14, heading 140.0.
+        turns = [e[1] for e in rig.events if e[0] == "turn"]
+        i_back = [i for i, e in enumerate(rig.events) if e[0] == "back"][0]
+        after = [e[1] for e in rig.events[i_back:] if e[0] == "turn"]
+        self.assertEqual(after[:3], [145.0, 195.0, 140.0], after[:5])
+        self.assertIn(170.0, turns, "the walking heading the looks yaw about")
+
+    def test_a_second_loss_gets_no_second_rescue(self):
+        # The budget. Same walk with no prompt ever: it is rescued once, walks
+        # on, goes blind again, and the SECOND loss ends it exactly as today.
+        ch = self.chain(at_hint={0: [Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=170)]})
+        rig = Rig(ch, table_at=None)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts.count("rescued"), 1, acts)
+        self.assertEqual(acts.count("rescue-failed"), 0, acts)
+        self.assertEqual(acts[-1], "lost")
+        self.assertTrue(res["failure"].startswith("lost at k="), res["failure"])
+        self.assertEqual(len([e for e in rig.events
+                              if e[0] == "back" and e[2] == 1.0]), 1,
+                         "exactly one rescue step back in the whole walk")
+        # ... and the walk really did get lost a second time: k had moved on
+        # from where the rescue put it.
+        self.assertGreater(res["k_final"], 13)
+
+    def test_looks_under_the_strong_gate_fail_the_rescue(self):
+        # 120 inliers is a live wrong-place count (the census's p95 is 126 and
+        # its maximum 164): believing it would move the estimate 60 waypoints
+        # on a wrong match. The rescue records what it saw, turns back, and the
+        # walk ends with the SAME failure string as before this patch.
+        ch = self.chain(at_hint={0: [Fix(k=13, inliers=120)] * 3})
+        rig = Rig(ch, table_at=None)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[-2:], ["rescue-failed", "lost"], acts[-4:])
+        self.assertEqual(
+            res["failure"],
+            "lost at k=16 of 29: 13 iterations with no credible fix after "
+            "6 blind advances",
+            "the failure wording every harness and reader parses must not move")
+        row = res["fixes"][-2]
+        self.assertEqual(row["rescue"], {"looks": 3, "deg": 0.0,
+                                         "inliers": 120, "from_k": 16,
+                                         "to_k": None})
+        self.assertIsNone(row["fix"], "the loop's own fix was None")
+        # the camera is put back where the walk had it
+        turns = [e[1] for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns[-1], 170.0)
+
+    def test_no_rescue_before_LOST_MAX(self):
+        # Twelve lost iterations and then a credible fix: the rung must not
+        # fire at LOST_MAX - 1. The anti-vacuity half is the middle of the
+        # walk — twelve misses and four escape rungs — so this cannot pass by
+        # never getting near a loss.
+        fixes = ([Fix(k=i) for i in range(1, self.CREDIBLE + 1)]
+                 + [None] * 18 + [Fix(k=17, inliers=120)])
+        ch = ScriptedWide(30, fixes, default=None, lookback=None)
+        rig = Rig(ch, table_at=31)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:10], ["advanced"] * 10)
+        self.assertEqual(acts[10:16], ["blind-advance"] * 6)
+        self.assertEqual(acts[16:28],
+                         ["miss", "miss", "escape:jump",
+                          "miss", "miss", "escape:back",
+                          "miss", "miss", "escape:left",
+                          "miss", "miss", "escape:right"], acts[16:28])
+        self.assertEqual(acts[28], "advanced", "the twelfth lost iteration recovered")
+        self.assertFalse([a for a in acts if a.startswith("rescue")], acts)
+        self.assertEqual([e for e in rig.events
+                          if e[0] == "back" and e[2] == 1.0], [],
+                         "no rescue step back before LOST_MAX")
+        self.assertTrue(res["arrived"])
+
+    def test_the_rescue_searches_behind_the_last_credible_k(self):
+        # THE POINT OF THE RUNG. The last credible sighting was waypoint 10;
+        # blind advances carried k to 16. The three looks must search the WHOLE
+        # chain behind that sighting (hint 0, patch43b: b16 t19's last credible
+        # k was a wrong wide fit 16 waypoints past the truth) out to
+        # last_cred_k + WIDE_AHEAD -- and NOT around k, where the plan thinks
+        # it is.
+        ch = self.chain(at_hint={0: [Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=120),
+                                     Fix(k=13, inliers=170)]})
+        rig = RescueRig(ch, table_at=None)
+        res = rig.go(time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertIn("rescued", acts, acts[-4:])
+        row = res["fixes"][acts.index("rescued")]
+        self.assertEqual(row["rescue"]["from_k"], 16, "k when the rescue fired")
+        self.assertEqual(ch.wide_calls[-3:], [0, 0, 0],
+                         "the three looks search from the chain's start")
+        self.assertEqual(ch.wide_windows[-3:], [10 + chain_walk.WIDE_AHEAD] * 3,
+                         "out to last_cred_k + WIDE_AHEAD")
+        self.assertNotIn(0, ch.wide_calls[:-3],
+                         "and nothing else in this walk asked there")
+        self.assertNotIn(16, ch.wide_calls[-3:], "not anchored at k")
+        self.assertNotIn(10, ch.wide_calls[-3:], "and not at last_cred_k itself")
+
+    # ---- the interaction suite (two skeptics, 2026-09-08) ----
+
+    def test_no_rescue_when_the_cap_cannot_pay_for_the_step_back(self):
+        # THE CAP OWNS THE WALK. Uncapped this scenario's LOST_MAX iteration
+        # costs 3.30 s of rescue and the walk ends at 28.60 s; capped at 25.4 s
+        # the first draft still ran to 28.60 — 3.20 s past its own ceiling —
+        # and reported "lost", so a harness sizing an external kill timer off
+        # `time_cap` had that much less slack here than anywhere else (§10.14).
+        # The rung reserves its step back or does not start.
+        #
+        # The rescue is reached at 25.80 s, so a cap of 26.5 cannot pay for the
+        # 1.0 s back and the walk must end exactly as it did before patch43.
+        ch = self.chain(at_hint={0: [Fix(k=13, inliers=170)]})
+        rig = Rig(ch, table_at=None)
+        res = rig.go(time_cap=26.5)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertFalse([a for a in acts if a.startswith("rescue")], acts[-4:])
+        self.assertEqual(acts[-1], "lost")
+        self.assertEqual([e for e in rig.events
+                          if e[0] == "back" and e[2] == 1.0], [])
+        self.assertLessEqual(res["seconds"], 26.5,
+                             "and the walk stays inside its own cap")
+        # ANTI-VACUITY: the same chain with room to spare IS rescued, so this
+        # cannot pass by the scenario never reaching the rung.
+        ch2 = self.chain(at_hint={0: [Fix(k=13, inliers=170)]})
+        rig2 = Rig(ch2, table_at=None)
+        acts2 = [f["action"] for f in rig2.go(time_cap=400.0)["fixes"]]
+        self.assertIn("rescued", acts2, acts2[-4:])
+
+    def test_the_looks_stop_when_the_cap_is_reached(self):
+        # ... and the looks are bounded too. The step back lands at 26.80 s,
+        # look0 costs a capture (0.1) and each of the other two a turn and a
+        # capture (0.6), so a 27.0 s cap pays for two looks and not the third.
+        # Uncapped the same walk takes all three: that is the control, and it
+        # is what a deleted check would show here.
+        def looks_at(cap):
+            ch = self.chain()                     # every look reads nothing
+            rig = Rig(ch, table_at=None)
+            res = rig.go(time_cap=cap)
+            rows = [f for f in res["fixes"] if f["action"] == "rescue-failed"]
+            self.assertEqual(len(rows), 1, [f["action"] for f in res["fixes"]])
+            return rows[0]["rescue"]["looks"], res["seconds"]
+        self.assertEqual(looks_at(400.0)[0], 3)
+        self.assertEqual(looks_at(27.0)[0], 2)
+        # What is left is one look plus the turn back — the granularity the
+        # loop already has, since it turns and pushes before it reads the clock.
+        self.assertLessEqual(looks_at(27.0)[1] - 27.0, 1.2)
+
+    def test_a_rescue_drops_the_END_TURNs_yaw(self):
+        # THE END TURN'S OFFSET IS MEASURED FROM A POSITION THE RESCUE BACKS
+        # AWAY FROM. This walk turns -30.5 deg toward the dealer at the tail
+        # (dx -600 / PX_PER_DEG), goes blind, and is rescued back to waypoint
+        # 17, where the plan pointer re-derives onto target 20 and the camera
+        # is aimed at its recorded 95.0. With the offset left standing the very
+        # next push commanded 95.0 - 30.5 = 64.5 — a heading nowhere near the
+        # tail — which is exactly what `regressed` zeroes end_yaw to prevent.
+        wps = EndTurnTowardTheDealer._wps([89.5] * 3 + [95.0] * 10)
+        ch = ScriptedWide(len(wps),
+                          [Fix(k=i) for i in (1, 4, 7, 10, 13, 16)]
+                          + [Fix(k=17, dx=-600.0)],
+                          default=None, lookback=None,
+                          at_hint={0: [Fix(k=17, inliers=170)]})
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = without_stuck(rig.go, time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts.count("rescued"), 1, acts)
+        i = acts.index("rescued")
+        self.assertEqual(res["fixes"][i]["k"], 17)
+        turns = [round(e[1], 1) for e in rig.events if e[0] == "turn"]
+        self.assertEqual(turns, [0.0, 89.5, 59.0, 64.5, 95.0],
+                         "walk east, turn at the stop, TURN -30.5 toward the "
+                         "dealer, carry it onto the next tail heading — then "
+                         "the rescue drops it and aims at the RECORDED 95.0")
+        self.assertNotIn(64.5, turns[4:],
+                         "the stale offset must not ride the re-aimed heading")
+        # ANTI-VACUITY: the end turn really did happen and really did ride one
+        # heading before the rescue.
+        self.assertEqual([r["lateral"]["end_turn"] for r in res["fixes"]
+                          if r["lateral"] and "end_turn" in r["lateral"]],
+                         [-30.5])
+
+    def test_a_rescue_re_arms_the_one_shot_turn_early(self):
+        # TURN-EARLY IS RE-ARMED BY PROGRESS THE SENSOR SAW, and a rescue is
+        # that — believed at the same STRONG_MIN_INLIERS as `relocalised`,
+        # which re-arms it through PROGRESS_ACTIONS. This walk turns early at
+        # the stop (plan entry 5), takes it unverified, is lost, and is rescued
+        # back to waypoint 7 — BEFORE that same stop. Approaching it blind
+        # again it must be able to turn early again; left set, the flag sent it
+        # into the misses and rungs instead and it died lost one stop later
+        # with no second rescue left.
+        wps = EndTurnTowardTheDealer._wps([89.5] * 3 + [95.0] * 10)
+        ch = ScriptedWide(len(wps), [Fix(k=1), Fix(k=4), Fix(k=7, scale=2.6)],
+                          default=None, lookback=None,
+                          at_hint={0: [Fix(k=7, inliers=170)]})
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = without_stuck(rig.go, time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        i = acts.index("rescued")
+        self.assertEqual(acts.count("turn-early"), 2, acts)
+        self.assertLess(acts.index("turn-early"), i, acts)
+        self.assertGreater(acts.index("turn-early", i), i,
+                           "the second turn-early is AFTER the rescue")
+        self.assertEqual(res["fixes"][i]["rescue"]["to_k"], 7)
+
+
+class TheRescueReachesTheReaders(unittest.TestCase):
+    """(p) A NEW ACTION THAT NO READER KNOWS IS A HOLE IN THE EVIDENCE.
+
+    `chain_walk` owns this vocabulary and two tools under `tools/` consume it
+    by name: `collision_census.py` buckets the seconds a walk wastes, and
+    `turn_review.py` tiles the frame at every turn because the user's review
+    rule is "look at the turns first". A new action that neither knows is
+    counted nowhere and shown nowhere, and nothing fails — §10.1's shape. The
+    tools are loaded BY PATH so this test needs no sys.path change and cannot
+    pick up some other module of the same name.
+    """
+
+    @staticmethod
+    def _load(name, rel):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            name, os.path.join(_ROOT, rel))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    @staticmethod
+    def _quiet(fn, *a):
+        """Run a tool's entry point without its report or its warnings.
+
+        `collision_census.main` PRINTS its table, and both tools read their
+        journal with a bare `open()` and leak the handle. The leak is
+        pre-existing, has nothing to do with this patch, and is not this
+        test's to fix or to report — but an unsuppressed ResourceWarning in
+        the suite's output is noise a reader has to learn to ignore.
+        """
+        import contextlib
+        import io
+        import warnings
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            return fn(*a)
+
+    def _journal(self, rows):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        p = os.path.join(d, "t01.jsonl")
+        with open(p, "w") as fh:
+            for r in rows:
+                fh.write(json.dumps(r) + "\n")
+        return d, p
+
+    def test_a_failed_rescue_is_counted_as_waste(self):
+        cc = self._load("collision_census_under_test",
+                        os.path.join("tools", "collision_census.py"))
+        # k=120 is the bar counter region, which is where the rescue fires.
+        d, p = self._journal([
+            {"iteration": 1, "k": 120, "action": "miss", "seconds": 1.0},
+            {"iteration": 2, "k": 120, "action": "rescue-failed", "seconds": 3.3},
+            {"iteration": 3, "k": 120, "action": "lost", "seconds": 0.0},
+        ])
+        per_region = self._quiet(cc.main, os.path.join(d, "*.jsonl"))
+        got = per_region[cc.region(120)]
+        self.assertEqual(got["waste_it"], 3,
+                         "miss, rescue-failed and lost are all waste")
+        self.assertAlmostEqual(got["waste_s"], 4.3, places=6)
+        self.assertEqual(got["lost_here"], 1)
+
+    def test_a_successful_rescue_is_not_counted_as_waste(self):
+        # The control for the test above: a rescue that WORKED is progress,
+        # and counting it as waste would make the census argue for removing
+        # the one rung that saved the trial.
+        cc = self._load("collision_census_under_test2",
+                        os.path.join("tools", "collision_census.py"))
+        d, p = self._journal([
+            {"iteration": 1, "k": 120, "action": "rescued", "seconds": 3.3},
+            {"iteration": 2, "k": 120, "action": "arrived", "seconds": 0.0},
+        ])
+        per_region = self._quiet(cc.main, os.path.join(d, "*.jsonl"))
+        self.assertEqual(per_region[cc.region(120)]["waste_it"], 0)
+
+    def test_the_review_tool_shows_the_rescues_turn(self):
+        tr = self._load("turn_review_under_test",
+                        os.path.join("tools", "turn_review.py"))
+        d, p = self._journal([
+            {"iteration": 1, "k": 1, "action": "advanced"},
+            {"iteration": 2, "k": 2, "action": "turned"},
+            {"iteration": 3, "k": 3, "action": "turn-retry"},
+            {"iteration": 4, "k": 4, "action": "rescued"},
+            {"iteration": 5, "k": 5, "action": "rescue-failed"},
+            {"iteration": 6, "k": 6, "action": "blind-advance"},
+        ])
+        got = [r["action"] for r in self._quiet(tr.turn_rows, p)]
+        self.assertEqual(got, ["turned", "turn-retry", "rescued"],
+                         "the rescue's re-aim is a turn; a walk that ENDED at "
+                         "rescue-failed has no turn worth tiling")
+
+    def test_the_review_tool_picks_a_frame_DETERMINISTICALLY(self):
+        # A rescued iteration saves its three look frames beside its own, so an
+        # unsorted glob tiled whichever the filesystem listed first. The base
+        # name sorts before any suffix ("." < "_").
+        tr = self._load("turn_review_under_test2",
+                        os.path.join("tools", "turn_review.py"))
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        for suffix in ("_rescue_lookR", "_rescue_look0", "", "_rescue_lookL"):
+            open(os.path.join(d, f"it_007_k16{suffix}.jpg"), "w").close()
+        self.assertEqual(os.path.basename(tr.frame_for(d, 7)), "it_007_k16.jpg")
 
 
 if __name__ == "__main__":

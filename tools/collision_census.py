@@ -20,7 +20,8 @@ import chain_walk  # noqa: E402
 REGIONS = [(0, 3, "office"), (4, 39, "corridor+stairs"), (40, 88, "door->street"),
            (89, 114, "portrait room (Wanda at 109-114)"), (115, 129, "turn->bar entrance"),
            (130, 166, "bar counter->tables"), (167, 196, "tables->last turn"), (197, 204, "table approach")]
-WASTE = ("stalled", "weak", "miss", "turn-retry", "turn-back", "turn-wait", "lost")
+WASTE = ("stalled", "weak", "miss", "turn-retry", "turn-back", "turn-wait", "lost",
+         "rescue-failed")
 
 
 def region(k):

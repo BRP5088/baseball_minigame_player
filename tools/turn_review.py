@@ -23,11 +23,12 @@ def newest(pattern):
 
 def turn_rows(journal):
     rows = [json.loads(l) for l in open(journal) if l.strip()]
-    return [r for r in rows if str(r.get("action", "")).startswith(("turned", "turn-retry"))]
+    return [r for r in rows if str(r.get("action", "")).startswith(
+        ("turned", "turn-retry", "rescued"))]
 
 
 def frame_for(shots, iteration):
-    fs = glob.glob(os.path.join(shots, f"it_{iteration:03d}_k*.jpg"))
+    fs = sorted(glob.glob(os.path.join(shots, f"it_{iteration:03d}_k*.jpg")))
     return fs[0] if fs else None
 
 
