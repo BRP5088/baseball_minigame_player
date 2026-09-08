@@ -1073,8 +1073,14 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # for evidence of being short, and an early turn was taken BECAUSE
             # nothing fits (an NPC in the face). Pushing along the old heading
             # there walked into her three more times (third A/B, trial 3).
+            # ... and none when the last credible fit had WALL scale: pressed
+            # close to something, three pushes along the old heading found
+            # nothing at stops 88 and 129 in every slow arrival tonight, and
+            # the ladder ran anyway (fast_runs/notes.md). The retries that
+            # helped carried scale 1.1-1.2.
             if (not verified and turn_retries < TURN_RETRY_MAX
-                    and walk_heading is not None and not early_stop):
+                    and walk_heading is not None and not early_stop
+                    and last_cred_scale < WALL_SCALE):
                 turn_retries += 1
                 turn_to(walk_heading)
                 last_cmd = walk_heading

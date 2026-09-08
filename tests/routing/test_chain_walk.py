@@ -540,6 +540,23 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
 
+    def test_no_retry_pushes_at_a_stop_after_a_wall_scale_fit(self):
+        # The same stop as above, but the last credible fit before it read
+        # scale 2.9 (pressed close to something): the retry pushes along the
+        # old heading are skipped and the stop is accepted unverified at once.
+        # The control is the test above (scale 1.0: three retries).
+        self.assertEqual(chain_walk.WALL_SCALE, 2.5)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(4, [Fix(k=1, scale=2.9, inliers=90)], default=Fix(k=1, inliers=9))
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=14.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertNotIn("turn-retry", acts, acts)
+        self.assertEqual(acts[:2], ["advanced", "turned-unverified"], acts)
+
     def test_an_unverified_stop_looks_left_and_right_before_giving_up(self):
         # Head-on the stop's frame fits nothing; looking 25 deg LEFT it fits
         # credibly with the scene 60 px right of centre in that view -> the

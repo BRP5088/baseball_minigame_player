@@ -17,6 +17,7 @@ sys.path.insert(0, _ROOT)
 os.environ.setdefault("BASEBALL_TEST_RUN", "1")
 
 from PIL import Image
+import numpy as np
 import table_prompt as tp
 
 CASES = os.path.join(_ROOT, "test_fixtures", "table_prompt_cases")
@@ -74,6 +75,24 @@ class OcrPath(unittest.TestCase):
         self.assertLess(tp.ink(img), tp.INK_MIN, "ink now passes it; the case has moved")
         self.assertLess(tp.ocr_words(img), 2, "OCR now reads it; the case has moved")
         self.assertTrue(tp.at_table(img))
+
+    def test_a_dark_prompt_frame_is_seen_after_brightness_normalisation(self):
+        # ab4 trial 10, it062: the prompt on screen in a capture whose mean is
+        # 75/255; the raw mask scores under MATCH_MIN, the normalised copy
+        # scores above it. Pinned: the raw path alone must NOT accept it (so
+        # the test cannot pass on the mask), and the verdict is True.
+        im = Image.open(os.path.join(CASES, "prompt_dark_ab4_t10_it062.jpg")).convert("RGB")
+        self.assertLess(tp.score(im), tp.MATCH_MIN, "the raw mask would already see it: fixture is wrong")
+        self.assertEqual((tp.DARK_MEAN, tp.DARK_GAIN_CAP), (90.0, 1.5))
+        self.assertTrue(tp.at_table(im))
+        norm = tp._normalised_if_dark(im)
+        self.assertIsNotNone(norm)
+        self.assertGreaterEqual(tp.score(norm), tp.MATCH_MIN)
+
+    def test_a_bright_frame_is_not_normalised(self):
+        im = Image.open(os.path.join(CASES, "questlog_open_no_prompt_walk2_f0049.jpg")).convert("RGB")
+        self.assertIsNone(tp._normalised_if_dark(Image.fromarray(np.full((120, 160, 3), 120, np.uint8))))
+        self.assertFalse(tp.at_table(im))
 
     def test_wanda_prompt_stays_rejected_without_the_ink_gate(self):
         # The ink gate's stated purpose. Wanda's prompt is a different sentence
