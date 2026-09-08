@@ -4,7 +4,7 @@
 
 ## Now
 
-- **THE 25 IS RUNNING (launched 20:05:44)**: `overnight/chain_trials.py --chain route_user_1853 --trials 25`
+- **THE 25 IS RUNNING (relaunched 20:11:57 after batch 5, 1/3, added the look-around at unverified stops, af216b0; the first launch at 20:05 went 1/3 and was stopped)**: `overnight/chain_trials.py --chain route_user_1853 --trials 25`
   -> `overnight/chain_trials.json` / `.log`, frames `overnight/chain_frames/t*/`, journals
   `overnight/chain_journals/route_user_1853_t*.jsonl`. The requirement is 25 CONSECUTIVE arrivals; count the
   longest run of ARRIVED lines. Batches so far (archived as `overnight/chain_trials_batch{1..4}.*`):
