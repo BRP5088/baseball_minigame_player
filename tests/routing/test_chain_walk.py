@@ -2266,6 +2266,193 @@ class Lateral(unittest.TestCase):
 
 
 
+
+class BarStopEarlyTurn(unittest.TestCase):
+    """patch55: one FEWER push before the bar's sharp turn.
+
+    The user, watching the stream: "they walked too close to the bar when they
+    should have turned earlier." The fit scale agrees -- over 2,560 credible
+    fits the 135-149 band medians 2.22, the worst on the route, against 1.00 at
+    the spawn and 1.29 once the turn is taken. Those waypoints are exactly the
+    last pushes before the 296-degree turn at 166.
+
+    The mirror of DOOR_STOP_EXTRA_PUSH, which shipped on the same kind of
+    observation and won its A/B. This one ships OFF and the A/B decides, so
+    every test drives the flag BOTH ways through a real walk.
+
+    THE CHAIN: four walking pushes at one heading, then the turn-only stop
+    (ly = 0.0), then one more push. plan_indices MERGES a run of same-heading
+    pushes into as few entries as it can, and the shape that matters is that
+    plan[1] is a PUSH whose next entry is the stop -- exactly the entry the
+    rule exists to skip, and still AHEAD of the pointer when the branch runs.
+    """
+
+    ROWS = [(90.0, -0.35)] * 4 + [(0.0, 0.0), (10.0, -0.35)]
+
+    def _wps(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate(self.ROWS, start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        return wps
+
+    def _rig(self, table_at=6):
+        ch = FakeChain(len(self._wps()),
+                       [Fix(k=1), Fix(k=2), Fix(k=3), Fix(k=4), Fix(k=5),
+                        Fix(k=6)],
+                       default=None)
+        ch.waypoints = self._wps()
+        return Rig(ch, table_at=table_at)
+
+    def _at(self, index):
+        prev = chain_walk.BAR_STOP_INDEX
+        chain_walk.BAR_STOP_INDEX = index
+        self.addCleanup(setattr, chain_walk, "BAR_STOP_INDEX", prev)
+
+    def _flag(self, on):
+        prev = chain_walk.BAR_STOP_EARLY_TURN
+        chain_walk.BAR_STOP_EARLY_TURN = on
+        self.addCleanup(setattr, chain_walk, "BAR_STOP_EARLY_TURN", prev)
+
+    def test_the_flag_ships_OFF_and_the_index_is_this_chains_bar_stop(self):
+        # Literals (10.11). 166 is the turn-only stop in route_user_1853's plan
+        # (its stops are 3, 39, 88, 129, 166, 196) and it is the 296-degree turn
+        # the 135-149 overshoot precedes.
+        self.assertIs(chain_walk.BAR_STOP_EARLY_TURN, False)
+        self.assertEqual(chain_walk.BAR_STOP_INDEX, 166)
+        # It invents no physical constant.
+        self.assertEqual(chain_walk.PUSH_MAG, 0.45)
+        self.assertEqual(chain_walk.PUSH_SEC, 0.40)
+
+    def test_the_plan_this_class_uses_has_a_PUSH_right_before_its_stop(self):
+        # ANTI-VACUITY for every test below: without a push immediately before
+        # the stop, "one fewer push" would pass for the wrong reason. Note
+        # plan_indices MERGES a run of same-heading pushes, so wp1 and wp2
+        # become one entry -- which is why the entry before the stop is
+        # plan[0], not plan[1].
+        self.assertEqual(chain_walk.plan_indices(self._wps()),
+                         [(1, True, 90.0), (4, True, 90.0), (5, False, 0.0),
+                          (6, True, 10.0)])
+
+    def _pushes(self, on, stop=5):
+        """Run one walk at this arm and return (push count, result)."""
+        prev_f, prev_i = (chain_walk.BAR_STOP_EARLY_TURN,
+                          chain_walk.BAR_STOP_INDEX)
+        chain_walk.BAR_STOP_EARLY_TURN, chain_walk.BAR_STOP_INDEX = on, stop
+        try:
+            rig = self._rig()
+            res = rig.go()
+            return rig.count("push"), res, rig
+        finally:
+            (chain_walk.BAR_STOP_EARLY_TURN,
+             chain_walk.BAR_STOP_INDEX) = prev_f, prev_i
+
+    def _turn_at(self, events, heading=0.0):
+        """How many pushes happen BEFORE the stop's own turn."""
+        for i, e in enumerate(events):
+            if e[0] == "turn" and e[1] == heading:
+                return sum(1 for x in events[:i] if x[0] == "push")
+        return None
+
+    def test_ON_takes_the_stops_turn_EARLIER_after_fewer_pushes(self):
+        # WHAT THE RULE ACTUALLY DOES, and my first version of this test got it
+        # wrong: skipping the plan entry does NOT delete a push, because the
+        # loop still has to travel to the stop. It moves the stop's TURN
+        # earlier -- the character turns after fewer pushes into the bar, which
+        # is exactly "they should have turned earlier". Asserting a push
+        # disappeared passed for no one and would have shipped a wrong claim.
+        off, off_res, off_rig = self._pushes(False)
+        on, on_res, on_rig = self._pushes(True)
+        before_off = self._turn_at(off_rig.events)
+        before_on = self._turn_at(on_rig.events)
+        self.assertIsNotNone(before_off, "the stop's turn must happen at all")
+        self.assertIsNotNone(before_on)
+        self.assertLess(before_on, before_off,
+                        f"the turn must come after FEWER pushes with the rule "
+                        f"on (off={before_off}, on={before_on})")
+        self.assertNotIn("bar_turned_early", off_res)
+        self.assertEqual(on_res.get("bar_turned_early"), 4,
+                         "the record names the push target that was skipped")
+
+    def test_the_stop_is_still_TAKEN_never_skipped(self):
+        # The guard is `plan[pi][1]`, and a turn-only stop is push=False. A rule
+        # that skipped a STOP would drop its verification and its yaw clearing.
+        _, _, rig = self._pushes(True)
+        self.assertIn(("turn", 0.0), rig.events,
+                      "the stop's own turn to 0.0 still happened")
+
+    def test_it_fires_ONCE_per_walk(self):
+        # The latch. Without it the branch re-fires and walks the pointer over
+        # entries it was never meant to touch: the LAST push entry would be
+        # skipped too and the walk would end without ever pushing past the stop.
+        on, on_res, on_rig = self._pushes(True)
+        self.assertEqual(on_res.get("bar_turned_early"), 4,
+                         "recorded once, naming one skipped target")
+        self.assertGreater(on, 0,
+                           "a re-firing rule eats the pushes after the stop too")
+
+    # ---- the predicate, where the defensive guards can be driven ----------
+
+    PUSH_THEN_STOP = [(1, True, 90.0), (4, True, 90.0), (5, False, 0.0),
+                      (6, True, 10.0)]
+
+    def test_the_predicate_fires_on_a_push_immediately_before_the_stop(self):
+        self.assertTrue(
+            chain_walk._turn_early_at(1, self.PUSH_THEN_STOP, 5, False))
+
+    def test_the_predicate_REFUSES_to_skip_a_STOP(self):
+        # Unreachable through plan_indices, which never emits two adjacent
+        # stops, so a walk-level test cannot kill a mutant that deletes this
+        # guard. Driven directly.
+        stop_then_stop = [(4, False, 0.0), (5, False, 0.0)]
+        self.assertFalse(
+            chain_walk._turn_early_at(0, stop_then_stop, 5, False),
+            "the entry skipped must be a PUSH")
+
+    def test_the_predicate_REFUSES_once_the_latch_is_set(self):
+        self.assertFalse(
+            chain_walk._turn_early_at(1, self.PUSH_THEN_STOP, 5, True),
+            "the latch makes it once per walk")
+
+    def test_the_predicate_REFUSES_a_push_before_another_PUSH(self):
+        self.assertFalse(
+            chain_walk._turn_early_at(0, self.PUSH_THEN_STOP, 5, False),
+            "plan[1] is a push, not the stop")
+
+    def test_the_predicate_REFUSES_a_PUSH_that_merely_shares_the_index(self):
+        # The one case that isolates "the next entry must be a STOP": a PUSH
+        # whose target happens to equal BAR_STOP_INDEX. Without this the guard
+        # is decorative -- a mutant deleting it survived every other test here,
+        # because no other case had a push carrying the stop's number.
+        push_shares = [(1, True, 90.0), (5, True, 90.0), (6, False, 0.0)]
+        self.assertFalse(
+            chain_walk._turn_early_at(0, push_shares, 5, False),
+            "plan[1] targets 5 but it is a PUSH, so this must not fire")
+        # ... and the same shape WITH a stop there does fire, so the test is
+        # not passing for want of any firing case at all.
+        stop_there = [(1, True, 90.0), (5, False, 0.0), (6, True, 10.0)]
+        self.assertTrue(chain_walk._turn_early_at(0, stop_there, 5, False))
+
+    def test_the_predicate_REFUSES_the_wrong_stop_and_the_plans_end(self):
+        self.assertFalse(
+            chain_walk._turn_early_at(1, self.PUSH_THEN_STOP, 999, False))
+        self.assertFalse(
+            chain_walk._turn_early_at(3, self.PUSH_THEN_STOP, 5, False),
+            "there is no entry after the last one")
+
+    def test_pointed_at_a_DIFFERENT_stop_it_does_nothing_here(self):
+        # It is not "skip a push somewhere near a stop": the next entry must be
+        # the NAMED stop. Compared against the OFF arm, not an absolute count.
+        off, _, _ = self._pushes(False)
+        elsewhere, res, _ = self._pushes(True, stop=999)
+        self.assertEqual(elsewhere, off,
+                         "pointed at a stop this plan does not have, it must "
+                         "change nothing")
+        self.assertNotIn("bar_turned_early", res)
+
+
 class SettleProbe(unittest.TestCase):
     """patch54: the fit sampled WHILE the character is still coming to rest.
 

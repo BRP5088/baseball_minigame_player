@@ -506,6 +506,17 @@ DOOR_STOP_EXTRA_PUSH = True
 DOOR_STOP_INDEX = 39
 # How many extra pushes. ONE, because one step is what the user asked for.
 DOOR_STOP_EXTRA_PUSHES = 1
+# ONE FEWER PUSH BEFORE THE BAR'S SHARP TURN (patch55), the mirror of the door
+# step and from the same source: the user, watching the stream, said "they
+# walked too close to the bar when they should have turned earlier". The fit
+# scale agrees -- over 2,560 credible fits the 135-149 band medians 2.22, the
+# worst on the route, against 1.00 at the spawn and 1.29 once the turn is
+# taken. Those waypoints are exactly plan[33..35], the last pushes before the
+# 296-degree turn at 166. Ships OFF; --flag BAR_STOP_EARLY_TURN measures it,
+# and the pre-registered instrument is that band's median scale falling
+# toward 1.0.
+BAR_STOP_EARLY_TURN = False
+BAR_STOP_INDEX = 166
 # THE ACTION THE EXTRA PUSH RECORDS, and the reason it is a name and not a
 # bare literal: it is the FIRST row this module has ever written that shares
 # an iteration number with another row, and three readers select "one
@@ -642,6 +653,25 @@ def _blind_cap(pi, plan, unverified_turn, last_cred_scale):
         if any(not push for _, push, _ in ahead):
             return 1
     return BLIND_MAX
+
+
+def _turn_early_at(pi, plan, index, latched):
+    """Should the pointer step over plan[pi] to take a stop one push early?
+
+    Pure, so every guard can be driven directly. Inside `walk` two of them --
+    "the entry skipped must be a PUSH" and the once-per-walk latch -- are
+    unreachable through anything `plan_indices` emits: it never puts two
+    turn-only stops next to each other, and after a fired skip the next entry
+    IS the stop. Mutants deleting them therefore survived a walk-level test,
+    which is precisely the "guard that cannot fire" shape this project keeps
+    finding. Held to their stated meaning here instead.
+    """
+    return (not latched
+            and 0 <= pi
+            and pi + 1 < len(plan)
+            and plan[pi][1]              # the entry skipped must be a PUSH
+            and not plan[pi + 1][1]      # ... and the next must be a stop
+            and plan[pi + 1][0] == index)
 
 
 def _near_stop(pi, plan):
@@ -1152,6 +1182,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     early_stop = False          # the current stop was reached by turn-early: no retry pushes
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
+    bar_turned_early = False    # the once-per-walk latch for
+                                # BAR_STOP_EARLY_TURN
     door_stepped = False        # this SERVICING of DOOR_STOP_INDEX has had
                                 # its extra push (DOOR_STOP_EXTRA_PUSH)
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
@@ -1280,6 +1312,20 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         # THE END OF THE CHAIN IS A BOUNDED PHASE. Past the last target there
         # is nothing left to servo onto: every further push is dead reckoning
         # with no reference, which is the thing this module exists to replace.
+        # TURN EARLY AT THE BAR (BAR_STOP_EARLY_TURN). Step over the push
+        # immediately before the named stop, once per walk. It can only ever
+        # skip a PUSH entry, and only when the very next entry is that stop,
+        # so no stop is ever passed and the yaw-clearing rule above is
+        # untouched.
+        if (BAR_STOP_EARLY_TURN
+                and _turn_early_at(pi, plan, BAR_STOP_INDEX,
+                                   bar_turned_early)):
+            bar_turned_early = True
+            log(f"    turning EARLY at the bar: skipping the push to "
+                f"{plan[pi][0]} so the stop at {BAR_STOP_INDEX} is taken one "
+                f"push sooner (BAR_STOP_EARLY_TURN)")
+            res["bar_turned_early"] = int(plan[pi][0])
+            pi += 1
         at_end = pi >= len(plan)
         if at_end:
             end_iters += 1
