@@ -26,11 +26,18 @@ import json
 import sys
 
 
-def audit(d):
-    """-> (rows, longest_clean_run). A row is (trial, ok, [complaints])."""
+def audit(d, no_reload=False):
+    """-> (rows, longest_clean_run). A row is (trial, ok, [complaints]).
+
+    `no_reload` is the user's stricter definition: a trial that needed a second
+    walk BREAKS the streak, because the arrivals were not consecutive walks.
+    Under it, batch 28 is 27 (trials 14-40), not 40.
+    """
     rows = []
     for r in d.get("runs", []):
         bad = []
+        if no_reload and r.get("retried"):
+            bad.append("reloaded -- not a consecutive walk under the strict rule")
         # AN INVALID TRIAL NEITHER BREAKS NOR EXTENDS A STREAK -- this project's
         # convention, and it matters because the goal is 25 IN A ROW WITHIN ONE
         # BATCH. An invalid means the trial could not be measured (the game
@@ -132,6 +139,12 @@ def selftest():
     assert (fok, fn) == (1, 3), (fok, fn)
     n2, arr2, (fok2, fn2) = both_numbers({"runs": [good(1)]})
     assert fn2 == 0, "a single-attempt run records no first-walk field"
+    # THE STRICT RULE: a reloaded arrival breaks the run, a clean one does not.
+    rl = dict(good(2), retried=True)
+    _, lax = audit({"runs": [good(1), rl, good(3), good(4)]})
+    _, strict = audit({"runs": [good(1), rl, good(3), good(4)]}, no_reload=True)
+    assert lax == 4, lax
+    assert strict == 2, strict
     rows, best = audit({"runs": []})
     assert best == 0 and rows == []
     print("selftest OK: a clean run, a false recheck breaking it, a missing "
@@ -141,13 +154,17 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest(); raise SystemExit(0)
-    path = sys.argv[1] if len(sys.argv) > 1 else "overnight/chain_trials.json"
+    path = next((a for a in sys.argv[1:] if not a.startswith("--")),
+                "overnight/chain_trials.json")
     d = json.load(open(path))
     rows, best = audit(d)
+    _, strict = audit(d, no_reload=True)
     cfg = d.get("config", {})
     flags = {k: v for k, v in cfg.items() if isinstance(v, bool)}
     n, arrived, (first_ok, first_n) = both_numbers(d)
-    print(f"{path}: {len(rows)} trials, LONGEST FULLY-VERIFIED STREAK {best}")
+    print(f"{path}: {len(rows)} trials")
+    print(f"  longest verified streak, reloads allowed   {best}")
+    print(f"  longest verified streak, NO reloads        {strict}   <- the user's rule")
     if n:
         print(f"  trial arrival     {arrived}/{n} = {arrived/n:.0%}")
     if first_n:
