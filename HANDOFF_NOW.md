@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 02:18. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 03:02. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -180,7 +180,12 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, THIRTEENTH LAUNCH, RUNNING (02:15:59, the SAME build 2220c83), plain `--trials 25`: a repeatability
+- **THE 25, FOURTEENTH LAUNCH, RUNNING (02:58:59, commit a8ff495 = 2220c83 + patch41 the rewind), plain
+  `--trials 25`.** **Thirteenth launch (2220c83 again): 23/25 arrived, walk median 81.1 [70..104], best streak 15** (`overnight/
+  chain_trials_batch13.*`): the twelfth's 24/25 at 86 s REPEATS. Its two failures: t5 the detector blind with
+  the prompt on screen (score 0.15-0.19, one OCR word; the $50-token census decides the next detector step),
+  t21 the third identical 166-stop failure (reader pending). Tonight's true-arrival streak record stays 21.
+- **THE 25, THIRTEENTH LAUNCH, DONE 02:58 (02:15:59, the SAME build 2220c83), plain `--trials 25`: a repeatability
   run.** **Twelfth launch: 24 of 25, 0 invalid, walk median 86.4 s [74..127], best streak 21** (`overnight/
   chain_trials_batch12.*`) against the eleventh's 21 of 25 at 105.3 s: the tie fix bought ~19 s per arrival, as
   the rule-cost and record-run studies predicted. The one failure (t22, reader pending) is the b11-t25 shape:

@@ -701,6 +701,10 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         exits on a strong look; the prompt check only in the
                                                                         tail; at_table() believes 0.20 with one OCR word
 
+    2220c83  02:16 (again)  25     23            84 s        15        repeatability: the 24/25 repeats
+    a8ff495  02:59         25     running                              a thin fit at a stop is nothing; a retry needs credible
+                                                                        short-evidence; an unverified stop REWINDS and re-approaches
+
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
 with the estimate jumped ahead (unverified stops arrive 1 in 14 and 0 in 6 in the audit's table); the
