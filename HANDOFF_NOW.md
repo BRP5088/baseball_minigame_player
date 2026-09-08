@@ -109,6 +109,14 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (r') b13 trial 21's reader (`notes_b13_t21.md`): the wedge begins one to two pushes past the 129 doorway
+   (a near-black close-up by it41, furniture or the counter's end), and the 166 stop was stamped on a 6-inlier
+   fit at dx +800, scale 0.27 (the portrait hallway cross-matched as the tables room). Both halves are what
+   patch41 changes (a thin fit is nothing; an unverified stop rewinds). NOTE: the reader read the checkout's
+   chain_walk.py AFTER patch41 landed and asked why the rewind "did not engage" — that trial ran on 2220c83,
+   before it. The first domino (walking into something right after the doorway while blind) is still open:
+   the ladder has never cleared a geometry wedge (§8g); the reader's human answer is back off and thread
+   toward the visible tables. Watch the fourteenth launch's failures at that spot with the rewind live.
    (r) b13 trial 21 (03:2x): the THIRD identical failure on the 2220c83 build (b11 t25, b12 t22, b13 t21):
    the 129 stop verified by a -25 look, an un-yawed LEFT strafe, blind pushes at 130-136 into the mirror
    wall, turn-early at 136 for 166, accepted unverified, lost. CENSUS of the 129 stop since the tenth launch
