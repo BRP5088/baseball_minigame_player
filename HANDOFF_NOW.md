@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 07:00. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 07:09. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,6 +234,21 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
+- **TWENTIETH LAUNCH, RUNNING (07:07, commit a411fe4 = 32e4400 + patch44): THE STOP_LOOK_YAW A/B,
+  `overnight/chain_trials.py --chain route_user_1853 --arms off,on --flag STOP_LOOK_YAW --trials 20`
+  (10 a side, interleaved; the arm is set in the CHILD through BASEBALL_CHAIN_ARM_FLAG; rows carry
+  `STOP_LOOK_YAW-on/off`; `tools/trial_sheet.py` reads the new label).** Score it two ways when it ends:
+  (1) arrival per arm, Fisher (the harness prints it); (2) THE INSTRUMENT: for every trial with a
+  `turned-looked` 129 stop, the dx of the first credible (>= 29 inliers) fit after it, off arm vs on arm
+  (`agent_progress/closed-loop/review/after_look129_census.py` does this over all journals -- restrict it
+  to this batch's epochs and split by arm from `overnight/chain_trials.json`'s `runs[].arm_value`). The
+  off arm's first-dx median is -300 px across the night; if the on arm's is near 0 the mechanism is
+  confirmed regardless of the arrival count at n=10. Also count `looked["yaw"]` rows per arm and check
+  the 39 (stairs) and 166 stops, where the yaw also fires. patch44: built by an Opus builder, two Sonnet
+  skeptics (a skipped turn-only stop never cleared the yaw -- fixed with the plan-pointer skip clear; the
+  default arm label had changed -- restored to `pan-`), a fix round, a recheck READY: 185 tests, 15
+  mutants caught. **Then**: if the on arm wins on the instrument and does not lose on arrival, ship
+  STOP_LOOK_YAW = True and run a plain 25.
 - **NINETEENTH LAUNCH DONE 06:56: 23 of 25, walk median 80.2 s [70..107], best streak 10**
   (`overnight/chain_trials_batch19.*`, the night's best count, = b13). The rescue fired twice and found
   nothing twice (t11: through a WRONG DOOR in the office corridor into an unmapped storage room, the
