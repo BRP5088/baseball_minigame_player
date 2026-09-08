@@ -718,9 +718,17 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         portrait, the bar-entrance corner after the 129 look's
                                                                         strafe, the photographer NPC then a wrong 191-inlier wide
                                                                         relocalisation), the ladder moving nothing
-    078a912  04:51 (again)  25     running                             repeatability; patch43 (a LOST rescue: back out 1.0 s, look
-                                                                        0/-25/+25 over the whole chain behind k at the strong
-                                                                        gate, once per walk) lands at this batch's end if READY
+    078a912  04:51 (again)  25     22            88.9 s      13        repeatability: 22/25 REPEATS. Its three, each read: t8 the
+                                                                        bar-entrance corner after the 129 look's strafe (b16 t12
+                                                                        again); t9 a 29-inlier look at the top of the stairs turned
+                                                                        the character into the doorway post, a jump put it in an
+                                                                        unrecorded side room; t12 an aproned patron in the tables
+                                                                        aisle, the ladder freed it and STUCK fired on the row the
+                                                                        fit read 176 at scale 0.973 (reached() needs 1.0)
+    078a912  05:35 (again)  25     running                             the third run of this build; patch43 (a LOST rescue: back
+                                                                        out 1.0 s, look 0/-25/+25 over the whole chain behind k at
+                                                                        the strong gate, once per walk) lands at this batch's end
+                                                                        if its recheck says READY
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED

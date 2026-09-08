@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 04:14. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 05:37. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,23 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, SEVENTEENTH LAUNCH, RUNNING (04:51, commit 078a912 again), plain `--trials 25`: a repeatability
+- **THE 25, EIGHTEENTH LAUNCH, RUNNING (05:35, commit 078a912 a third time), plain `--trials 25`, while
+  patch43's fix round and recheck finish (workflow `lost-rescue-builder`, builder + both skeptics done at
+  05:24; `drafts/pending_after_ab/apply_patch43.py` exists, NOT yet applied). Land it at this batch's end
+  if the recheck says READY, with the t19 amendment (the rescue's looks search 0 .. k + WIDE_AHEAD).**
+  **Seventeenth launch (078a912 again): 22 of 25, 0 invalid, walk median 88.9 s [73..124], best streak 13**
+  (`overnight/chain_trials_batch17.*`): the sixteenth's 22/25 repeats. Its three, each read: t8
+  (`notes_b17_t08.md`) the b16-t12 shape exactly -- the 129 look at -25 fitted at 174, the un-yaw strafe
+  left, then a dark corner and an NPC at point-blank range, nothing fitted for 19 rows; t9
+  (`notes_cur_t09_1788858313.md`) the top of the stairs: the 39 stop verified by a look at exactly 29
+  inliers with dx +330, the character turned into the doorway post, a jump put it in an unrecorded side
+  room with an NPC (the b14 t15 stairs family); t12 (`notes_b17_t12.md`) an aproned patron in the tables
+  aisle at 173, the ladder got past her, and STUCK fired on the very row the fit read 176 at scale 0.973
+  (`chain.reached` needs 1.0; `stuck_progress_census.*`: too rare and mixed for a rule, refused). The
+  129-look census (`look129_side_census.*`): every `turned-looked` 129 is the -25 look with a capped
+  0.3 s strafe LEFT, 73 arrived and 9 failed on the identical record -- one population; only the frames
+  separate them, which is the rescue's job.
+- **THE 25, SEVENTEENTH LAUNCH, DONE 05:34 (04:51, commit 078a912 again), plain `--trials 25`: a repeatability
   run while patch43 is built.** **Sixteenth launch (078a912 = a8ff495 + patch42): 22 of 25, 0 invalid, walk
   median 82.5 s [74..115], best streak 11** (`overnight/chain_trials_batch16.*`): the rewind's removal
   restored the b14 rate; **the fee token decided 2 of the 22 arrivals** (t9 score 0.173 and t14 0.245, zero
