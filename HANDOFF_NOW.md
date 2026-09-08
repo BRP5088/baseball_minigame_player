@@ -109,6 +109,14 @@ The loop for the night, in order, repeated:
    81 prompt frames, 3x and 4x, both polarities, words and the $50 token, is running on the E-cores
    (`scratchpad/ocr_token_census.py` -> `overnight/census/at_table_ocr_tokens_20260908.json`); the rule it
    supports (Play + $50, or 4x words) lands only with 0 false positives over all frames. Reader dispatched.
+   (s) b14 trial 6 (03:1x): THE REWIND'S FIRST LIVE FIRING. Last credible fit at k=103 (it34); nothing fit
+   for the next 22 iterations. Blind 104-109, turn-early at 109 for 129, back, wait, then turned-unverified
+   REWOUND k to 103 (rewound_to=103 in the row) — mechanically right — and the re-approach walked the same
+   three blind pushes into the same obstacle; at 109 turn-early did NOT fire again (the per-blockage mark is
+   re-armed only by evidenced progress, and a rewind is not that), so misses, the ladder (no rung changed
+   the view), lost. Candidates from this one trial (n=1, reader pending): re-arm turn-early on a rewind (the
+   rewind budget of 2 bounds it); make the re-approach DIFFER (a sidestep before re-walking the same line).
+   Neither built.
    (r') b13 trial 21's reader (`notes_b13_t21.md`): the wedge begins one to two pushes past the 129 doorway
    (a near-black close-up by it41, furniture or the counter's end), and the 166 stop was stamped on a 6-inlier
    fit at dx +800, scale 0.27 (the portrait hallway cross-matched as the tables room). Both halves are what
