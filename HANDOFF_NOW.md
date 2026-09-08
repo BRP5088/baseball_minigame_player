@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-07 23:52. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 00:15. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -62,7 +62,21 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE PAN A/B, FOURTH ATTEMPT, RUNNING (23:31:17, commit 7fa0efa):** the retry-skip landed at the user's
+- **THE 25, TENTH LAUNCH, RUNNING (00:13:19, commit e49cd3e), plain `--trials 25`, pan OFF.** On the fourth
+  A/B attempt's build plus patch36 (no retry pushes at a stop after a wall-scale fit) and patch38 (at_table()
+  retries a dark frame brightness-normalised). **Pan A/B, fourth attempt, DONE (7fa0efa, 20 trials, 0
+  invalid): pan off 9/10 (walk median 104.5 s), pan on 8/10 (99.7 s), Fisher p = 1.00** — no arrival
+  difference, the flag stays off; `overnight/chain_trials_ab_pan_try4.*`. Its three failures: t6 (on) lost
+  after the 166 stop was accepted unverified with its looks reading +518..+810 px (a dartboard alcove); t10
+  (on) the prompt ON SCREEN for three iterations and the detector blind to a dark frame (fixed, patch38);
+  t11 (off) a marginal 29-inlier look at the 39 stop strafed the character into an alcove with an NPC.
+  Readers: `agent_progress/closed-loop/review/notes_ab4_t*.md`. **Still to land at the next boundary:**
+  `apply_patch34.py` END-TURN (workflow recheck pending), `apply_patch37.py` STOP-TIE separation + look-around
+  early exit (workflow `stop-tie-separation` building; the rule-cost study: two thirds of the +34 s per
+  arrival is stop ceremony from STOP_TIE_FRAC firing on near-duplicate waypoints at every stop; the record-run
+  study agrees and adds: STRONG_MIN_INLIERS 165 would have refused the record run's correct 154-inlier skip of
+  stop 88). Studies: `agent_progress/closed-loop/{fast_runs,rule_costs,record_run}/notes.md`.
+- **THE PAN A/B, FOURTH ATTEMPT, DONE (23:31:17, commit 7fa0efa):** the retry-skip landed at the user's
   request ("don't wait, land the retry fix now and relaunch"): a stop reached by turn-early takes NO retry pushes
   (`drafts/pending_after_ab/apply_patch35.py`). Third attempt (532825d, 6 trials): pan off 1/3, pan on 2/3
   (`overnight/chain_trials_ab_pan_try3.*`). Turn-early FIRED LIVE at Wanda in trials 2 and 3 (both arrived;

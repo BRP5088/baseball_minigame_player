@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "Pan A/B, second attempt, on the ladder round", "state": "running",
+    {"title": "THE 25, tenth launch: retry gate + dark-frame detector", "state": "running",
+     "detail": "The pan A/B finished 9/10 against 8/10, no difference, flag stays off. Tonight's readers and three studies (fast vs slow, the record 67.9 s run, the cost of each rule) agree: collisions are flat, the extra 20-30 s per arrival is ceremony at the turn stops, and two thirds of it is the tie rule firing on near-duplicate waypoints. Landed now: no retry pushes after a wall-scale fit (the slow runs' 30-45 s at stops 88 and 129), and the prompt detector retries dark frames (trial 10 stood at the prompt for three iterations unseen). Next boundary: turn toward the dealer at the end, and the tie fix."},
+    {"title": "Pan A/B, second attempt, on the ladder round", "state": "done",
      "detail": "First attempt stopped at 4 trials: Wanda Fuller stood on the route in the portrait room and three trials in a row walked into her face, both arms. Readers on every failed trial tonight: 5 of 7 were an NPC filling the view, and each died having tried one or two escape rungs because the lost budget ran out before the ladder finished. Now every blockage gets the whole ladder, a sidestep is a 0.6 s detour held for three targets, and the pan A/B runs again on top, 10 v 10 interleaved."},
     {"title": "Pan A/B, first attempt", "state": "done",
      "detail": "The ninth launch of the 25 went 1 of 5: three trials lost right after the bar-tables stop, where the head-on check has failed in 8 of the last 9 trials and the sideways look's arithmetic disagreed with the next reading by 300 px. The judge's first item was to A/B the pan that matches each look against its own recorded frame. Off arm = the 25's own configuration, so nothing is lost by switching. Readers are on every failed trial."},
