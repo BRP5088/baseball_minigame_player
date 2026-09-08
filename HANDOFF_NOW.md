@@ -4,7 +4,9 @@
 
 ## Now
 
-- **THE 25, sixth launch, RUNNING (21:08:25)** with the audit round (3df1727): `overnight/chain_trials.py
+- **THE 25, seventh launch, RUNNING (21:30:34)** with the batch-6 round (d7ac88d: one blind push near a wall before a stop, a
+  backward step at wedged stops, a jump/back/left/right ladder) on top of the audit round (3df1727). Sixth launch: 4/7 valid
+  (`overnight/chain_trials_batch6.*`), both bar-entrance losses were the portrait-wall wedge. Earlier: `overnight/chain_trials.py
   --chain route_user_1853 --trials 25`, 180 s cap, STUCK after 12 non-advancing iterations, LOST after 9
   blind. Earlier launches tonight, archived as `overnight/chain_trials_batch{4,5,5b,5c,5d,5e}.*`: batch 4 8/10;
   5b 2/6; 5c 2/3; 5e 6/14. Each stop's cause and fix is in `git log -- chain_walk.py`. Reviews and audits:

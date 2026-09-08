@@ -25,8 +25,8 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, sixth launch, with the audit round", "state": "running",
-     "detail": "Two skeptics audited the controller while the earlier launches ran and confirmed five guards that could not fire or fired on the wrong measurement; all fixed and mutation-tested. A live-frame census showed no inlier count separates true fits from wrong places (the sequence window does the work), so only the wide-search gate moved. The stop table says the bar-entrance stop is the lever: verified 58% of the time, and an unverified pass there arrives 1 in 14. Earlier tonight: batch 4 8/10, batch 5e 6/14."},
+    {"title": "THE 25, seventh launch", "state": "running",
+     "detail": "Sixth launch went 4 of 7 valid; both bar-entrance losses were the same event, read by two agents from the frames: the loop walked nose-first into the big portrait at the end of the portrait room and had no backward move. Now a blind sensor near a wall gets one push before the stop, a wedged stop steps back before waiting or retrying, and the escape ladder is jump, back, left, right. Every failed trial now gets a screenshot reader the moment it lands."},
     {"title": "Arrival review: did they wander?", "state": "done",
      "detail": "13 arrivals read frame by frame: 12 minor detours, 1 wandered-and-lucky, 0 off the route. Every detour was a wedge at a real obstacle: the exit-door threshold and the bartender's counter with two NPCs and two steins."},
     {"title": "Batches 1-4", "state": "done",
