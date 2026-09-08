@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 10:12. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 10:22. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## MORNING SUMMARY (written 08:05, updated 09:14; everything below it is the detail)
 
@@ -53,8 +53,17 @@ record.** Losses: t3 the office stretch (lost at 88 after the blind corridor); t
 over-correction a fourth time (the look matched 132, yaw -25.8, next fits +126/+275, blind, lost) --
 3 of 7 such firings lost, exactly patch46's case.
 
-**Running now (10:10):** the twenty-fourth launch, a SHORT batch of 12 on the same build (09:57) so the
-next boundary meets the two patches in build. Research verdicts so far: `tail-and-headon-research`
+**Batch 24 (da361ef, 12 trials, 09:57-10:18): 9 of 12.** Losses: t5 the stairs NPC; t9 the 129 stop
+taken unverified (nothing fitted), the ladder, then credible fits at 134-136 with dx +640 (a 32 deg
+heading error) the strafes could not close, stuck (`big_dx_midchain_census`: such fits occur in 5 of
+249 trials, 4 arrived -- a mid-chain end turn is REFUSED at that n); t12 a +29 deg yaw at the 196 stop
+then the end of the chain without the prompt (one case).
+
+**Running now (10:19): THE FIT-GATE A/B, commit ef717b1 = da361ef + patch46,** `--arms off,on --flag
+STOP_YAW_NEAR_FIT_ONLY --trials 20` (10 a side). Score: arrival per arm; the residual after the 129
+correction by the look-fit's offset (`yaw_firings_census.py` extended: rows with `yaw_skipped` are the
+on arm's fallbacks); the 39 stop's outcome in the on arm (its +3 fits now strafe). patch47 (the door
+step) is in its fix round; it lands at this A/B's end and runs its own A/B next. Research verdicts so far: `tail-and-headon-research`
 REFUSED both its candidates (the end-game is at its floor, 4.4 s median vs the human's 2.2 s; the head-on
 large-dx bias costs nothing measurable and its instrument would be circular); `wanderer-investigation`
 found NOTHING TO SHIP (the only surviving mechanism -- on a blind blockage the LEFT sidestep frees the

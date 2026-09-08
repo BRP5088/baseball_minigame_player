@@ -778,7 +778,14 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         yaw over-correction (a look matched waypoint 132, yaw
                                                                         -25.8, the next fits +126/+275, blind, lost) -- 3 of 7 such
                                                                         firings lost, the patch46 gate's case
-    da361ef  09:57 (4th)    12     running                             a short batch so the next boundary meets patch46/47
+    da361ef  09:57 (4th)    12      9            92.0 s       4        a short batch so the next boundary met patch46. Losses: the
+                                                                        stairs NPC (t5); 129 taken unverified then fits with dx
+                                                                        +640 the strafes could not close (t9); a +29 deg yaw at the
+                                                                        196 stop then the end without the prompt (t12)
+    ef717b1  10:19   A/B 20 (10/arm) running                             patch46 STOP_YAW_NEAR_FIT_ONLY, `--arms off,on --flag
+                                                                        STOP_YAW_NEAR_FIT_ONLY`: the yaw only when the look fits the
+                                                                        stop's index +-1, else the old strafe (fits 2-3 ahead
+                                                                        over-turned and lost 3 of 7)
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
