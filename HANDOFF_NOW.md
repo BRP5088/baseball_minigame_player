@@ -55,6 +55,14 @@ The loop for the night, in order, repeated:
    climbing scale and changes nothing, but relaxing the 'past' rule would prevent only 7 of 46 such jumps
    (12% at the k=61 hotspot); nothing to build. The HUD-in-ORB lead is closed: chain.py reuses
    places._as_gray, which drops the compass, the quest list (left 28%) and the coin before ORB.
+   (h) READY: `drafts/pending_after_ab/apply_patch34.py` END-TURN (00:45): built by an Opus builder, one
+   skeptic found three interaction defects (end turn on an escape iteration; the yaw offset surviving a
+   regression; the block above the detour hold), the builder fixed them, the recheck found a fourth (a
+   regression discovered in the at_end phase re-fired a fresh end turn off the stale `at_end`), fixed here
+   with `and not regressed` plus the recheck's own probe as a test. Verified on a cp scratch of the CURRENT
+   tree (with patch35/36/38 in): 132 tests, mutants "'not regressed' removed" and "rule deleted" caught (the
+   builder's six caught earlier). Lands at the tenth launch's end together with (a)'s sibling (patch37) if
+   its build is done by then.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
