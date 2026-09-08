@@ -689,6 +689,25 @@ ran ahead, lateral displacement 1 each. Measured rates by version: batch 4
 regression corrected in 5e); the audit round runs as this is written.
 
 
+**THE CLOSED LOOP'S MEASURED STATE, 2026-09-08 02:15 (the newest line in this file; the batches below
+are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failure in
+`agent_progress/closed-loop/review/`):**
+
+    build (commit)       trials  arrived   walk median   best streak   what changed
+    e49cd3e  00:13         12     11 + 1 false   ~105 s      11        retry gate after a wall-scale fit; a dark-frame
+                                                                        detector retry that fired on the street (reverted)
+    f8af4d3  00:38         25     21           105.3 s       9        the end-turn rule (turn toward the dealer past the last stop)
+    2220c83  01:31         25     24            86.4 s      21        a stop tie needs a different place; the look-around
+                                                                        exits on a strong look; the prompt check only in the
+                                                                        tail; at_table() believes 0.20 with one OCR word
+
+Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
+are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
+with the estimate jumped ahead (unverified stops arrive 1 in 14 and 0 in 6 in the audit's table); the
+rewind-on-unverified rule (`drafts/pending_after_ab/apply_patch41.py`) is in verification. Every rule
+above came from a reader's frames and is pinned by tests and caught mutants; `HANDOFF_NOW.md` carries the
+queue and the censuses behind each constant.
+
 ### (a) Where the route stands
 
 **RE-MEASURED 2026-09-07, AFTER the leg-1 revert. Arrival did NOT move.**

@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 01:34. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 02:18. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -144,7 +144,14 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, TWELFTH LAUNCH, RUNNING (01:31:01, commit 2220c83), plain `--trials 25`:** landed at the boundary:
+- **THE 25, THIRTEENTH LAUNCH, RUNNING (02:15:59, the SAME build 2220c83), plain `--trials 25`: a repeatability
+  run.** **Twelfth launch: 24 of 25, 0 invalid, walk median 86.4 s [74..127], best streak 21** (`overnight/
+  chain_trials_batch12.*`) against the eleventh's 21 of 25 at 105.3 s: the tie fix bought ~19 s per arrival, as
+  the rule-cost and record-run studies predicted. The one failure (t22, reader pending) is the b11-t25 shape:
+  blind pushes into the doorway pillar after the 129 stop, turn-early two pushes short of the 166 stop's
+  recording position, the stop accepted unverified. **patch41 (rewind on unverified) is in its fix round;
+  it lands at this batch's end if the recheck passes.** Tonight's true-arrival streak record: 21.
+- **THE 25, TWELFTH LAUNCH, DONE 02:14 (01:31:01, commit 2220c83), plain `--trials 25`:** landed at the boundary:
   patch37 (a stop tie needs a different place, symmetric; the look-around and the pan exit on a strong look),
   patch39 (the prompt check only in the last 30 waypoints), patch40 (at_table() believes 0.20 with one OCR
   word). **Eleventh launch (f8af4d3): 21 of 25, 0 invalid** (`overnight/chain_trials_batch11.*`): the four

@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, twelfth launch: tie fix, tail gate, detector rule", "state": "running",
+    {"title": "THE 25, thirteenth launch: the same build again", "state": "running",
+     "detail": "Twelfth launch 24 of 25, walk median 86 s against 105 s the batch before, best streak 21. The one failure was the doorway pillar at the bar entrance followed by a stop accepted unverified; the rewind rule for that is in its final check and lands at this batch's end. This run measures whether 24 of 25 repeats on the same build."},
+    {"title": "THE 25, twelfth launch: tie fix, tail gate, detector rule", "state": "done",
      "detail": "Eleventh launch 21 of 25. Landed now: a stop is a tie only when the runner-up is a different place (the old rule fired on 28 of 37 replayed stops and cost two thirds of the extra time per arrival), the look-around stops at the first strong look, the prompt check is only consulted in the last 30 waypoints, and the detector believes a 0.20 correlation when it also reads a prompt word (measured on all 7,885 route frames: zero false positives). The rewind-on-unverified rule is in build for the next boundary."},
     {"title": "THE 25, eleventh launch: end-turn rule in, dark-frame retry out", "state": "done",
      "detail": "The tenth launch made 11 true arrivals in a row, then trial 12 'arrived' on the street: the new dark-frame retry of the prompt detector fired on the office doorway facing the L&B storefront. Reverted at once (that detector is the $50 gate; a 500-frame check had said zero false positives and the 701st frame fired). Landed instead: past the last turn stop, a large offset turns the camera toward the dealer instead of strafing, built by a builder and three skeptics. The tie fix is next."},
