@@ -1,6 +1,6 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 05:37. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 06:19. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
 
 ## Now
 
@@ -234,7 +234,24 @@ The loop for the night, in order, repeated:
    them per trial). No mutation sweeps beside the console; the single test file is fine.
 
 
-- **THE 25, EIGHTEENTH LAUNCH, RUNNING (05:35, commit 078a912 a third time), plain `--trials 25`, while
+- **THE 25, NINETEENTH LAUNCH, RUNNING (06:15, commit 32e4400 = 078a912 + patch43 + patch43b), plain
+  `--trials 25`: THE LOST RESCUE'S FIRST LIVE RUN.** Read every `rescued` / `rescue-failed` row (the
+  journal carries `rescue: {looks, deg, inliers, from_k, to_k}`; frames `_rescue_look0/L/R`): a rescue
+  that believes a look and then arrives is the win; a rescue that believes a WRONG look is the hazard
+  (the strong gate 165 sits above the wrong-place census max 164, measured in-window; the whole-chain
+  search is wider than that census). Tally by: rescues fired / believed / arrived-after / lost-anyway.
+  **patch44 (STOP_LOOK_YAW) is in build** (workflow `stop-yaw-builder`, started 06:05); it lands at this
+  batch's end if READY and the next batch is its A/B: `--arms off,on --flag STOP_LOOK_YAW`, 10 an arm
+  minimum, scored on arrival AND on the dx of the first credible fit after the 129 stop (off arm ~-300 px).
+  **Eighteenth launch (078a912, third run): 20 of 25, walk median 78.7 s [63..108], best streak 7**
+  (`overnight/chain_trials_batch18.*`). Five failures: a NEW CLUSTER of three on the STAIRS (t8
+  `notes_b18_t08.md`: the door stop at 39 turned short into a side room, once in 295 walks; t14 and t22,
+  readers out: thin 16-33-inlier fits at 39-46 that never advance, all four rungs useless) -- four stairs
+  losses in the last 40 trials after ~100 without, so LOOK AT THE STAIRS FRAMES before anything else in the
+  morning; and two more identical 129-look failures (t10 `notes_b18_t10.md`, t20), the fourth and fifth
+  of the night. The fastest walk on record, t3 at 62.7 s (`census_after_129_notes.md`): every stop
+  verified on the first frame, no escapes, the 129 stop crossed by a correct relocalisation.
+- **THE 25, EIGHTEENTH LAUNCH, DONE 06:14 (05:35, commit 078a912 a third time), plain `--trials 25`, while
   patch43's fix round and recheck finish (workflow `lost-rescue-builder`, builder + both skeptics done at
   05:24; `drafts/pending_after_ab/apply_patch43.py` exists, NOT yet applied). Land it at this batch's end
   if the recheck says READY, with the t19 amendment (the rescue's looks search 0 .. k + WIDE_AHEAD).**

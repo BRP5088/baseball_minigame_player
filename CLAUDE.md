@@ -725,10 +725,20 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         unrecorded side room; t12 an aproned patron in the tables
                                                                         aisle, the ladder freed it and STUCK fired on the row the
                                                                         fit read 176 at scale 0.973 (reached() needs 1.0)
-    078a912  05:35 (again)  25     running                             the third run of this build; patch43 (a LOST rescue: back
-                                                                        out 1.0 s, look 0/-25/+25 over the whole chain behind k at
-                                                                        the strong gate, once per walk) lands at this batch's end
-                                                                        if its recheck says READY
+    078a912  05:35 (again)  25     20            78.7 s       7        the third run of this build: five failures, a NEW cluster --
+                                                                        three losses on the STAIRS (t8 the door stop turned short
+                                                                        into a side room, t14/t22 thin fits that never advance at
+                                                                        39-46; four stairs losses in 40 trials after ~100 without)
+                                                                        and two more identical 129-look failures (t10, t20). The
+                                                                        fastest walk on record, t3 at 62.7 s: nothing went wrong.
+    32e4400  06:15         25     running                             patch43+43b, a LOST RESCUE: at lost >= LOST_MAX, once per
+                                                                        walk, back out 1.0 s and look 0/-25/+25 over the WHOLE chain
+                                                                        behind the last credible k at the strong gate (165); fires
+                                                                        only where the walk was already lost, so every firing is a
+                                                                        measurement and arrivals cost nothing. patch44 (STOP_LOOK_YAW:
+                                                                        a looked stop turns instead of strafing; census: after the
+                                                                        129 strafe the next fit still reads -300 px on 93 of 96
+                                                                        arrivals) is in build for an A/B
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
