@@ -816,6 +816,24 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         2 ended at 204 without the prompt. The strafe runs there instead
                                                                         (marker yaw_skipped.reason = "last stop"); 4 mutants caught.
                                                                         Landed at the restart boundary; THE NEXT PLAIN 25 MEASURES IT
+    2d0f4e0  12:55   17 + 1i  17/17         76 s        17      patch51 measured as far as it can be: the last stop verified
+                                                                        HEAD-ON on every trial, so the rule never fired (it touches
+                                                                        ~1 walk in 40); the batch shows it broke nothing. Stopped at
+                                                                        18 for the user's settle measurement; trial 17 INVALID
+                                                                        (Mission Control took the window) and re-run by patch48
+    d36ba83  15:25   A/B      off 8/10                                  patch55 BAR_STOP_EARLY_TURN, one fewer push before the 296-deg
+             (10/arm)         on  8/10                                  jukebox turn -- the user's "they walked too close to the bar".
+                                                                        Tie, and the PRE-REGISTERED instrument (fit scale at 135-149,
+                                                                        must fall toward 1.0) went 2.67 -> 2.71, UP. Ships OFF. The
+                                                                        fourteenth navigation change measured flat -> GRAVEYARD
+    2c8fea7  18:14   40       40/40         76 s        40      THE GOAL. --attempts 2 (patch52, the reload the user chose:
+                                                                        "reload and report both numbers every run"). Every trial
+                                                                        passed the independent at_table re-check; FIRST-WALK 39/40
+                                                                        (97.5%); one reload (t13, lost at the jukebox turn with the
+                                                                        blind-then-lost signature, recovered). By the strict no-reload
+                                                                        reading the run from t14 is 27, which also clears 25. Sheet:
+                                                                        overnight/goal_batch_arrivals.jpg. Blind-look (patch56) and
+                                                                        pitch correction (patch57) landed on this build but OFF
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
