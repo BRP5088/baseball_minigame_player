@@ -1,6 +1,44 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-08 07:45. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+**Updated 2026-09-08 08:05. DEAD RECKONING IS PAUSED BY THE USER; the closed loop is running its 25.**
+
+## MORNING SUMMARY (written 08:05, the night's last state; everything below it is the detail)
+
+**Where it stands.** The closed loop arrives at the dealer's prompt 20-23 of 25 on every batch since
+02:00 (b16 22, b17 22, b18 20, b19 23; the A/B 18/20; b21 running at 5/6). Walk median 78-89 s; the
+fastest walk on record 62.7 s (b18 t3). Best true streak tonight 21 (b12). The 25-in-a-row goal needs
+~97% a trial; the loop is at ~88%, and the remaining losses are NOT one controller bug -- they are
+WANDERERS: a patron in the tables aisle (stuck at 173, twice), an NPC that took up a spot at the top of
+the stairs after ~05:00 (five stairs losses in b17-b19, none before), corridor doors that open when a
+blind push hits them (two trials ended in an unmapped bedroom / storage room), and the photographer
+NPC in the portrait room. Every failure has a reader's note in `agent_progress/closed-loop/review/`.
+
+**What landed overnight (all committed, suite green each time):**
+- patch42: the rewind rule reverted by its own census (11/11 unverified vs 0/3 rewound at the
+  bar-entrance stop); `at_table()` reads the "$50" fee token last -- 0 of 7,885 route frames, and it
+  DECIDED 2 of batch 16's 22 arrivals.
+- patch43+43b: a LOST RESCUE (back out 1.0 s, look 0/-25/+25 over the whole chain, once per walk,
+  only where the walk was already lost). Fired 5 times, found nothing 5 times (the character pinned
+  against an NPC or in an unmapped room each time), cost no arrival anything.
+- patch44+45: STOP_LOOK_YAW -- at a stop verified by the look-around, TURN by the offset instead
+  of sidestepping. The census behind it: after the old strafe the scene still sat ~300 px left of
+  the heading on 93 of 96 arrivals (the sidestep did nothing; the offset is a heading error). The A/B
+  (10 a side): arrival 9/10 vs 9/10, and THE INSTRUMENT -- the first fit after the stop -- read
+  -352 px on every off-arm trial and +72 px on every on-arm trial. Shipped ON at 07:43 (da361ef).
+
+**Refused by census tonight (do not rebuild):** a runner-up margin on wide relocalisations; a
+lateral-offset or scale gate at the 129 stop; a scene-change gate on blind pushes; a stuck-progress
+reset (too rare). Details and raw numbers: `agent_progress/closed-loop/review/census_after_129_notes.md`.
+
+**Running now:** the twenty-first launch, plain 25 on da361ef (rescue + yaw), monitors on trial
+lines, rescue firings and STOP YAW firings. **Next, in order:** (1) read b21's tally and its readers;
+(2) the same yaw for a HEAD-ON stop fit with a large |dx| (the offset shows there too: b20 t2 had
+132 inliers at dx -325 and strafed) -- HANDOFF item (e) in full, A/B it the same way; (3) the yaw
+over-corrects by ~5-8 deg on 4 of 8 firings (pixels at 25 deg off-axis subtend fewer degrees) --
+measure before touching the gain; (4) the wanderers: nothing in the journals separates them; the
+frames do, and the human answer in every reader is "sidestep around the person, do not push into
+them" -- the escape ladder's strafes (0.6 s) never clear a pinned character (bar stretch: back 0/27,
+right 5/69).
 
 ## Now
 
