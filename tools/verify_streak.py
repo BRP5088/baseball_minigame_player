@@ -87,12 +87,14 @@ def selftest():
     bad = dict(good(2), at_table_recheck=False)
     rows, best = audit({"runs": [good(1), bad, good(3), good(4)]})
     assert best == 2, (rows, best)
-    # An INVALID between two arrivals must JOIN them, not split them.
+    assert any("did not hold" in c for _, _, cs in rows for c in cs), rows
+    # An INVALID between two arrivals must JOIN them, not split them. Declared
+    # AFTER the assertion above, because reassigning `rows` first left that
+    # check reading this case instead -- it failed loudly, which is the point.
     inv = {"trial": 2, "outcome": "INVALID", "arrived": False}
-    rows, best = audit({"runs": [good(1), inv, good(3), good(4)]})
-    assert best == 3, (rows, best)
-    assert rows[1][1] is None and "INVALID" in rows[1][2][0], rows[1]
-    assert any("did not hold" in c for _, _, cs in rows for c in cs)
+    rows_i, best_i = audit({"runs": [good(1), inv, good(3), good(4)]})
+    assert best_i == 3, (rows_i, best_i)
+    assert rows_i[1][1] is None and "INVALID" in rows_i[1][2][0], rows_i[1]
     # ...and a missing recheck is not a pass
     missing = {k: v for k, v in good(1).items() if k != "at_table_recheck"}
     rows, best = audit({"runs": [missing]})
