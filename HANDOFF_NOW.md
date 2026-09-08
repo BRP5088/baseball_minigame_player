@@ -102,6 +102,13 @@ The loop for the night, in order, repeated:
    the last credible k (STOP_REWIND_MAX 2) instead of advancing on faith (the stop table: unverified stops
    arrive 1 in 14 and 0 in 6). b11 trial 10's reader confirmed the end-turn's first live firing and the
    detector miss (patch40's fixture).
+   (o) b12 trial 22 (01:5x, the streak ended at 21): IDENTICAL to b11 trial 25 — the 129 stop verified by a
+   look (182 inliers), a 27-inlier fit at 130 read dx -392, two blind pushes (133, 136), then turn-early fired
+   at 136 for the 166 stop because NEAR_STOP_TARGETS counts PLAN ENTRIES (139, 142, 166) while the 143-166 pan
+   collapses to one entry — so the early turn was made two pushes (0.36 u) short of where frame 166 was
+   recorded; the stop fit nothing, was accepted unverified, k jumped 136 -> 166, lost. patch41's rewind is
+   the fix for the second half; a candidate for the first: measure turn-early's nearness in walking distance
+   (pushes remaining to the stop's recording position), not plan entries. Reader pending.
    (n) b11 trial 25 (reader `notes_cur_t25_1788845268.md`): the 129 stop verified at 151 inliers but tight on
    a wall portrait; the next fit read 17 inliers with dx -369 (a capped strafe), two blind pushes walked into
    the doorway pillar, the 166 stop was reached by dead reckoning, accepted unverified after back/wait, and
