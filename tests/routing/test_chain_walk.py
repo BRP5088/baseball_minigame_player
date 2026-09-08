@@ -2256,6 +2256,429 @@ class Lateral(unittest.TestCase):
         self.assertEqual(res["fixes"][0]["lateral"]["side"], "right")
 
 
+class StopLookYaw(unittest.TestCase):
+    """(n) AT A LOOKED STOP THE OFFSET IS A YAW, AND A SIDESTEP CANNOT FIX ONE.
+
+    agent_progress/closed-loop/review/after_look129_census.py over the 113
+    journals with a `turned-looked` stop at chain 129: the look fits at -25 deg
+    on every one, the scene sits a further +dx RIGHT inside that yawed frame,
+    and the implied residual heading error has median -19.7 deg on arrivals
+    and -19.2 on failures. The loop strafes LEFT for the capped 0.3 s -- and
+    the first head-on fit afterwards still reads dx median -300 px. The
+    sidestep moved the character and not the offset.
+
+    STOP_LOOK_YAW turns by it instead, using the END TURN's own formula and
+    cap, and carries the offset on every push until the next turn-only stop.
+    It ships False; these tests drive it both ways and pin the shipped path
+    as literals, because a mutant that ignores the flag must fail.
+    """
+
+    # wp2 is the STOP (ly = 0, a stationary run of one). The pushes after it
+    # carry a DIFFERENT heading from the stop's, so a yaw riding the next push
+    # shows up as its own turn instead of being hidden by TURN_SKIP_DEG.
+    AFTER = [(10.0, -0.35), (10.0, -0.35)]
+
+    def _wps(self, after=None):
+        rows = [(90.0, -0.35), (0.0, 0.0)] + list(
+            self.AFTER if after is None else after)
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate(rows, start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        return wps
+
+    def _rig(self, wps, fixes, table_at, lookback="script"):
+        ch = FakeChain(len(wps), fixes, default=None, lookback=lookback)
+        ch.waypoints = wps
+        return Rig(ch, table_at=table_at)
+
+    @staticmethod
+    def _on(go, *a, **kw):
+        """Run a walk with STOP_LOOK_YAW ON, restored in a finally."""
+        old = chain_walk.STOP_LOOK_YAW
+        chain_walk.STOP_LOOK_YAW = True
+        try:
+            return go(*a, **kw)
+        finally:
+            chain_walk.STOP_LOOK_YAW = old
+
+    @staticmethod
+    def turns(rig):
+        return [round(e[1], 1) for e in rig.events if e[0] == "turn"]
+
+    def test_the_flag_ships_OFF_and_reuses_the_END_TURNs_own_constants(self):
+        # Literals (10.11): a test that reads the constant it guards passes
+        # forever. STOP_LOOK_YAW invents no number of its own.
+        self.assertIs(chain_walk.STOP_LOOK_YAW, False)
+        self.assertEqual(chain_walk.PX_PER_DEG, 19.7)
+        self.assertEqual(chain_walk.END_TURN_MAX_DEG, 45.0)
+        self.assertEqual(chain_walk.LATERAL_TOL_PX, 35.0)
+        self.assertEqual(chain_walk.STOP_LOOK_DEG, (-25.0, 25.0))
+
+    def test_a_looked_stop_TURNS_by_the_offset_and_the_next_push_carries_it(self):
+        # The census's own shape: the -25 look fits, and inside that yawed
+        # frame the scene sits a further +235 px RIGHT, so the offset from the
+        # WALKING heading is 235 - 25*19.7 = -257.5 px = -13.1 deg. LEFT.
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3)], table_at=7)
+        res = self._on(rig.go)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:2], ["advanced", "turned-looked"], acts)
+        self.assertEqual(self.turns(rig),
+                         [90.0, 0.0, 335.0, 25.0, 0.0, 346.9, 356.9],
+                         "the stop, both looks, back to the stop, THE YAW "
+                         "(0 - 13.1), then the NEXT PUSH's own plan heading "
+                         "with the same yaw on it (10 - 13.1)")
+        self.assertEqual(rig.strafes(), [],
+                         "a yaw REPLACES the sidestep; it never does both")
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["yaw"], {"deg": -13.1, "px": -258})
+        self.assertNotIn("strafe", lat)
+        self.assertTrue(res["arrived"])
+
+    def test_the_yaw_is_cleared_at_the_next_turn_only_stop(self):
+        # A stop is verified against the recording's frame at the recording's
+        # heading, so it is approached SQUARE: the yaw taken at the previous
+        # stop was measured somewhere the walk has left.
+        rig = self._rig(self._wps(after=[(10.0, -0.35), (20.0, 0.0),
+                                         (30.0, -0.35)]),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3), Fix(k=4, inliers=200)], table_at=8)
+        res = self._on(rig.go)
+        turns = self.turns(rig)
+        self.assertIn(346.9, turns, "ANTI-VACUITY: the yaw was taken")
+        self.assertIn(356.9, turns, "... and it rode the push after it")
+        self.assertEqual(turns,
+                         [90.0, 0.0, 335.0, 25.0, 0.0, 346.9, 356.9,
+                          20.0, 30.0],
+                         "the SECOND stop turns to the plan's own 20.0 (not "
+                         "6.9), and the push after it to 30.0 (not 16.9)")
+        self.assertEqual([f["action"] for f in res["fixes"]][:4],
+                         ["advanced", "turned-looked", "advanced", "turned"])
+        self.assertTrue(res["arrived"])
+
+    def test_with_the_flag_OFF_the_stop_STRAFES_exactly_as_today(self):
+        # THE CONTROL, and the shipped path. Pinned as literals so a mutant
+        # that yaws regardless of the flag fails here, and so that "the flag
+        # off is byte-for-byte today's behaviour" is a measurement.
+        self.assertIs(chain_walk.STOP_LOOK_YAW, False)
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3)], table_at=7)
+        res = rig.go()
+        self.assertEqual(self.turns(rig), [90.0, 0.0, 335.0, 25.0, 0.0, 10.0],
+                         "no yaw turn, and the next push takes the plan's raw "
+                         "10.0")
+        self.assertEqual(rig.strafes(), [("strafe", -0.3, 0.3)],
+                         "LEFT at LATERAL_MAG for the capped LATERAL_CAP_SEC")
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat, {"deg": -25.0, "inliers": 90,
+                               "strafe": {"side": "left", "seconds": 0.3,
+                                          "px": -258}})
+        self.assertNotIn("yaw", lat)
+
+    def test_the_yaw_is_capped_at_END_TURN_MAX_DEG(self):
+        # 1600 px inside the +25 frame is 1600 + 25*19.7 = 2092.5 px = 106.2
+        # deg from the walking heading. A wrong match with a huge dx must not
+        # spin the camera -- the END TURN's reason, and its constant.
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), None, None,
+                         Fix(k=2, inliers=90, dx=1600.0), Fix(k=3)],
+                        table_at=7)
+        res = self._on(rig.go)
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["deg"], 25.0, "the +25 look was the credible one")
+        self.assertEqual(lat["yaw"]["deg"], 45.0)
+        self.assertEqual(lat["yaw"]["deg"], chain_walk.END_TURN_MAX_DEG)
+        self.assertEqual(self.turns(rig),
+                         [90.0, 0.0, 335.0, 25.0, 0.0, 45.0, 55.0])
+
+    def test_inside_LATERAL_TOL_PX_neither_a_yaw_nor_a_strafe(self):
+        # 500 px inside the -25 frame is 500 - 492.5 = 7.5 px from the walking
+        # heading: the look found the stop essentially straight ahead. The
+        # yaw answers to the same gate the sidestep does.
+        rig = self._rig(self._wps(),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=500.0),
+                         None, Fix(k=3)], table_at=7)
+        res = self._on(rig.go)
+        lat = res["fixes"][1]["lateral"]
+        self.assertNotIn("yaw", lat)
+        self.assertNotIn("strafe", lat)
+        self.assertEqual(rig.strafes(), [])
+        self.assertEqual(self.turns(rig), [90.0, 0.0, 335.0, 25.0, 0.0, 10.0],
+                         "the next push takes the plan's raw heading")
+
+    def test_a_REGRESSION_drops_the_stop_yaw(self):
+        """A look-back regression says the character is BEHIND where the loop
+        thought -- which is the position the yaw was measured from -- and the
+        branch rewinds the plan pointer to 0. The END TURN's yaw is dropped
+        there for exactly this reason and says so in its own comment; without
+        this the stop's offset would ride the recorded mid-chain headings from
+        the start of the plan, which is the family GRAVEYARD closed.
+        """
+        rig = self._rig(self._wps(after=[(10.0, -0.35), (20.0, -0.35),
+                                         (30.0, -0.35), (40.0, -0.35),
+                                         (40.0, -0.35)]),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3), None, Fix(k=3)],
+                        table_at=9, lookback=Fix(k=2, inliers=120))
+        res = self._on(rig.go)
+        acts = [f["action"] for f in res["fixes"]]
+        turns = self.turns(rig)
+        self.assertEqual(acts[:5], ["advanced", "turned-looked", "advanced",
+                                    "regressed", "advanced"], acts)
+        self.assertEqual(turns[5:8], [346.9, 356.9, 26.9],
+                         "ANTI-VACUITY: the yaw was live on both pushes "
+                         "before the regression (10 - 13.1, 40 - 13.1)")
+        self.assertEqual(turns[8], 10.0,
+                         "the RECORDED heading: the offset died with the "
+                         "position that earned it (the leak commands 356.9)")
+
+    def test_a_REGRESSION_BEHIND_EVERY_STOP_still_drops_the_yaw(self):
+        """The regression clear on its own, with nothing else able to do it.
+
+        The test above regresses to the stop's own index, so the plan pointer
+        re-passes that stop on the next iteration and the SKIP clear would
+        drop the yaw even if the `regressed` branch did not -- one rule
+        masking the other, and a mutant that deletes the regression clear
+        passes. Here the look-back lands at waypoint 0, BEHIND every stop in
+        the plan: nothing is passed, the next target is a push, and the
+        explicit clear is the only thing standing between the yaw and the
+        recorded mid-chain headings the branch's own comment is about.
+        """
+        rig = self._rig(self._wps(after=[(10.0, -0.35), (20.0, -0.35),
+                                         (30.0, -0.35), (40.0, -0.35),
+                                         (40.0, -0.35)]),
+                        [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                         None, Fix(k=3), None, Fix(k=3)],
+                        table_at=9, lookback=Fix(k=0, inliers=120))
+        res = self._on(rig.go)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:4], ["advanced", "turned-looked", "advanced",
+                                    "regressed"], acts)
+        self.assertEqual([f["k"] for f in res["fixes"]][3], 0,
+                         "ANTI-VACUITY: the look-back landed BEHIND the stop, "
+                         "so nothing but the regression clear can fire")
+        turns = self.turns(rig)
+        self.assertEqual(turns[5:8], [346.9, 356.9, 26.9],
+                         "ANTI-VACUITY: the yaw was live on both pushes "
+                         "before the regression")
+        self.assertEqual(turns[8], 90.0,
+                         "back to plan entry 0's RECORDED heading; the leak "
+                         "commands 76.9")
+
+    def test_a_SKIPPED_turn_only_stop_drops_the_yaw_TOO(self):
+        """A stop the PLAN POINTER PASSES ends the yaw as surely as one the
+        loop takes.
+
+        The reproduction a skeptic built against the first draft of this patch
+        (2026-09-08, agent_progress/closed-loop/stop_yaw). The clear above
+        lives on the UNPACK of plan[pi], and a wide relocalisation jumps k over
+        whole entries -- those are never unpacked. A yaw taken at the stop at
+        chain 2 then rode EVERY push from chain 25 on, twenty waypoints past
+        the stop that should have ended it, and that is the steering-while-
+        walking family GRAVEYARD closed, arriving by the back door.
+
+        The stop at 10 is genuinely skipped, not merely unverified: its own
+        index never reaches chain.locate().
+        """
+        wps = [Wp(i) for i in range(30)]
+        wps[2].lx = wps[2].ly = 0.0          # the stop that takes the yaw
+        wps[10].lx = wps[10].ly = 0.0        # the stop the pointer JUMPS OVER
+        ch = ScriptedWide(30,
+                          [Fix(k=1),                        # push -> advanced
+                           None,                            # the stop's frame
+                           Fix(k=2, inliers=90, dx=235.0),  # the -25 look fits
+                           None],                           # the +25 does not
+                          default=None, lookback=None,
+                          at_hint={4: [Fix(k=25, inliers=170)]})
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = self._on(always_turning, rig.go, time_cap=40.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:4], ["advanced", "turned-looked",
+                                    "blind-advance", "relocalised"], acts)
+        self.assertNotIn(10, ch.locate_calls,
+                         "the stop at 10 must be SKIPPED, not visited and "
+                         "left unverified -- otherwise this tests the clear "
+                         "that already works")
+        turns = self.turns(rig)
+        self.assertEqual(turns[:9],
+                         [10.0, 20.0, 355.0, 45.0, 20.0, 6.9, 16.9, 26.9,
+                          260.0],
+                         "to the push, the stop, both looks, back to the stop, "
+                         "THE YAW (20 - 13.1), the two pushes that carry it "
+                         "(30 - 13.1, 40 - 13.1) -- and then the relocalised "
+                         "push at the plan's RAW 260.0. The leak commands "
+                         "246.9 there and 266.9 for the rest of the walk.")
+        self.assertNotIn(246.9, turns, turns)
+
+    def test_a_jump_over_PUSHES_ALONE_keeps_the_yaw(self):
+        """THE CONTROL for the test above, and the predicate it pins.
+
+        The same walk with the stop at 10 taken out: the relocalisation now
+        skips ten PUSH entries and nothing else, and the yaw SURVIVES. That is
+        the rule as written -- a yaw dies at a turn-only stop, reached or
+        passed, and nowhere else -- and it is deliberate: a wide fix says the
+        character is further along than the loop thought, not that the camera
+        is back on the recorded line. Only a stop re-measures that, against
+        the recording's own frame at the recording's own heading.
+
+        Without this the `not plan[pi][1]` half of the skip clear is untested
+        and a mutant that drops it passes: in the test above the stop and the
+        pushes beside it are skipped together, so clearing on either gives the
+        same answer.
+        """
+        wps = [Wp(i) for i in range(30)]
+        wps[2].lx = wps[2].ly = 0.0          # the only turn-only stop
+        ch = ScriptedWide(30,
+                          [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                           None],
+                          default=None, lookback=None,
+                          at_hint={4: [Fix(k=25, inliers=170)]})
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = self._on(always_turning, rig.go, time_cap=40.0)
+        self.assertEqual([f["action"] for f in res["fixes"]][:4],
+                         ["advanced", "turned-looked", "blind-advance",
+                          "relocalised"])
+        turns = self.turns(rig)
+        self.assertEqual(turns[:9],
+                         [10.0, 20.0, 355.0, 45.0, 20.0, 6.9, 16.9, 26.9,
+                          246.9],
+                         "the same walk as the skipped-stop test up to the "
+                         "jump, and then 260 - 13.1: the yaw is STILL ON")
+        self.assertNotIn(260.0, turns,
+                         "no stop was passed, so nothing cleared it")
+
+    def test_the_PAN_branch_takes_no_yaw_even_with_BOTH_flags_on(self):
+        """A stop WITH a recorded run sidesteps as it always did.
+
+        The pan and the look-around are the two arms of one if/elif and only
+        the elif consults STOP_LOOK_YAW, so this holds by construction -- but
+        untested it held for the wrong reason: a mutant that put the same yaw
+        block inside the PAN branch passed all 179 tests (skeptic 1,
+        2026-09-08), because no test had ever armed both flags at once. The
+        pan's dx is measured against the run frame's OWN heading and needs no
+        un-yawing, which is exactly why it is not a yaw.
+        """
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (90.0, 0.0), (60.0, 0.0),
+                                     (30.0, 0.0), (30.0, -0.35), (30.0, -0.35)],
+                                    start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        ch = FakeChain(7, [Fix(k=1), None, None,
+                           Fix(k=3, inliers=90, dx=80.0), Fix(k=5), Fix(k=6)],
+                       default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=9)
+        old = chain_walk.STOP_PAN_FROM_RUN
+        chain_walk.STOP_PAN_FROM_RUN = True
+        try:
+            res = self._on(rig.go)
+        finally:
+            chain_walk.STOP_PAN_FROM_RUN = old
+        lat = res["fixes"][1]["lateral"]
+        self.assertEqual(lat["pan_heading"], 60.0,
+                         "ANTI-VACUITY: the PAN branch ran, not the "
+                         "look-around")
+        self.assertNotIn("yaw", lat)
+        self.assertEqual(lat["strafe"], {"side": "right", "seconds": 0.111,
+                                         "px": 80})
+        self.assertEqual(self.turns(rig)[:5], [90.0, 30.0, 90.0, 60.0, 30.0],
+                         "to the stop, the run's first and middle headings, "
+                         "BACK TO THE STOP'S OWN HEADING -- no yaw on it")
+
+    def test_the_LAST_stops_yaw_rides_the_tail_and_an_END_TURN_STACKS_on_it(self):
+        """Nothing clears the yaw taken at the plan's LAST turn-only stop, and
+        that is deliberate: there is no next stop to approach square, and the
+        tail is the one place the loop is allowed to aim at the scene.
+
+        Pinned in both directions because it was reasoned and never measured
+        (skeptic 2, 2026-09-08). The END TURN reads the dx of a frame captured
+        at the ALREADY-YAWED heading, so its own ddeg is a residual on top and
+        the two accumulate without double-counting -- the same way two END
+        TURNS accumulate. Every heading here is a literal.
+        """
+        wps = [Wp(0, 0.0)]
+        rows = ([(0.0, -0.35)] * 15 + [(89.5, 0.0)]
+                + [(89.5, -0.35), (95.0, -0.35), (95.0, -0.35)])
+        for i, (h, ly) in enumerate(rows, start=1):
+            w = Wp(i, h)
+            w.lx = 0.0
+            w.ly = ly
+            wps.append(w)
+        plan = chain_walk.plan_indices(wps)
+        self.assertEqual(chain_walk._last_stop_index(plan), 5,
+                         "ANTI-VACUITY: the stop at 16 IS the last one")
+        ch = FakeChain(len(wps),
+                       [Fix(k=1), Fix(k=4), Fix(k=7), Fix(k=10), Fix(k=13),
+                        None,                              # the stop's frame
+                        Fix(k=16, inliers=90, dx=235.0),   # the -25 look fits
+                        None,                              # the +25 does not
+                        Fix(k=17, inliers=120, dx=-600.0)],
+                       default=None, lookback=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = self._on(rig.go, time_cap=20.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:7], ["advanced"] * 5 + ["turned-looked",
+                                                       "advanced"], acts)
+        lat = res["fixes"][6]["lateral"]
+        self.assertEqual(lat["end_turn"], -30.5,
+                         "-600 px / 19.7 = -30.5 deg, the END TURN's own rule")
+        self.assertEqual(round(lat["heading"], 1), 45.9,
+                         "STACKED on the yawed 76.4, not on the recorded 89.5")
+        self.assertEqual(rig.strafes(), [],
+                         "neither correction sidesteps")
+        turns = self.turns(rig)
+        self.assertEqual(turns[:5], [0.0, 89.5, 64.5, 114.5, 89.5],
+                         "the five pushes share the recorded 0.0 and TURN_SKIP "
+                         "commands it once, then the stop and its two looks "
+                         "and back to the stop's own heading")
+        self.assertEqual(turns[5:], [76.4, 45.9, 51.4],
+                         "THE YAW (89.5 - 13.1); then the END TURN on top of "
+                         "it (76.4 - 30.5); then the next tail push carrying "
+                         "BOTH (95.0 - 13.1 - 30.5)")
+
+    def test_a_LOST_RESCUE_drops_the_stop_yaw(self):
+        """The rescue backs the character out and re-aims it from a believed
+        look, so a heading correction measured at a stop it has now left is
+        refuted -- the same argument that branch already makes, in its own
+        words, for the END TURN's yaw and for the one-shot turn-early.
+
+        The chain is patch43's own (30 all-push waypoints, credible to 10,
+        then blind) with ONE turn-only stop inserted at index 2, so the walk
+        takes a yaw there and then goes blind, lost, and rescued.
+        """
+        wps = [Wp(i) for i in range(30)]
+        wps[2].lx = wps[2].ly = 0.0          # the one turn-only stop
+        ch = ScriptedWide(30,
+                          [Fix(k=1), None, Fix(k=2, inliers=90, dx=235.0),
+                           None] + [Fix(k=i) for i in range(3, 11)],
+                          default=None, lookback=None,
+                          at_hint={0: [Fix(k=13, inliers=170)]})
+        ch.waypoints = wps
+        rig = RescueRig(ch, table_at=None)
+        res = self._on(rig.go, time_cap=400.0)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts.count("rescued"), 1, acts)
+        self.assertTrue(res["arrived"])
+        turns = self.turns(rig)
+        self.assertIn(16.9, turns,
+                      "ANTI-VACUITY: the yaw was live on the pushes after the "
+                      "stop (waypoint 3's recorded 30.0, minus 13.1)")
+        self.assertEqual(turns[turns.index(140.0):], [140.0],
+                         "the rescue re-aims to the plan's RAW heading and "
+                         "every push after it keeps it: nothing turns to 126.9")
+
+
 class EndTurnTowardTheDealer(unittest.TestCase):
     """(n) ON THE FINAL APPROACH A HUGE dx IS A TURN, NOT A SIDESTEP.
 
@@ -3175,6 +3598,131 @@ class HarnessScoring(unittest.TestCase):
                     "TABLE_CHECK_TAIL"):
             self.assertIn(key, cfg)
         self.assertEqual(len(cfg), 12)
+
+    # --- the ARM, and WHICH flag it sets -----------------------------------
+
+    def test_the_flag_name_is_read_from_argv_at_CALL_time(self):
+        # A module-level knob a harness may redirect is resolved when it is
+        # used, never captured in a default (10.18).
+        self.assertEqual(chain_trials.arm_flag_name(["chain_trials.py"]),
+                         chain_trials.DEFAULT_ARM_FLAG)
+        self.assertEqual(chain_trials.DEFAULT_ARM_FLAG, "STOP_PAN_FROM_RUN")
+        self.assertEqual(
+            chain_trials.arm_flag_name(["chain_trials.py", "route", "--flag",
+                                        "STOP_LOOK_YAW"]),
+            "STOP_LOOK_YAW")
+        with self.assertRaises(SystemExit):
+            chain_trials.arm_flag_name(["chain_trials.py", "--flag"])
+
+    def test_the_arm_sets_the_flag_the_run_NAMED(self):
+        # THE MUTANT THIS EXISTS FOR: a child that sets STOP_PAN_FROM_RUN
+        # whatever --flag says. Both arms would then run the shipped default
+        # of the flag under test, and the A/B would report a clean interleave
+        # of one arm against itself.
+        old = (chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN)
+        chain_walk.STOP_LOOK_YAW = chain_walk.STOP_PAN_FROM_RUN = False
+        try:
+            name = chain_trials.apply_arm(
+                chain_walk, self.log,
+                env={chain_trials.PAN_ENV: "on",
+                     chain_trials.ARM_FLAG_ENV: "STOP_LOOK_YAW"})
+            self.assertEqual(name, "STOP_LOOK_YAW")
+            self.assertTrue(chain_walk.STOP_LOOK_YAW)
+            self.assertFalse(chain_walk.STOP_PAN_FROM_RUN,
+                             "the pan flag must not move when it is not armed")
+            self.assertEqual(self.logs[-1], "  arm: STOP_LOOK_YAW = True",
+                             "the child's log names the flag it set")
+            chain_trials.apply_arm(
+                chain_walk, self.log,
+                env={chain_trials.PAN_ENV: "off",
+                     chain_trials.ARM_FLAG_ENV: "STOP_LOOK_YAW"})
+            self.assertFalse(chain_walk.STOP_LOOK_YAW, "the OTHER arm")
+        finally:
+            chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN = old
+
+    def test_the_default_arm_flag_is_still_the_pan(self):
+        # Every invocation written before --flag must behave exactly as it did.
+        old = (chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN)
+        chain_walk.STOP_LOOK_YAW = chain_walk.STOP_PAN_FROM_RUN = False
+        try:
+            name = chain_trials.apply_arm(chain_walk, self.log,
+                                          env={chain_trials.PAN_ENV: "on"})
+            self.assertEqual(name, "STOP_PAN_FROM_RUN")
+            self.assertTrue(chain_walk.STOP_PAN_FROM_RUN)
+            self.assertFalse(chain_walk.STOP_LOOK_YAW)
+        finally:
+            chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN = old
+
+    def test_the_default_arms_ROW_LABEL_is_still_pan(self):
+        # THE LABEL IS TEXT SOMEONE READS AND SOMETHING GREPS. `--flag` names
+        # the attribute; it must not rename the rows of every batch written
+        # before it, or an old chain_trials.json's `pan-on` and tonight's stop
+        # comparing row for row and the log line a reader knows changes under
+        # them. Same rule as `res["pan"]`, which this patch leaves alone.
+        self.assertEqual(chain_trials.arm_label(chain_trials.DEFAULT_ARM_FLAG),
+                         "pan")
+        self.assertEqual(chain_trials.arm_label("STOP_PAN_FROM_RUN"), "pan")
+        self.assertEqual(chain_trials.arm_label("STOP_LOOK_YAW"),
+                         "STOP_LOOK_YAW", "a NAMED flag carries its own name")
+        # ... and that main() uses it. main() cannot run offline (_assert_live,
+        # console_lock, _harness.run_trial), so this half is a source check and
+        # is honest about being one: it pins the three sites that write the
+        # label and asserts the FLAG name reaches none of them.
+        with open(os.path.join(_ROOT, "overnight", "chain_trials.py")) as fh:
+            src = fh.read()
+        self.assertIn("    label = arm_label(flag)", src)
+        self.assertIn('row["arm"] = f"{label}-{arm}"', src)
+        self.assertIn('r.get("arm") == f"{label}-{a}"', src)
+        self.assertIn('log(f"  {label}-{a}: arrived', src)
+        self.assertNotIn('f"{flag}-', src,
+                         "the flag NAME is not the row label")
+
+    def test_no_arm_in_the_environment_sets_nothing_at_all(self):
+        old = (chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN)
+        chain_walk.STOP_LOOK_YAW = chain_walk.STOP_PAN_FROM_RUN = False
+        try:
+            self.assertIsNone(chain_trials.apply_arm(chain_walk, self.log,
+                                                     env={}))
+            self.assertFalse(chain_walk.STOP_PAN_FROM_RUN)
+            self.assertFalse(chain_walk.STOP_LOOK_YAW)
+            self.assertEqual(self.logs, [], "and says nothing")
+        finally:
+            chain_walk.STOP_LOOK_YAW, chain_walk.STOP_PAN_FROM_RUN = old
+
+    def test_a_flag_naming_no_chain_walk_attribute_is_REFUSED(self):
+        # setattr on a typo binds something nothing reads: 10.1's no-op that
+        # logs like a change, in the one place where it costs a whole A/B.
+        with self.assertRaises(SystemExit):
+            chain_trials.apply_arm(
+                chain_walk, self.log,
+                env={chain_trials.PAN_ENV: "on",
+                     chain_trials.ARM_FLAG_ENV: "STOP_LOOK_YWA"})
+
+    def test_the_trial_sheet_still_reads_a_line_whose_ARM_IS_NOT_THE_PAN(self):
+        # THE READER GOES WITH THE LABEL. trial_sheet is what the user's
+        # standing rule runs on every failed trial, and its pattern knew only
+        # "pan-": against a `--flag STOP_LOOK_YAW` batch it did not mis-parse
+        # the lines, it REFUSED every one of them. Loaded BY PATH so this
+        # needs no sys.path change and cannot pick up another module.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "trial_sheet_under_test", os.path.join(_ROOT, "tools",
+                                                   "trial_sheet.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        tail = ("k=204/205  it=41  pushes=33  seconds=104.9 "
+                "(walk 84.0, setup 20.1)  failure=None")
+        for label in ("STOP_LOOK_YAW-on", "STOP_LOOK_YAW-off", "pan-off"):
+            m = mod.LINE_RE.match(f"[ 3] ARRIVED   {label} {tail}")
+            self.assertIsNotNone(m, f"the reader refused {label}")
+            self.assertEqual(m.group(2), "ARRIVED")
+            self.assertEqual(m.group(3), label)
+            self.assertEqual(int(m.group(4)), 204)
+        # ... and a line with NO arm at all, which is every non-A/B batch.
+        m = mod.LINE_RE.match(f"[ 3] FAILED    {tail}")
+        self.assertIsNotNone(m)
+        self.assertIsNone(m.group(3))
+        self.assertEqual(int(m.group(4)), 204)
 
     def test_a_chain_name_may_not_be_a_path(self):
         # run_trial builds its temp filenames from this argument.

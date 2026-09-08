@@ -15,11 +15,23 @@ import cv2
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+# THE ARM LABEL IS THE ARMED FLAG'S OWN NAME (chain_trials `--flag`), not
+# always "pan-": `--flag STOP_LOOK_YAW` writes `STOP_LOOK_YAW-on`. A pattern
+# that only knew "pan-" did not mis-parse those lines, it REFUSED every one of
+# them ("cannot parse the trial line") for the whole batch -- and this tool is
+# what the user's standing rule runs on every failed trial. Hoisted so a test
+# can reach it without the console, cv2 or a log on disk.
+LINE_RE = re.compile(
+    r"\[ *(\d+)\] (\w+)\s+(?:([A-Za-z_][\w.]*-(?:on|off))\s+)?"
+    r"k=(\d+)/\d+\s+it=(\d+)\s+pushes=(\d+)\s+seconds=([\d.]+)"
+    r".*?failure=(.*)")
+
+
 def main(tn, log=os.path.join(ROOT, "overnight", "chain_trials.log")):
     line = next((l for l in open(log) if re.match(r"\[ *%d\] " % tn, l)), None)
     if line is None:
         raise SystemExit(f"no line for trial {tn} in {log}")
-    m = re.match(r"\[ *(\d+)\] (\w+)\s+(?:(pan-\w+)\s+)?k=(\d+)/\d+\s+it=(\d+)\s+pushes=(\d+)\s+seconds=([\d.]+).*?failure=(.*)", line.strip())
+    m = LINE_RE.match(line.strip())
     if m is None:
         raise SystemExit(f"cannot parse the trial line: {line.strip()}")
     outcome, arm, k, it, pushes, secs, failure = m.group(2), m.group(3), int(m.group(4)), int(m.group(5)), int(m.group(6)), float(m.group(7)), m.group(8)

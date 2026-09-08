@@ -99,11 +99,70 @@ JOURNAL_ENV = "BASEBALL_CHAIN_JOURNAL"
 # the child through this variable and is applied INSIDE one_trial(), so process
 # death is the restore and no cleanup can reinstate a stale default (§10.17).
 PAN_ENV = "BASEBALL_CHAIN_PAN"
+# ... and WHICH chain_walk attribute that value sets. `--flag NAME` names it;
+# the default is the flag the option was built for, so every invocation
+# written before `--flag` behaves exactly as it did. The name travels to the
+# child beside the value, for the same reason (process death is the restore).
+ARM_FLAG_ENV = "BASEBALL_CHAIN_ARM_FLAG"
+DEFAULT_ARM_FLAG = "STOP_PAN_FROM_RUN"
 
 ARRIVED, TIMED_OUT, FAILED, INVALID = "ARRIVED", "TIMED_OUT", "FAILED", "INVALID"
 
 USAGE = (".venv/bin/python -B overnight/chain_trials.py <chain-name> "
-         "[--trials N] [--no-shots]")
+         "[--trials N] [--no-shots] [--arms off,on] [--flag CHAIN_WALK_FLAG]")
+
+
+def arm_flag_name(argv=None):
+    """The chain_walk attribute `--arms` switches, from `--flag NAME`.
+
+    Read at CALL time from argv, never captured in a default (CLAUDE.md
+    10.18): a module-level knob a test or a harness may redirect is resolved
+    when it is used.
+    """
+    argv = list(sys.argv if argv is None else argv)
+    if "--flag" in argv:
+        i = argv.index("--flag")
+        if i + 1 >= len(argv):
+            raise SystemExit("--flag takes a chain_walk attribute name")
+        return argv[i + 1]
+    return DEFAULT_ARM_FLAG
+
+
+def arm_label(flag):
+    """The TEXT an arm's row and its tally line carry, from the flag it sets.
+
+    THE DEFAULT FLAG KEEPS THE LABEL IT HAS ALWAYS HAD. Every `--arms off,on`
+    written before `--flag` must produce the same bytes it did, so an old
+    chain_trials.json's `pan-on` rows and tonight's compare row for row and a
+    reader watching the log by eye sees no change -- the same rule this patch
+    already applies to `res["pan"]`, which it leaves untouched beside the new
+    `res["arm_flag"]`. A NAMED flag carries its own name, which is the point
+    of naming it.
+    """
+    return "pan" if flag == DEFAULT_ARM_FLAG else flag
+
+
+def apply_arm(chain_walk, log, env=None):
+    """Set the armed flag INSIDE the child and say which one it was.
+
+    Returns the attribute name, or None when no arm was requested. The
+    environment is read at CALL time so a test can hand it one. A name that
+    is not a chain_walk attribute is REFUSED rather than set: `setattr` on a
+    typo binds something nothing reads, both arms then run the shipped
+    default, and the A/B reports a clean interleave of one arm with itself --
+    CLAUDE.md 10.1's no-op that logs like a change, in the one place where it
+    costs the whole measurement.
+    """
+    env = os.environ if env is None else env
+    arm = env.get(PAN_ENV)
+    if arm is None:
+        return None
+    name = env.get(ARM_FLAG_ENV) or DEFAULT_ARM_FLAG
+    if not hasattr(chain_walk, name):
+        raise SystemExit(f"--flag names no chain_walk attribute: {name}")
+    setattr(chain_walk, name, arm == "on")
+    log(f"  arm: {name} = {getattr(chain_walk, name)}")
+    return name
 
 
 def _assert_live():
@@ -209,10 +268,7 @@ def one_trial(name):
     def log(m):
         print(m, flush=True)
 
-    pan = os.environ.get(PAN_ENV)
-    if pan is not None:
-        chain_walk.STOP_PAN_FROM_RUN = (pan == "on")
-        log(f"  arm: STOP_PAN_FROM_RUN = {chain_walk.STOP_PAN_FROM_RUN}")
+    armed = apply_arm(chain_walk, log)
 
     d = chain_dir(name)
     if not os.path.isdir(d):
@@ -251,6 +307,10 @@ def one_trial(name):
         res["at_table_recheck"] = f"unreadable: {type(exc).__name__}"
     res["chain"] = name
     res["pan"] = bool(chain_walk.STOP_PAN_FROM_RUN)
+    # WHICH flag this trial's arm set, and to what. `pan` above is kept
+    # unchanged so every result recorded before `--flag` still reads the same.
+    res["arm_flag"] = armed or DEFAULT_ARM_FLAG
+    res["arm_value"] = bool(getattr(chain_walk, res["arm_flag"], False))
     res["waypoints"] = len(ch.waypoints)
     res["shots"] = shots_dir
     res["journal"] = journal
@@ -366,6 +426,10 @@ def main():
         arms = spec.split(",")
         if any(a not in ("off", "on") for a in arms):
             raise SystemExit("--arms takes off/on values, e.g. --arms off,on")
+    flag = arm_flag_name()
+    label = arm_label(flag)
+    if "--flag" in sys.argv:
+        args = [a for a in args if a != flag]
     if not args:
         raise SystemExit(USAGE)
     name = args[0]
@@ -389,6 +453,11 @@ def main():
     import console_lock
     import chain_walk
 
+    # Refused in the PARENT as well as the child, so a typo costs one second
+    # rather than a whole interleaved batch of one arm against itself.
+    if not hasattr(chain_walk, flag):
+        raise SystemExit(f"--flag names no chain_walk attribute: {flag}")
+
     if not _harness.alive():
         raise SystemExit("the stream is not up; not starting")
 
@@ -399,6 +468,7 @@ def main():
            "setup_budget": SETUP_BUDGET,
            "config": config(),
            "arms": arms,
+           "arm_flag": flag,
            "runs": []}
     log(f"chain trials: {trials} of {name} "
         f"(walk cap {TIME_CAP:.0f}s + setup budget {SETUP_BUDGET:.0f}s = "
@@ -434,12 +504,15 @@ def main():
             arm = arms[(i - 1) % len(arms)] if arms else None
             if arm is not None:
                 os.environ[PAN_ENV] = arm
+                # ... and WHICH flag it sets. Set HERE, inside main(), never
+                # at import (CLAUDE.md 5, and tests/harness scans for it).
+                os.environ[ARM_FLAG_ENV] = flag
             r, secs = _harness.run_trial(__file__, name, CEILING, log=log)
             outcome = classify(r, secs, log)
             row = trial_row(i, outcome, secs, r, journal=journal)
             row["journal"] = journal
             if arm is not None:
-                row["arm"] = "pan-" + arm
+                row["arm"] = f"{label}-{arm}"
             res["runs"].append(row)
             armtxt = f"{row['arm']:8s} " if arm is not None else ""
             log(f"[{i:2d}] {outcome:9s} {armtxt}"
@@ -468,9 +541,9 @@ def main():
     if arms:
         tally = {}
         for a in arms:
-            rs = [r for r in got if r.get("arm") == "pan-" + a]
+            rs = [r for r in got if r.get("arm") == f"{label}-{a}"]
             tally[a] = (sum(1 for r in rs if r["outcome"] == ARRIVED), len(rs))
-            log(f"  pan-{a}: arrived {tally[a][0]}/{tally[a][1]} valid")
+            log(f"  {label}-{a}: arrived {tally[a][0]}/{tally[a][1]} valid")
         if len(arms) == 2:
             (a1, n1), (a2, n2) = tally[arms[0]], tally[arms[1]]
             res["fisher_p"] = fisher_exact(a1, n1 - a1, a2, n2 - a2)

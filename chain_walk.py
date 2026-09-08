@@ -308,6 +308,38 @@ STOP_LOOK_DEG = (-25.0, 25.0)
 # against the frame recorded AT that heading. See stationary_runs().
 STOP_PAN_FROM_RUN = False
 STOP_PAN_LOOKS = 2              # how many run frames to look at (first, middle)
+# AT A STOP THE LOOK-AROUND VERIFIED, CORRECT THE HEADING, NOT THE POSITION
+# (ships False; the A/B decides).
+#
+# THE MEASUREMENT (agent_progress/closed-loop/review/after_look129_census.py
+# and .out, over the 113 journals carrying a `turned-looked` stop at chain
+# 129 -- the bar entrance, the stop the audit's own table names as the lever):
+# the look fits at -25 deg on EVERY one of them, with the scene a further +dx
+# to the RIGHT inside that yawed frame, so the residual heading error
+# theta = -25 + dx / PX_PER_DEG has the SAME median on the trials that
+# arrived and on the ones that failed -- close to -20 deg either way, so it is
+# not a symptom of a bad trial. The loop answers it with a SIDESTEP, and the
+# FIRST head-on fit after that strafe still reads dx median -300 px on
+# arrivals (93 of 96 credible, -379..-17) and -269 on failures: the scene is
+# still ~15 deg left of the walking heading. The sidestep changes NOTHING
+# measurable, because the offset is a YAW and a sidestep cannot fix a yaw.
+# What it DOES do is move the character -- six of 2026-09-08's failures put it
+# into the doorway corner or into an NPC, the view then unchanged for twenty
+# rows -- while the arrivals carry the offset all the way through waypoints
+# 130-142, correcting LEFT on 393 of 419 fits without converging
+# (agent_progress/closed-loop/waste/bar-counter.md).
+#
+# (The exact median residual is in that script's .out and is deliberately not
+# repeated as a number here: px-per-degree is ONE literal in this file,
+# PX_PER_DEG, and tests/routing/test_chain_walk.py counts the occurrences.)
+#
+# So turn by it. This is the END TURN's own rule (see END_TURN_PX) applied at
+# a looked stop instead of only in the tail, referencing its formula and its
+# cap rather than copying them, and it is what HANDOFF_NOW.md item (e) asked
+# for. It MOVES NOTHING: GRAVEYARD's two survivors out of thirteen navigation
+# changes are the aim sweep and turning, and every change that failed moved
+# the character. `stop_yaw` carries it until the next turn-only stop.
+STOP_LOOK_YAW = False
 # A stop whose frame and both looks fit NOTHING is most likely an NPC in the
 # face (batch 4 trial 8, Wanda). NPCs move: wait this long once and look
 # again before spending retry pushes into whatever is there.
@@ -968,6 +1000,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                              None)
     last_stop_j = _last_stop_index(plan)   # the end turn fires only past this
     end_yaw = 0.0               # degrees added to every remaining tail heading
+    stop_yaw = 0.0              # ... and the degrees a LOOKED STOP's yaw adds
+                                # to every push until the next turn-only stop
+                                # (STOP_LOOK_YAW). Zero unless that flag is on.
     end_turns = 0               # end turns spent this walk (END_TURN_MAX)
 
     def finish(failure=None):
@@ -1060,7 +1095,29 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             return finish(f"stuck at k={k} of {n - 1}: no advance in "
                           f"{since_advance} iterations")
         # THE PLAN POINTER: the next target is the first plan entry past k.
+        #
+        # A TURN-ONLY STOP THE POINTER PASSES WITHOUT TAKING IT DROPS THE YAW,
+        # exactly as a stop the loop actually takes does. The clear below lives
+        # on the UNPACK of `plan[pi]`, and a SKIPPED entry is never unpacked: k
+        # jumps on a wide relocalisation -- the stop branch's "relocalised past
+        # the stop", the blind path's forward search, the lost rescue -- and
+        # the pointer then walks over whatever lies between. Reproduced
+        # (agent_progress/closed-loop/stop_yaw): a yaw taken at chain 2 rode
+        # every push from chain 25 on, twenty waypoints past the stop that
+        # should have ended it, which is the "steering while walking" family
+        # GRAVEYARD closed. The ordinary advance cannot do this -- ADVANCE_MAX
+        # is 1 and `new_k` is capped at `target_k` -- and `_near_stop` returns
+        # the FIRST turn-only entry in its window, so turn-early skips only
+        # pushes; the wide jumps are the whole population.
+        #
+        # `pi` here is STILL the entry the previous iteration serviced, since
+        # nothing moves it after the unpack. So `pi > pi_serviced` is precisely
+        # "this entry was jumped over", and the stop the loop just took --
+        # whose own look-around is what set the yaw -- is left alone.
+        pi_serviced = pi
         while pi < len(plan) and plan[pi][0] <= k:
+            if pi > pi_serviced and not plan[pi][1]:
+                stop_yaw = 0.0
             pi += 1
         # THE END OF THE CHAIN IS A BOUNDED PHASE. Past the last target there
         # is nothing left to servo onto: every further push is dead reckoning
@@ -1101,7 +1158,15 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             target_k, do_push, heading = n - 1, True, plan_last_heading
         else:
             target_k, do_push, heading = plan[pi]
-        if end_yaw and heading is not None:
+        if not do_push:
+            # A TURN-ONLY STOP TURNS TO THE PLAN'S OWN HEADING. A stop is
+            # verified against the recording's frame at the recording's
+            # heading, and STOP_LOOK_YAW's offset was a correction measured at
+            # a DIFFERENT stop, from a position the walk has since left.
+            # Cleared HERE, before the turn below, so the stop is approached
+            # square and its own look-around measures the residual afresh.
+            stop_yaw = 0.0
+        if (end_yaw or stop_yaw) and heading is not None:
             # THE END TURN RIDES ON EVERY REMAINING HEADING, including the end
             # budget's pushes along the plan's final heading. Each target of
             # the tail carries its own recorded heading and the loop turns to
@@ -1113,7 +1178,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # `regressed` branch); short of that the walk either arrives or
             # ends, and there is nothing after the final approach to restore
             # the recorded line for.
-            heading = (heading + end_yaw) % 360.0
+            # ... and STOP_LOOK_YAW's `stop_yaw` rides the same way and for
+            # the same reason: a yaw taken at a stop has to survive until the
+            # next turn-only stop, or the very next turn to a recorded heading
+            # would undo the correction that earned it. It is cleared at that
+            # stop, on a look-back regression, and on a lost rescue.
+            heading = (heading + end_yaw + stop_yaw) % 360.0
 
         turned = False
         if heading is not None and (
@@ -1303,17 +1373,38 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     # is the relation the END TURN inverts; ONE literal, named.
                     dx2 = getattr(f2, "dx", 0.0) or 0.0
                     px = dx2 + ddeg * PX_PER_DEG
-                    # ONE ordinary correction, not a double one: batch 7 trial
-                    # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
-                    # strafe RIGHT that three credible head-on fits then undid
-                    # LEFT. A yawed fit sees the scene half out of frame; it
-                    # earns a normal step, and the next head-on fit decides.
-                    secs = min(LATERAL_CAP_SEC, abs(px) / (LATERAL_GAIN * LATERAL_MAG))
-                    if secs >= LATERAL_MIN_SEC:
-                        side = RIGHT if px > 0 else LEFT
-                        strafe(side * LATERAL_MAG, secs)
-                        looked["strafe"] = {"side": "right" if side > 0 else "left",
-                                            "seconds": round(secs, 3), "px": round(px)}
+                    if STOP_LOOK_YAW and abs(px) > LATERAL_TOL_PX:
+                        # THE OFFSET AT A LOOKED STOP IS A YAW, NOT A POSITION
+                        # (see STOP_LOOK_YAW): turn by it instead of stepping
+                        # sideways, and let it ride every push until the next
+                        # turn-only stop. The END TURN's own formula and cap,
+                        # referenced rather than copied so the two cannot drift
+                        # into two different numbers, and its sign convention:
+                        # a NEGATIVE px -- the scene sits LEFT of the walking
+                        # heading -- turns LEFT, i.e. DECREASING heading, which
+                        # is pose.offset's convention. NO strafe: the strafe is
+                        # the thing this replaces, and the census says it moved
+                        # the character without moving the offset.
+                        ddeg_fix = round(max(-END_TURN_MAX_DEG,
+                                             min(END_TURN_MAX_DEG,
+                                                 float(px) / PX_PER_DEG)), 1)
+                        stop_yaw = ddeg_fix
+                        new_heading = (heading + stop_yaw) % 360.0
+                        turn_to(new_heading)
+                        last_cmd = new_heading
+                        looked["yaw"] = {"deg": ddeg_fix, "px": round(px)}
+                    else:
+                        # ONE ordinary correction, not a double one: batch 7 trial
+                        # 1's look fit (77 inliers, yawed 25 deg) drove a 0.6 s
+                        # strafe RIGHT that three credible head-on fits then undid
+                        # LEFT. A yawed fit sees the scene half out of frame; it
+                        # earns a normal step, and the next head-on fit decides.
+                        secs = min(LATERAL_CAP_SEC, abs(px) / (LATERAL_GAIN * LATERAL_MAG))
+                        if secs >= LATERAL_MIN_SEC:
+                            side = RIGHT if px > 0 else LEFT
+                            strafe(side * LATERAL_MAG, secs)
+                            looked["strafe"] = {"side": "right" if side > 0 else "left",
+                                                "seconds": round(secs, 3), "px": round(px)}
             if not verified and past_ev:
                 k = target_k
                 misses = 0
@@ -1507,7 +1598,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     "elapsed": round(now() - t0, 2)})
             log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  {action}"
                 f"{'' if turned else ' (skipped, same heading)'} to {heading}"
-                f"  ({inl_t} inliers at the stop)")
+                f"  ({inl_t} inliers at the stop)"
+                # A STOP YAW has no side and no seconds; naming it in the log
+                # is how a reader tells it from the sidestep it replaced.
+                + (f"  STOP YAW {looked['yaw']['deg']:+.1f} deg on "
+                   f"{looked['yaw']['px']} px, no strafe"
+                   if looked is not None and "yaw" in looked else ""))
             continue
 
         fix = chain.locate(img, k)
@@ -1550,6 +1646,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # and re-approaches gets the turns it has left, never a fresh
             # three per regression.
             end_yaw = 0.0
+            # ... and STOP_LOOK_YAW's yaw with it, for the reason above word
+            # for word: it was measured at a stop the look-back has just said
+            # the character is behind, and this branch rewinds the plan
+            # pointer to 0, so the offset would otherwise ride the recorded
+            # mid-chain headings from there.
+            stop_yaw = 0.0
             action = "regressed"
         elif weak and inl >= WEAK_MIN_INLIERS and int(fix.k) > k:
             # WEAK BUT CONSISTENT: a thin fit that names the target (or its
@@ -1760,6 +1862,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     # again, fell into the rungs, and died lost one stop later
                     # with no second rescue (probe_turned_early.py).
                     turned_early = False
+                    # ... and STOP_LOOK_YAW's yaw, for the same reason as the
+                    # end turn's above: the rescue has backed the character
+                    # out and re-aimed it from a believed look, so a heading
+                    # correction measured at a stop it has left is refuted.
+                    stop_yaw = 0.0
                     action = "rescued"
                     record({"iteration": iteration, "k": k, "target": target_k,
                             "fix": _fix_row(f2), "action": action,
