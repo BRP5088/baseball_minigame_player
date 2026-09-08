@@ -801,7 +801,21 @@ are archived as `overnight/chain_trials_batch{10,11,12}.*`, one reader per failu
                                                                         0.80 tail). SHIPPED ON (patch50). Also landed: patch48, the
                                                                         harness waits for a missing game window and re-runs the
                                                                         trial number instead of burning it
-    a780ed6  11:46         25     running                             the door step ON, plain 25: rescue + yaw + door step
+    a780ed6  11:46   12 + 8   12/12 + 7/8   83.7 s / 86.1 s   12      the door step ON, plain 25 in two parts: part 1 stopped at 12
+                                                                        by the user's VPN reconnecting (chiaki: "Takion failed to send
+                                                                        data packet"; trials 13-14 INVALID on the dead stream, not
+                                                                        counted), part 2 stopped at 8 by the user's restart. 19 of 20
+                                                                        valid; the one loss t1 of part 2: a +10.6 deg STOP YAW at the
+                                                                        LAST stop (196, the look fit TWO ahead at 198), then the final
+                                                                        approach never found the prompt (patch51's case, below)
+    2d0f4e0  12:25          -     not run yet                          patch51 STOP_YAW_SKIP_LAST_STOP = True: no stop yaw at the plan's
+                                                                        LAST turn-only stop -- nothing clears it after that, so it rides
+                                                                        the whole final approach under the end turn. Census of the 196
+                                                                        stop over 266 walks: head-on or strafed 225 arrived / 1 ended
+                                                                        without the prompt / 1 failed; looked and YAWED (6) 4 arrived /
+                                                                        2 ended at 204 without the prompt. The strafe runs there instead
+                                                                        (marker yaw_skipped.reason = "last stop"); 4 mutants caught.
+                                                                        Landed at the restart boundary; THE NEXT PLAIN 25 MEASURES IT
 
 Twenty true arrivals in a row across the first two, twenty-one inside the third. The failures that remain
 are one shape: blind pushes into geometry after a verified stop, then the next stop accepted UNVERIFIED
