@@ -68,10 +68,22 @@ def curve(samples):
     return rows, best, knee
 
 
-def run(chain_name, pushes, mag, sec):
+def run(chain_name, pushes, mag, sec, reset=True):
     import analog_replay as ar
     import compass
     import chain as chain_mod
+
+    if reset:
+        # START FROM THE SPAWN, ALWAYS. After a batch the character stands
+        # wherever the last trial ended -- often AT the dealer's table, where
+        # pushing forward walks into furniture and every fit degrades for a
+        # reason that has nothing to do with settling. The spawn is
+        # deterministic (bearing 87 E on every reset), so the measurement is
+        # repeatable across sessions instead of being one pose's accident.
+        import reset_env
+        reset_env.reset_environment(log=print,
+                                    progress_file="progress_testing.json")
+        time.sleep(1.2)          # the world has to finish appearing
 
     ch = chain_mod.Chain.load(os.path.join("chains", chain_name),
                               log=lambda *a: None)
@@ -146,6 +158,9 @@ if __name__ == "__main__":
     ap.add_argument("--mag", type=float, default=0.45)
     ap.add_argument("--sec", type=float, default=0.40)
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--no-reset", dest="reset", action="store_false",
+                    help="measure from wherever the character stands (the "
+                         "result is then one pose's accident, not the spawn's)")
     a = ap.parse_args()
     if a.selftest:
         selftest(); raise SystemExit(0)
@@ -153,4 +168,4 @@ if __name__ == "__main__":
         raise SystemExit("REFUSING: chain_trials.py is running. This tool "
                          "PUSHES THE STICK; running it now would drive the "
                          "character during a live trial.")
-    run(a.chain, a.pushes, a.mag, a.sec)
+    run(a.chain, a.pushes, a.mag, a.sec, reset=a.reset)
