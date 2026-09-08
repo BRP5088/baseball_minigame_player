@@ -25,7 +25,9 @@ HTML = os.environ.get("DASH_HTML", os.path.join(
     "auto_baseball_dashboard.html"))
 
 QUEUE = [
-    {"title": "THE 25, ninth launch (80182ac)", "state": "running",
+    {"title": "Pan A/B: look along the recorded pan, 10 v 10 interleaved", "state": "running",
+     "detail": "The ninth launch of the 25 went 1 of 5: three trials lost right after the bar-tables stop, where the head-on check has failed in 8 of the last 9 trials and the sideways look's arithmetic disagreed with the next reading by 300 px. The judge's first item was to A/B the pan that matches each look against its own recorded frame. Off arm = the 25's own configuration, so nothing is lost by switching. Readers are on every failed trial."},
+    {"title": "THE 25, ninth launch (80182ac)", "state": "done",
      "detail": "Eighth launch 2/2 (155 s, 104 s), seventh 1/2. New in this one: the look-around strafe is one ordinary correction (batch 7's failure was a doubled one), four same-side junk fits steer once (0 of 24 arriving trials had four; 5 failing ones did), and the pan-from-run sits behind a flag, off, for its own A/B. Every failed trial gets a screenshot reader the moment it lands; the ninth's trial 1 (lost at k=173, the bar-tables stop again) is being read now."},
     {"title": "THE 25, seventh launch", "state": "done",
      "detail": "Sixth launch went 4 of 7 valid; both bar-entrance losses were the same event, read by two agents from the frames: the loop walked nose-first into the big portrait at the end of the portrait room and had no backward move. Now a blind sensor near a wall gets one push before the stop, a wedged stop steps back before waiting or retrying, and the escape ladder is jump, back, left, right. Every failed trial now gets a screenshot reader the moment it lands."},
