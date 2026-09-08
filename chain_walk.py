@@ -137,6 +137,17 @@ RECORD_PERIOD_SEC = 0.25          # chain_record's default when a row has no t
 # panel or a dark wall is featureless (7-16 keypoints, CLAUDE.md §8(g)), and
 # trial 1b showed the sensor goes blind exactly where the plan needs to turn.
 BLIND_MAX = 6
+# Inside the last END_TAIL_TARGETS plan targets a blind push is capped at
+# END_BLIND_MAX: past the final stop, overshooting means the bar's back door
+# (batch 5b trial 3, 2026-09-07 20:20), and the prompt check runs every
+# iteration anyway.
+END_TAIL_TARGETS = 6
+END_BLIND_MAX = 2
+# A credible fit at the waypoint BEHIND the target whose scale says the scene
+# is this much larger than in that frame means the character is well past it:
+# count it as reaching the target. Arriving trials advanced through the bar at
+# scales 1.0-1.5; trial 3 stalled at 166 with 2.1 and 2.6 while at ~181.
+PAST_SCALE = 1.6
 # A weak fix (under FIX_MIN_INLIERS) still corroborates the plan when it has at
 # least this many inliers: right-but-thin fits in trials 1-3 read 17-36, junk
 # read 6-13 (n ~ 15, provisional; re-measure from overnight/chain_journals/).
@@ -564,6 +575,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     blind = 0                   # consecutive pushes made with no credible fix
     lost = 0                    # iterations with nothing credible, budget spent
     turn_retries = 0            # retries spent on the current turn stop
+    unverified_turn = False     # the last stop was accepted unverified
     walk_heading = None         # the last heading a push was made along
     last_cmd = None             # the last heading actually commanded
     plan_last_heading = next((h for _, _, h in reversed(plan) if h is not None),
@@ -729,10 +741,15 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     log(f"    it {iteration:3d}  k={k:3d} -> {target_k:3d}  relocalised "
                         f"past the stop: {wide.inliers} inliers at {wide.k}")
                     continue
-            short = (not verified and fix_t is not None
-                     and int(getattr(fix_t, "k", target_k)) < target_k)
+            # "PAST" needs a real fit (>= WEAK_MIN_INLIERS) at a LATER
+            # waypoint. A junk fit at any index is no evidence: batch 5b
+            # trials 2, 5 and 6 read 6-12-inlier fits at k >= stop as "past",
+            # skipped the retry that fixes a short stop, and were lost.
+            past_ev = (not verified and fix_t is not None
+                       and inl_t >= WEAK_MIN_INLIERS
+                       and int(getattr(fix_t, "k", target_k)) >= target_k)
             looked = None
-            if not verified and not short and heading is not None:
+            if not verified and not past_ev and heading is not None:
                 # LOOK AROUND before believing the stop is occluded or passed:
                 # a lateral displacement puts the stop's scene off to one side.
                 best = None
@@ -766,12 +783,12 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                         strafe(side * LATERAL_MAG, secs)
                         looked["strafe"] = {"side": "right" if side > 0 else "left",
                                             "seconds": round(secs, 3), "px": round(px)}
-            if not verified and not short:
+            if not verified and past_ev:
                 k = target_k
                 misses = 0
                 stalls = 0
                 turn_retries = 0
-                why = "occluded" if fix_t is None else "past"
+                why = "past"
                 record({"iteration": iteration, "k": k, "target": target_k,
                         "fix": _fix_row(fix_t), "action": f"turned-{why}",
                         "lateral": None, "at_end": False,
@@ -802,6 +819,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             misses = 0
             stalls = 0
             turn_retries = 0
+            unverified_turn = not verified
             action = "turned" if verified else "turned-unverified"
             if looked is not None:
                 action = "turned-looked"
@@ -871,7 +889,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls = 0
                 action = "relocalised"
-            elif blind < BLIND_MAX and not at_end:
+            elif blind < (END_BLIND_MAX if (pi >= len(plan) - END_TAIL_TARGETS or unverified_turn)
+                          else BLIND_MAX) and not at_end:
                 blind += 1
                 k = target_k
                 misses = 0
@@ -910,6 +929,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             misses = 0
             blind = 0
             lost = 0
+            unverified_turn = False
             # Never past the target this push was aimed at (one push, one
             # target: a wrong match must not run the plan ahead of the
             # character) and never past the last waypoint (locate() may
@@ -923,10 +943,13 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # path and a no-op path with identical output (§10.1). Mid-chain
             # this changes nothing — `reached(fix, k+1)` forces `fix.k >= k+1`,
             # so `new_k > k` always holds there.
-            if chain.reached(fix, target_k) and new_k > k:
+            past = (int(fix.k) == k and (getattr(fix, "scale", 1.0) or 1.0) >= PAST_SCALE)
+            if past and new_k <= k:
+                new_k = min(target_k, n - 1)
+            if (chain.reached(fix, target_k) or past) and new_k > k:
                 k = new_k
                 stalls = 0
-                action = "advanced"
+                action = "advanced-past" if past and not chain.reached(fix, target_k) else "advanced"
             else:
                 stalls += 1
                 if stalls >= STALL_MAX:

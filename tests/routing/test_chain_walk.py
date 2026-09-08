@@ -352,7 +352,7 @@ class IndexAdvance(unittest.TestCase):
         # k=9 is further than WINDOW from every target it will be asked about,
         # so this weak fix is blindness, not corroboration (see the test below
         # for a weak fix that NAMES the target).
-        ch = FakeChain(8, default=Fix(k=9, scale=1.2, dx=-131.0, inliers=13))
+        ch = FakeChain(30, default=Fix(k=29, scale=1.2, dx=-131.0, inliers=13))   # clear of the tail cap
         rig = Rig(ch, table_at=None)
         res = always_turning(rig.go, time_cap=11.05)
         # k follows the PLAN (dead-reckoned to the target for BLIND_MAX
@@ -372,7 +372,7 @@ class IndexAdvance(unittest.TestCase):
                  Fix(k=3, inliers=15, dx=150.0),      # weak, names 3 (target 2, within WINDOW)
                  None, None, None, None,              # four blind advances (budget intact)
                  None]                                # the fifth is a miss
-        rig = Rig(FakeChain(12, fixes, default=None), table_at=None)
+        rig = Rig(FakeChain(30, fixes, default=None), table_at=None)
         res = always_turning(rig.go, time_cap=7.05)
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:2], ["advanced-weak", "advanced-weak"])
@@ -429,16 +429,18 @@ class IndexAdvance(unittest.TestCase):
         # locate calls in order: it1 push -> Fix(k=1); it2 turn-verify -> a thin
         # fit to the EARLIER waypoint 2 (evidence of being short); it3 (after
         # the retry push) turn-verify -> credible; it4 push -> Fix(4)
-        ch = FakeChain(6, [Fix(k=1), Fix(k=2, inliers=8), Fix(k=3, inliers=90),
+        # the two look-around locates at the stop see nothing (None, None)
+        ch = FakeChain(6, [Fix(k=1), Fix(k=2, inliers=8), None, None, Fix(k=3, inliers=90),
                            Fix(k=4), Fix(k=5)])
         ch.waypoints = wps
-        rig = Rig(ch, table_at=6)
+        rig = Rig(ch, table_at=8)   # the looks add two captures
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:4], ["advanced", "turn-retry", "turned", "advanced"])
         turns = [e[1] for e in rig.events if e[0] == "turn"]
-        self.assertEqual(turns, [90.0, 0.0, 90.0, 0.0],
-                         "turn to the stop, back to the walking heading, then the stop again")
+        self.assertEqual(turns, [90.0, 0.0, 335.0, 25.0, 0.0, 90.0, 0.0],
+                         "turn to the stop, look left and right, back to the stop, back to "
+                         "the walking heading for the retry push, then the stop again")
         self.assertEqual(rig.chain.locate_calls[1:3], [3, 3],
                          "the stop is verified against its OWN index")
         self.assertTrue(res["arrived"])
@@ -452,7 +454,7 @@ class IndexAdvance(unittest.TestCase):
         ch = FakeChain(4, [Fix(k=1)], default=Fix(k=1, inliers=9))
         ch.waypoints = wps
         rig = Rig(ch, table_at=None)
-        res = always_turning(rig.go, time_cap=8.05)
+        res = always_turning(rig.go, time_cap=14.05)   # each retry now also looks left and right
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual(acts[:5], ["advanced", "turn-retry", "turn-retry", "turn-retry", "turned-unverified"])
         self.assertEqual(chain_walk.TURN_RETRY_MAX, 3)
@@ -483,28 +485,55 @@ class IndexAdvance(unittest.TestCase):
         self.assertNotIn("turn-retry", acts)
         self.assertEqual(res["fixes"][1]["lateral"]["deg"], -25.0)
 
-    def test_a_stop_whose_frame_fits_nothing_is_occluded_not_short(self):
-        # Batch 4 trial 8: an NPC in the face. No fit at the stop -> no retry
-        # push; turn and go on.
+    def test_a_stop_whose_frame_fits_nothing_is_looked_around_then_retried(self):
+        # No fit at the stop and nothing on either side: no evidence of being
+        # past, so the retry pushes run (batch 5b trials 5-6 were short of the
+        # door with a junk fit and were wrongly read as "past").
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        # it2: head-on None, look left None, look right None -> occluded
-        ch = FakeChain(5, [Fix(k=1), None, None, None, Fix(k=3), Fix(k=4)], default=None)
+        # it2: head-on None, look left None, look right None -> retry push;
+        # it3: head-on credible -> turned
+        ch = FakeChain(5, [Fix(k=1), None, None, None, Fix(k=3, inliers=90), Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
-        rig = Rig(ch, table_at=7)
+        rig = Rig(ch, table_at=8)
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
-        self.assertEqual(acts[:2], ["advanced", "turned-occluded"])
-        self.assertNotIn("turn-retry", acts)
-        self.assertEqual(rig.count("push"), 3, "no retry push: 1 + 2 walking + the arrival push")
+        self.assertEqual(acts[:3], ["advanced", "turn-retry", "turned"])
+
+    def test_a_junk_fit_at_a_later_waypoint_is_not_evidence_of_being_past(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        # head-on a 9-inlier fit at 4 (junk), looks None -> retry, then credible
+        ch = FakeChain(5, [Fix(k=1), Fix(k=4, inliers=9), None, None, Fix(k=3, inliers=90), Fix(k=3), Fix(k=4)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=8)
+        res = rig.go()
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[1], "turn-retry")
+
+    def test_after_an_unverified_turn_blind_pushes_are_capped_at_two(self):
+        wps = [Wp(0, 90.0)]
+        for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0)] + [(0.0, -0.35)] * 12, start=1):
+            w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
+        ch = FakeChain(15, [Fix(k=1)], default=None)
+        ch.waypoints = wps
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=24.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[1:4], ["turn-retry"] * 3)
+        self.assertEqual(acts[4], "turned-unverified")
+        self.assertEqual(acts[5:7], ["blind-advance"] * 2)
+        self.assertEqual(acts[7], "miss", "an unverified turn allows two blind pushes, not six")
 
     def test_a_stop_whose_frame_fits_a_later_waypoint_is_passed_not_short(self):
         wps = [Wp(0, 90.0)]
         for i, (h, ly) in enumerate([(90.0, -0.35), (0.0, 0.0), (0.0, -0.35), (0.0, -0.35)], start=1):
             w = Wp(i, h); w.lx = 0.0; w.ly = ly; wps.append(w)
-        # it2: head-on a junk fit at the stop's own index, looks None, None
-        ch = FakeChain(5, [Fix(k=1), Fix(k=3, inliers=9), None, None, Fix(k=3), Fix(k=4)], default=None)
+        # it2: head-on a THIN but real fit (20 inliers, over WEAK_MIN 15 and
+        # under FIX_MIN 29) at a LATER waypoint: evidence of being past
+        ch = FakeChain(5, [Fix(k=1), Fix(k=4, inliers=20), Fix(k=3), Fix(k=4)], default=None)
         ch.waypoints = wps
         rig = Rig(ch, table_at=7)
         res = rig.go()
@@ -554,6 +583,30 @@ class IndexAdvance(unittest.TestCase):
         self.assertEqual(acts[:2], ["advanced", "relocalised"])
         self.assertEqual([f["k"] for f in res["fixes"]][1], 9)
         self.assertNotIn("turn-retry", acts)
+
+    def test_a_credible_fit_behind_the_target_with_a_large_scale_advances(self):
+        self.assertEqual(chain_walk.PAST_SCALE, 1.6)
+        # fix says k=0 but the scene is 2.1x larger than in frame 0: past it.
+        ch = FakeChain(8, [Fix(k=0, scale=2.1, inliers=90), Fix(k=1, scale=2.4, inliers=80),
+                           Fix(k=2, scale=1.2, inliers=80)], default=None)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=3.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts, ["advanced-past", "advanced-past", "stalled"])
+        self.assertEqual([f["k"] for f in res["fixes"]], [1, 2, 2])
+
+    def test_blind_pushes_are_capped_at_two_in_the_last_targets(self):
+        self.assertEqual((chain_walk.END_TAIL_TARGETS, chain_walk.END_BLIND_MAX), (6, 2))
+        # k starts at 10 of a 12-waypoint chain via credible fixes, then the
+        # sensor goes blind: only two blind pushes, then misses.
+        fixes = [Fix(k=i) for i in range(1, 6)]
+        ch = FakeChain(12, fixes, default=None)
+        rig = Rig(ch, table_at=None)
+        res = always_turning(rig.go, time_cap=12.05)
+        acts = [f["action"] for f in res["fixes"]]
+        self.assertEqual(acts[:5], ["advanced"] * 5)
+        self.assertEqual(acts[5:7], ["blind-advance"] * 2)
+        self.assertEqual(acts[7], "miss", "the third blind push inside the tail is refused")
 
     def test_a_miss_looks_back_and_k_may_regress(self):
         # k is at 6 (advanced legitimately), then the forward window finds
@@ -611,7 +664,7 @@ class Escapes(unittest.TestCase):
 
     def test_misses_escape_after_MISS_MAX(self):
         self.assertEqual(chain_walk.MISS_MAX, 3)
-        rig = Rig(FakeChain(12, default=None), table_at=None)   # no prompt: the walk ends LOST
+        rig = Rig(FakeChain(30, default=None), table_at=None)   # clear of the tail cap   # no prompt: the walk ends LOST
         res = rig.go()
         acts = [f["action"] for f in res["fixes"]]
         self.assertEqual([i for i, a in enumerate(acts, 1)
@@ -810,7 +863,7 @@ class ConsecutiveCounters(unittest.TestCase):
         # is READ, so the two misses before it never sum with anything after:
         # a credible fix also restores the blind budget.
         self.assertEqual(chain_walk.BLIND_MAX, 6)
-        rig = Rig(FakeChain(12, [None] * 15 + [Fix(k=6, scale=0.5)]),   # wide searches never consume the script
+        rig = Rig(FakeChain(30, [None] * 15 + [Fix(k=6, scale=0.5)]),   # 30: clear of the six-target tail cap   # wide searches never consume the script
                   table_at=None)
         res = always_turning(rig.go, time_cap=11.05)         # exactly eleven 1.0s iterations
         self.assertEqual([f["action"] for f in res["fixes"]],
