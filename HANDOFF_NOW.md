@@ -32,6 +32,13 @@ The loop for the night, in order, repeated:
    commands beside the frames): one agent ranks tonight's arrivals by walk time, tables the five fastest against
    the five slowest by region and by stop, and proposes at most three controller changes;
    `agent_progress/closed-loop/fast_runs/notes.md`. Usage at 23:58: 5-hour 39% (resets 02:02), weekly 42%.
+   (e) STOPS: A LOOK THAT FITS WITH A LARGE dx IS A HEADING ERROR, NOT A PUSH SHORTFALL (ab4 trial 6 reader,
+   `agent_progress/closed-loop/review/notes_ab4_t06.md`): at the 166 stop the looks fit with dx +518, +648,
+   +704, +810 while three retry pushes were spent, the stop was accepted "turned-unverified" at 12 inliers,
+   and the walk then headed north into a dartboard alcove the chain never faces, wedged there and was lost.
+   The same shape as the end-turn rule, at every stop: when the best look fits with |dx| > END_TURN_PX, turn
+   toward the scene (dx / px-per-degree, capped) and re-verify instead of retrying pushes or accepting.
+   Candidate after (a); build only with the end-turn machinery already in.
 3b. EVERY RUN TEACHES SOMETHING (the user, 00:05: "if a run is faster than the current fast one, figure out
    why and see if you can incorporate those changes. ideally every run should teach you something new"): the
    evening's fastest walks are EARLY builds — batch 5e trial 4 67.9 s, 5e t5 72.9, batch 4 t3 74.2, batch 5 t1
