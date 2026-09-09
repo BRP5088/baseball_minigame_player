@@ -252,6 +252,25 @@ for c in lift:
           anchor_only_score(img, c["slot"]) < local_hand.MIN_TYPE_SCORE,
           f"anchor scores {anchor_only_score(img, c['slot']):.3f}")
 
+# ---- 8. THE FALLBACK BRANCH MUST FILL adds_power TOO -------------------------------
+# A slot no candidate reached still emits a tactics row, and that branch used to set
+# `type` and leave `adds_power` unset. So a row whose TYPE was known still reported the
+# EASIER question as "ask the paid model", and over the corpus the binary abstained on
+# 7.6% of rows against the 4-way's 5.9% -- the wrong way round by construction, and
+# invisible because both numbers looked plausible on their own.
+# lifted0.png reaches this branch (its row carries the PLAYER anchor as x, which is how
+# the branch is identifiable from outside).
+fb = Image.open(os.path.join(LIFT, "lifted0.png")).convert("RGB")
+fb_rows = local_hand.read_hand(fb)
+fb_tac = [r for r in fb_rows if r["kind"] == "tactics"]
+check("the fallback branch emits a tactics row at all", bool(fb_tac))
+check("and every tactics row carries adds_power, not just type",
+      all("adds_power" in r for r in fb_tac),
+      str([sorted(r) for r in fb_tac]))
+check("the binary is never unsure where the 4-way name is known",
+      all(not (r.get("type") is not None and r.get("adds_power") is None) for r in fb_tac),
+      str([(r.get("type"), r.get("adds_power")) for r in fb_tac]))
+
 for slot in range(5):
     ap, sc = local_hand.reads_adds_power(noise, slot)
     check(f"noise abstains on adds_power at slot {slot}", ap is None, f"{ap!r} @{sc:.3f}")

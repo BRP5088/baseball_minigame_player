@@ -621,8 +621,14 @@ def _read_fan(img, strong):
             # A slot no candidate reached. It is emitted anyway -- when the fan fits the
             # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
             t, ts = read_tactics_type(img, i)
+            # AND THE BINARY, which this branch used to leave unset -- so a row whose
+            # TYPE was known still reported adds_power as "ask the paid model". It made
+            # the easier question abstain MORE often than the harder one (7.6% against
+            # 5.9% over the corpus), which is the wrong way round by construction.
+            ap, aps = reads_adds_power(img, i)
             out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
                         "score": 0.0, "type": t, "type_score": round(ts, 3),
+                        "adds_power": ap, "adds_power_score": round(aps, 3),
                         "y": int(SLOT_PLAYER[i][1] * s)})
             continue
         _, x, kind, circle, cy = best[i]
