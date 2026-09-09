@@ -97,7 +97,9 @@ RFIX = os.path.join(_ROOT, "test_fixtures", "runners")
 rtruth = json.load(open(os.path.join(RFIX, "truth.json")))
 occ_right = occ_wrong = occ_abst = 0
 for c in rtruth["crops"]:
-    b = ls.read_base(Image.open(os.path.join(RFIX, c["file"])).convert("RGB"))
+    # read_base takes the BASE NAME now: the adopted reader has per-base coin templates
+    # and per-base geometry, so it cannot infer which base a crop came from.
+    b = ls.read_base(Image.open(os.path.join(RFIX, c["file"])).convert("RGB"), c["base"])
     if b["occupied"] is None:
         occ_abst += 1
     elif b["occupied"] == c["occupied"]:

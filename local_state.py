@@ -27,8 +27,10 @@ WHY EACH ABSTAINS, in its own terms:
 STILL NEEDING THE PAID MODEL: the SCREEN type, result_won, the ban-screen collection, and
 batters_used.
 """
+import base64
 import os
 
+import cv2
 import numpy as np
 import scipy.ndimage as _ndi
 from PIL import Image
@@ -270,131 +272,256 @@ def read_phase(img, bank=None):
 # --------------------------------------------------------------------------------------
 # THE RUNNERS READER (is there a card on this base)
 # --------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------
-# THE RUNNERS READER. Belongs beside local_hand.read_tactics_type; same shape, same rule --
-# it ABSTAINS rather than guess, because its answer picks the card played in a $50 match.
+# --------------------------------------------------------------------------------------
+# THE RUNNERS READER -- rebuilt 2026-09-09 after an independent skeptic refuted the first
+# one. It answers ONE question per base: is a player card standing on it.
 #
-# THE PREMISE IS THE USER'S AND IT IS CORRECT: a card sitting on a base carries the SAME
-# white power disc as a card in hand, so "is there a runner here" is a DISC-DETECTION
-# question, not an OCR-a-name question. Checked against the frames: an EMPTY base is a dark
-# round coin medallion in its socket; an OCCUPIED one is a face-up player card with the
-# power disc at its top-right.
+# THE PREMISE IS THE USER'S AND IT IS CORRECT: a card on a base carries the SAME white
+# power disc as a card in hand, so "is there a runner here" is a DISC question, not an
+# OCR-a-name question. WHAT THE FIRST VERSION GOT WRONG is the other half: it treated
+# "I found no disc" as EVIDENCE OF AN EMPTY BASE and returned a confident False, with
+# nothing behind that branch at all. Measured on 600 frames sampled at random from
+# overnight/runs/*/stream.mp4 (agent_progress/runners-fix/, 32_videoneg.py): on
+# 233 of 1800 base regions -- a ban screen, a reveal, a cutscene, a black frame, an NPC
+# filling the shot -- the old reader answered "no runner on this base".
 #
-# MEASURED over 183 base crops (61 turns x 3 bases) from overnight/local_hand/, every crop
-# adjudicated BY EYE from a contact sheet: 15 occupied, 168 empty.
+# SO THERE ARE TWO DETECTORS NOW AND THEY MUST AGREE.
 #
-#   THE TWO POPULATIONS, brightness            THE TWO POPULATIONS, the blob's own width
-#     occupied crops, max grey   255 (15/15)     the power disc          26 - 28  (n=15)
-#     empty crops,    max grey   157 - 211       the empty medallion     31 - 34  at 2nd base
-#       (only 13 of 168 reach 210, and 6 of      the OPPONENT'S TURN     59 - 71
-#        those are the OPPONENT'S TURN banner      banner letters
-#        at 255 -- excluded by SIZE, not          the card back's toe    28 - 34
-#        brightness)                               ovals (a card flying in)
+#   A CARD IS HERE   a white blob of the power disc's size, with a dark mark inside.
+#   THE BASE IS BARE an empty base is a dark embossed COIN in a socket, in the same place
+#                    in every frame; matched against a 16x16 template of it.
 #
-#   fill (white area / bbox)      the disc 0.512 - 0.737    everything else at disc size
-#                                                           0.211 - 0.235
-#   ink (largest dark part inside) the disc 17 - 100 px     everything else 0 - 6 px
+# occupied when the disc is seen and the coin is not; empty when the coin is seen and the
+# disc is not; NOT READ when they contradict each other or when neither fires -- which is
+# what a card flying across the base, or a screen that is not the board at all, looks
+# like. None is never "no runner". The caller asks the paid model.
 #
-# The SECONDARY cannot be mistaken for the power: the shield is WHITE-ON-DARK (a thin white
-# annulus, fill 0.10-0.15) while the power disc is filled white with the digit punched out.
-# local_hand's own docstring records the same inversion for hand cards.
-DISC_WHITE = 210
-DISC_W = (23, 31)
-DISC_H = (11, 31)
-DISC_FILL = 0.45
-DISC_INK = 15
-DARK = 110
+# MEASURED over 1080 base crops (360 turns x 3 bases) from overnight/local_hand/, every
+# crop adjudicated BY EYE off contact sheets (agent_progress/runners-fix/progress.md):
+#
+#                                        n     CORRECT   WRONG   ABSTAINED
+#     a player card on the base         143       143       0        0
+#     the bare coin                     929       929       0        0
+#     a card back flying across it        8         2       0        6
+#
+#   HELD OUT -- the coin templates are built from the empty crops of the FIRST 100 turns
+#   only, so rows 100-359 never touched them: 124/124 occupied, 649/649 bare, 1/7 of the
+#   card-back crops answered, ZERO wrong. 1.03 ms for all three bases.
+#
+#   Against the PAID MODEL over the same 360 turns the runner COUNT agrees 345, differs 9,
+#   abstains 6 -- and ALL NINE DIFFERENCES ARE THE PAID MODEL'S ERROR, adjudicated by eye
+#   (it misses a second-base runner in seven turns and invents one in two, once naming it
+#   "Runner" and once "second_base_runner"). Agreement with it is not the target.
+#
+# THE TWO POPULATIONS BEHIND EVERY CONSTANT (all 1080 crops; the sweep is 34_ablate.py,
+# which moves one constant at a time and re-scores end to end):
+#
+#   BASE_COIN_MIN     the coin visible in its socket   n=931   min 0.9175  p05 0.9803
+#                     a card back across the coin      n=  6   max 0.6876
+#                     a player card on the base        n=143   max 0.3888
+#                     0.70 .. 0.90 all give the same answer on all 1080; 0.95 costs 11
+#                     bare crops, 0.60 starts answering crops whose coin is half covered.
+#
+#   BASE_DISC_H       the disc AS THE CROP PRESENTS IT   n=143   12 .. 27
+#                       (measured by POSITION -- the blob in the disc's own place on
+#                        the card -- so the population is not defined by this gate)
+#                       (26-27 at second base; 12-23 at first and third, where the crop
+#                        box CUTS it -- see the note on GAMEPLAY_REGIONS_FRAC below)
+#                     every other blob of disc width on a base with no card on it
+#                                                        n=  6   6, 6, 62, 62, 62, 62
+#                                                        (a sliver at the crop's bottom
+#                                                         edge; the OPPONENT'S TURN banner)
+#                     7 .. 12 all identical; 13 loses 8 real cards, 6 costs 2 bare crops,
+#                     62 lets the banner letter in. 9 and 40 are the middles of those runs.
+#                     THE OLD (11, 31) SAT ONE STEP FROM THE EDGE: 12 is the last floor
+#                     that reads every card, and its own lowest disc is 12 px tall.
+#
+#   BASE_DISC_W       the disc          n=143   26 .. 29
+#                     everything else that passes fill+ink   19 (h 9), 23 (h 6), 25 (h 6),
+#                                                            then 43 .. 71 (banner letters)
+#                     20 .. 26 identical; 27 loses 83 cards, 18 costs a bare crop.
+#
+#   BASE_DISC_WHITE   200 .. 220 identical. 190 puts a CARD BACK's white rabbit head
+#                     through the size gate and answers "occupied" on it (1 wrong at 190,
+#                     4 at 170). 230 loses a card. This one is load-bearing.
+#
+#   BASE_DISC_FILL, BASE_DISC_INK, BASE_DARK are REDUNDANT on this corpus: 0.45 -> 0.0,
+#   15 -> 0, and both together, change no answer among 1080. They are shape insurance
+#   against art these 360 turns do not contain, and they are not evidence. Say so rather
+#   than credit them.
+#
+# SCALE. Every constant is in the units of the crop's own width and scaled by it, so the
+# reader does not assume 1920x1080. Resampling all 1080 crops to 0.75x, 0.90x, 0.972x
+# (= a 1867-wide capture) and 1.10x costs exactly ONE occupied crop, turned into an
+# abstention, and produces no wrong answer at any scale (35_scale.py). That is a
+# resampling test, NOT a real capture at another geometry -- none exists on disk.
+#
+# THE CROP BOXES ARE WRONG AND THIS READER WORKS AROUND THEM. Measured on full frames
+# recovered from the recorded video (13_discgeom.py): the power disc of a card on FIRST
+# base spans y 0.3056-0.3343 of the frame and on THIRD 0.3102-0.3380, while
+# orchestrator.GAMEPLAY_REGIONS_FRAC starts both crops at y0 = 0.320 -- so the crop cuts
+# the disc in half, 88 of 143 discs arrive clipped, and BASE_DISC_H's floor has to reach
+# down to 12 to see them. second_base (y0 = 0.080) is whole and its discs are 26-27.
+# Re-cutting those two crops from the video at y0 = 0.295 makes the disc WHOLE on 26 of
+# 26 re-cuts and reads its POWER on 18 of 22 first-base cards, against 0 of 88 today
+# (37_boxfix.py). It is a separate change: it moves what the PAID model sees, invalidates
+# every constant here that is measured in crop pixels, and needs its own collection pass.
+BASE_ANCHOR_W = {"third": 221.0, "second": 288.0, "first": 220.0}
+BASE_DISC_WHITE = 210
+BASE_DISC_W = (22.0, 36.0)
+BASE_DISC_H = (9.0, 40.0)
+BASE_DISC_FILL = 0.45
+BASE_DISC_INK = 15.0
+BASE_DARK = 110
+# The coin's own box inside each crop, and its 16x16 template: the mean of every bare crop
+# in the first 100 sampled turns, so turns 100-359 are held out. Rebuild with
+# agent_progress/runners-fix/build_templates.py -- it is deterministic.
+BASE_COIN_BOX = {"third": (64.0, 37.0, 140.0, 116.0),
+                 "first": (94.0, 44.0, 174.0, 122.0),
+                 "second": (86.0, 76.0, 166.0, 150.0)}
+BASE_COIN_N = 16
+BASE_COIN_MIN = 0.80
+BASE_COINS_B64 = (
+    "XFRJQDk0MzU8QEZRYGtxcE1BMykjJjlMWFpYVlZfbHA7MCYeNGJgT0dGT11kYGFtLiQcPHJR"
+    "QE9FQEs5QVxlaCceLnVRO2xlTHVxSDM8XWYjHFxhO057ZmqAbFI3OUNeISNxRkJgfYB6c11T"
+    "Qjs5Uh0ubkJHbXJxdWVhW1NEP0kcMG1ESVdxY3BmVV1KQT1IHixtSkVIX1+AcFlUQDk7SCMc"
+    "Y1ZBT3BvfHNbVUM8OlcuFkhpSV18ZVtdT1k9PEFvOiIlZWRQW1dkWkVHPTtjdUs8JTVkaVdE"
+    "Q0dEQ05reF1dUEAsN1hsbmZhZm91bVtoYmFaTz03QlFaYF1ZV1lsdjMjGBk4XFRIT0lTYj4d"
+    "IzEyIBhDWjhBXEo5NT5oSSItMh83XjhAU3hSM0I8PnY7KTAiW0NOYE9uZF1sUDpNayQtMFg9"
+    "Q1hthGBlbYpDN20xLUFMP0RKdYp9d36Ehz9cRDJJTEBWWGRucX+GfHFsWFA5Sk9EO2RXW2lz"
+    "j2BeYVtaQkhVRzk9VGRgZ4mBT0lfUUxEYkNEN0FfamJ4hUQ+aUZVQGdPNkhCQTo9U08yT21A"
+    "WkpWb0YvOzw5Mi4wR3BZSl1YRWNyWT0zMC83VW9mQ1ljX1RIY3RzbWhsdHZlR1RcZmZhVUdQ"
+    "XmptaFxSRlVgZFlmY2FcT0dGRkhJUFxjZWx0dXVxamFXWltbRicpMTc8e3RxZkU7WE9GQGBc"
+    "JygvN3hxYEJJUXdXOj08W1ojKDRvakdUYVNvZk1aQzxpQiIxcFNIRll2gllvcGs4SmMhLXFN"
+    "S1laeop1c36HUTxqJiduUEdmXHBxdoOJcn89ZysjblBKVW5oZW6EgVx8TWguJHJRUkBIXWRg"
+    "f4pVY1JnKih0XEdRTFtoYHWGV0RYXSQva3pJRE9HQkZZXEJHaEMmN1p7eEpBREVBP0FOaVwq"
+    "MEhsWHqBaVZJSE5ga2I5O09demhTYXR7eHJybFpETV9maX97cF1QT1NRTElQZm5ucW+Bf3x5"
+    "dGliYGNsdHV1dXd0"
+)
+BASE_COIN_ORDER = ("third", "second", "first")
 
-# THE GATE THAT DOES THE WORK: the digit must be ENCLOSED by its disc -- its ink may not
-# reach the blob's own bounding box on a side that is not the image border (the border
-# exemption is what lets a disc the crop box has CLIPPED still count).
-#
-# MEASURED, 26_mutants.py / 27_ablate.py, on all 183 crops:
-#     shipped                       14 hit / 0 wrong / 1 abstain | 0 false positives
-#     ENCLOSE off, DISC_WHITE 210   15 hit / 0 wrong / 0 abstain | 0 false positives
-#     ENCLOSE off, DISC_WHITE 190   15 hit                       | 5 FALSE POSITIVES
-#     ENCLOSE off, DISC_WHITE 185   15 hit                       | 12 FALSE POSITIVES
-#     size window off, ENCLOSE on   15 hit                       | 3 FALSE POSITIVES
-# So ENCLOSE costs ONE detection (turned into an abstention, not a wrong answer) and buys
-# a DISC_WHITE that can move from 170 to 220 without changing any answer. DISC_FILL and
-# DISC_INK are REDUNDANT on this corpus -- removing either changes nothing -- and are kept
-# only as insurance against shapes 183 crops do not contain. Say so rather than credit them.
-ENCLOSE = True
+_base_coins = None
 
 
-def _disc_candidates(g):
-    """(enclosed, eligible) power-disc blobs in a greyscale base crop.
+def base_coins():
+    """{base: 16x16 float array}, the bare-coin templates, decoded once."""
+    global _base_coins
+    if _base_coins is None:
+        raw = np.frombuffer(base64.b64decode(BASE_COINS_B64), dtype=np.uint8)
+        n = BASE_COIN_N * BASE_COIN_N
+        _base_coins = {b: raw[k * n:(k + 1) * n].reshape(BASE_COIN_N, BASE_COIN_N)
+                       .astype(np.float32)
+                       for k, b in enumerate(BASE_COIN_ORDER)}
+    return _base_coins
 
-    `eligible` is the superset: disc-sized, disc-filled, with a dark mark inside.
-    `enclosed` are the ones whose dark mark does not run off the blob's own edge.
+
+def base_coin_score(img, base):
+    """Zero-mean normalised correlation of the coin's box against its template, or None.
+
+    None means the crop cannot hold the box at all -- a geometry this reader has no
+    anchor for. It is NOT a low score, and it must never be read as "no coin".
     """
-    import numpy as np
-    import scipy.ndimage as _ndi
+    t = base_coins().get(base)
+    if t is None:
+        return None
+    # SEARCH, DO NOT ANCHOR. BASE_COIN_BOX is still used -- for the coin's SIZE, which
+    # scales with the crop width -- but not for its POSITION, which does not survive a
+    # crop-box change. patch83 moved two boxes 0.030 of frame height and the anchored
+    # version died: third +0.995 -> -0.048, first +0.989 -> +0.008, while second (the box
+    # patch83 left alone) was unchanged. The searched version reads the same under both.
+    import cv2
+    g = np.asarray(img.convert("L"), dtype=np.float32)
+    s = img.width / BASE_ANCHOR_W[base]
+    x0, y0, x1, y1 = BASE_COIN_BOX[base]
+    side = int(round(max(x1 - x0, y1 - y0) * s))
+    if side < 8 or side > min(g.shape):
+        return None
+    tt = cv2.resize(t.astype(np.float32), (side, side), interpolation=cv2.INTER_LINEAR)
+    return float(cv2.matchTemplate(g, tt, cv2.TM_CCOEFF_NORMED).max())
+
+
+def base_discs(g, s):
+    """Every white blob in a base crop that is shaped like a card's POWER DISC.
+
+    `g` is the greyscale crop, `s` its width over this base's anchor width. A blob
+    qualifies on SIZE, on being solid, and on carrying a dark mark inside -- the digit.
+    The SECONDARY cannot be mistaken for it: the shield is a thin WHITE ANNULUS around a
+    dark interior (fill 0.10-0.15) while the power disc is filled white with the digit
+    punched out (fill 0.51-0.74), the same inversion local_hand records for hand cards.
+    """
+    out = []
     H, W = g.shape
-    lab, n = _ndi.label(g >= DISC_WHITE)
-    enclosed, eligible = [], []
+    lab, _ = _ndi.label(g >= BASE_DISC_WHITE)
     for k, sl in enumerate(_ndi.find_objects(lab), start=1):
         if sl is None:
             continue
         ys, xs = sl
         h, w = ys.stop - ys.start, xs.stop - xs.start
-        if not (DISC_W[0] <= w <= DISC_W[1] and DISC_H[0] <= h <= DISC_H[1]):
+        if not (BASE_DISC_W[0] * s <= w <= BASE_DISC_W[1] * s):
+            continue
+        if not (BASE_DISC_H[0] * s <= h <= BASE_DISC_H[1] * s):
             continue
         area = int((lab[sl] == k).sum())
-        fill = area / float(w * h)
-        if fill < DISC_FILL:
+        if area / float(w * h) < BASE_DISC_FILL:
             continue
-        sub = g[ys.start:ys.stop, xs.start:xs.stop] <= DARK
+        sub = g[ys.start:ys.stop, xs.start:xs.stop] <= BASE_DARK
         l2, n2 = _ndi.label(sub)
         if not n2:
             continue
-        sizes = _ndi.sum(sub, l2, range(1, n2 + 1))
-        j = int(np.argmax(sizes)) + 1
-        ink = int(sizes[j - 1])
-        if ink < DISC_INK:
+        ink = float(max(_ndi.sum(sub, l2, range(1, n2 + 1))))
+        if ink < BASE_DISC_INK * s * s:
             continue
-        cand = {"box": (int(xs.start), int(ys.start), int(xs.stop), int(ys.stop)),
-                "w": w, "h": h, "fill": round(fill, 3), "ink": ink,
-                "clipped": bool(ys.start == 0 or xs.start == 0
-                                or ys.stop >= H or xs.stop >= W)}
-        eligible.append(cand)
-        if ENCLOSE:
-            iy, ix = np.where(l2 == j)
-            if (iy.min() == 0 and ys.start != 0) or (iy.max() == h - 1 and ys.stop < H):
-                continue
-            if (ix.min() == 0 and xs.start != 0) or (ix.max() == w - 1 and xs.stop < W):
-                continue
-        enclosed.append(cand)
-    return enclosed, eligible
+        out.append({"box": (int(xs.start), int(ys.start), int(xs.stop), int(ys.stop)),
+                    "w": int(w), "h": int(h), "ink": int(ink),
+                    "clipped": bool(ys.start == 0 or xs.start == 0
+                                    or ys.stop >= H or xs.stop >= W)})
+    return out
 
 
-def read_base(img):
-    """Is a runner standing on this base, and what is his power.
+def read_base(img, base):
+    """Is a player card standing on this base, and what is its power.
 
+    `base` is "third", "second" or "first" -- the coin template and its box are per base.
     Returns {"occupied": True | False | None, "power": int | None, "score": float,
-             "clipped": bool}. `occupied` None and `power` None both mean NOT READ: the
-    caller asks the paid model. None is never "no runner" and never "power unknown".
+             "coin": float | None, "clipped": bool, "why": str}. `occupied` None and
+    `power` None both mean NOT READ: ask the paid model. None is never "no runner".
 
-    A base is OCCUPIED when a power disc is found. A blob that is disc-sized and
-    disc-filled but whose ink runs off its own edge is card art, a card back, or a disc the
-    crop box has cut too hard to recognise -- it ABSTAINS rather than decide either way.
+    THE ANSWER NEEDS BOTH DETECTORS TO AGREE. A disc and no coin is a card on the base.
+    A coin and no disc is a bare base. Both, or neither, is not an answer: neither is
+    what a card back sliding across the base looks like, and what a screen that is not
+    the board at all looks like -- and the old reader called that second case EMPTY.
 
     The POWER is read only from an UNCLIPPED disc, through local_hand.read_digit and its
-    template bank (cut from HAND crops in a different archive, so a base disc is held out
-    by construction), which abstains below local_hand.MIN_SCORE. A clipped disc is never
-    read: measured, every one scores 0.216-0.534 against a MIN_SCORE of 0.80, so it
-    abstains on its own -- but the check is explicit so a future template set cannot start
-    guessing at half a glyph.
+    template bank, which is cut from HAND crops in a different archive, so a base disc is
+    held out of it by construction. With today's crop boxes the first- and third-base
+    discs are always cut by the crop's top edge, so power comes back only from second
+    base -- 38 of its 55 occupied crops, and where correspondence with the paid model can
+    be PROVEN (exactly one runner labelled and exactly one base read occupied) it is
+    15 correct, 0 wrong, 63 abstained.
     """
-    import numpy as np
-    import local_hand
     g = np.asarray(img.convert("L"), dtype=np.uint8)
-    enclosed, eligible = _disc_candidates(g)
-    if not enclosed:
-        return {"occupied": None if eligible else False,
-                "power": None, "score": 0.0, "clipped": False}
-    disc = max(enclosed, key=lambda d: d["ink"])
-    out = {"occupied": True, "power": None, "score": 0.0, "clipped": disc["clipped"]}
+    s = img.width / BASE_ANCHOR_W[base]
+    coin = base_coin_score(img, base)
+    out = {"occupied": None, "power": None, "score": 0.0, "coin": coin,
+           "clipped": False, "why": ""}
+    if coin is None:
+        out["why"] = "no coin box fits this crop"
+        return out
+    discs = base_discs(g, s)
+    disc_seen = bool(discs)
+    coin_seen = coin >= BASE_COIN_MIN
+    if disc_seen == coin_seen:
+        out["why"] = ("a disc AND the coin" if disc_seen
+                      else f"neither a disc nor the coin (coin {coin:.3f})")
+        return out
+    if coin_seen:
+        out["occupied"] = False
+        out["why"] = f"the bare coin ({coin:.3f})"
+        return out
+    out["occupied"] = True
+    out["why"] = f"a power disc, and no coin ({coin:.3f})"
+    disc = max(discs, key=lambda d: d["ink"])
+    out["clipped"] = disc["clipped"]
     if disc["clipped"]:
         return out
     circle = local_hand._digit_in_disc(g, disc["box"])
@@ -412,14 +539,15 @@ def read_runners(third_img, second_img, first_img):
 
     `count` is None when any base abstained: a count with a hole in it is a WRONG count,
     not a partial one. decision_engine reads state.runners only through
-    `len(state.runners) > 0` (line 182) and `state.runners` truthiness (line 104), so the
-    count is the whole of what it consumes. orchestrator.exclude_runners matches the reveal
-    by roster NAME, which a disc reader cannot supply -- see the report.
+    `len(state.runners) > 0` and its truthiness, and best_pitching_play only asks whether
+    runners are on, so the count is the whole of what those consume.
+    orchestrator.exclude_runners is the one caller that needs more: it matches the reveal
+    by roster NAME, and a disc reader cannot supply a name. THIS READER CANNOT FEED IT.
     """
-    bases = {"third": read_base(third_img), "second": read_base(second_img),
-             "first": read_base(first_img)}
+    bases = {"third": read_base(third_img, "third"),
+             "second": read_base(second_img, "second"),
+             "first": read_base(first_img, "first")}
     vals = [b["occupied"] for b in bases.values()]
     count = None if any(v is None for v in vals) else sum(1 for v in vals if v)
     return {"bases": bases, "count": count}
-
 
