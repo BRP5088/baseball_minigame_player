@@ -38,6 +38,14 @@
 - **patch63 LANDED (2f133e7):** the post-play read waits for the DEAL at HAND_DEAL_THRESHOLD 25.0
   (between 15.44 and 31.83), floor 6.0 s, cap 35, ON by default (BASEBALL_DEAL_WAIT=0 off); 6 mutants
   caught. Pre-registered live acceptance in the patch docstring. NOT yet measured live.
+- **THE DUMP IS NOW EVERY FRAME (bf0ceb9, 22:20):** the stream is 60 fps; the writer's throttle
+  (FRAME_DUMP_MIN_INTERVAL_MS) went 50 -> 0 after measuring 16 fps delivered / 44 skipped at 50 and
+  51 / 8 at 10. Now 60.0 delivered, 0 skipped, push_us ~330 (2% of the frame thread). The rebuilt
+  chiaki is installed and running (restart_chiaki.sh). `tools/record_stream.py <dir> [sec]` records
+  the dump to stream.mp4 (h264_videotoolbox, ~42 MB/min) + frames.jsonl (i, seq, t, mono_ns) -- the
+  source of truth for frame-by-frame review; analysis is meant to run on Snoopy (unreachable at
+  22:20: ssh timed out). The C++ throttle checks were restructured (push back to back, measured
+  bound, know the value 0); both C++ suites green.
 - **IN BUILD (workflows):** patch60 reveal watcher (20 Hz thread on the dump records each reveal
   episode; the loop reads the peak frame -- makes the timing irrelevant); patch59 escape by region;
   the OCR timing study (`agent_progress/ocr-timing/TIMING_REPORT.md`). Then F1 (discard ledger)
