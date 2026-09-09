@@ -1699,6 +1699,61 @@ that alignment.** Require an independent agreement â€” here, the kind pattern â€
 and report how many samples were excluded, never just the rate.
 
 
+**23. A READER THAT CROPS AT A FIXED ANCHOR IS READING THE WRONG PIXELS THE MOMENT
+THE THING MOVES -- AND IT REPORTS THAT AS "I AM NOT SURE".** 2026-09-09: two
+readers, built months apart, were held at 0% and 40% by the same defect, and in
+both cases the abstention rate read as "the recogniser is weak" when the
+recogniser was never shown the object.
+
+    reader          what it cropped at        coverage before -> after
+    the shield      a fixed offset below      0%    -> 98.4%   cross-session
+                    the power disc
+    tactics type    the SLOT anchor, in a     40.5% -> 93.6%   cross-session
+                    180px-wide box
+
+The shield's offset varies because **the cursor lifts a card and the badge rides
+with it**, so a window measured on unlifted cards found the badge on 8% of one
+digit. The tactics banner's box was wide enough to reach past the card and take
+in the NEIGHBOUR's banner, so the correlation was matching two cards at once and
+collapsed whenever the neighbour differed.
+
+**THE FIX IS THE SAME ONE THAT RESCUED THE RUNNERS READER: SEARCH FOR THE ASSET.**
+These are sprites -- one badge, one banner, identical every time -- so
+`cv2.matchTemplate` over a generous window answers "is it there" and "which one"
+at once, with no assumption about where it sits. The gate then sits between two
+measured populations: the shield's peak correlation is p05 0.843 on shielded
+cards against p99 0.541 on unshielded, an empty band, and SHIELD_MIN is its
+midpoint.
+
+**HOW TO RECOGNISE IT WITHOUT GUESSING.** Build a contact sheet of the cards the
+reader called unsure and LOOK. The tactics one was settled in a single glance:
+the banner text was PLAINLY LEGIBLE in nearly every "unsure" card, sitting off to
+one side with a stranger's banner beside it. A recogniser that cannot read
+legible text is not failing to recognise; it is being handed the wrong crop.
+Section 10.15 in a new place -- and the cheapest diagnostic on this project.
+
+**AND MEASURE THE OFFSET FROM WHAT WAS FOUND, NOT FROM THE ANCHOR.** The first
+shield measurement put dy at 48-68px with a 20px spread and looked like a fixed
+asset; it was measured against the SLOT anchor, so it was reporting the cursor
+lift as if it were sprite variance. `read_hand` rows now carry the found `y`
+alongside `x` for exactly this reason.
+
+**THE PAID MODEL IS NOT GROUND TRUTH HERE, AND THE CONTROL SAYS SO.** Nine of the
+ten remaining shield disagreements are cards with NO BADGE AT ALL that the paid
+model gave a number to. The mechanism is measured, not asserted: on the 684 cards
+where the badge IS found, the claimed `secondary` equals the card's own POWER
+**0 times**; on the 20 where it is not, **5 times**. It is reading the card frame.
+That is the sixth independent way this model has been shown wrong (three 6s as
+5s, discards 0/8, a Fielding Play bonus, four phase labels, a runner's name).
+
+**A TEST FOR THIS DOES NOT BITE BY DEFAULT.** Removing the tactics recentring left
+every check in its test file green, because the fixtures all sat near their
+anchors. It needed fixtures chosen for how far OFF the anchor they sit -- 43px in
+y, 63px in x -- and the "the anchor alone cannot read it" half scored at the
+anchor DIRECTLY, because the reader's own fallback tries both anchors and would
+have masked it.
+
+
 
 ---
 

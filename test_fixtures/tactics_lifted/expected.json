@@ -1,0 +1,49 @@
+{
+ "note": "tactics cards sitting well off their slot anchor -- the crop must recentre on the FOUND card or these abstain",
+ "cards": [
+  {
+   "file": "lifted0.png",
+   "src": "hand_1788956926229983000.png",
+   "slot": 0,
+   "type": "fielding_boost",
+   "offset_from_anchor": [
+    63.0,
+    1.0
+   ],
+   "anchor_score": 0.083
+  },
+  {
+   "file": "lifted1.png",
+   "src": "hand_1788956747352983000.png",
+   "slot": 3,
+   "type": "pitch_boost",
+   "offset_from_anchor": [
+    2.0,
+    -43.0
+   ],
+   "anchor_score": 0.14
+  },
+  {
+   "file": "lifted2.png",
+   "src": "hand_1788963216991462000.png",
+   "slot": 1,
+   "type": "pitch_boost",
+   "offset_from_anchor": [
+    -3.4,
+    -42.5
+   ],
+   "anchor_score": 0.221
+  },
+  {
+   "file": "lifted3.png",
+   "src": "hand_1788955975096535000.png",
+   "slot": 2,
+   "type": "swing_boost",
+   "offset_from_anchor": [
+    -17.0,
+    0.0
+   ],
+   "anchor_score": 0.747
+  }
+ ]
+}

@@ -1,0 +1,183 @@
+{
+ "note": "secondary pinned where the paid model and the local reader agree independently",
+ "hands": [
+  {
+   "file": "hand00.png",
+   "src": "hand_1788955553936007000.png",
+   "cards": [
+    {
+     "slot": 1,
+     "secondary": 3
+    },
+    {
+     "slot": 2,
+     "secondary": 3
+    },
+    {
+     "slot": 3,
+     "secondary": 3
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand01.png",
+   "src": "hand_1788955567890717000.png",
+   "cards": [
+    {
+     "slot": 2,
+     "secondary": 3
+    },
+    {
+     "slot": 3,
+     "secondary": 3
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand02.png",
+   "src": "hand_1788955581850910000.png",
+   "cards": [
+    {
+     "slot": 2,
+     "secondary": 3
+    },
+    {
+     "slot": 3,
+     "secondary": 3
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand03.png",
+   "src": "hand_1788955598743132000.png",
+   "cards": [
+    {
+     "slot": 2,
+     "secondary": 3
+    },
+    {
+     "slot": 3,
+     "secondary": 2
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand04.png",
+   "src": "hand_1788955618863708000.png",
+   "cards": [
+    {
+     "slot": 2,
+     "secondary": 1
+    },
+    {
+     "slot": 3,
+     "secondary": 2
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand05.png",
+   "src": "hand_1788955642900557000.png",
+   "cards": [
+    {
+     "slot": 1,
+     "secondary": 1
+    },
+    {
+     "slot": 2,
+     "secondary": 2
+    },
+    {
+     "slot": 3,
+     "secondary": 2
+    },
+    {
+     "slot": 4,
+     "secondary": 3
+    }
+   ]
+  },
+  {
+   "file": "hand06.png",
+   "src": "hand_1788955734010681000.png",
+   "cards": [
+    {
+     "slot": 1,
+     "secondary": 0
+    },
+    {
+     "slot": 2,
+     "secondary": 0
+    },
+    {
+     "slot": 3,
+     "secondary": 0
+    },
+    {
+     "slot": 4,
+     "secondary": 1
+    }
+   ]
+  },
+  {
+   "file": "hand07.png",
+   "src": "hand_1788955767356569000.png",
+   "cards": [
+    {
+     "slot": 1,
+     "secondary": 0
+    },
+    {
+     "slot": 2,
+     "secondary": 0
+    },
+    {
+     "slot": 3,
+     "secondary": 1
+    },
+    {
+     "slot": 4,
+     "secondary": 1
+    }
+   ]
+  },
+  {
+   "file": "hand08.png",
+   "src": "hand_1788955782360671000.png",
+   "cards": [
+    {
+     "slot": 1,
+     "secondary": 0
+    },
+    {
+     "slot": 2,
+     "secondary": 0
+    },
+    {
+     "slot": 3,
+     "secondary": 1
+    }
+   ]
+  }
+ ]
+}

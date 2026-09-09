@@ -324,11 +324,45 @@ def _strong_discs(img):
 # The MARGIN over the runner-up type does NOT separate (right p05 0.112 against wrong max
 # 0.203) and is not used -- measured and dropped, per CLAUDE.md 10.4.
 TACTICS_TEMPLATES = os.path.join(_HERE, "tactics_templates.npz")
-MIN_TYPE_SCORE = 0.88
+# RE-MEASURED after the box was narrowed and the crop recentred on the found card.
+# Cross-session (templates from the early half of the corpus, tested on the late half,
+# 173 cards) the two populations are:
+#
+#     RIGHT (n=172)   p01 0.714   p05 0.830   p50 0.969
+#     WRONG (n=1)     the single wrong answer in the whole test set scores 0.766
+#
+# They overlap in the tail, so this is a SAFETY TRADE and not a gap (CLAUDE.md 10.4):
+#
+#     gate 0.80   coverage 97.7%   0 wrong   margin over the worst wrong +0.034
+#     gate 0.85   coverage 93.6%   0 wrong   margin +0.084          <- shipped
+#     gate 0.88   coverage 87.3%   0 wrong   margin +0.114
+#
+# 0.85 keeps the ~8% margin this reader's previous gate was chosen for, at more than
+# twice the coverage. The old value was 0.88 against a 180px box and read 40.5%.
+MIN_TYPE_SCORE = 0.85
 # The banner's box relative to the slot's TACTICS anchor, in the 979-wide crop the anchors
 # were measured in, and scaled with them.
-BANNER_BOX = (-50, 18, 130, 70)
-BANNER_SIZE = (64, 20)
+# THE BOX WAS 180px WIDE AND THAT WAS THE WHOLE PROBLEM. At 180 it reaches past the
+# card and takes in the NEIGHBOUR's banner ("BATTER"), so the correlation was being
+# asked to match two cards at once and collapsed whenever the neighbour differed. A
+# contact sheet of the cards the reader called unsure settled it in one look: the
+# banner text was PLAINLY LEGIBLE in nearly every one, sitting off to one side with a
+# stranger's banner beside it. Narrowing to 120 and recentring on the FOUND card:
+#
+#     box    what it covers                cross-session coverage at zero wrong
+#     180w   the banner + the neighbour            78.0%
+#     140w   the banner + a sliver                 94.8%
+#     120w   the banner                            95.4%      <- shipped
+#     100w   part of the banner                    97.7%, but 1 WRONG
+#
+# (What actually shipped before this was worse than the 180w row, because it also
+# cropped at the fixed SLOT anchor rather than the found card: 40.5% at gate 0.88.)
+BANNER_BOX = (-62, 18, 58, 70)
+BANNER_SIZE = (48, 20)
+# How far to slide the crop looking for its best fit. Measured: +-12 is enough, and
+# +-32 and +-48 buy nothing, because recentring on the found card has already done the
+# work -- a located tactics card sits within 30px of its slot anchor in x, 7px in y.
+BANNER_SEARCH = tuple((ox, oy) for ox in range(-12, 13, 4) for oy in range(-6, 7, 3))
 
 _type_cache = None
 
@@ -343,22 +377,70 @@ def _type_templates():
     return _type_cache
 
 
-def tactics_banner_vector(img, slot):
-    """The normalised banner patch for a slot, or None when it falls off the crop."""
-    if not (0 <= slot < len(SLOT_TACTICS)):
-        return None
+def tactics_banner_vector(img, slot, cx=None, cy=None):
+    """The normalised banner patch, or None when it falls off the crop.
+
+    `cx`/`cy` are the card's FOUND position. Pass them whenever they are known: the
+    slot anchor is only a fallback, and cropping at it costs more than half the
+    coverage, because the cursor lifts a card and its banner rides with it.
+    """
+    if cx is None or cy is None:
+        if not (0 <= slot < len(SLOT_TACTICS)):
+            return None
+        sc = img.width / ANCHOR_W
+        cx, cy = SLOT_TACTICS[slot][0] * sc, SLOT_TACTICS[slot][1] * sc
+    return _banner_at(img, cx, cy, 0, 0)
+
+
+def _banner_at(img, cx, cy, ox, oy):
     sc = img.width / ANCHOR_W
-    ax, ay = SLOT_TACTICS[slot][0] * sc, SLOT_TACTICS[slot][1] * sc
     x0, y0, x1, y1 = BANNER_BOX
-    box = (max(0, int(ax + x0 * sc)), max(0, int(ay + y0 * sc)),
-           min(img.width, int(ax + x1 * sc)), min(img.height, int(ay + y1 * sc)))
-    if box[2] - box[0] < 10 or box[3] - box[1] < 6:
+    box = (int(cx + (x0 + ox) * sc), int(cy + (y0 + oy) * sc),
+           int(cx + (x1 + ox) * sc), int(cy + (y1 + oy) * sc))
+    if (box[0] < 0 or box[1] < 0 or box[2] > img.width or box[3] > img.height
+            or box[2] - box[0] < 10 or box[3] - box[1] < 6):
         return None
     a = np.asarray(img.crop(box).convert("L").resize(BANNER_SIZE, Image.LANCZOS),
                    dtype=np.float32).ravel()
     a = a - a.mean()
     n = np.linalg.norm(a)
     return None if n < 1e-6 else a / n
+
+
+def _best_banner(img, slot, cx, cy):
+    """(type, score) for the best-fitting banner offset, or (None, 0.0).
+
+    The crop is slid over BANNER_SEARCH and the best fit kept, so a card a few pixels
+    off where it was expected is read rather than abstained on.
+    """
+    bank = _type_templates()
+    if bank is None:
+        return None, 0.0
+    vecs, types = bank
+    if cx is None or cy is None:
+        if not (0 <= slot < len(SLOT_TACTICS)):
+            return None, 0.0
+        # NO CANDIDATE REACHED THIS SLOT, so there is no found position and both
+        # anchors are guesses. Try each and keep the better fit -- measured over the
+        # 17 corpus rows this branch emits, the tactics anchor reads 0 of them and the
+        # player anchor's x reads 7, right, with none wrong. Trying both costs one
+        # more search on a path that fires ~5% of the time.
+        sc = img.width / ANCHOR_W
+        starts = [(SLOT_TACTICS[slot][0] * sc, SLOT_TACTICS[slot][1] * sc),
+                  (SLOT_PLAYER[slot][0] * sc, SLOT_PLAYER[slot][1] * sc)]
+    else:
+        starts = [(cx, cy)]
+    best_t, best = None, 0.0
+    for sx, sy in starts:
+        for ox, oy in BANNER_SEARCH:
+            v = _banner_at(img, sx, sy, ox, oy)
+            if v is None:
+                continue
+            scores = vecs @ v
+            k = int(scores.argmax())
+            if float(scores[k]) > best:
+                best_t, best = types[k], float(scores[k])
+    return best_t, best
 
 
 # THE TWO TYPES THAT ADD POWER. CLAUDE.md section 4: a speed or fielding boost carries a
@@ -373,41 +455,27 @@ ADDS_POWER = frozenset({"swing_boost", "pitch_boost"})
 MIN_ADDS_POWER_SCORE = 0.77
 
 
-def reads_adds_power(img, slot):
+def reads_adds_power(img, slot, cx=None, cy=None):
     """(True|False, score) for "does this tactics card add power", or (None, score).
 
     None means NOT READ and the caller must ask the paid model. It never guesses: a speed
     boost played as if it added power is a wrong card in a $50 match, and an abstention is
     one API call.
     """
-    bank = _type_templates()
-    v = tactics_banner_vector(img, slot)
-    if bank is None or v is None:
-        return None, 0.0
-    vecs, types = bank
-    scores = vecs @ v
-    k = int(scores.argmax())
-    best = float(scores[k])
-    if best < MIN_ADDS_POWER_SCORE:
+    t, best = _best_banner(img, slot, cx, cy)
+    if t is None or best < MIN_ADDS_POWER_SCORE:
         return None, best
-    return (types[k] in ADDS_POWER), best
+    return (t in ADDS_POWER), best
 
 
-def read_tactics_type(img, slot):
+def read_tactics_type(img, slot, cx=None, cy=None):
     """(type, score) for the tactics card in `slot`, or (None, score) when unsure.
 
     None means NOT READ and the caller must ask the paid model. It never guesses: the
     whole value of this reader is that its answer can be trusted without a second opinion.
     """
-    bank = _type_templates()
-    v = tactics_banner_vector(img, slot)
-    if bank is None or v is None:
-        return None, 0.0
-    vecs, types = bank
-    scores = vecs @ v
-    k = int(scores.argmax())
-    best = float(scores[k])
-    return (types[k] if best >= MIN_TYPE_SCORE else None), best
+    t, best = _best_banner(img, slot, cx, cy)
+    return (t if (t is not None and best >= MIN_TYPE_SCORE) else None), best
 
 
 def read_hand(img):
@@ -434,6 +502,95 @@ def read_hand(img):
     return _read_ungated(img, strong)
 
 
+
+# ---------------------------------------------------------------------------
+# THE SHIELD (the `secondary` field): a white digit on a dark heraldic badge.
+#
+# Two locators failed before this one. The first hunted DARK blobs and found the
+# neighbouring card's power disc (its contact sheet showed 4s and 5s; shields are
+# 1-3). The second added a polarity test and over-corrected to 14 badges of 339.
+# Both were searching for a thing and hoping.
+#
+# What works is what already fixed the runners reader: SEARCH for the asset. The
+# badge is one sprite -- same outline, same rim, same fill -- so cv2.matchTemplate
+# over the card's foot answers both questions at once, is there a badge and which
+# digit is in it, without any assumption about where it sits. That matters,
+# because the offset is NOT fixed: the cursor lifts a card and the badge rides
+# with it, which is why a fixed-offset window measured 8% coverage on 3s.
+#
+# The templates are the MEAN of 120 / 51 / 135 aligned examples. Averaging that
+# many and getting a SHARP digit is itself the evidence that the sprite is fixed.
+#
+# THE GATE SITS BETWEEN TWO MEASURED POPULATIONS (CLAUDE.md 10.4), peak
+# correlation over 1,155 player cards:
+#
+#     paid says SHIELDED    (n=704)   p01 0.363   p05 0.843   p50 0.928
+#     paid says UNSHIELDED  (n=451)   p50 0.381   p95 0.519   p99 0.541
+#
+# 0.541 -> 0.843 is empty. SHIELD_MIN is its midpoint. The tails that cross it
+# are the paid model's own errors, not the reader's -- see below.
+#
+# Cross-session (templates from the early half of the corpus, scored on the late
+# half, so a hand can never score itself): 589 of 600 correct, 98.2%.
+#
+# ALL TEN REMAINING DISAGREEMENTS WERE ADJUDICATED BY OPENING THE FRAMES, and
+# nine of the ten cards HAVE NO BADGE AT ALL -- the paid model invented one. The
+# mechanism is measured, not guessed: on the 684 cards where the badge IS found,
+# the claimed `secondary` equals the card's own POWER 0 times; on the 20 where it
+# is not, 5 times (25%), and every one of those cards has power 5 or 6 and a
+# small edge number in its art. The paid model is reading the card frame.
+# ---------------------------------------------------------------------------
+SHIELD_TEMPLATES = os.path.join(_HERE, "shield_templates.npz")
+SHIELD_SIZE = (34, 40)          # the badge, in ANCHOR_W pixels
+SHIELD_MIN = 0.69               # the midpoint of the empty band 0.541 .. 0.843
+_SHIELD = None
+
+
+def _shield_templates():
+    global _SHIELD
+    if _SHIELD is None:
+        try:
+            z = np.load(SHIELD_TEMPLATES)
+            _SHIELD = {int(k): z[k] for k in z.files}
+        except Exception:
+            _SHIELD = {}
+    return _SHIELD
+
+
+def read_shield(img, cx, cy):
+    """(digit, score) for the shield under the power disc at (cx, cy).
+
+    Returns (0, score) when no badge clears SHIELD_MIN -- an unshielded card is a
+    real answer, not an abstention, because the two populations are separated.
+    Returns (None, 0.0) only when the templates are missing or the crop is too
+    small to search, which is the caller's cue to ask the paid model.
+    """
+    tpl = _shield_templates()
+    if not tpl:
+        return None, 0.0
+    try:
+        import cv2
+    except Exception:
+        return None, 0.0
+    s = img.width / ANCHOR_W
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    h, w = g.shape
+    x0, x1 = int(max(0, cx - 80 * s)), int(min(w, cx + 40 * s))
+    y0, y1 = int(max(0, cy - 10 * s)), int(min(h, cy + 100 * s))
+    sub = g[y0:y1, x0:x1]
+    tw, th = int(round(SHIELD_SIZE[0] * s)), int(round(SHIELD_SIZE[1] * s))
+    if tw < 4 or th < 4 or sub.shape[0] < th or sub.shape[1] < tw:
+        return None, 0.0
+    best_d, best = None, -1.0
+    for d, t in tpl.items():
+        tt = cv2.resize(t, (tw, th), interpolation=cv2.INTER_LANCZOS4)
+        _, mx, _, _ = cv2.minMaxLoc(cv2.matchTemplate(sub, tt, cv2.TM_CCOEFF_NORMED))
+        if mx > best:
+            best_d, best = d, float(mx)
+    if best < SHIELD_MIN:
+        return 0, round(best, 3)
+    return best_d, round(best, 3)
+
 def _read_fan(img, strong):
     s = img.width / ANCHOR_W
     g = np.asarray(img.convert("L"), dtype=np.uint8)
@@ -457,7 +614,7 @@ def _read_fan(img, strong):
         if cost > SLOT_TOL * s:
             continue
         if best[i] is None or (rank, key, -cost) > best[i][0]:
-            best[i] = ((rank, key, -cost), x, kind, circle)
+            best[i] = ((rank, key, -cost), x, kind, circle, y)
     out = []
     for i in range(5):
         if best[i] is None:
@@ -465,18 +622,25 @@ def _read_fan(img, strong):
             # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
             t, ts = read_tactics_type(img, i)
             out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
-                        "score": 0.0, "type": t, "type_score": round(ts, 3)})
+                        "score": 0.0, "type": t, "type_score": round(ts, 3),
+                        "y": int(SLOT_PLAYER[i][1] * s)})
             continue
-        _, x, kind, circle = best[i]
+        _, x, kind, circle, cy = best[i]
         digit, sc = read_digit(img, circle) if circle else (None, 0.0)
-        row = {"x": x, "kind": kind, "digit": digit, "score": round(sc, 3)}
+        row = {"x": x, "kind": kind, "digit": digit, "score": round(sc, 3),
+               "y": int(cy)}
+        if kind == "player":
+            # hand_to_cards() requires `secondary` on every player card, so this
+            # is read here rather than left for the caller to ask the API for.
+            row["secondary"], ss = read_shield(img, x, cy)
+            row["secondary_score"] = ss
         if kind == "tactics":
             # The type is what decides play, so it is read here and NEVER guessed.
-            row["type"], ts = read_tactics_type(img, i)
+            row["type"], ts = read_tactics_type(img, i, x, cy)
             row["type_score"] = round(ts, 3)
             # AND THE QUESTION THE DECISION ACTUALLY ASKS, which is easier and therefore
             # answered more often: does this card add power at all?
-            row["adds_power"], aps = reads_adds_power(img, i)
+            row["adds_power"], aps = reads_adds_power(img, i, x, cy)
             row["adds_power_score"] = round(aps, 3)
         out.append(row)
     return out
