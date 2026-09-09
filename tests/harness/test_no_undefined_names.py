@@ -37,7 +37,14 @@ def check(name, cond):
 SKIP_DIRS = {".venv", "paddle_venv", "armor_venv", "models",
              "chiaki-ng-src", "chiaki-ng-build",
              "_obsolete", "tests_quarantine", "places_quarantine",
-             "__pycache__", "demos", "screenshot_log"}
+             "__pycache__", "demos", "screenshot_log", "agent_progress"}
+# agent_progress/ is a sub-agent's SCRATCH TREE, gitignored and safe to delete wholesale
+# (CLAUDE.md 10.16). Its one-off analysis scripts are written to be run once from a
+# particular cwd and are full of names bound by the shell that launched them -- they are
+# not this project's code and a real undefined name in one costs nothing. Scanning them
+# made this test fail on 2026-09-09 over six such names in six throwaway scripts, which
+# would train someone to ignore it.
+#
 # armor_venv and models arrived 2026-09-09 with the local-OCR bake-off: a third venv
 # on Python 3.11 for ArmorOCR and its downloaded weights. Vendored code, like the
 # other two venvs -- torch's own dependencies carry Python 2 leftovers such as
