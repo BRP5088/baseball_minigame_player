@@ -1697,17 +1697,32 @@ def log_local_read_comparison(state_json: dict):
         # possible way to build the corpus: it rides on turns already paid for.
         import local_hand
         vision_hand = {c.get("hand_index"): c for c in (state_json.get("hand") or [])}
-        # PREFER THE POST-DEAL FRAME. The vision crop is taken later, by which time the
-        # cursor is resting on a card and that card is lifted, brightened and occluding
-        # its neighbour. The post-deal frame has nothing lifted, which is the user's own
-        # fix and removes the cause rather than compensating for it.
-        hand_img = take_post_deal_hand() or crops["hand"]
-        hand_src = "post-deal" if hand_img is not crops["hand"] else "vision-crop"
-        try:
-            rows = local_hand.read_hand(hand_img)
-        except Exception as e:
-            print(f"  [local-check] hand: local reader failed ({e})")
-            rows = []
+        # READ BOTH FRAMES AND KEEP THE BETTER. The polled frame is usually the good one
+        # -- the vision crop is taken after the cursor has re-landed and LIFTED a card,
+        # which hides that card's disc and occludes its neighbour. But the poll can also
+        # come back with nothing usable, and patch79 handed its winner over regardless:
+        # ten hands in one run found ZERO positions, which is worse than the crop it
+        # replaced. So the two are scored against each other rather than ranked by
+        # assumption. Ties go to the vision crop, the older and better-understood path.
+        def _n_read(rr):
+            return sum(1 for r in rr
+                       if (r["digit"] is not None)
+                       or (r["kind"] == "tactics" and r.get("type") is not None))
+
+        def _try(img):
+            try:
+                return local_hand.read_hand(img)
+            except Exception as e:
+                print(f"  [local-check] hand: local reader failed ({e})")
+                return []
+
+        polled = take_post_deal_hand()
+        rows = _try(crops["hand"])
+        hand_img, hand_src = crops["hand"], "vision-crop"
+        if polled is not None:
+            alt = _try(polled)
+            if _n_read(alt) > _n_read(rows):
+                rows, hand_img, hand_src = alt, polled, "post-deal"
         record_local_hand(dict(crops, hand=hand_img), rows, state_json, hand_src)
 
         # ALIGNMENT IS BY POSITION, so it is only valid when the counts match.

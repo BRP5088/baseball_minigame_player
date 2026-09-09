@@ -78,10 +78,16 @@ check("and it stops early on a complete read rather than burning the whole windo
 
 # ---- 3. THE READER PREFERS IT. Pinned on the call, not on a comment.
 src2 = inspect.getsource(orchestrator.log_local_read_comparison)
-check("the local read prefers the post-deal frame",
-      "take_post_deal_hand()" in src2)
-check("and falls back to the vision crop when there is none",
-      'or crops["hand"]' in src2)
+# BOTH frames are read and the better KEPT. patch79 ranked the polled frames only against
+# each other and handed the winner over unconditionally -- ten hands in one run then found
+# ZERO positions, worse than the crop being replaced. The comparison that would have shown
+# it was never made. It is made now.
+check("the local read considers the polled frame", "take_post_deal_hand()" in src2)
+check("and ALSO reads the vision crop, so the two can be compared",
+      '_try(crops["hand"])' in src2)
+check("keeping whichever reads MORE slots, not whichever is assumed better",
+      "_n_read(alt) > _n_read(rows)" in src2)
+check("and scoring by slots READ, not slots found", "def _n_read" in src2)
 check("the source of each recorded hand is written down, so the effect is measurable",
       "hand_src" in src2)
 
