@@ -356,7 +356,12 @@ def read_frame(path=None, max_age_s=None, now_ns=None):
     if age_s > limit or age_s < -1.0:
         return None
 
-    return _to_image(hdr, payload)
+    img = _to_image(hdr, payload)
+    if img is not None:
+        # The join key with a recording and with the event log (patch64).
+        img.info["dump_seq"] = hdr["seq"]
+        img.info["dump_mono_ns"] = hdr["mono_ns"]
+    return img
 
 
 def stats(path=None):

@@ -474,6 +474,8 @@ def cycle(n):
 
 def main(cycles=5):
     route_failures = 0
+    import event_log
+    event_log.log_regions()
     log(f"{cycles} cycles, API budget {api_budget.budget()} calls "
         f"(~${api_budget.budget() * api_budget.APPROX_COST_PER_CALL:.2f})")
 

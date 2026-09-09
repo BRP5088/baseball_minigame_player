@@ -407,6 +407,13 @@ class RevealWatcher:
             self._open = None
             self._episodes.append(o)
             self._closed_count += 1
+            try:
+                import event_log
+                event_log.log_event("reveal_episode", t_first=o.t_first, t_peak=o.t_peak,
+                                    t_last=o.t_last, peak=o.peak,
+                                    peak_seq=(o.frame.info.get("dump_seq") if o.frame is not None else None))
+            except Exception:
+                pass
             snap = o.snapshot()
         self._say(f"[reveal] episode closed ({reason}): t_first={snap.t_first:.2f} "
                   f"t_peak={snap.t_peak:.2f} peak={snap.peak:.4f} "

@@ -417,6 +417,13 @@ def press(action: str, hold_seconds: float = 0.05, post_delay: float = None):
     would be silently ignored — the backoff would appear to work, print that it
     had raised the delay, and change nothing.
     """
+    # THE EVENT LOG (patch64), first, so the row exists whether or not the press
+    # goes out (the test-run lockout below still holds every input path off).
+    try:
+        import event_log
+        event_log.log_event("press", action=action, hold=hold_seconds, post_delay=post_delay)
+    except Exception:
+        pass
     global _press_via_inject, _press_via_background, _press_via_focus
     if post_delay is None:
         post_delay = ACTION_DELAY

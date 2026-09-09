@@ -41,6 +41,7 @@ import shutil
 import sys
 import threading
 import time
+import event_log
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
@@ -100,6 +101,16 @@ _API_KEY = os.environ["PERSONAL_ANTHROPIC_API_KEY"]
 # config string the fallback passes, from one definition, so the two cannot
 # drift into asking different things.
 def _ocr_text(image, psm, whitelist=None):
+    """The one word-mode OCR path, wrapped for the EVENT LOG (patch64): the caller
+    names the read kind and the text is what the agent judges. See _ocr_text_raw."""
+    _ocr_result = _ocr_text_raw(image, psm, whitelist)
+    event_log.log_event("ocr", caller=event_log.caller_name(2), psm=psm, whitelist=whitelist,
+                        size=(list(image.size) if hasattr(image, "size") else None),
+                        text=(_ocr_result or "")[:200])
+    return _ocr_result
+
+
+def _ocr_text_raw(image, psm, whitelist=None):
     """Local OCR of an already-preprocessed crop. Returns tesseract's raw text.
 
     Raw, INCLUDING trailing newlines: ocr_scoreboard splits this into lines and
@@ -175,7 +186,19 @@ class _BudgetedMessages:
     def create(self, *args, **kwargs):
         import api_budget
         api_budget.note_call()
-        return self._inner.create(*args, **kwargs)
+        resp = self._inner.create(*args, **kwargs)
+        # THE EVENT LOG (patch64): the one place every paid read passes through. The
+        # caller names the read kind; the raw answer is what the agent judges.
+        try:
+            n_img = sum(1 for m in kwargs.get("messages", []) if isinstance(m, dict)
+                        for c in (m.get("content") if isinstance(m.get("content"), list) else [])
+                        if isinstance(c, dict) and c.get("type") == "image")
+            text = "".join(getattr(b, "text", "") for b in getattr(resp, "content", []) or [])
+            event_log.log_event("vision", caller=event_log.caller_name(2), images=n_img,
+                                answer=text[:4000], calls_used=api_budget.used())
+        except Exception:
+            pass
+        return resp
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
@@ -1205,6 +1228,8 @@ def capture_screenshot_image():
     # vision model, which duly reported "other" and stalled the run.
     import game_capture
     img = game_capture.grab()
+    event_log.log_event("capture", where="capture_screenshot_image",
+                        dump=img is not None, img_seq=(img.info.get("dump_seq") if img is not None else None))
     if img is None:
         focus_chiaki_window()
         time.sleep(0.15)
@@ -1851,6 +1876,8 @@ def _fast_grab():
     """
     import game_capture
     img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)
+    event_log.log_event("capture", where="_fast_grab", dump=img is not None,
+                        img_seq=(img.info.get("dump_seq") if img is not None else None))
     if img is not None:
         return img
     # THE FALLBACK IS THE BUG THIS DOCSTRING DESCRIBES, REINTRODUCED. It is
