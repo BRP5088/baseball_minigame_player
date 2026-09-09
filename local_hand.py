@@ -340,6 +340,41 @@ TACTICS_TEMPLATES = os.path.join(_HERE, "tactics_templates.npz")
 # 0.85 keeps the ~8% margin this reader's previous gate was chosen for, at more than
 # twice the coverage. The old value was 0.88 against a 180px box and read 40.5%.
 MIN_TYPE_SCORE = 0.85
+
+# AND A SECOND, LOWER GATE, BECAUSE "IS THIS A TACTICS CARD AT ALL" IS AN EASIER QUESTION
+# THAN "WHICH TACTICS CARD IS IT".
+#
+# `kind` is decided BY POSITION -- the tactics disc sits 60-83px left of the player disc in
+# the same slot -- and position is wrong on about 3% of hands: over 360 recorded hands the
+# fan called a card `tactics` that the paid model called `player` eleven times, and opening
+# those frames settled it against the fan every time. They are plainly player cards, with a
+# BATTER or PITCHER banner, a power disc and a shield. This is the one field where the paid
+# model was RIGHT and the local reader was WRONG.
+#
+# The banner separates them completely, because a player card has no tactics banner to find.
+# Measured CROSS-SESSION (bank cut from the early half of the corpus, scored on the late
+# half, so a card cannot score itself -- without that split every real tactics card scores
+# 1.000 against its own template and the gap is an illusion):
+#
+#     really TACTICS (n=176)   MIN 0.595   p01 0.720   p05 0.823   p50 0.967
+#     really PLAYER  (n=4)     p50 0.207   p95 0.481   MAX 0.524
+#
+# Pooling every real player card that has landed on a tactics anchor (14 of them, across
+# both the in-sample and cross-session passes) against the cross-session tactics scores:
+#
+#     really PLAYER   MAX 0.560
+#     really TACTICS  MIN 0.595   p01 0.720   p05 0.823
+#
+# The band 0.560 .. 0.595 is empty. TACTICS_PRESENT_MIN sits inside it, ABOVE the player
+# maximum -- 0.56 was tried first and is exactly ON that maximum, which is the mistake
+# CLAUDE.md 10.4 is about. The band is only 0.035 wide, so this is a genuine constraint
+# and not a comfortable margin; it is reported here rather than rounded away.
+#
+# HONEST LIMIT: n = 4 in the cross-session player group (11 in sample). The direction is
+# unambiguous and the band is empty, but the RATE is not established on four points. A
+# player card mislabelled tactics is never played as a batter, so the cost of the old
+# behaviour was a missing card rather than a wrong one -- which is why it stayed invisible.
+TACTICS_PRESENT_MIN = 0.58
 # The banner's box relative to the slot's TACTICS anchor, in the 979-wide crop the anchors
 # were measured in, and scaled with them.
 # THE BOX WAS 180px WIDE AND THAT WAS THE WHOLE PROBLEM. At 180 it reaches past the
@@ -620,7 +655,27 @@ def _read_fan(img, strong):
         if best[i] is None:
             # A slot no candidate reached. It is emitted anyway -- when the fan fits the
             # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
+            # WHAT KIND IS A SLOT NOTHING REACHED? This branch used to answer
+            # "tactics", unconditionally, and that is a fabricated reading rather than a
+            # missing one: over the corpus it emits 17 rows and the paid model calls 10
+            # of them PLAYER and 7 tactics, so the default was wrong more often than a
+            # coin. It accounted for 10 of the 13 kind disagreements on the whole corpus,
+            # and it is the shape CLAUDE.md 10.1 names -- a no-op path whose output is
+            # indistinguishable from a real answer.
+            #
+            # The banner decides instead, and when the banner is not there the honest
+            # answer is UNKNOWN. On those 17 rows the two populations are far apart:
+            # really-player scores top out at 0.560 while really-tactics bottom out at
+            # 0.936 in sample, 0.595 across sessions.
             t, ts = read_tactics_type(img, i)
+            if ts < TACTICS_PRESENT_MIN:
+                # No candidate AND no banner. Something is in this slot -- the fan only
+                # emits five rows when it fits -- but nothing here can say what, so the
+                # caller must ask the paid model rather than be handed a guess.
+                out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "unknown",
+                            "digit": None, "score": 0.0,
+                            "y": int(SLOT_PLAYER[i][1] * s)})
+                continue
             # AND THE BINARY, which this branch used to leave unset -- so a row whose
             # TYPE was known still reported adds_power as "ask the paid model". It made
             # the easier question abstain MORE often than the harder one (7.6% against
@@ -632,6 +687,13 @@ def _read_fan(img, strong):
                         "y": int(SLOT_PLAYER[i][1] * s)})
             continue
         _, x, kind, circle, cy = best[i]
+        if kind == "tactics":
+            # POSITION SAID TACTICS. ASK THE CARD. A slot at the tactics anchor whose
+            # banner cannot be found is a player card sitting where a tactics card
+            # usually sits -- see TACTICS_PRESENT_MIN above.
+            _t, _present = _best_banner(img, i, x, cy)
+            if _present < TACTICS_PRESENT_MIN:
+                kind = "player"
         digit, sc = read_digit(img, circle) if circle else (None, 0.0)
         row = {"x": x, "kind": kind, "digit": digit, "score": round(sc, 3),
                "y": int(cy)}

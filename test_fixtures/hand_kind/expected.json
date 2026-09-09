@@ -1,0 +1,70 @@
+{
+ "note": "slots the fan could not reach. The old code labelled these `tactics` by default and was wrong 10 times in 17; the paid model's kind is the label.",
+ "hands": [
+  {
+   "file": "kind0.png",
+   "src": "hand_1788956272377647000.png",
+   "unknown_slots": [
+    1
+   ],
+   "paid_kinds": {
+    "1": "player"
+   },
+   "banner_score_at_those_slots": {
+    "1": 0.309
+   }
+  },
+  {
+   "file": "kind1.png",
+   "src": "hand_1788956429451482000.png",
+   "unknown_slots": [
+    1
+   ],
+   "paid_kinds": {
+    "1": "player"
+   },
+   "banner_score_at_those_slots": {
+    "1": 0.388
+   }
+  },
+  {
+   "file": "kind2.png",
+   "src": "hand_1788963902539961000.png",
+   "unknown_slots": [
+    2
+   ],
+   "paid_kinds": {
+    "2": "player"
+   },
+   "banner_score_at_those_slots": {
+    "2": 0.533
+   }
+  },
+  {
+   "file": "kind3.png",
+   "src": "hand_1788964064703452000.png",
+   "unknown_slots": [
+    4
+   ],
+   "paid_kinds": {
+    "4": "player"
+   },
+   "banner_score_at_those_slots": {
+    "4": 0.56
+   }
+  },
+  {
+   "file": "kind4.png",
+   "src": "hand_1788967780072886000.png",
+   "unknown_slots": [
+    3
+   ],
+   "paid_kinds": {
+    "3": "player"
+   },
+   "banner_score_at_those_slots": {
+    "3": 0.336
+   }
+  }
+ ]
+}
