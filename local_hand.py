@@ -25,14 +25,21 @@ ever matched against a template from its own frame:
     speed               about 2 ms to find, 0.07 ms to read each
 
 KNOWN GAPS, stated because they decide whether this may replace the paid call:
-  * the templates cover 1, 2, 4, 5, 7, 8. The roster says a power circle can also show
-    6 and 9, and a tactics bonus can show 3. Those three have no template yet, so this
-    reader ABSTAINS on them rather than guessing -- which is why read_hand returns None
-    for a digit it cannot match, and why the caller must treat None as "ask the API".
-  * the shield digit is white on a DARK shield, the exact inverse of this detector's
+  * A TACTICS CARD'S TYPE IS NOT READ, and that is the gap that matters. CLAUDE.md section
+    4: only swing and pitch boosts add power, while speed and fielding boosts carry a
+    nonzero bonus that adds NONE. orchestrator derives that type from the card's NAME, and
+    no banner is read here -- so a hand holding a tactics card still needs the paid call to
+    decide what to play. 14 of 15 measured hands hold at least one.
+  * The tactics BONUS is not read either. Its digit sits fused inside the wreath.
+  * The shield digit is white on a DARK shield, the exact inverse of this detector's
     target. It is not read here at all.
-  * a tactic and a player card are told apart by the BANNER, not the circle, and no
-    banner is read here.
+  * Which cards are PLAYER and which are TACTICS is decided by WHERE the disc sits in its
+    slot, and only on the fan path. When the fan does not fit -- a short hand, an empty
+    table -- there is no such evidence and every position comes back "unknown".
+  * Templates cover 1, 2, 4, 5, 6, 7, 8, 9. THE GAME HAS NO 3 (the user, 2026-09-09) and no
+    player card has ever shown a power of 1, 2 or 3: powers run 4 to 9, and 1 and 2 appear
+    only as tactics bonuses. A digit that matches nothing comes back None, which the caller
+    must treat as NOT READ -- never as absent.
 """
 import json
 import os
@@ -127,6 +134,146 @@ def find_tactics(img):
     return out
 
 
+# ---------------------------------------------------------------------------------------
+# THE HAND IS FIVE CARDS IN A FIXED FAN, so segment the CARDS and give each at most one
+# disc. Searching the whole strip for discs can return any number of positions: measured
+# over the 57 labelled hands in overnight/local_hand/agreement.jsonl it returned 3 to 8,
+# 30 of 57 hands had the wrong CARD COUNT and another 17 put the tactics cards in the wrong
+# slots -- only 10 of 57 agreed with the paid model about the positions.
+#
+# The fan is a UI layout, not a scene: over two independent corpora (57 hands here, 15 in
+# agent_progress/bakeoff) each slot's power disc lands within about +-15 px of the same
+# spot, and the y positions trace the fan's arc. So a card slot is a MEASURED 2D anchor,
+# every candidate is assigned to the nearest one, and the count cannot then be wrong.
+#
+# MEASURED per slot (medians of every candidate that landed on a card the paid model named):
+SLOT_PLAYER = [(195, 195), (382, 160), (546, 143), (729, 169), (886, 205)]
+# A TACTICS card carries its disc 60-83 px further LEFT, inside the wreath. That offset is
+# what tells the two kinds apart -- and it is the ONLY thing that does. A gate on the card's
+# dark fraction was measured over 2,688 windows (4 widths x 14 offsets x 16 bands x 3
+# heights) against 202 player and 83 tactics slots and the populations OVERLAP in every one,
+# so no such gate exists. Slot 4 has no tactics sample in either corpus; its anchor is
+# extrapolated and is the weakest entry here.
+SLOT_TACTICS = [(132, 194), (299, 150), (486, 134), (661, 150), (826, 190)]
+SLOT_TOL = 34
+# The crop is a FRACTIONAL region (orchestrator.GAMEPLAY_REGIONS_FRAC["hand"]), so its
+# PIXEL size follows the capture: 979x307 is a 1920x1080 capture, and CLAUDE.md section 3
+# records 1867x1050 captures in the same session (a 952x298 crop). The anchors above were
+# measured at 979 wide, so they are scaled to whatever crop arrives.
+ANCHOR_W = 979.0
+
+# A REAL DISC AGAINST CARD ART, two populations with a gap, over 247 candidates:
+#     radius r    junk  9-17  (38)     disc 18-22 (209)     only 1 at 17, 2 at 16
+#     reach       junk  3-5   (41)     disc  6-8  (206)     only 1 at 5,  3 at 4
+# The mouse's teeth and eyes are dark ink ringed by white face -- exactly what the digit
+# finder hunts -- and this is what removes them. It costs ZERO real discs (per-card recall
+# 204/285 with the gate and without it) while dropping 41 junk candidates.
+DISC_MIN_R = 18
+DISC_MIN_REACH = 6
+# The second pass at 90 exists because a 9 or a 7 TOUCHES its disc's outline ring and the
+# two label as one oversized component at 110. Recall 254/285 -> 265/285. The PRIMARY
+# threshold must win a tie: a blob found at 90 has a tighter bounding box than the crop the
+# templates were cut at, and letting it win read 5 digits exactly one too high.
+DARK_THRESHOLDS = (110, 90)
+
+# THE DISC AS A WHITE BLOB, for the 9s and 7s whose ink fuses with the ring anyway. Its own
+# shape features do NOT separate a disc from card art (w, h, area and fill all overlap
+# between on-slot and off-slot blobs), so it is used ONLY to fill a slot nothing else
+# claimed, never as a detector in its own right. Union recall: 281/285.
+DISC_WHITE = 200
+DISC_WHITE_SIZE = (30, 50)
+DISC_INNER = 0.78          # the digit lives this far inside the disc; the ring is outside it
+
+# DOES THE FIVE-CARD FAN FIT AT ALL? Late in a match a hand shrinks and a short fan
+# RE-CENTRES -- agent_progress/bakeoff frames 018, 028 and 053 are 3- and 4-card hands whose
+# cards sit nowhere near these anchors, and 003/027/052 are an empty table -- so the slot
+# model must not be applied to one. Per-hand MEDIAN residual to the nearest anchor:
+#     five-card hands, n=72   min 0.0   p50 3.0   p95 12.0   MAX 14.0
+#     short hands,     n=3    28.5, 51.3, 32.3
+# THE NEGATIVE SIDE IS THREE FRAMES, which is thin, and that is exactly why failing this
+# gate costs nothing: the reader falls back to the ungated search that shipped before, so a
+# short hand can only be as wrong as it already was. A per-CANDIDATE residual was tried
+# first and CANNOT gate -- three of the seven short-hand candidates sit inside the five-card
+# range (CLAUDE.md 10.4).
+FIT_MAX = 20.0
+FIT_MIN_DISCS = 2
+
+
+def _white_discs(g):
+    """The power discs as white blobs, whatever their digit is doing."""
+    import scipy.ndimage as _ndi
+    H, W = g.shape
+    lab, n = _ndi.label(g >= DISC_WHITE)
+    lo, hi = DISC_WHITE_SIZE
+    out = []
+    for i, sl in enumerate(_ndi.find_objects(lab), start=1):
+        if sl is None:
+            continue
+        ys, xs = sl
+        h, w = ys.stop - ys.start, xs.stop - xs.start
+        if not (lo <= w <= hi and lo <= h <= hi):
+            continue
+        if ys.start == 0 or xs.start == 0 or ys.stop >= H or xs.stop >= W:
+            continue
+        out.append(((xs.start + xs.stop) // 2, (ys.start + ys.stop) // 2,
+                    int((lab[sl] == i).sum()), (xs.start, ys.start, xs.stop, ys.stop)))
+    return out
+
+
+def _digit_in_disc(g, box):
+    """(cx, cy, r) for the digit inside a white disc, or None.
+
+    Keeps only the dark pixels inside the disc's inner radius, which is what separates a
+    fused 9 from its own ring.
+    """
+    import scipy.ndimage as _ndi
+    x0, y0, x1, y1 = box
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    rad = DISC_INNER * max(x1 - x0, y1 - y0) / 2.0
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    sub = (g[y0:y1, x0:x1] <= 110) & (((xx - cx) ** 2 + (yy - cy) ** 2) <= rad ** 2)
+    lab, n = _ndi.label(sub)
+    if not n:
+        return None
+    sizes = _ndi.sum(sub, lab, range(1, n + 1))
+    ys, xs = np.where(lab == int(np.argmax(sizes)) + 1)
+    if len(xs) < 20:
+        return None
+    bx0, bx1, by0, by1 = xs.min() + x0, xs.max() + x0 + 1, ys.min() + y0, ys.max() + y0 + 1
+    w, h = bx1 - bx0, by1 - by0
+    if not (5 <= w <= 28 and 9 <= h <= 34):
+        return None
+    return (int((bx0 + bx1) // 2), int((by0 + by1) // 2), int(max(w, h) * 0.9))
+
+
+def _slot(x, y, s=1.0):
+    """(cost, slot index, kind) for the nearest card anchor, at crop scale `s`."""
+    return min((abs(x - t[i][0] * s) + abs(y - t[i][1] * s) / 3.0, i, k)
+               for i in range(5)
+               for k, t in (("player", SLOT_PLAYER), ("tactics", SLOT_TACTICS)))
+
+
+def _free(x, y, taken):
+    """Nothing already claims this spot. IN TWO DIMENSIONS: an x-only test let a junk white
+    blob 117 px BELOW a real disc, in the same column, suppress it (hand_1788935911)."""
+    return all((x - t[0]) ** 2 + (y - t[1]) ** 2 > 625 for t in taken)
+
+
+def _strong_discs(img):
+    """Disc-sized enclosed digits, both dark thresholds, primary first."""
+    from circle_finder import find_circles
+    seen, out = [], []
+    for thr in DARK_THRESHOLDS:
+        for c in find_circles(img, thr):
+            if c[3] < DISC_MIN_REACH or c[2] < DISC_MIN_R:
+                continue
+            if _free(c[0], c[1], seen):
+                seen.append((c[0], c[1]))
+                out.append(c)
+    out.sort(key=lambda c: c[0])
+    return out
+
+
 def read_hand(img):
     """Every card position in a hand strip, left to right, from every reader.
 
@@ -135,15 +282,68 @@ def read_hand(img):
     card element -- and the caller must treat that as NOT READ, never as absent. Nothing
     here ever guesses: that is what makes a partial answer safe to fall back on.
 
-    Tactics cards are located but their bonus is NOT read yet: every tactics card in the
-    measured corpus carried a bonus of 1, so there is no evidence the fused shape can tell
-    a 1 from a 2 or a 3.
+    Positions come from the FIVE-SLOT FAN above whenever the fan fits, so the card count
+    cannot be wrong; when it does not fit -- a short hand, an empty table -- the older
+    ungated search runs instead and the answer is no worse than it used to be.
+
+    Tactics cards are located and their KIND is now decided by where their disc sits inside
+    the slot, but their bonus is still not read.
     """
-    from circle_finder import find_circles           # local import: numpy + scipy only
+    strong = _strong_discs(img)
+    if len(strong) >= FIT_MIN_DISCS:
+        s = img.width / ANCHOR_W
+        fit = sorted(_slot(c[0], c[1], s)[0] / s for c in strong)
+        if fit[len(fit) // 2] <= FIT_MAX:
+            return _read_fan(img, strong)
+    return _read_ungated(img, strong)
+
+
+def _read_fan(img, strong):
+    s = img.width / ANCHOR_W
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    taken = [(c[0], c[1]) for c in strong]
+    # rank 3, an isolated digit: the only source whose crop is the geometry the templates
+    # were cut at. rank 2, the bare white disc. rank 1, a fused wreath, which carries no
+    # readable digit of its own.
+    cands = [(3, (c[3], c[2]), c[0], c[1], (c[0], c[1], c[2])) for c in strong]
+    for x, y, area, box in _white_discs(g):
+        if _free(x, y, taken):
+            taken.append((x, y))
+            cands.append((2, (area, 0), x, y, _digit_in_disc(g, box)))
+    for t in find_tactics(img):
+        if _free(t["x"], t["y"], taken):
+            taken.append((t["x"], t["y"]))
+            cands.append((1, (0, 0), t["x"], t["y"], None))
+
+    best = [None] * 5
+    for rank, key, x, y, circle in cands:
+        cost, i, kind = _slot(x, y, s)
+        if cost > SLOT_TOL * s:
+            continue
+        if best[i] is None or (rank, key, -cost) > best[i][0]:
+            best[i] = ((rank, key, -cost), x, kind, circle)
     out = []
-    for c in find_circles(img):
+    for i in range(5):
+        if best[i] is None:
+            # A slot no candidate reached. It is emitted anyway -- when the fan fits the
+            # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
+            out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
+                        "score": 0.0})
+            continue
+        _, x, kind, circle = best[i]
+        digit, sc = read_digit(img, circle) if circle else (None, 0.0)
+        out.append({"x": x, "kind": kind, "digit": digit, "score": round(sc, 3)})
+    return out
+
+
+def _read_ungated(img, strong):
+    """What shipped before the fan: every disc found anywhere, in x order."""
+    out = []
+    for c in strong:
         d, s = read_digit(img, c)
-        out.append({"x": c[0], "kind": "player", "digit": d, "score": round(s, 3)})
+        # NOT "player". Off the fan there is no positional evidence of kind, and
+        # claiming it read a tactics card as a batter -- see KNOWN GAPS above.
+        out.append({"x": c[0], "kind": "unknown", "digit": d, "score": round(s, 3)})
     for t in find_tactics(img):
         if all(abs(t["x"] - o["x"]) > 20 for o in out):
             out.append({"x": t["x"], "kind": "tactics", "digit": None, "score": 0.0})

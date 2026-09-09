@@ -115,11 +115,141 @@
    }
   ],
   "expected_local": [
-   "1",
+   "?",
    "8",
    "4",
    "7",
    "5"
+  ]
+ },
+ "tactics_slot3.png": {
+  "paid": [
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "tactics",
+    "power": null,
+    "bonus": 1,
+    "type": "speed_boost"
+   },
+   {
+    "kind": "player",
+    "power": 4,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "tactics_slot": 3,
+  "expected_local": [
+   "5",
+   "5",
+   "5",
+   "?",
+   "4"
+  ]
+ },
+ "tactics_bypos0.png": {
+  "paid": [
+   {
+    "kind": "tactics",
+    "power": null,
+    "bonus": 2,
+    "type": "swing_boost"
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 4,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 8,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "expected_local": [
+   "?",
+   "5",
+   "5",
+   "4",
+   "8"
+  ],
+  "tactics_decided_by_position": [
+   0
+  ]
+ },
+ "tactics_bypos1.png": {
+  "paid": [
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "tactics",
+    "power": null,
+    "bonus": 1,
+    "type": "speed_boost"
+   },
+   {
+    "kind": "player",
+    "power": 4,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "expected_local": [
+   "5",
+   "5",
+   "5",
+   "?",
+   "4"
+  ],
+  "tactics_decided_by_position": [
+   3
   ]
  }
 }
