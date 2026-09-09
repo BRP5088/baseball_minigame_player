@@ -2328,13 +2328,24 @@ REVEAL_EDGE_THRESHOLD = 0.065
 #     turn period   p50 32s   p75 59s   p90 83s   max 95s
 #     cap 45s covers 64%   cap 75s covers 84%   cap 90s covers 96%
 #
-# 75 buys the 45->75 band for nothing on any turn that works: this returns the
-# instant the reveal is seen, and a reveal stays up 6s (p50), far longer than
-# the 0.25s poll. Only a turn with no reveal coming pays the extra, and those
-# were already paying 45s to fail. Not pushed to 90: the last 12 points of
-# coverage cost every failing turn another 15s, and a turn period that long is
-# more likely a stall than a slow deal.
-REVEAL_MAX_WAIT = 75.0
+# THE REASONING ABOVE IS THE WRONG QUANTITY, and it cost 54% of a measured run.
+#
+# Turn PERIOD does not decide this wait. What decides it is how long AFTER THE PLAY the
+# reveal appears -- and that is a different, much tighter distribution. Pooled over every
+# log on disk, 4 logs, 72 real reveals:
+#
+#     t_first after the play   min 0.90   p50 3.80   p95 5.80   p99 7.90   MAX 7.90
+#     1s bins                  0-1:1  1-2:2  2-3:7  3-4:32  4-5:18  5-6:9  7-8:3
+#
+# The other half of the sentence above is false too. "Only a turn with no reveal coming
+# pays the extra" treats that as an edge case; it is 67 of 139 plays on disk. On the
+# 2026-09-09 cycle those 22 turns cost 1,650 s -- 54% OF THE WHOLE RUN, against 457 s (15%)
+# for every paid vision call put together.
+#
+# So the two populations are: a reveal that is coming, which has always arrived inside
+# 7.9 s, and one that is not, which never arrives at any budget. 15.0 is 1.9x the observed
+# maximum and loses none of the 72. It saves 60 s on every turn with no reveal.
+REVEAL_MAX_WAIT = 15.0
 _REVEAL_GRADIENT_CUTOFF = 28.0
 
 
