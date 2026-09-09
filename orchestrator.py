@@ -544,6 +544,55 @@ Rules for filling this in:
   field that doesn't apply to the current screen.
 """
 
+# ---------------------------------------------------------------------------------------
+# PAID_READS_CARDS -- THE PAID MODEL IS NO LONGER ASKED TO READ CARDS.
+#
+# The user's call, 2026-09-09: "comment out the API reads for all card reading. only leave
+# the state classifications. leaving them in is hiding the real values and your also
+# wasting my IRL money."
+#
+# Both halves of that are measured. It never read the cards: over 2,171 recorded hand
+# cards its `name` came back as 'Batter'/'Pitcher' (the TYPE BANNER, not a name),
+# '', 'None', 'Unknown', or one of 57 invented names -- including six spellings of the
+# same one. And on 32 of 33 frames that contained NO CARDS AT ALL it returned a full
+# five-card hand, against 325 of 327 on frames that did: "five cards" is a DEFAULT, the
+# same shape as `discards_left` answering 2 on 286 of 360 turns.
+#
+# NOTHING IS DELETED. The original instructions sit above this line, word for word. Set
+# this flag True and the old behaviour returns exactly as it was.
+PAID_READS_CARDS = False
+
+# The card-reading half of the prompt, swapped out rather than removed.
+_PROMPT_CARDS_ON = """When screen is "turn", "discard_prompt", or "result": read
+your_score/opp_score/discards_left/hand from the "scoreboard"/"hand"
+crops (they're sharper than the overview), and read "runners" by
+checking the three base crops for which ones show a real card instead
+of a bare coin. For every other screen type, rely on the "overview"
+image alone and leave scoreboard/hand/base-crop content out of it."""
+
+_PROMPT_CARDS_OFF = """When screen is "turn", "discard_prompt", or "result": read
+your_score/opp_score from the "scoreboard" crop (it's sharper than the
+overview). For every other screen type, rely on the "overview" image
+alone.
+
+DO NOT READ THE CARDS. Return "hand": [] and "runners": [] ALWAYS, on
+every screen, whatever you can see. Those fields are read locally from
+the same frame and your answer for them is discarded. Do not describe,
+count or guess at any card in the hand or on a base."""
+
+_PROMPT_POWER_ON = """- "power" is swing power (batter) or pitch focus (pitcher). "secondary"
+  is speed (batter) or fielding (pitcher) — use 0 if no shield icon is
+  shown on the card."""
+
+_PROMPT_POWER_OFF = """- "power"/"secondary" are read locally, not here — see "hand" above."""
+
+if not PAID_READS_CARDS:
+    assert READ_STATE_PROMPT.count(_PROMPT_CARDS_ON) == 1, "prompt drifted from the flag"
+    assert READ_STATE_PROMPT.count(_PROMPT_POWER_ON) == 1, "prompt drifted from the flag"
+    READ_STATE_PROMPT = (READ_STATE_PROMPT
+                         .replace(_PROMPT_CARDS_ON, _PROMPT_CARDS_OFF)
+                         .replace(_PROMPT_POWER_ON, _PROMPT_POWER_OFF))
+
 READ_BALANCE_PROMPT = """
 You are looking at a screenshot of the game's pause menu (a book/journal
 graphic with "PAUSE" at the top). Along the right edge of the screen are
@@ -3164,8 +3213,17 @@ def read_game_state(mask_low_contrast: bool = False) -> dict:
     # directly next to each image's pixels instead of relying on the
     # model recalling a distant instruction by the time it gets there.
     BASE_CROP_HINT = "{label} — look carefully: is this a bare round coin (empty, no runner) or a face-up player card with a readable name/power (a real runner)? Don't default to empty without checking."
+    # PAID_READS_CARDS -- the card crops are no longer SENT. They are still computed,
+    # because the local readers and record_local_hand need them; only the encode-and-ship
+    # is skipped. That is four of six images per call, and it is the money.
+    # The card crops are still COMPUTED -- the local readers and record_local_hand need
+    # them -- but while PAID_READS_CARDS is False they are not encoded and shipped. That
+    # is four of six images per call, and it is the money.
+    PAID_CROPS = None if PAID_READS_CARDS else ("overview", "scoreboard")
     content = []
     for label, img_b64 in capture_state_images_b64(mask_low_contrast=mask_low_contrast):
+        if PAID_CROPS is not None and label not in PAID_CROPS:
+            continue
         label_text = BASE_CROP_HINT.format(label=label) if label in ("third_base", "first_base", "second_base") else label
         content.append({"type": "text", "text": f"[{label_text}]"})
         content.append({"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}})
@@ -3182,11 +3240,63 @@ def read_game_state(mask_low_contrast: bool = False) -> dict:
     )
     text = "".join(block.text for block in response.content if block.type == "text").strip()
     state = extract_json(text)
+    # ORDER MATTERS NOW. The paid answer no longer carries a hand, so the local build has
+    # to happen BEFORE anything that reads state["hand"] -- repair_phase_from_hand did,
+    # and silently saw an empty list.
+    apply_local_readers(state)
     repair_misread_cards(state)
     repair_phase_from_hand(state)
-    apply_local_readers(state)
     validate_game_state(state)
     return state
+
+
+def local_hand_cards(hand_img):
+    """(cards, None) in the paid schema's shape, or (None, why) when the hand is not
+    fully readable.
+
+    ALL OR NOTHING, deliberately. hand_to_cards() indexes c["power"], c["secondary"],
+    c["type"] and c["bonus"] with [] rather than .get(), so a half-built hand is a
+    KeyError deep in play_one_turn; and a hand missing one card is not a hand -- the
+    decision engine would choose from four cards believing it saw five.
+
+    `name` is None on player cards ON PURPOSE. Hand cards do not display a name
+    (CLAUDE.md section 3), so there is nothing to read and nothing downstream reads it --
+    matching a played card against a reveal is done on POWER.
+    """
+    try:
+        import local_hand
+    except Exception as exc:
+        return None, f"local_hand unavailable ({exc})"
+    try:
+        rows = local_hand.read_hand(hand_img)
+    except Exception as exc:
+        return None, f"read_hand raised ({exc})"
+    # The fan is five slots BY CONSTRUCTION, so its own geometry is the authority --
+    # MAX_HAND_SIZE lives in input_controller and is not imported here (a NameError the
+    # undefined-name test has already caught once in this file).
+    want = len(local_hand.SLOT_PLAYER)
+    if len(rows) != want:
+        return None, f"{len(rows)} rows, expected {want}"
+    cards = []
+    for i, r in enumerate(rows):
+        kind = r.get("kind")
+        if kind == "player":
+            if r.get("digit") is None:
+                return None, f"slot {i}: power unread"
+            if r.get("secondary") is None:
+                return None, f"slot {i}: shield unread"
+            cards.append({"kind": "player", "name": None, "power": int(r["digit"]),
+                          "secondary": int(r["secondary"]), "hand_index": i})
+        elif kind == "tactics":
+            if r.get("type") is None:
+                return None, f"slot {i}: tactics type unread"
+            if r.get("bonus") is None:
+                return None, f"slot {i}: tactics bonus unread"
+            cards.append({"kind": "tactics", "name": r["type"], "type": r["type"],
+                          "bonus": int(r["bonus"]), "hand_index": i})
+        else:
+            return None, f"slot {i}: kind unknown"
+    return cards, None
 
 
 def apply_local_readers(state: dict, crops: dict = None) -> None:
@@ -3218,6 +3328,23 @@ def apply_local_readers(state: dict, crops: dict = None) -> None:
         import local_state
     except Exception:
         return
+
+    # ---- THE HAND, BUILT LOCALLY. The paid model is no longer asked for it. ----------
+    # It never read the cards anyway: over 2,171 recorded hand cards its `name` was
+    # 'Batter'/'Pitcher' (the type banner), '', 'None', 'Unknown' or one of 57 invented
+    # names including six spellings of the same thing -- and on 32 of 33 frames that
+    # contained NO CARDS AT ALL it returned a full five-card hand. That is a default, not
+    # a reading, and it was hiding the local reader's true numbers behind it.
+    if crops.get("hand") is not None and not PAID_READS_CARDS:
+        cards, why = local_hand_cards(crops["hand"])
+        if cards is not None:
+            state["hand"] = cards
+        else:
+            # NOT READ is a real answer and it must look different from an empty hand.
+            # validate_game_state turns this into the retry the caller already handles.
+            state["hand"] = []
+            state["_hand_unread"] = why
+            print(f"  [local] hand NOT READ: {why}")
 
     if crops.get("scoreboard") is not None:
         try:

@@ -82,19 +82,53 @@ def _vector(img, box):
     return None if n < 1e-6 else a / n
 
 
+# THE FITTED RADIUS IS NOT RELIABLE TO A PIXEL, AND ONE PIXEL DECIDES THE ANSWER.
+# Found by filming a hand that was NOT MOVING: over 28 consecutive frames of a settled
+# hand, one card read 7 / unread / 7 / unread with the score swinging 0.57 to 0.91. The
+# picture was identical to the eye; what changed was the circle the finder fitted, which
+# alternated between r=19 and r=20. read_digit resamples the crop to a fixed 24x24, so a
+# one-pixel radius rescales the digit inside the tile and the correlation moves ~0.1-0.25.
+#
+# The same lesson as the shield and the banner (CLAUDE.md 10.23): do not trust one crop
+# position. Here it is the SCALE that has to be searched rather than the position.
+#
+# Measured on the REAL saved captures -- not video, which has compression the live path
+# does not -- over 1,181 player cards:
+#
+#     unread by the single-radius reader            24
+#     recovered by searching r-3 .. r+3             16   all 16 agreeing with the paid model
+#     answers CHANGED on cards that already read     0   of 1,157
+#
+# So it is free: it recovers two thirds of the misses and cannot alter an answer that was
+# already being given. The best score sits at dr -1 or -2 on nearly every card, which says
+# the 1.05 expansion below is slightly too generous -- but a search is robust to that in a
+# way that re-tuning one constant is not, and re-tuning would have to be re-done per
+# capture geometry.
+DIGIT_RADII = (-3, -2, -1, 0, 1, 2, 3)
+
+
 def read_digit(img, circle):
-    """(digit, score) for one located circle, or (None, score) when nothing matches."""
+    """(digit, score) for one located circle, or (None, score) when nothing matches.
+
+    The circle's RADIUS is searched, because the finder's fit is only good to a pixel or
+    two and a pixel decides the answer -- see DIGIT_RADII above.
+    """
     cx, cy, r = circle[0], circle[1], circle[2]
-    rr = int(r * 1.05)
-    v = _vector(img, (max(0, cx - rr), max(0, cy - rr),
-                      min(img.width, cx + rr), min(img.height, cy + rr)))
-    if v is None:
-        return None, 0.0
     vecs, digits = _templates()
-    scores = vecs @ v
-    k = int(scores.argmax())
-    best = float(scores[k])
-    return (digits[k] if best >= MIN_SCORE else None), best
+    best_d, best = None, 0.0
+    for dr in DIGIT_RADII:
+        rr = int((r + dr) * 1.05)
+        if rr < 4:
+            continue
+        v = _vector(img, (max(0, cx - rr), max(0, cy - rr),
+                          min(img.width, cx + rr), min(img.height, cy + rr)))
+        if v is None:
+            continue
+        scores = vecs @ v
+        k = int(scores.argmax())
+        if float(scores[k]) > best:
+            best_d, best = digits[k], float(scores[k])
+    return (best_d if best >= MIN_SCORE else None), best
 
 
 def find_tactics(img):
@@ -626,6 +660,141 @@ def read_shield(img, cx, cy):
         return 0, round(best, 3)
     return best_d, round(best, 3)
 
+
+# ---------------------------------------------------------------------------
+# THE TACTICS BONUS -- and there are TWO SPRITES, not one, which is why the digit
+# reader was stuck at 41.8% on this field.
+#
+#     swing_boost / pitch_boost      a WHITE DISC with a BLACK digit. read_digit
+#                                    already reads this one.
+#     speed_boost / fielding_boost   a DARK HERALDIC SHIELD with a WHITE digit --
+#                                    the same sprite family read_shield reads on
+#                                    player cards, at the INVERSE polarity.
+#
+# Over 465 cards whose slot correspondence with the paid model is PROVEN (both sides
+# emit five rows AND agree which slots are tactics -- CLAUDE.md 10.22): swing 137 +
+# pitch 65 carry the disc and win their slot on the isolated-digit path every time;
+# speed 127 + fielding 136 carry the shield and win it NEVER. This module's own
+# docstring says the bonus "sits fused inside the wreath" -- true for the disc cards,
+# WRONG for the shield cards, where nothing is fused and the polarity is simply
+# inverted, so a dark-ink finder sees the badge as one blob and reads no digit from it.
+# 236 of the 272 misses were LOCATED and never read, as a rank-1 candidate whose
+# circle is None by construction.
+#
+# It reads the way the shield and the banner do (10.23): SEARCH for the sprite, because
+# the cursor lifts a card and the badge rides with it -- measured at -40 to -43 px in y
+# on every cursor-selected card.
+#
+# CROSS-SESSION (banks from the EARLY half of the corpus, split on a real ~1 h session
+# gap; leave-one-out would leak because two hands in one match hold the same cards):
+#
+#     TRAIN  232 cards   right 229   WRONG 0   unsure 3
+#     TEST   233 cards   right 227   WRONG 0   unsure 6      (245/246 with the slot fallback)
+#
+# Both gates sit in a MEASURED EMPTY BAND (10.4), on the test half:
+#     DISC    positives min 0.831   negatives max 0.468   -> band 0.468 .. 0.831
+#     SHIELD  positives p05 0.828   negatives max 0.596   -> band 0.596 .. 0.828
+#
+# AND IT CORRECTS THE PAID MODEL: the three cards it labels "bonus 0" are all FIELDING
+# PLAY badges that plainly read 1. Adjudicated by eye on
+# agent_progress/bonus-reader/sheet_zero.png -- CLAUDE.md already records that error.
+#
+# IT IS A BADGE READER, NOT A CARD-TYPE DETECTOR. Applied to a player card it happily
+# reads that card's own shield, answering on 325 of 422. Only call it on a row the fan
+# has already called tactics.
+# ---------------------------------------------------------------------------
+BONUS_TEMPLATES = os.path.join(_HERE, "bonus_templates.npz")
+BONUS_WIN = (80, 90)            # half-window, anchor-px. Wider only lifts the NEGATIVES,
+                                # because the search starts reaching the neighbour's badge.
+BONUS_DISC_SIZE = (46, 46)
+BONUS_SHIELD_MIN = 0.70
+BONUS_DISC_MIN = 0.70
+_bonus_bank = None
+
+
+def _bonus_banks():
+    """{"shield": {digit: tpl}, "disc": {digit: tpl}}.
+
+    Shield digits 2 and 3 are borrowed from shield_templates.npz -- the SAME sprite, cut
+    from player cards -- because no tactics card in the corpus carries a shield 2 or 3, so
+    a bank built from tactics cards alone could only ever answer 1 and could never be
+    wrong. Borrowing them is what makes the shield digit a real question.
+    """
+    global _bonus_bank
+    if _bonus_bank is None:
+        b = {"shield": {}, "disc": {}}
+        try:
+            z = np.load(BONUS_TEMPLATES)
+            for k in z.files:
+                fam, d = k.rsplit("_", 1)
+                b[fam][int(d)] = z[k].astype(np.uint8)
+        except Exception:
+            pass
+        for d, t in (_shield_templates() or {}).items():
+            b["shield"].setdefault(int(d), np.asarray(t, dtype=np.uint8))
+        _bonus_bank = b
+    return _bonus_bank
+
+
+def _bonus_search(g, cx, cy, s, tpls, size):
+    import cv2
+    h, w = g.shape
+    x0, x1 = int(max(0, cx - BONUS_WIN[0] * s)), int(min(w, cx + BONUS_WIN[0] * s))
+    y0, y1 = int(max(0, cy - BONUS_WIN[1] * s)), int(min(h, cy + BONUS_WIN[1] * s))
+    sub = g[y0:y1, x0:x1]
+    tw, th = int(round(size[0] * s)), int(round(size[1] * s))
+    if tw < 4 or th < 4 or sub.shape[0] < th or sub.shape[1] < tw:
+        return None, -1.0
+    bd, bp = None, -1.0
+    for d, t in sorted(tpls.items()):
+        tt = cv2.resize(t, (tw, th), interpolation=cv2.INTER_LANCZOS4)
+        _, mx, _, _ = cv2.minMaxLoc(cv2.matchTemplate(sub, tt, cv2.TM_CCOEFF_NORMED))
+        if mx > bp:
+            bd, bp = int(d), float(mx)
+    return bd, bp
+
+
+def _bonus_at(g, cx, cy, s, b):
+    sd, sp = _bonus_search(g, cx, cy, s, b["shield"], SHIELD_SIZE)
+    dd, dp = _bonus_search(g, cx, cy, s, b["disc"], BONUS_DISC_SIZE)
+    # The families are INVERSE POLARITY, so the higher peak names the family and the loser
+    # is noise: measured, the loser tops out at 0.596 / 0.468 while a winner starts at
+    # 0.828 / 0.831.
+    if sp >= dp:
+        return (sd if sp >= BONUS_SHIELD_MIN else None), sp
+    return (dd if dp >= BONUS_DISC_MIN else None), dp
+
+
+def read_bonus(img, cx, cy, slot=None):
+    """(bonus, score) for the tactics card at (cx, cy), or (None, score) when unsure.
+
+    None means NOT READ, never "no bonus".
+
+    Pass `slot` whenever it is known. When no candidate reached a slot, the fan emits the
+    row at the PLAYER anchor, ~63px right of where the badge sits, and every such row in
+    the corpus is a CURSOR-LIFTED card -- the lift brightens it so the dark-blob finder
+    never saw it. All 8 abstain from the player anchor and all 8 read correctly from
+    SLOT_TACTICS. The fallback runs ONLY after the first search abstained, so it can never
+    overturn an answer.
+    """
+    try:
+        import cv2  # noqa: F401
+    except Exception:
+        return None, 0.0
+    b = _bonus_banks()
+    if not b["shield"] or not b["disc"]:
+        return None, 0.0
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    s = img.width / ANCHOR_W
+    val, sc = _bonus_at(g, cx, cy, s, b)
+    if val is None and slot is not None and 0 <= slot < len(SLOT_TACTICS):
+        ax, ay = SLOT_TACTICS[slot][0] * s, SLOT_TACTICS[slot][1] * s
+        if abs(ax - cx) > 8 * s or abs(ay - cy) > 8 * s:
+            v2, s2 = _bonus_at(g, ax, ay, s, b)
+            if v2 is not None:
+                return v2, round(s2, 3)
+    return val, round(sc, 3)
+
 def _read_fan(img, strong):
     s = img.width / ANCHOR_W
     g = np.asarray(img.convert("L"), dtype=np.uint8)
@@ -710,6 +879,10 @@ def _read_fan(img, strong):
             # answered more often: does this card add power at all?
             row["adds_power"], aps = reads_adds_power(img, i, x, cy)
             row["adds_power_score"] = round(aps, 3)
+            # hand_to_cards() indexes c["bonus"] on every tactics card, so it is read here
+            # rather than left for the paid model.
+            row["bonus"], bs = read_bonus(img, x, cy, slot=i)
+            row["bonus_score"] = bs
         out.append(row)
     return out
 
