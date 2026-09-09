@@ -47,14 +47,34 @@ check("the stashed frame is returned", got is marker)
 check("and the stash is EMPTY afterwards, so it cannot be reused",
       orchestrator.take_post_deal_hand() is None)
 
-# ---- 2. THE DEAL GATE FILLS IT. Without this the reader silently falls back to the later
-# vision crop forever and nothing anywhere says so.
+# ---- 2. THE POLL FILLS IT, and it is filled through a SETTER.
+# `_POST_DEAL_HAND = ...` inside run() would bind a LOCAL, the stash would stay empty
+# forever, and the reader would silently use the later vision crop with nothing anywhere
+# saying so -- this project's signature failure. Caught before it ever ran; pinned here so
+# it cannot come back.
+import ast                                                              # noqa: E402
 import inspect                                                          # noqa: E402
-src = inspect.getsource(orchestrator.wait_for_hand_deal)
-check("wait_for_hand_deal stashes the frame it released on",
-      "_POST_DEAL_HAND = cur" in src)
-check("and it does so on the RELEASE path, not the timeout",
-      src.index("_POST_DEAL_HAND = cur") < src.index("no replacement card seen"))
+
+src_all = inspect.getsource(orchestrator)
+tree = ast.parse(src_all)
+run_fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "run"), None)
+check("orchestrator.run exists to check", run_fn is not None)
+if run_fn is not None:
+    local_binds = [n for n in ast.walk(run_fn) if isinstance(n, ast.Assign)
+                   for t in n.targets
+                   if isinstance(t, ast.Name) and t.id == "_POST_DEAL_HAND"]
+    check("run() never BINDS _POST_DEAL_HAND directly -- that would be a silent no-op",
+          not local_binds, f"{len(local_binds)} direct assignment(s)")
+    calls = [n for n in ast.walk(run_fn) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == "stash_post_deal_hand"]
+    check("run() fills the stash through the setter", len(calls) == 1, f"{len(calls)} call(s)")
+
+poll_src = inspect.getsource(orchestrator.poll_for_readable_hand)
+check("the poll scores frames by slots actually READ, not slots found",
+      "r[\"digit\"] is not None" in poll_src and "read > best_read" in poll_src)
+check("and it stops early on a complete read rather than burning the whole window",
+      "break" in poll_src and "MAX_HAND_SIZE" in poll_src)
 
 # ---- 3. THE READER PREFERS IT. Pinned on the call, not on a comment.
 src2 = inspect.getsource(orchestrator.log_local_read_comparison)
