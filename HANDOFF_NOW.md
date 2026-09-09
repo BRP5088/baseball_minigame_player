@@ -84,16 +84,44 @@ playing a card nobody chose. It fired twice tonight ("intended card absent from 
 against 6 images / 3.1 s. So trimming what the model must EMIT is the lever, but the hand
 `name` field cannot be trimmed: it is what supplies phase and tactics type.
 
-## RUNNING RIGHT NOW (offline, no console, no money)
+## THE WORKFLOW FINISHED, AND ITS WINNER IS LANDED (patch71, 975658c)
 
-**Workflow `hand-finder-precision`, run `wf_e6e4870c-296`.** Four measured attacks on card
-POSITION detection, each with an independent skeptic:
-`extra-circles` (false positive discs), `tactics-blob` (when `find_tactics` is wrong),
-`card-segmentation` (segment the 5 fanned cards FIRST so a count mismatch is impossible by
-construction — the structural fix), `digit-fusion` (do 6/7/9 merge with the card art).
-Pre-registered metric, baseline to beat: **ALIGNED 10/57, ACCURACY 83%, WRONG 3.**
-Notes land in `agent_progress/<key>/progress.md`. Transcripts under
-`.claude/projects/.../subagents/workflows/wf_e6e4870c-296`.
+**`hand-finder-precision`, 8 agents, 471 tool calls.** Four hypotheses, each re-derived by
+an independent skeptic who reimplemented the metric before reading anyone's scorer.
+
+    metric (count matches AND the set of tactics slots matches)   ALIGNED   WRONG
+    shipped, whole-strip disc search                               10/57      3
+    patch71, the five-slot fan                                     57/57      0
+    HELD OUT, the 15 five-card bakeoff hands                       15/15      0
+                                                  (shipped there)   5/15
+    accuracy 191 of 202 player slots = 95%, 21.9 ms a hand
+
+Verified independently with my own implementation of the metric.
+
+- **CONFIRMED and landed:** the fan model (positions from measured 2D anchors scaled by crop
+  width; kind from the tactics disc sitting 60-83 px left, which decides 79 of 83 tactics
+  slots); the second dark pass at 90 for 9s and 7s whose ink fuses with the disc ring.
+- **CONFIRMED, not landed:** `DIGIT_H` floor of 21 (junk 10-20, real discs 21-23, held out
+  clean). The fan's own `DISC_MIN_R`/`DISC_MIN_REACH` gates cover the same junk; land it
+  only if measured to add something.
+- **REFUTED, recorded so it is not retried:** `find_tactics` is not the lever. A PERFECT
+  `find_tactics` caps at ALIGNED 11/57. It is a SHIELD detector — both card kinds carry a
+  shield, so it cannot be a tactics detector by construction.
+- **Six templates deleted, and they were mine** (three labelled one card off, three not
+  digits) — the cost of CLAUDE.md 10.22, added this session.
+
+Notes: `agent_progress/{extra-circles,tactics-blob,card-segmentation,digit-fusion}/progress.md`.
+
+## WHAT IS STILL OPEN ON THE READER
+
+1. **A tactics card's TYPE is unread, and it is the last thing standing between the local
+   reader and the paid call.** Only swing and pitch boosts add power. The measured candidate
+   is the BANNER: `orchestrator` derives PHASE from the hand card's banner name and the
+   tactics TYPE from its name. Measured 11 of 34 discs named at 221 ms — an overlapped
+   card's banner reads "ATTER", "ITCHER" or nothing. More hands is what raises that.
+2. **11 of 202 player slots still unread** (the reader abstains rather than guessing).
+3. **`drafts/patch70_honest_kind.py` is now SUPERSEDED** — patch71 gives kind a measured
+   positional signal on the fan path and says "unknown" off it. Do not apply patch70.
 
 ## THE ORDER OF WORK ON RETURN
 
