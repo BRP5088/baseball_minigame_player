@@ -1492,6 +1492,22 @@ def _encode_jpeg_b64(img) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def screenshot_b64_from_image(img) -> str:
+    """Encode an image for the model EXACTLY as capture_screenshot_b64()
+    encodes a fresh capture: the same SCREENSHOT_MAX_WIDTH downscale that
+    capture_screenshot_image() applies, then the same JPEG at quality 85.
+
+    It exists so read_matchup_reveal() can be handed the reveal watcher's peak
+    frame -- taken from chiaki's dump at its native 1920x1080 -- without the
+    model seeing a different KIND of image from the one every prompt in this
+    file was calibrated against.
+    """
+    if img.width > SCREENSHOT_MAX_WIDTH:
+        ratio = SCREENSHOT_MAX_WIDTH / img.width
+        img = img.resize((SCREENSHOT_MAX_WIDTH, int(img.height * ratio)))
+    return _encode_jpeg_b64(img)
+
+
 def capture_state_images_b64(mask_low_contrast: bool = False) -> list:
     """
     One screenshot, split into a cheap low-res overview (for screen-type
@@ -2361,6 +2377,178 @@ def wait_for_reveal_cards(max_wait: float = REVEAL_MAX_WAIT, poll_interval: floa
     return False
 
 
+# --- THE REVEAL WATCHER: look all the time, instead of at the right moment --
+#
+# THE POLL ABOVE TIMED OUT ON 7 OF 7 TURNS of the live match on 2026-09-08,
+# logging "peak edge 0.034-0.0535" every time. read_matchup_reveal() therefore
+# never ran, the strategy got no reveal information at all, and every turn
+# spent the full 75 seconds -- about six extra minutes on that match.
+#
+# The reveal was on screen. A 20 Hz sampler on chiaki's frame dump, scoring
+# frames with THIS SAME center_card_edge_fraction, saw 1848 of 12678 samples
+# at or above 0.065 over 720 seconds: 14 episodes, the eleven reveal-shaped
+# ones 4.00-12.82 s long and peaking at 0.1036-0.1687, one about every 20-35 s
+# (agent_progress/ocr-speed/reveal_sampler.py ->
+# overnight/census/reveal_edge_20260908.jsonl, frames under
+# overnight/census/reveal_edge_frames_20260908/). The 0.0535 the poll kept
+# reporting as its peak is the FACE-DOWN pre-flip pair of card backs, which
+# measures 0.050-0.054. So the poll was not looking during the flip.
+#
+# THE STATISTIC ALSO FIRES ON THE END-OF-ROUND LOSER SCREEN -- 0.0705-0.0764
+# over 15 saved frames of it, against genuine reveals that reach down to
+# 0.0729 in the census above this function, so the two OVERLAP and no cutoff
+# separates them. The old poll was scoped to one turn's post-play window and
+# this watcher is not, which is a real cost of looking all the time. It is
+# bounded by the mark, not by a threshold: the round-result screen comes AFTER
+# the reveal and BEFORE the next play, so the first episode after a play is
+# the reveal unless that turn produced no episode at all -- a turn that had
+# nothing before this patch either. reveal_cards feeds match_log.jsonl and
+# nothing else.
+#
+# WHETHER IT STARTS LATE OR THE FLIP LANDS BETWEEN POLLS WAS NEVER
+# ESTABLISHED, and this design makes the question irrelevant: a thread reading
+# the dump at 20 Hz records every episode as it happens, and a turn asks
+# afterwards for the episode that followed ITS OWN play. Nothing has to be
+# looking at the right moment.
+#
+# THE THRESHOLD, THE REGION AND THE POLL ARE ALL UNCHANGED. The watcher scores
+# frames with the same function against the same 0.065 -- re-measured on the
+# four saved frames at both widths, reveals 0.1155-0.1278 and face-down
+# 0.0491-0.0544 -- and wait_for_reveal_cards() is still what runs whenever the
+# dump is not there.
+REVEAL_WATCH_PERIOD = 0.05
+REVEAL_WATCH_CLOSE_GAP = 1.0
+REVEAL_WATCH_KEEP = 8
+# The same budget the poll had, so a turn can never wait LONGER than before.
+REVEAL_EPISODE_TIMEOUT = REVEAL_MAX_WAIT
+
+_REVEAL_WATCHER = None
+
+
+def start_reveal_watcher():
+    """Start the background reveal watcher, or return None if it cannot run.
+
+    Both imports are LAZY, so importing orchestrator costs nothing and a
+    script that never plays a match never loads them.
+
+    `frame_dump.read_frame` is passed as the reader WITH NO PATH: it resolves
+    the dump at CALL time -- the argument, then CHIAKI_FRAME_DUMP, then
+    DEFAULT_PATH -- and returns None under BASEBALL_TEST_RUN, which is what
+    stops the offline suite from ever being handed a frame by a chiaki that
+    happens to be streaming on this machine. A path captured here would be
+    CLAUDE.md 10.18's bug, and it would be silent.
+    """
+    global _REVEAL_WATCHER
+    if _REVEAL_WATCHER is not None:
+        return _REVEAL_WATCHER
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        # NO THREAD IN THE OFFLINE SUITE. frame_dump would hand it None on
+        # every read anyway, but a daemon thread per run() test is noise the
+        # suite does not need, and the flag is read HERE, at call time, never
+        # captured at import (CLAUDE.md 5: tools/prompt_ocr_ab.py set it at
+        # module level and silently disabled every stick send in a live
+        # harness). It also keeps the fallback the state every existing run()
+        # test exercises.
+        return None
+    try:
+        import frame_dump
+        import reveal_watch
+        w = reveal_watch.RevealWatcher(
+            frame_dump.read_frame, center_card_edge_fraction,
+            REVEAL_EDGE_THRESHOLD, period=REVEAL_WATCH_PERIOD,
+            close_gap=REVEAL_WATCH_CLOSE_GAP, keep=REVEAL_WATCH_KEEP)
+        w.start()
+    except Exception as e:
+        # NEVER fatal. A match that cannot watch falls back to the poll it
+        # always used; a match that cannot start is a $50 fee already paid.
+        print(f"  [reveal] watcher could not start ({e}) -- falling back to "
+              f"the {REVEAL_MAX_WAIT:.0f}s poll.")
+        return None
+    _REVEAL_WATCHER = w
+    return w
+
+
+def stop_reveal_watcher():
+    """Stop the watcher and forget it. Safe when none is running."""
+    global _REVEAL_WATCHER
+    w, _REVEAL_WATCHER = _REVEAL_WATCHER, None
+    if w is not None:
+        try:
+            w.stop()
+        except Exception as e:
+            print(f"  [reveal] watcher would not stop ({e}).")
+
+
+def reveal_mark():
+    """The clock a play is stamped with.
+
+    Taken from the watcher when there is one, so the mark and the episodes it
+    will be compared against can only ever come from the same clock.
+    """
+    w = _REVEAL_WATCHER
+    return w.mark() if w is not None else time.time()
+
+
+def reveal_frame_for(t_mark, timeout=None):
+    """The frame to read this turn's reveal from, or None to capture fresh.
+
+    Raises RuntimeError when no reveal was seen -- exactly the signal the
+    polling wait gave, so the caller's `except` is unchanged.
+
+    THE `available` CHECK IS THE WHOLE POINT OF THE FALLBACK. With no patched
+    chiaki, no dump, or a dump that has stopped, this behaves as the code did
+    before this patch -- and the offline suite is in precisely that state, so
+    every existing run() test still exercises wait_for_reveal_cards().
+
+    `timeout` is resolved at CALL time (CLAUDE.md 10.18): written
+    `timeout=REVEAL_EPISODE_TIMEOUT`, the constant would be captured when this
+    `def` ran and no later change to it could ever be seen.
+    """
+    w = _REVEAL_WATCHER
+    if w is None or t_mark is None or not w.available:
+        if not wait_for_reveal_cards():
+            raise RuntimeError("reveal cards never appeared")
+        return None
+    budget = REVEAL_EPISODE_TIMEOUT if timeout is None else timeout
+    t0 = time.time()
+    ep = w.episode_after(t_mark, budget)
+    waited = time.time() - t0
+    if ep is None:
+        left = budget - waited
+        if not w.available and left > 1.0:
+            # THE DUMP DIED WHILE WE WAITED, so episode_after gave up early
+            # rather than idling out a budget nothing could satisfy. The poll
+            # reads through _fast_grab -- the CAPTURE path, not the dump -- so
+            # it may still see the reveal that the watcher can no longer see.
+            #
+            # IT GETS ONLY WHAT IS LEFT OF THE BUDGET. wait_for_reveal_cards
+            # already takes max_wait, so nothing about that function changes,
+            # and the turn can never wait longer in total than the
+            # REVEAL_MAX_WAIT it waited before this patch existed. A fallback
+            # that started a fresh 75 s clock would make the rare case slower
+            # than the code it replaced, which is not a fallback, it is a
+            # regression with a comment.
+            print(f"  [reveal] the dump went quiet after {waited:.0f}s "
+                  f"({w.stats()}) -- falling back to the poll for the "
+                  f"{left:.0f}s left of the budget")
+            if not wait_for_reveal_cards(max_wait=left):
+                raise RuntimeError("reveal cards never appeared")
+            return None
+        # Deliberately the same SHAPE as the poll's timeout line above, so the
+        # two are comparable turn for turn inside one log.
+        print(f"  [reveal] no episode within {waited:.0f}s of the play vs "
+              f"threshold {REVEAL_EDGE_THRESHOLD} -- {w.stats()}")
+        raise RuntimeError("reveal cards never appeared")
+    # THE DURATION IS IN THE LINE ON PURPOSE. The end-of-round LOSER screen
+    # scores in the same band as a weak reveal and sits there for 20+ seconds,
+    # where a reveal runs 4-13 s; peak and duration together are what make a
+    # confounded row identifiable in the morning without a new threshold.
+    print(f"  [reveal] episode t_first=+{ep.t_first - t_mark:.1f}s after the "
+          f"play, peak {ep.peak:.4f}, {ep.duration():.1f}s long, waited "
+          f"{waited:.1f}s" + ("" if ep.closed else " (still open)"))
+    return ep.frame
+
+
 # --- Post-play readiness ---------------------------------------------------
 #
 # THE LOOP READS ~15 SECONDS TOO EARLY AFTER EVERY PLAY. Measured over all 88
@@ -2819,7 +3007,7 @@ def read_game_state(mask_low_contrast: bool = False) -> dict:
     return state
 
 
-def read_matchup_reveal() -> list:
+def read_matchup_reveal(img=None) -> list:
     """
     Read whichever face-up reveal cards (yours vs the opponent's) are
     currently visible mid-turn-resolution — each side up to 2 entries
@@ -2838,8 +3026,19 @@ def read_matchup_reveal() -> list:
     outcome and risk being misattributed to the fielding/speed effect
     this logging exists to investigate (caught by the user, 2026-08-24,
     reviewing the fix that first excluded tactics cards entirely).
+
+    `img` IS THE FRAME TO READ, and None means "take a fresh screenshot" --
+    which is what every caller did before the reveal watcher existed. The
+    watcher hands over the PEAK frame of the reveal episode, the moment the
+    centre-edge statistic was highest and so the moment the cards are fully
+    drawn. That is strictly better than whatever happens to be on screen by
+    the time this runs: the reveal stays up 4-10 s and this call arrives
+    somewhere inside that window, or after it has closed. The frame is encoded
+    by screenshot_b64_from_image(), byte for byte the way
+    capture_screenshot_b64() encodes its own capture.
     """
-    img_b64 = capture_screenshot_b64()
+    img_b64 = (capture_screenshot_b64() if img is None
+               else screenshot_b64_from_image(img))
     response = client.messages.create(
         model=MODEL,
         max_tokens=500,
@@ -4249,9 +4448,20 @@ def play_one_turn(state_json: dict, batters_used: int):
     if decision.tactics_card:
         tactics_idx = next(i for i, t in tactics if t is decision.tactics_card)
 
+    # THE REVEAL CLOCK STARTS ONE LINE BEFORE THE COMMIT, not after
+    # play_one_turn returns. Everything after this press belongs to THIS
+    # turn's reveal; an episode already under way when it is taken belongs to
+    # the turn before, and reveal_frame_for() refuses that on `t_first >=
+    # t_mark` alone. Taken BEFORE the press rather than after, so no part of
+    # the flip can land in the gap between the two.
+    _reveal_mark = reveal_mark()
     select_and_play(player_idx, tactics_idx)
 
     matchup_info = {
+        # POPPED by run() before this dict can reach pending_matchup, so
+        # match_log.jsonl is unaffected by patch60. It is a clock reading, not
+        # a measurement of the turn, and it has no business in the dataset.
+        "reveal_mark": _reveal_mark,
         "phase": state_json["phase"],
         "our_card_name": decision.player_card.name,
         "our_power": decision.player_card.power,
@@ -4414,6 +4624,13 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # a finally so it cannot outlive the run — the previous version only
     # set the event on the two normal exits.
     try:
+        # THE REVEAL WATCHER runs for the length of the match loop and is
+        # stopped in the finally below, for the same reason as the screenshot
+        # logger: the loop exits through many paths, and a daemon thread that
+        # outlives its run keeps reading the dump for the rest of the process.
+        # Never fatal -- start_reveal_watcher() returns None when it cannot
+        # run, and every turn then falls back to wait_for_reveal_cards().
+        start_reveal_watcher()
         if log_screenshots:
             # Started INSIDE the try so the finally always reaches it. I9: the
             # handle is kept (it used to be discarded, leaving no way to stop
@@ -5181,9 +5398,18 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # the centre keeps animating for ~9s after the
                             # reveal and only goes quiet once the cards have
                             # already cleared.
-                            if not wait_for_reveal_cards():
-                                raise RuntimeError("reveal cards never appeared")
-                            reveal_cards = read_matchup_reveal()
+                            # THE WATCHER'S EPISODE, NOT A POLL. The
+                            # mark is POPPED, not read: it is a clock reading
+                            # and must not travel on into match_log.jsonl
+                            # through pending_matchup below.
+                            # reveal_frame_for() raises the same RuntimeError
+                            # the poll's timeout raised, and falls back to
+                            # that poll whenever the watcher is unavailable --
+                            # which is the state of every offline test and of
+                            # any run without the patched chiaki.
+                            _reveal_mark = matchup_info.pop("reveal_mark", None)
+                            reveal_img = reveal_frame_for(_reveal_mark)
+                            reveal_cards = read_matchup_reveal(img=reveal_img)
                             # Known accepted limitation (QA, 2026-08-23): if our
                             # card and the opponent's happen to share a name
                             # (plausible from a shared card pool), both get
@@ -5440,6 +5666,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 time.sleep(2)
 
     finally:
+        stop_reveal_watcher()
         if screenshot_stop is not None:
             screenshot_stop.set()
         if stop_reason is not None:
