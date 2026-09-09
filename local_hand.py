@@ -291,10 +291,25 @@ def _strong_discs(img):
 #     top score   RIGHT p05 0.773    WRONG MAX 0.761      no overlap
 #     raw accuracy 73/83; all 10 errors fall below the worst right answer
 #
+# AND THAT CLEAN SEPARATION DID NOT SURVIVE A BIGGER BANK. Re-measured over 196 cards in 86
+# hands with 117 templates: the right answers run down to 0.342 and the worst WRONG reaches
+# 0.815, so the populations OVERLAP and no gate sits in a gap any more. Saying otherwise
+# would be fitting a constant to this sample (CLAUDE.md 10.4).
+#
+# So the gate is set as a SAFETY TRADE instead, and the trade is asymmetric: an abstention
+# costs one paid call, while a wrong type plays a speed boost as if it added power in a $50
+# match. Sweep, leave-one-hand-out:
+#
+#     0.77   173/196 read (88%)   172 right,  1 WRONG      <- a speed boost read as swing
+#     0.82   167/196 read (85%)   167 right,  0 wrong      but only 0.005 above the worst wrong
+#     0.88   152/196 read (78%)   152 right,  0 wrong      8% clear of it
+#
+# 0.88 is the one with margin. The 1 wrong at 0.77 has NOT been adjudicated by eye and may
+# itself be a paid-model error -- that model read three 6s as 5s on the same day.
 # The MARGIN over the runner-up type does NOT separate (right p05 0.112 against wrong max
 # 0.203) and is not used -- measured and dropped, per CLAUDE.md 10.4.
 TACTICS_TEMPLATES = os.path.join(_HERE, "tactics_templates.npz")
-MIN_TYPE_SCORE = 0.77
+MIN_TYPE_SCORE = 0.88
 # The banner's box relative to the slot's TACTICS anchor, in the 979-wide crop the anchors
 # were measured in, and scaled with them.
 BANNER_BOX = (-50, 18, 130, 70)

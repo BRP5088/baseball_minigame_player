@@ -99,10 +99,15 @@ for slot in range(5):
 # ---- 4. THE GATE IS PINNED AS A LITERAL and bracketed by the two measured populations.
 # Comparing against local_hand.MIN_TYPE_SCORE would rise with it and pass forever
 # (CLAUDE.md 10.11).
-check("MIN_TYPE_SCORE is 0.77", local_hand.MIN_TYPE_SCORE == 0.77,
+# The gate is pinned as a LITERAL. It is no longer "between two populations": with 117
+# templates over 196 cards the right answers reach down to 0.342 and the worst WRONG reaches
+# 0.815, so they OVERLAP and no gap exists. It is a SAFETY TRADE, and the trade is
+# asymmetric -- an abstention costs one paid call, a wrong type plays a speed boost as if it
+# added power in a $50 match. 0.88 clears the worst observed wrong by 8%.
+check("MIN_TYPE_SCORE is 0.88", local_hand.MIN_TYPE_SCORE == 0.88,
       str(local_hand.MIN_TYPE_SCORE))
-check("and it sits between the measured populations (0.761 wrong, 0.773 right)",
-      0.761 < local_hand.MIN_TYPE_SCORE <= 0.773)
+check("and it clears the worst measured WRONG answer (0.815) with margin",
+      local_hand.MIN_TYPE_SCORE >= 0.815 * 1.05, str(local_hand.MIN_TYPE_SCORE))
 
 # ---- 5. THE BANK holds only the four types the game has, and no type has a single example
 # (one template cannot be checked against anything).
