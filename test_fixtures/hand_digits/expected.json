@@ -1,0 +1,125 @@
+{
+ "hand025.png": {
+  "paid": [
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 4,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 8,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 8,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "expected_local": [
+   "5",
+   "4",
+   "8",
+   "8",
+   "5"
+  ]
+ },
+ "hand030.png": {
+  "paid": [
+   {
+    "kind": "tactics",
+    "power": null,
+    "bonus": 1,
+    "type": "fielding_boost"
+   },
+   {
+    "kind": "player",
+    "power": 6,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 8,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 6,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "expected_local": [
+   "?",
+   "6",
+   "8",
+   "6",
+   "5"
+  ]
+ },
+ "hand054.png": {
+  "paid": [
+   {
+    "kind": "tactics",
+    "power": null,
+    "bonus": 1,
+    "type": "swing_boost"
+   },
+   {
+    "kind": "player",
+    "power": 8,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 4,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 7,
+    "bonus": null,
+    "type": null
+   },
+   {
+    "kind": "player",
+    "power": 5,
+    "bonus": null,
+    "type": null
+   }
+  ],
+  "expected_local": [
+   "1",
+   "8",
+   "4",
+   "7",
+   "5"
+  ]
+ }
+}
