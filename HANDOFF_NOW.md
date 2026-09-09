@@ -1,5 +1,111 @@
 # HANDOFF — what is running and what happens next
 
+**Updated 2026-09-09 03:30 — the user has gone to bed. THE CONSOLE IS IDLE: `run_cycles.py`
+and the stream recorder were both stopped deliberately, mid-match, at the user's request.
+One workflow is running OFFLINE (no console, no money).**
+
+## THE STATE ON DISK RIGHT NOW
+
+- **`progress_testing.json` says `match_in_progress: true`, and that is CORRECT, not stale.**
+  A real match was on screen when the run was stopped. Do NOT clear it by hand. The next
+  `reset_env.reset_environment()` clears it on a confirmed reload, which is the one moment
+  clearing is safe. Balance $96, record 17W/6L.
+- **Nothing is holding the console.** `ps aux | grep -E "[r]un_cycles|[r]ecord_stream"` is empty.
+
+## WHAT LANDED TONIGHT
+
+- **patch69 (211c6bf)** — `local_hand` runs in production inside
+  `orchestrator.log_local_read_comparison`, replacing a PaddleOCR subprocess that reloaded its
+  models every call: **seconds → 4.5 ms**. Every sampled turn appends the hand crop and BOTH
+  readings to `overnight/local_hand/`, so vision's answer labels the corpus.
+- **`LOCAL_CHECK_EVERY` 4 → 1 (c859f61)** — sampling existed only to dodge that 25.57 s cost.
+  One turn in four was paying 25 s for a diagnostic.
+- **Templates rebuilt from VERIFIED labels (211c6bf, 0f9aa88)** — `tools/build_digit_templates.py`
+  seeds from hands the paid model labelled and grows by having those seeds classify each archive
+  cluster (admitted at 0.80 agreement / 0.75 score, 13 of 46 clusters DROPPED). Reading cluster
+  contact sheets by eye had got 5 of 28 labels wrong, which read a real 5 as an 8 at 0.99.
+  Corpus disagreements 6 → **0**.
+- **The labelled corpus is committed (9fa6193)** — 57 hand strips + `agreement.jsonl`.
+
+## THE MEASUREMENT THAT MATTERS, AND A CORRECTION I MADE MID-SESSION
+
+I reported per-digit live accuracy (6 at 31%, 7 at 33%, 9 at 0%) and blamed thin templates.
+**That table was an artefact.** It aligned local rows to vision cards by POSITION whenever the
+counts matched — unsound, because the finder can miss one digit and invent another in the same
+hand, the counts still match, and every later column is scored against the wrong card. A contact
+sheet settled it: slots recorded as a missed 6 or 7 are FIELDING PLAY cards.
+
+Re-measured with alignment PROVEN (counts match AND the set of tactics slots matches):
+
+    57 hands ->  10 ALIGNED   30 count mismatch   17 kind-pattern mismatch
+    on the aligned hands: 34 correct, 3 wrong, 4 unread   =  83%
+
+**Templates are not the bottleneck. Card POSITION detection is** — 47 of 57 hands cannot be
+compared to vision at all.
+
+## TWO OPEN DEFECTS IN THE LOCAL READER
+
+1. **It calls a tactics card a player card.** Twice tonight: "Power Swing bonus 2" read as a
+   power-2 batter at score 0.972, and a "Fielding Play bonus 1" read as a 6 at 0.993. A score
+   gate cannot catch either — the CARD is misidentified, not the digit. Three discriminators
+   were measured against both populations and ALL THREE OVERLAP: ring darkness (tactics p05
+   0.32/p50 0.54 against player p05 0.09/p95 0.40), the biggest dark blob beside the disc
+   (tactics min 30/p50 82 against player p05 58/p95 76), and shield presence (**23% of PLAYER
+   cards show no shield**). No constant was invented.
+   **The fix is written and waiting: `drafts/patch70_honest_kind.py`.** It makes `kind` report
+   `"tactics"` (the fused wreath, which IS evidence) or `"unknown"`, and NEVER `"player"`.
+   **It is NOT applied because the workflow below is measuring against the current baseline.**
+   Apply it after the workflow reports, then run the suite.
+
+2. **The measured candidate for a real fix is the BANNER.** `orchestrator` derives the
+   batting/pitching PHASE from the hand card's banner name (`_PHASE_FOR_BANNER`) and a tactics
+   card's TYPE from its name (`TACTICS_NAME_TO_KIND`). One banner reader would close three of
+   the four fields that keep the paid call on every turn. Measured 2026-09-09: **11 of 34 discs
+   named correctly at 221 ms a hand** — an overlapped card's banner reads "ATTER", "ITCHER" or
+   nothing. Too little recall to gate a $50 decision, and 4 tactics examples is too few to
+   measure the false-attribution risk from a neighbour's banner. Every played turn adds one.
+
+## WHY THE PAID CALL IS STILL MADE EVERY TURN (the user asked directly)
+
+Measured from `overnight/runs/20260909_022748_patch69_localhand2/events.jsonl`:
+
+    read_game_state       every turn    1.9-4.8 s, median 3.1    15 calls
+    read_matchup_reveal   every play    6.7 and 8.2 s
+
+`read_game_state` returns ten fields; three have local readers (hand power digits, scores,
+runners). Four do not: **screen, phase, discards_left, tactics type**. The last one decides
+play — only swing and pitch boosts add power (CLAUDE.md section 4) — so a speed boost read as
+power plays the wrong card.
+
+`read_matchup_reveal` is NOT a diagnostic: it is the only detector for a dropped keystroke
+playing a card nobody chose. It fired twice tonight ("intended card absent from reveal").
+
+**Output tokens dominate the latency, not images** — and this run proves it: 1 image / 8.2 s
+against 6 images / 3.1 s. So trimming what the model must EMIT is the lever, but the hand
+`name` field cannot be trimmed: it is what supplies phase and tactics type.
+
+## RUNNING RIGHT NOW (offline, no console, no money)
+
+**Workflow `hand-finder-precision`, run `wf_e6e4870c-296`.** Four measured attacks on card
+POSITION detection, each with an independent skeptic:
+`extra-circles` (false positive discs), `tactics-blob` (when `find_tactics` is wrong),
+`card-segmentation` (segment the 5 fanned cards FIRST so a count mismatch is impossible by
+construction — the structural fix), `digit-fusion` (do 6/7/9 merge with the card art).
+Pre-registered metric, baseline to beat: **ALIGNED 10/57, ACCURACY 83%, WRONG 3.**
+Notes land in `agent_progress/<key>/progress.md`. Transcripts under
+`.claude/projects/.../subagents/workflows/wf_e6e4870c-296`.
+
+## THE ORDER OF WORK ON RETURN
+
+1. Read the workflow's verdicts. Only CONFIRMED findings get implemented.
+2. Apply `drafts/patch70_honest_kind.py`, run the suite, mutation-test.
+3. Implement whichever position fix survived verification; re-score on the same metric.
+4. Then, and only then, more matches — for tactics art and for 7s and 9s.
+
+**THE GAME HAS NO 3** (the user, 2026-09-09). No player card has ever shown a power of 1, 2 or
+3 either: powers run 4-9, and 1 and 2 appear only as tactics bonuses. Do not hunt for a 3.
+
+
 **Updated 2026-09-08 12:27 -- THE USER IS RESTARTING THE MAC. NOTHING IS RUNNING. Read this block first.**
 
 ## SAVED STATE and IN-FLIGHT WORK (20:10)
