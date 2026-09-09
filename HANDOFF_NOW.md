@@ -13,9 +13,29 @@
   through `_harness.run_trial` (killed from outside at `ceiling_for(attempts)`), the child retries
   through `chain_trials.walk_attempts` (default 2, env `BASEBALL_CYCLE_WALK_ATTEMPTS`),
   `_reset_progress` reads the wallet AFTER the walk. 70 checks, 12 mutants, suite 154 green.
-  **THE SMOKE TEST IS RUNNING since 20:16** (`overnight/smoke_cycle_wrapper.log`, `smoke_cycle.log`;
-  BASEBALL_API_BUDGET=200). Acceptance, pre-registered in the patch docstring: ARRIVED + attempt
-  number; orchestrator.run started; >=1 match RESULT; the loop stopped on its own.
+  **THE SMOKE TEST PASSED (20:16-21:07, `overnight/smoke_cycle_20260908_2016.log`):** walk 1 lost at
+  Wanda (the estimate ran 65 waypoints ahead, `overnight/cycle_frames/cycle01_try1/`), walk 2 arrived;
+  $246 read off the pause menu with the prompt intact; 4 matches 3W/1L; stopped on its own at $46;
+  175 paid calls ($2.10). All four pre-registered checks met.
+- **THE MATCH-PLAY REVIEW** (`agent_progress/ocr-speed/REPORT.md`, 21 agents, 5 findings survived
+  11 refuted): the photo is sharp, the SCREEN IS NOT READY -- the post-play gate releases ~15 s
+  before the replacement card lands (the code's own comment), `POST_PLAY_WAIT_FOR_DEAL` ships OFF;
+  F1 no discard ledger (15 discards in a 2-discard match, each excess discard COMMITS the weakest
+  card); F2 the reveal read is a diagnostic past its sunset (26% of the API budget, 225 s/match,
+  nothing decides on it); F3 hand-length floor missing; F4 REDRAW_POWER_THRESHOLD tuned on a
+  mechanic the code cannot perform; F5 match_log outcomes mislabelled (20 of 37 sure home runs
+  logged "out"). Do-first list in section 5. NO navigation change anywhere.
+- **REVEAL FACTS (measured 20:46-21:07):** the match capture ALREADY reads the dump
+  (grab -> compass.fast_capture -> frame_dump, 25 ms); on the dump the reveal scores 0.11-0.16 vs
+  threshold 0.065 on every turn (`overnight/census/reveal_edge_20260908.jsonl`, peak frames in
+  `reveal_edge_frames_20260908/`); the 4 Hz poll logs peak 0.0535 = the FACE-DOWN phase, so it is
+  not looking during the flip. Recording of match 4 at 20 Hz per region + 2 Hz frames:
+  `overnight/census/match_timeline_20260908/`.
+- **IN BUILD (workflows):** patch60 reveal watcher (20 Hz thread on the dump records each reveal
+  episode; the loop reads the peak frame -- makes the timing irrelevant); patch59 escape by region;
+  the OCR timing study (`agent_progress/ocr-timing/TIMING_REPORT.md`). Then F1 (discard ledger)
+  and F3 (hand floor + BASEBALL_DEAL_WAIT=1 live) as patches, each measured by one cycle at
+  BASEBALL_API_BUDGET=200.
 - **Still a patch SCRIPT, workflow w8wn7t1ua building it:** patch59
   (gate the escape ladder on the push before/after match count that crawl mode validated --
   blocked 148-166 inliers vs moved 10-28, n=6 each; ships OFF; removes the bar detours the user
