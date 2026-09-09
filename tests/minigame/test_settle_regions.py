@@ -282,9 +282,10 @@ if hand_deal_seen([_th], threshold=_th + 1):
 # ON by default since 2026-09-08 (patch63); BASEBALL_DEAL_WAIT=0 is the only off switch.
 if not POST_PLAY_WAIT_FOR_DEAL and (os.environ.get("BASEBALL_DEAL_WAIT") or "1").strip().lower() not in ("0", "false", "off", "no"):
     failures.append("the deal gate is OFF by default -- patch63 turned it on")
-if POST_PLAY_DEAL_MAX_WAIT < 22:
+# 20 s, live-measured: every deal in 30 gate windows crossed by 15.0 s (patch66).
+if POST_PLAY_DEAL_MAX_WAIT < 18:
     failures.append(f"POST_PLAY_DEAL_MAX_WAIT={POST_PLAY_DEAL_MAX_WAIT} is below "
-                    "the p50 deal time of ~16.9s plus margin — it would time out "
+                    "the 15.0s slowest deal measured live plus margin — it would time out "
                     "on ordinary plays and silently revert to reading early")
 
 # Timeout must FALL THROUGH, never raise: the caller still needs a frame, and
@@ -306,7 +307,7 @@ finally:
     _o._grab_settle_regions = _real_grab
     _o.time = _real_time
 
-print(f"OK: post-play deal gate — rising-edge on the hand at threshold {_th}, "
+print(f"OK: post-play deal gate — distance from the baseline at threshold {_th}, "
       f"falls through after {POST_PLAY_DEAL_MAX_WAIT:.0f}s, "
       f"{'ENABLED' if POST_PLAY_WAIT_FOR_DEAL else 'default off'}")
 

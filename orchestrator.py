@@ -2613,7 +2613,11 @@ def reveal_frame_for(t_mark, timeout=None):
 # retry path handles a bad one.
 # 35, was 25: the worst deal measured 2026-09-08 landed 21.95 s after the play (n=9);
 # 25 left 3 s of margin. The cap costs time only on a turn that already failed.
-POST_PLAY_DEAL_MAX_WAIT = 35.0
+# 20.0, was 35.0: over 30 real gate windows recorded at 60 fps on 2026-09-08 EVERY
+# deal crossed the threshold below by 15.0 s (p50 5.5, p90 10.6), so 20 s carries a third
+# of margin. The old 35 was sized for the rising-edge gate, which missed 11 of 30 windows
+# and paid the whole cap for each. A cap costs time only on a turn with no deal.
+POST_PLAY_DEAL_MAX_WAIT = 20.0
 # THE DEAL EDGE, between two measured populations (2026-09-08, 20 Hz on the frame
 # dump, n=9 turns; agent_progress/ocr-timing/TIMING_REPORT.md):
 #   dead window (max d_hand between the play burst and the deal burst)  7.25 .. 15.44
@@ -2623,7 +2627,43 @@ POST_PLAY_DEAL_MAX_WAIT = 35.0
 # gap. 25.0 sits in the gap; 16..30 all release at p50 ~10 s. CAVEAT: measured at a
 # 0.060 s sample gap; the live poll is 0.15 s, so both populations rise in
 # production. Re-check against the first live session's [deal] lines.
-HAND_DEAL_THRESHOLD = 25.0
+# 15.0, WAS 25.0 AND A DIFFERENT QUANTITY. The gate now measures how far the hand has
+# moved from where it was when the gate STARTED, not how much it moved since the previous
+# sample. Measured non-circularly over 30 real gate windows (agent_progress/hand-timing/):
+#     no deal (n=7)    4.1  5.5  6.8  9.3  9.3 10.1 11.5
+#     deal   (n=23)   20.0 21.6 29.1 ... 49.1 50.1
+# 15.0 sits in that gap, 1.30x above the highest no-deal and 0.75x the lowest deal. The
+# rising-edge statistic it replaces cannot see a card that slides in over two seconds,
+# because that motion is divided among the thirteen polls that carry it -- four of the
+# eleven live timeouts were exactly that, with total movement 19.3-33.4 and no step over
+# 16.1. Read through hand_deal_threshold(), so a sweep moves it without a code edit.
+HAND_DEAL_THRESHOLD = 15.0
+# ...AND IT IS A KNOB, NOT A SETTLED VALUE. 25.0 was derived offline at a 0.060 s
+# sample gap; live at the 0.15 s poll (2026-09-08, n=11 turns) the gate released at
+# 6.0-16.5 s with a median of 7.9 s against the study's predicted 11.5 s, twice
+# exactly on the 6.0 s floor, and timed out entirely twice. Firing early AND missing
+# is CLAUDE.md 10.4's signature of a threshold inside one population. Rather than
+# invent a second number from the same thin evidence, the value is read at CALL time
+# (10.18) so it can be swept hand by hand -- BASEBALL_DEAL_THRESHOLD=NN -- and every
+# [deal] line prints the threshold in force and the largest delta the poll saw, which
+# is the measurement that will settle it.
+DEAL_THRESHOLD_ENV = "BASEBALL_DEAL_THRESHOLD"
+# How often the wait says it is still alive. 5 s is short enough that no silence
+# is ever mistaken for a hang and long enough that a 35 s wait costs 7 lines.
+DEAL_HEARTBEAT_SEC = 5.0
+
+
+def hand_deal_threshold(env=None):
+    raw = (os.environ if env is None else env).get(DEAL_THRESHOLD_ENV)
+    if raw is None:
+        return HAND_DEAL_THRESHOLD
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{DEAL_THRESHOLD_ENV}={raw!r} is not a number")
+    if not 0.0 < v <= 255.0:
+        raise ValueError(f"{DEAL_THRESHOLD_ENV}={raw!r} is outside (0, 255]")
+    return v
 # No post-play read before this, edge or no edge: between the fastest release the
 # old gate produced (2.16 s, n=85 live) and the earliest a hand was readable by eye
 # (8.43 s, n=9).
@@ -2648,7 +2688,7 @@ def hand_deal_seen(deltas, threshold=None):
     """Pure decision function over a stream of hand-region deltas: True once a
     deal-sized motion has been observed. Split out from the polling loop so it
     can be replayed against logged frames — see the replay validation."""
-    th = HAND_DEAL_THRESHOLD if threshold is None else threshold
+    th = hand_deal_threshold() if threshold is None else threshold
     return any(d >= th for d in deltas)
 
 
@@ -2661,22 +2701,45 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     _grab_settle_regions(("hand",)) per poll, ~40 ms.
     """
     start = time.time()
-    prev = _grab_settle_regions(("hand",))["hand"]
+    # THE BASELINE: the hand as it was when this gate started. Every later frame is
+    # compared against THIS, not against its predecessor, so a gradual deal accumulates
+    # instead of being divided among the polls that carried it.
+    baseline = _grab_settle_regions(("hand",))["hand"]
     seen = False
+    th = hand_deal_threshold()
+    biggest = 0.0
+    last_beat = start
     while time.time() - start < max_wait:
         time.sleep(poll_interval)
         cur = _grab_settle_regions(("hand",))["hand"]
-        if _mean_abs_delta(prev, cur) >= HAND_DEAL_THRESHOLD:
+        d = _mean_abs_delta(baseline, cur)
+        biggest = max(biggest, d)
+        # THE HEARTBEAT. A 35 s silence and a hung process read exactly alike --
+        # the user watching the stream on 2026-09-08 could not tell them apart,
+        # and CLAUDE.md 10.1 lists "a slow step and a hung step with identical
+        # output" as this project's signature failure. One line every
+        # DEAL_HEARTBEAT_SEC says the loop is alive, how long it has waited, and
+        # how close the biggest delta has come -- which is also the number that
+        # sizes the threshold.
+        _now = time.time()
+        if _now - last_beat >= DEAL_HEARTBEAT_SEC:
+            last_beat = _now
+            print(f"  [deal] waiting {_now - start:.0f}s of {max_wait:.0f}s — "
+                  f"biggest delta {biggest:.1f} of the {th:g} needed")
+        if d >= th:
             seen = True
-        prev = cur
+
         # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
         # measurement above, so keep polling; return on the first poll at or past
         # the floor once an edge has been seen.
         if seen and time.time() - start >= POST_PLAY_MIN_WAIT:
-            print(f"  [deal] replacement card seen; released {time.time() - start:.1f}s after the play")
+            print(f"  [deal] replacement card seen; released {time.time() - start:.1f}s "
+                  f"after the play (threshold {th:g}, biggest delta {biggest:.1f})")
             return True
     print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
-          "reading anyway (the retry path will catch a bad read).")
+          f"reading anyway (the retry path will catch a bad read). "
+          f"Threshold {th:g}, biggest delta {biggest:.1f}: a biggest well UNDER the "
+          f"threshold means the gate is too high for this turn.")
     return False
 
 

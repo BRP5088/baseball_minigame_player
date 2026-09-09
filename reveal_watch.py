@@ -88,6 +88,17 @@ PERIOD = 0.05
 # reveal in two nor glue two screens into one episode.
 CLOSE_GAP = 1.0
 
+# HOW LONG THE PEAK MUST STOP RISING before an OPEN episode is handed over.
+# Measured live 2026-09-08 over 13 episodes of one match: the peak arrives after
+# t_first at 0.17..0.66 s on ten of them and 2.60/4.27/4.37 s on three, so no fixed
+# delay is right. What IS stable is that the rise ends: 0.5 s of no new maximum is
+# 1.2x the longest sub-threshold dip measured INSIDE an episode (0.41 s, the datum
+# CLOSE_GAP sits on) and half the 1.0 s close gap, so a settle always resolves
+# before the episode itself closes. Before this rule the loop read the FIRST frame
+# above the threshold on 8 of 8 turns (0.066-0.096) while the peaks were
+# 0.077-0.166, and the three reveal misreads of that match were all first frames.
+PEAK_SETTLE_SEC = 0.5
+
 # HOW MANY CLOSED EPISODES ARE KEPT. A match is ~10 turns and a lookup only
 # ever wants the newest, so this is for the log and the post-mortem.
 KEEP = 8
@@ -291,13 +302,17 @@ class RevealWatcher:
         under way when the card was committed belongs to the turn before and
         is never returned, however recent it is.
 
-        Returns an episode as soon as it exists with a peak frame -- it does
-        NOT wait for the episode to close. Waiting would add the close gap
-        plus whatever is left of a 4-10 s animation to every turn that asks
-        mid-reveal, and the peak-so-far is already past the face-down state
-        that the threshold rejects. `closed` on the result says which case
-        the caller got, so the live log can settle later whether waiting
-        would have been worth it.
+        Returns an episode once its peak has STOPPED RISING -- no new maximum
+        for PEAK_SETTLE_SEC -- or once it has closed, whichever comes first.
+        It does not wait out the whole 4-10 s animation.
+
+        WHY NOT THE FIRST FRAME. That is what this did until 2026-09-08, and
+        measured live it handed over the first frame above the threshold on 8
+        of 8 turns (peaks 0.066-0.096) while those same episodes went on to
+        peak at 0.077-0.166 a median 0.63 s later. The three reveal misreads
+        of that match -- two "intended card absent", one "no OPPONENT card
+        identified" -- were all such frames: the cards mid-flip. `closed` on
+        the result still says which case the caller got.
 
         IT ALSO GIVES UP THE MOMENT THE DUMP DIES. `available` is checked on
         every poll, not only at entry: a stream that stops mid-wait (chiaki
@@ -312,10 +327,20 @@ class RevealWatcher:
         """
         deadline = time.time() + float(timeout)
         entered_available = self.available
+        # The peak-settle state: the best score seen for the episode we are
+        # holding, and when it last rose. Held here rather than on the episode
+        # because _first_after hands back an independent COPY each poll.
+        best = None
+        rose_at = None
         while True:
             ep = self._first_after(t_mark)
             if ep is not None:
-                return ep
+                now = time.time()
+                if best is None or ep.peak > best:
+                    best, rose_at = ep.peak, now
+                # Closed, settled, or out of budget: this is the peak.
+                if ep.closed or now - rose_at >= PEAK_SETTLE_SEC or now >= deadline:
+                    return ep
             if time.time() >= deadline:
                 return None
             self._stop.wait(poll)

@@ -14,16 +14,29 @@ def check(cond, msg):
 # The two populations, measured 2026-09-08 (n=9 each). Literals, not the constant.
 DEAD_WINDOW_MAX = 15.44
 DEAL_BURST_MIN = 31.83
-check(_o.HAND_DEAL_THRESHOLD == 25.0, "HAND_DEAL_THRESHOLD is the measured 25.0")
-check(DEAD_WINDOW_MAX < _o.HAND_DEAL_THRESHOLD < DEAL_BURST_MIN,
-      "the deal threshold sits BETWEEN the dead window (max 15.44) and the deal burst (min 31.83)")
+check(_o.HAND_DEAL_THRESHOLD == 15.0,
+      "HAND_DEAL_THRESHOLD is 15.0 -- patch66 remeasured it live as a distance from the "
+      "baseline, where no-deal windows reach 11.5 and real deals start at 20.0")
+# RETIRED by patch66. Those two populations were of the RISING-EDGE statistic
+# (sample vs previous sample), which the gate no longer uses; live it missed 11 of
+# 30 windows. The populations that pin the shipped gate are in test_reveal_peak.py.
+check(_o.SETTLE_THRESHOLDS["hand"] == 8.0,
+      "the SETTLE gate keeps its own 8.0 -- correct once the deal has landed")
 check(_o.SETTLE_THRESHOLDS["hand"] == 8.0, "SETTLE_THRESHOLDS['hand'] stays 8.0 for the settle gate")
 check(not _o.hand_deal_seen([10.0]), "a dead-window delta (10.0) is NOT a deal by default")
-check(not _o.hand_deal_seen([20.0]), "a delta inside the gap but under 25 (20.0) is NOT a deal")
+# 20.0 IS a deal now: patch66 remeasured the gate as a distance from the baseline,
+# where the no-deal band tops out at 11.5 and real deals start at 20.0.
+check(_o.hand_deal_seen([20.0]), "20.0 clears the live threshold of 15.0")
+check(not _o.hand_deal_seen([11.5]), "11.5, the highest no-deal window measured, does not")
 check(_o.hand_deal_seen([32.0]), "a deal-burst delta (32.0) IS a deal")
 check(_o.POST_PLAY_MIN_WAIT == 6.0, "POST_PLAY_MIN_WAIT is 6.0")
 check(2.16 < _o.POST_PLAY_MIN_WAIT < 8.43, "the floor sits between the fastest old release (2.16) and the earliest readable hand (8.43)")
-check(_o.POST_PLAY_DEAL_MAX_WAIT >= 22.0, "the cap clears the worst measured deal (21.95 s)")
+# The 21.95 s worst case came from replaying 9 turns offline against the rising-edge
+# statistic. Live, over 30 gate windows, every real deal crossed the shipped
+# threshold by 15.0 s, so a 20 s cap carries a third of margin and saves 15 s on
+# each of the 7 turns in 30 that have no deal coming at all.
+check(_o.POST_PLAY_DEAL_MAX_WAIT >= 15.0 * 1.25,
+      "the cap clears the slowest deal measured LIVE (15.0 s) with 25% margin")
 
 # ON by default, off only by the env, read at call time.
 check(_o.post_play_wait_for_deal({}) is True, "deal wait is ON with the env unset")
