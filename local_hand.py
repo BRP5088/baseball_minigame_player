@@ -87,16 +87,65 @@ def read_digit(img, circle):
     return (digits[k] if best >= MIN_SCORE else None), best
 
 
-def read_hand(img):
-    """Every power digit in a hand strip, left to right.
+def find_tactics(img):
+    """Locate a TACTICS card's circle, which the player-card reader cannot see.
 
-    Returns a list of {"x", "digit", "score"}. `digit` is None where the mark did not
-    match any template -- an unknown digit or a card element -- and the caller must treat
-    that as "not read", never as "absent".
+    A tactics card wraps its circle in an ornate dark wreath and the digit's ink FUSES with
+    it, so the player reader -- which looks for isolated ink on clean white -- finds nothing
+    there. Measured: on hand 015 that fused shape is one blob 36x40 px, far too big for a
+    digit, and eroding it does not separate the two (it stays 33x38, then fragments).
+
+    So stop separating them. The wreath is a fixed game asset too, which makes "digit plus
+    wreath" a fixed shape in its own right. Located this way it is found on 15 of 15 hands,
+    including every one the player reader misses.
+
+    This is why there are several readers rather than one: each card type presents the digit
+    differently, and at about 2 ms a reader the cost of running them all is nothing. A reader
+    that tried to cover both lost more than it gained -- merging a disc-hole detector into
+    the player reader took disagreements from 0 to 1.
+    """
+    import numpy as _np
+    import scipy.ndimage as _ndi
+    g = _np.asarray(img.convert("L"), dtype=_np.uint8)
+    H, W = g.shape
+    lab, n = _ndi.label(g <= 110)
+    out = []
+    for sl, i in zip(_ndi.find_objects(lab), range(1, n + 1)):
+        if sl is None:
+            continue
+        ys, xs = sl
+        h, w = ys.stop - ys.start, xs.stop - xs.start
+        # The fused shape, measured across 15 hands: 33-37 wide, 38-41 tall.
+        if not (28 <= w <= 48 and 30 <= h <= 50):
+            continue
+        if ys.start == 0 or xs.start == 0 or ys.stop >= H or xs.stop >= W:
+            continue
+        out.append({"x": int((xs.start + xs.stop) / 2),
+                    "y": int((ys.start + ys.stop) / 2),
+                    "box": (int(xs.start), int(ys.start), int(xs.stop), int(ys.stop))})
+    out.sort(key=lambda c: c["x"])
+    return out
+
+
+def read_hand(img):
+    """Every card position in a hand strip, left to right, from every reader.
+
+    Each entry is {"x", "kind", "digit", "score"}. `kind` is "player" or "tactics".
+    `digit` is None where nothing matched -- an unknown digit, an untemplated one, or a
+    card element -- and the caller must treat that as NOT READ, never as absent. Nothing
+    here ever guesses: that is what makes a partial answer safe to fall back on.
+
+    Tactics cards are located but their bonus is NOT read yet: every tactics card in the
+    measured corpus carried a bonus of 1, so there is no evidence the fused shape can tell
+    a 1 from a 2 or a 3.
     """
     from circle_finder import find_circles           # local import: numpy + scipy only
     out = []
     for c in find_circles(img):
         d, s = read_digit(img, c)
-        out.append({"x": c[0], "digit": d, "score": round(s, 3)})
+        out.append({"x": c[0], "kind": "player", "digit": d, "score": round(s, 3)})
+    for t in find_tactics(img):
+        if all(abs(t["x"] - o["x"]) > 20 for o in out):
+            out.append({"x": t["x"], "kind": "tactics", "digit": None, "score": 0.0})
+    out.sort(key=lambda r: r["x"])
     return out
