@@ -119,8 +119,13 @@ check("anchors are declared in the crop width they were measured at",
 # disc's ring and the two label as one oversized blob at 110; a pass at 90 recovers the
 # card. The order is load-bearing, not cosmetic: reversing it took WRONG from 5 to 10,
 # because a blob found at 90 has a tighter box than the crop the templates were cut at.
-check("two dark thresholds, primary first",
-      tuple(local_hand.DARK_THRESHOLDS) == (110, 90), str(local_hand.DARK_THRESHOLDS))
+# Three passes, PRIMARY FIRST and the brightest LAST. 110 is the normal disc; 90 recovers
+# a 9 or 7 whose ink fuses with the disc ring; 130 recovers the card UNDER THE CURSOR, which
+# the game lifts and HIGHLIGHTS so its ink goes too bright for 110 to see. The order is
+# load-bearing in both directions: a looser pass winning a tie read 5 digits one too high.
+check("three dark thresholds, primary first and brightest last",
+      tuple(local_hand.DARK_THRESHOLDS) == (110, 90, 130),
+      str(local_hand.DARK_THRESHOLDS))
 check("find_circles takes a threshold and defaults to the shipped one",
       circle_finder.find_circles.__defaults__ == (circle_finder.DARK,),
       str(circle_finder.find_circles.__defaults__))

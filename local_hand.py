@@ -177,7 +177,22 @@ DISC_MIN_REACH = 6
 # two label as one oversized component at 110. Recall 254/285 -> 265/285. The PRIMARY
 # threshold must win a tie: a blob found at 90 has a tighter bounding box than the crop the
 # templates were cut at, and letting it win read 5 digits exactly one too high.
-DARK_THRESHOLDS = (110, 90)
+#
+# THE THIRD PASS AT 130 IS FOR THE CARD UNDER THE CURSOR, and the user found it. The game
+# LIFTS and HIGHLIGHTS whichever card the cursor sits on, so that card renders BRIGHTER and
+# its ink falls above DARK=110 -- the finder never sees the disc at all. Confirmed on four
+# hands the user identified as having a selected card, every one of which was an abstention:
+#
+#     hand #9  the lifted PITCH FOCUS  disc invisible at 110 and 90, found at 130
+#              at (486, 92) against a tactics anchor of (486, 134): a lift of 42 px
+#     hand #17 the lifted POWER SWING  same, at (133, 152) against (132, 194): 42 px
+#
+# The LIFT itself needs no handling -- 42 px costs 14 in the slot cost (|dx| + |dy|/3)
+# against SLOT_TOL 34, so the slot model already reaches it. Only the brightness lost it.
+# Measured over the whole corpus, adding 130 LAST (so it only fills what the darker passes
+# missed): aligned 133 -> 134, digits read 459 -> 464, unread 7 -> 5, and WRONG unchanged
+# at 3 -- all three of which are the paid model's own errors, not the reader's.
+DARK_THRESHOLDS = (110, 90, 130)
 
 # THE DISC AS A WHITE BLOB, for the 9s and 7s whose ink fuses with the ring anyway. Its own
 # shape features do NOT separate a disc from card art (w, h, area and fill all overlap
