@@ -1,0 +1,362 @@
+== build 9113fcd; constants recorded in overnight/runs/20260908_235423_patch65_66_67/run.json
+== overnight/runs/20260908_235423_patch65_66_67  (recorder pid 13666)
+== record before: 96 14 6 True
+1788926067.942 [cycles] 1 cycles, API budget 200 calls (~$2.40)
+1788926067.942 [cycles] === cycle 1 ===
+1788926067.982 [cycles]   [stream] up via find_bar (compass strip located; may be under an overlay)
+1788926067.982 [cycles] walking to the table in a child process: up to 2 walk(s), killed from outside after 720s
+1788926069.005 [cycles]       | [cycles] walking to the table with the closed loop (route_user_1853), up to 2 attempt(s)
+1788926074.538 [cycles]       | [cycles]   a match is in progress — 'Give up?' is up, answering YES so the pause menu can be reached (the reload discards it)
+1788926078.565 [cycles]       | [cycles]   pause menu open (selected 'Resume')
+1788926079.569 [cycles]       | [cycles]   selected: Load Last Save
+1788926080.571 [cycles]       | [cycles]   confirmation dialog up (delta 83.2) -> YES
+1788926085.093 [cycles]       | [cycles]   world back after 3.2s, spawn bearing 87 (E)
+1788926085.598 [cycles]       | [cycles]   cleared match_in_progress in progress_testing.json — the reload discarded any match, so the record was stale
+1788926089.637 [cycles]       | [cycles]   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 47 iteration(s). The 180s cap allows 3.83s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+1788926093.672 [cycles]       | [cycles]         turn to 271.3: TURNED to 273.7 (err -2.4) in 2 push(es), asked -175.7 deg, stick 2.60s
+1788926094.177 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 16.0, best 16.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926094.177 [cycles]       | [cycles]     it   1  k=  3 ->   3  turned-aligned to 271.3168428039934  (172 inliers at the stop)
+1788926095.183 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.3, best 21.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926095.183 [cycles]       | [cycles]     it   2  k=  4 ->   4  advanced-weak   fix={'k': 4, 'k_float': 4.0, 'inliers': 19, 'dx': -50.59580993652344, 'dy': 34.8480224609375, 'scale': 1.212567510448614, 'second': 17, 'second_k': 6, 'second_dx': -43.20001220703125, 'detail': 'k=4 (4.00) inliers=19 second=17 dx=-51 scale=1.213 window=[2,6] fitted=[2, 3, 4, 5, 6]'}
+1788926095.684 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926095.684 [cycles]       | [cycles]     it   3  k=  7 ->   7  blind-advance   fix={'k': 4, 'k_float': 4.0, 'inliers': 12, 'dx': -87.97591400146484, 'dy': 46.82887268066406, 'scale': 1.5206054952375077, 'second': 12, 'second_k': 6, 'second_dx': -80.73214721679688, 'detail': 'k=4 (4.00) inliers=12 second=12 dx=-88 scale=1.521 window=[3,7] fitted=[3, 4, 5, 6, 7]'}
+1788926096.693 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 12.6, best 12.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926096.693 [cycles]       | [cycles]     it   4  k=  9 ->  10  advanced-weak   fix={'k': 9, 'k_float': 9.0, 'inliers': 15, 'dx': -120.337890625, 'dy': 37.905487060546875, 'scale': 1.5712407004224038, 'second': 10, 'second_k': 8, 'second_dx': -119.8375015258789, 'detail': 'k=9 (9.00) inliers=15 second=10 dx=-120 scale=1.571 window=[6,10] fitted=[6, 7, 8, 9, 10]'}
+1788926097.193 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 12.8, best 12.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926097.695 [cycles]       | [cycles]     it   5  k= 10 ->  10  blind-advance   fix=None
+1788926098.198 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 7.0, best 7.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926098.198 [cycles]       | [cycles]     it   6  k= 13 ->  13  blind-advance   fix=None
+1788926099.203 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 7.0, best 7.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926099.203 [cycles]       | [cycles]     it   7  k= 16 ->  16  blind-advance   fix=None
+1788926099.706 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 8.0, best 8.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926099.706 [cycles]       | [cycles]     it   8  k= 19 ->  19  blind-advance   fix=None
+1788926100.714 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 9.4, best 9.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926100.714 [cycles]       | [cycles]     it   9  k= 19 ->  39  door-step 1/1: one more push along 271.3 before the stop turns (the frame after it fits 0 inliers, scale None)
+1788926103.236 [cycles]       | [cycles]         turn to 1.6: TURNED to 2.6 (err -1.0) in 2 push(es), asked +87.9 deg, stick 1.43s
+1788926103.740 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 10.2, best 10.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926103.740 [cycles]       | [cycles]     it   9  k= 39 ->  39  turned-aligned to 1.6055901753868653  (53 inliers at the stop)
+1788926104.245 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 13.8, best 13.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926104.750 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 13.5, best 13.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926104.750 [cycles]       | [cycles]     it  10  k= 40 ->  40  advanced        fix={'k': 40, 'k_float': 40.0, 'inliers': 41, 'dx': 87.84002685546875, 'dy': 338.0, 'scale': 1.144305997463036, 'second': 39, 'second_k': 41, 'second_dx': 87.43682861328125, 'detail': 'k=40 (40.00) inliers=41 second=39 dx=+88 scale=1.144 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe right 0.12s
+1788926105.755 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.2, best 21.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926106.256 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.11s, change 12.0, best 12.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926106.256 [cycles]       | [cycles]     it  11  k= 40 ->  43  stalled         fix={'k': 39, 'k_float': 39.0, 'inliers': 42, 'dx': 78.43548583984375, 'dy': 354.96563720703125, 'scale': 1.2407684801467485, 'second': 42, 'second_k': 40, 'second_dx': 78.048095703125, 'detail': 'k=39 (39.00) inliers=42 second=42 dx=+78 scale=1.241 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.11s
+1788926106.759 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 42.6, best 42.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926107.262 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 16.6, best 16.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926107.262 [cycles]       | [cycles]     it  12  k= 40 ->  43  stalled         fix={'k': 40, 'k_float': 40.0, 'inliers': 44, 'dx': 86.36181640625, 'dy': 328.8321228027344, 'scale': 1.4107724733898173, 'second': 43, 'second_k': 41, 'second_dx': 86.60003662109375, 'detail': 'k=40 (40.00) inliers=44 second=43 dx=+86 scale=1.411 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.12s
+1788926108.268 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 33.9, best 33.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926108.772 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.13s, change 9.2, best 9.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926108.772 [cycles]       | [cycles]     it  13  k= 43 ->  43  advanced        fix={'k': 43, 'k_float': 43.0, 'inliers': 37, 'dx': 91.53607177734375, 'dy': 293.0689392089844, 'scale': 1.5502822591131245, 'second': 34, 'second_k': 40, 'second_dx': 98.80645751953125, 'detail': 'k=43 (43.00) inliers=37 second=34 dx=+92 scale=1.550 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.13s
+1788926109.774 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.9, best 21.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926110.275 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.14s, change 8.7, best 8.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926110.275 [cycles]       | [cycles]     it  14  k= 43 ->  46  stalled         fix={'k': 44, 'k_float': 44.0, 'inliers': 35, 'dx': 97.94317626953125, 'dy': 259.38409423828125, 'scale': 1.7080415437911773, 'second': 34, 'second_k': 46, 'second_dx': 78.64324951171875, 'detail': 'k=44 (44.00) inliers=35 second=34 dx=+98 scale=1.708 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.14s
+1788926110.781 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 15.0, best 15.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926111.283 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.14s, change 4.1, best 4.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926111.283 [cycles]       | [cycles]     it  15  k= 43 ->  46  stalled         fix={'k': 42, 'k_float': 42.0, 'inliers': 29, 'dx': 100.9200439453125, 'dy': 251.75820922851562, 'scale': 2.165108878273905, 'second': 27, 'second_k': 45, 'second_dx': 78.69927978515625, 'detail': 'k=42 (42.00) inliers=29 second=27 dx=+101 scale=2.165 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.14s
+1788926112.289 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.8, best 19.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926112.791 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.14s, change 3.2, best 3.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926112.791 [cycles]       | [cycles]     it  16  k= 44 ->  46  advanced-weak   fix={'k': 44, 'k_float': 44.0, 'inliers': 16, 'dx': 147.33819580078125, 'dy': 151.6327362060547, 'scale': 2.5660134713872775, 'second': 14, 'second_k': 46, 'second_dx': 129.05178833007812, 'detail': 'k=44 (44.00) inliers=16 second=14 dx=+147 scale=2.566 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.14s
+1788926113.794 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.0, best 23.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926113.794 [cycles]       | [cycles]     it  17  k= 46 ->  46  blind-advance   fix={'k': 47, 'k_float': 47.0, 'inliers': 6, 'dx': -15.384002685546875, 'dy': 192.1000213623047, 'scale': 1.1469951279964807, 'second': 0, 'second_k': None, 'second_dx': 0.0, 'detail': 'k=47 (47.00) inliers=6 second=0 dx=-15 scale=1.147 window=[43,47] fitted=[47]'}
+1788926114.297 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 27.1, best 27.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926114.799 [cycles]       | [cycles]     it  18  k= 49 ->  49  blind-advance   fix={'k': 49, 'k_float': 49.0, 'inliers': 6, 'dx': -17.899978637695312, 'dy': 196.80003356933594, 'scale': 1.4748983485820457, 'second': 0, 'second_k': None, 'second_dx': 0.0, 'detail': 'k=49 (49.00) inliers=6 second=0 dx=-18 scale=1.475 window=[45,49] fitted=[49]'}
+1788926115.805 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 27.5, best 27.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926115.805 [cycles]       | [cycles]     it  19  k= 52 ->  52  blind-advance   fix={'k': 52, 'k_float': 52.0, 'inliers': 10, 'dx': -24.939987182617188, 'dy': 232.048583984375, 'scale': 1.4603739499599437, 'second': 9, 'second_k': 51, 'second_dx': -22.800018310546875, 'detail': 'k=52 (52.00) inliers=10 second=9 dx=-25 scale=1.460 window=[48,52] fitted=[50, 51, 52]'}
+1788926116.815 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.1, best 28.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926117.320 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 17.5, best 17.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926117.320 [cycles]       | [cycles]     it  20  k= 55 ->  55  advanced        fix={'k': 55, 'k_float': 51.89361769671821, 'inliers': 34, 'dx': -49.00398254394531, 'dy': 254.21682739257812, 'scale': 1.2147249954918748, 'second': 24, 'second_k': 54, 'second_dx': -48.21998596191406, 'detail': 'k=55 (51.89) inliers=34 second=24 dx=-49 scale=1.215 window=[51,55] fitted=[51, 52, 53, 54, 55]'}  strafe left 0.10s
+1788926117.825 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 20.6, best 20.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926118.330 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 11.4, best 11.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926118.330 [cycles]       | [cycles]     it  21  k= 55 ->  58  stalled         fix={'k': 57, 'k_float': 57.0, 'inliers': 82, 'dx': -40.58000183105469, 'dy': 274.75531005859375, 'scale': 1.308693160839513, 'second': 69, 'second_k': 58, 'second_dx': -40.723175048828125, 'detail': 'k=57 (57.00) inliers=82 second=69 dx=-41 scale=1.309 window=[54,58] fitted=[54, 55, 56, 57, 58]'}  strafe left 0.10s
+1788926119.337 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 14.9, best 14.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926119.337 [cycles]       | [cycles]     it  22  k= 55 ->  58  stalled         fix={'k': 56, 'k_float': 56.0, 'inliers': 77, 'dx': -31.186920166015625, 'dy': 270.0000305175781, 'scale': 1.3935400671530616, 'second': 76, 'second_k': 58, 'second_dx': -30.093582153320312, 'detail': 'k=56 (56.00) inliers=77 second=76 dx=-31 scale=1.394 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+1788926120.343 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 16.5, best 16.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926120.343 [cycles]       | [cycles]     it  23  k= 55 ->  58  stalled         fix={'k': 56, 'k_float': 56.0, 'inliers': 80, 'dx': -33.519989013671875, 'dy': 255.74993896484375, 'scale': 1.4799752319586572, 'second': 76, 'second_k': 58, 'second_dx': -32.999969482421875, 'detail': 'k=56 (56.00) inliers=80 second=76 dx=-34 scale=1.480 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+1788926120.846 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926121.347 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 7.7, best 7.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926121.347 [cycles]       | [cycles]     it  24  k= 58 ->  58  advanced        fix={'k': 58, 'k_float': 58.0, 'inliers': 63, 'dx': -35.649261474609375, 'dy': 243.64810180664062, 'scale': 1.4522962093383316, 'second': 57, 'second_k': 56, 'second_dx': -37.142364501953125, 'detail': 'k=58 (58.00) inliers=63 second=57 dx=-36 scale=1.452 window=[54,58] fitted=[54, 55, 56, 57, 58]'}  strafe left 0.10s
+1788926122.354 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 16.3, best 16.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926122.354 [cycles]       | [cycles]     it  25  k= 61 ->  61  advanced        fix={'k': 61, 'k_float': 61.0, 'inliers': 122, 'dx': -25.320785522460938, 'dy': 257.10723876953125, 'scale': 1.4907290043371475, 'second': 94, 'second_k': 59, 'second_dx': -28.15484619140625, 'detail': 'k=61 (61.00) inliers=122 second=94 dx=-25 scale=1.491 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+1788926122.857 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 15.6, best 15.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926123.361 [cycles]       | [cycles]     it  26  k= 61 ->  64  stalled         fix={'k': 61, 'k_float': 61.0, 'inliers': 108, 'dx': -28.339996337890625, 'dy': 258.2049560546875, 'scale': 1.5878274974960482, 'second': 104, 'second_k': 62, 'second_dx': -26.915969848632812, 'detail': 'k=61 (61.00) inliers=108 second=104 dx=-28 scale=1.588 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+1788926123.866 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 17.9, best 17.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926123.866 [cycles]       | [cycles]     it  27  k= 61 ->  64  stalled         fix={'k': 63, 'k_float': 63.0, 'inliers': 108, 'dx': -29.889572143554688, 'dy': 257.2799072265625, 'scale': 1.6633028034417632, 'second': 99, 'second_k': 60, 'second_dx': -36.62200927734375, 'detail': 'k=63 (63.00) inliers=108 second=99 dx=-30 scale=1.663 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+1788926124.874 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.6, best 19.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926125.379 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 9.3, best 9.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926125.379 [cycles]       | [cycles]     it  28  k= 61 ->  64  stalled         fix={'k': 60, 'k_float': 60.0, 'inliers': 90, 'dx': -41.64311218261719, 'dy': 265.87481689453125, 'scale': 2.023223662787434, 'second': 78, 'second_k': 63, 'second_dx': -37.09129333496094, 'detail': 'k=60 (60.00) inliers=90 second=78 dx=-42 scale=2.023 window=[60,64] fitted=[60, 61, 62, 63, 64]'}  strafe left 0.10s
+1788926125.887 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 22.0, best 22.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926126.388 [cycles]       | [cycles]     it  29  k= 64 ->  64  blind-advance   fix={'k': 61, 'k_float': 61.0, 'inliers': 27, 'dx': -36.833953857421875, 'dy': 280.96368408203125, 'scale': 2.106723512697055, 'second': 23, 'second_k': 63, 'second_dx': -23.77166748046875, 'detail': 'k=61 (61.00) inliers=27 second=23 dx=-37 scale=2.107 window=[60,64] fitted=[60, 61, 62, 63, 64]'}
+1788926126.388 [cycles]       | [cycles]     it  30  k=106 ->  88  relocalised past the stop: 183 inliers at 106
+1788926127.396 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 25.5, best 25.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926127.901 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.11s, change 15.5, best 15.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926127.901 [cycles]       | [cycles]     it  31  k=107 -> 107  advanced        fix={'k': 108, 'k_float': 107.52316350366601, 'inliers': 172, 'dx': -76.80001831054688, 'dy': 5.760009765625, 'scale': 0.9678149260441575, 'second': 171, 'second_k': 105, 'second_dx': -78.0479736328125, 'detail': 'k=108 (107.52) inliers=172 second=171 dx=-77 scale=0.968 window=[105,109] fitted=[105, 106, 107, 108, 109]'}  strafe left 0.11s
+1788926128.406 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 26.2, best 26.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926128.911 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 8.7, best 8.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926128.911 [cycles]       | [cycles]     it  32  k=107 -> 109  stalled         fix={'k': 107, 'k_float': 109.18779772656451, 'inliers': 168, 'dx': -58.243194580078125, 'dy': 2.4000091552734375, 'scale': 1.1674729147337248, 'second': 165, 'second_k': 106, 'second_dx': -59.79998779296875, 'detail': 'k=107 (109.19) inliers=168 second=165 dx=-58 scale=1.167 window=[106,110] fitted=[106, 107, 108, 109, 110]'}  strafe left 0.10s
+1788926129.915 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 22.3, best 22.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926130.419 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 10.1, best 10.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926130.419 [cycles]       | [cycles]     it  33  k=107 -> 109  stalled         fix={'k': 106, 'k_float': 106.0, 'inliers': 171, 'dx': -58.079986572265625, 'dy': -19.641571044921875, 'scale': 1.4482717560454248, 'second': 170, 'second_k': 107, 'second_dx': -58.54316711425781, 'detail': 'k=106 (106.00) inliers=171 second=170 dx=-58 scale=1.448 window=[106,110] fitted=[106, 107, 108, 109, 110]'}  strafe left 0.10s
+1788926131.425 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.6, best 19.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926131.926 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 12.1, best 12.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926131.926 [cycles]       | [cycles]     it  34  k=109 -> 109  advanced        fix={'k': 109, 'k_float': 109.0, 'inliers': 178, 'dx': -47.11445617675781, 'dy': -16.962020874023438, 'scale': 1.3978350749560045, 'second': 168, 'second_k': 110, 'second_dx': -26.53594970703125, 'detail': 'k=109 (109.00) inliers=178 second=168 dx=-47 scale=1.398 window=[106,110] fitted=[106, 107, 108, 109, 110]'}  strafe left 0.10s
+1788926132.429 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 18.0, best 18.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926132.429 [cycles]       | [cycles]     it  35  k=109 -> 112  stalled         fix={'k': 111, 'k_float': 111.0, 'inliers': 140, 'dx': -33.05220031738281, 'dy': -35.65635681152344, 'scale': 1.4793992919984065, 'second': 126, 'second_k': 109, 'second_dx': -33.958892822265625, 'detail': 'k=111 (111.00) inliers=140 second=126 dx=-33 scale=1.479 window=[108,112] fitted=[108, 109, 110, 111, 112]'}
+1788926133.435 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 20.2, best 20.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926133.435 [cycles]       | [cycles]     it  36  k=109 -> 112  stalled         fix={'k': 110, 'k_float': 110.0, 'inliers': 108, 'dx': 24.26922607421875, 'dy': -2.00775146484375, 'scale': 2.415197686859007, 'second': 93, 'second_k': 112, 'second_dx': -62.50396728515625, 'detail': 'k=110 (110.00) inliers=108 second=93 dx=+24 scale=2.415 window=[108,112] fitted=[108, 109, 110, 111, 112]'}
+1788926133.942 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.8, best 28.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926134.447 [cycles]       | [cycles]     it  37  k=112 -> 112  blind-advance   fix={'k': 110, 'k_float': 110.0, 'inliers': 13, 'dx': 23.813629150390625, 'dy': 18.8995361328125, 'scale': 4.138228874286224, 'second': 11, 'second_k': 112, 'second_dx': -0.685455322265625, 'detail': 'k=110 (110.00) inliers=13 second=11 dx=+24 scale=4.138 window=[108,112] fitted=[110, 111, 112]'}
+1788926134.953 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 41.7, best 41.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926135.458 [cycles]       | [cycles]     it  38  k=114 -> 114  blind-advance   fix={'k': 112, 'k_float': 112.0, 'inliers': 6, 'dx': 116.26679992675781, 'dy': -40.5, 'scale': 0.8500462216884093, 'second': 0, 'second_k': None, 'second_dx': 0.0, 'detail': 'k=112 (112.00) inliers=6 second=0 dx=+116 scale=0.850 window=[111,115] fitted=[112]'}
+1788926136.460 [cycles]       | [cycles]         turn to 303.3: TURNED to 306.8 (err -3.5) in 1 push(es), asked -58.4 deg, stick 0.78s
+1788926137.462 [cycles]       | [cycles]         turn to 278.3: TURNED to 279.3 (err -1.0) in 1 push(es), asked -28.5 deg, stick 0.40s
+1788926138.470 [cycles]       | [cycles]         turn to 303.3: TURNED to 300.8 (err +2.5) in 1 push(es), asked +24.0 deg, stick 0.40s
+1788926139.472 [cycles]       | [cycles]         turn to 283.4: TURNED to 284.8 (err -1.3) in 1 push(es), asked -17.4 deg, stick 0.25s
+1788926139.472 [cycles]       | [cycles]     it  39  k=129 -> 129  turned-looked to 303.34476843910807  (177 inliers at the stop)  STOP YAW -19.9 deg on -393 px, no strafe
+1788926139.977 [cycles]       | [cycles]         turn to 279.9: TURNED to 280.1 (err -0.3) in 1 push(es), asked -4.9 deg, stick 0.15s
+1788926140.482 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 11.4, best 11.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926140.983 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.22s, change 11.2, best 11.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926141.487 [cycles]       | [cycles]     it  40  k=129 -> 130  stalled         fix={'k': 129, 'k_float': 129.0, 'inliers': 190, 'dx': 156.4000244140625, 'dy': -36.0, 'scale': 1.2240198190281426, 'second': 182, 'second_k': 131, 'second_dx': 61.36131286621094, 'detail': 'k=129 (129.00) inliers=190 second=182 dx=+156 scale=1.224 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe right 0.22s
+1788926141.988 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 12.0, best 12.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926142.493 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 7.5, best 7.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926142.493 [cycles]       | [cycles]     it  41  k=130 -> 130  advanced        fix={'k': 130, 'k_float': 130.0, 'inliers': 167, 'dx': 39.052825927734375, 'dy': -47.67999267578125, 'scale': 1.398282309289595, 'second': 88, 'second_k': 129, 'second_dx': 106.526123046875, 'detail': 'k=130 (130.00) inliers=167 second=88 dx=+39 scale=1.398 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe right 0.10s
+1788926142.493 [cycles]       | [cycles]         turn to 278.4: NO-OP, already inside 4.0 deg (at 280.1, err -1.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788926143.499 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 10.3, best 10.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926143.499 [cycles]       | [cycles]     it  42  k=130 -> 133  stalled         fix={'k': 132, 'k_float': 132.0, 'inliers': 150, 'dx': 23.699569702148438, 'dy': -57.59999084472656, 'scale': 1.3707035239095022, 'second': 132, 'second_k': 131, 'second_dx': 24.704025268554688, 'detail': 'k=132 (132.00) inliers=150 second=132 dx=+24 scale=1.371 window=[129,133] fitted=[129, 130, 131, 132, 133]'}
+1788926144.004 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 12.9, best 12.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926144.506 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.11s, change 4.1, best 4.1, hazards none — one push, so `best` IS the whole leg's travel
+1788926144.506 [cycles]       | [cycles]     it  43  k=133 -> 133  advanced        fix={'k': 133, 'k_float': 133.0, 'inliers': 125, 'dx': 80.40963745117188, 'dy': -85.59822082519531, 'scale': 1.4855469766030802, 'second': 121, 'second_k': 131, 'second_dx': 72.56805419921875, 'detail': 'k=133 (133.00) inliers=125 second=121 dx=+80 scale=1.486 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe right 0.11s
+1788926145.511 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 17.7, best 17.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926146.015 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.18s, change 15.8, best 15.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926146.015 [cycles]       | [cycles]     it  44  k=136 -> 136  advanced        fix={'k': 136, 'k_float': 136.0, 'inliers': 141, 'dx': 128.72647094726562, 'dy': -85.82398986816406, 'scale': 1.5994388539188962, 'second': 139, 'second_k': 132, 'second_dx': 113.3472900390625, 'detail': 'k=136 (136.00) inliers=141 second=139 dx=+129 scale=1.599 window=[132,136] fitted=[132, 133, 134, 135, 136]'}  strafe right 0.18s
+1788926147.021 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.7, best 23.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926147.525 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.15s, change 24.4, best 24.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926147.525 [cycles]       | [cycles]     it  45  k=139 -> 139  advanced        fix={'k': 139, 'k_float': 139.0, 'inliers': 156, 'dx': 104.40361022949219, 'dy': -100.2909927368164, 'scale': 1.8233587634727042, 'second': 134, 'second_k': 135, 'second_dx': 77.2926025390625, 'detail': 'k=139 (139.00) inliers=156 second=134 dx=+104 scale=1.823 window=[135,139] fitted=[135, 136, 137, 138, 139]'}  strafe right 0.14s
+1788926148.027 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 37.4, best 37.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926148.027 [cycles]       | [cycles]     it  46  k=142 -> 142  advanced        fix={'k': 142, 'k_float': 142.0, 'inliers': 140, 'dx': 21.587432861328125, 'dy': -158.91070556640625, 'scale': 2.1947742663585506, 'second': 54, 'second_k': 138, 'second_dx': -89.69830322265625, 'detail': 'k=142 (142.00) inliers=140 second=54 dx=+22 scale=2.195 window=[138,142] fitted=[138, 139, 140, 141, 142]'}
+1788926150.040 [cycles]       | [cycles]         turn to 2.2: TURNED to 1.5 (err +0.8) in 1 push(es), asked +82.2 deg, stick 1.10s
+1788926150.545 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.17s, change 24.6, best 24.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926150.545 [cycles]       | [cycles]     it  47  k=166 -> 166  turned-aligned to 2.2489998976495684  (59 inliers at the stop)
+1788926151.049 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 39.0, best 39.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926152.056 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.30s, change 40.0, best 40.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926152.056 [cycles]       | [cycles]     it  48  k=167 -> 167  advanced        fix={'k': 169, 'k_float': 169.0, 'inliers': 110, 'dx': 216.26400756835938, 'dy': -34.214385986328125, 'scale': 1.2475431006252689, 'second': 109, 'second_k': 165, 'second_dx': 222.719970703125, 'detail': 'k=169 (169.00) inliers=110 second=109 dx=+216 scale=1.248 window=[165,169] fitted=[165, 166, 167, 168, 169]'}  strafe right 0.30s
+1788926152.056 [cycles]       | [cycles]         turn to 4.3: NO-OP, already inside 4.0 deg (at 1.5, err +2.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788926152.561 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 39.0, best 39.0, hazards none — one push, so `best` IS the whole leg's travel
+1788926153.063 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 32.3, best 32.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926153.064 [cycles]       | [cycles]     it  49  k=169 -> 169  advanced        fix={'k': 170, 'k_float': 170.0, 'inliers': 69, 'dx': 39.1199951171875, 'dy': -109.15199279785156, 'scale': 1.209256011112097, 'second': 56, 'second_k': 169, 'second_dx': 36.97601318359375, 'detail': 'k=170 (170.00) inliers=69 second=56 dx=+39 scale=1.209 window=[166,170] fitted=[166, 167, 168, 169, 170]'}  strafe right 0.10s
+1788926153.064 [cycles]       | [cycles]         turn to 2.2: NO-OP, already inside 4.0 deg (at 1.4, err +0.8) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788926154.073 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.5, best 23.5, hazards none — one push, so `best` IS the whole leg's travel
+1788926154.073 [cycles]       | [cycles]     it  50  k=171 -> 171  advanced        fix={'k': 171, 'k_float': 171.0, 'inliers': 110, 'dx': 29.664016723632812, 'dy': -98.5999755859375, 'scale': 1.2799262449807287, 'second': 106, 'second_k': 172, 'second_dx': 35.831825256347656, 'detail': 'k=171 (171.00) inliers=110 second=106 dx=+30 scale=1.280 window=[168,172] fitted=[168, 169, 170, 171, 172]'}
+1788926155.076 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 15.6, best 15.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926155.577 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 22.3, best 22.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926155.577 [cycles]       | [cycles]     it  51  k=171 -> 173  stalled         fix={'k': 172, 'k_float': 173.8976291801745, 'inliers': 107, 'dx': 35.42402648925781, 'dy': -101.95199584960938, 'scale': 1.1939310872144628, 'second': 106, 'second_k': 174, 'second_dx': 67.19999694824219, 'detail': 'k=172 (173.90) inliers=107 second=106 dx=+35 scale=1.194 window=[170,174] fitted=[170, 171, 172, 173, 174]'}  strafe right 0.10s
+1788926156.082 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 8.2, best 8.2, hazards none — one push, so `best` IS the whole leg's travel
+1788926156.583 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 43.3, best 43.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926156.583 [cycles]       | [cycles]     it  52  k=171 -> 173  stalled         fix={'k': 171, 'k_float': 171.0, 'inliers': 117, 'dx': 69.8720703125, 'dy': -98.6400146484375, 'scale': 1.2639705966833912, 'second': 115, 'second_k': 173, 'second_dx': 42.80000305175781, 'detail': 'k=171 (171.00) inliers=117 second=115 dx=+70 scale=1.264 window=[170,174] fitted=[170, 171, 172, 173, 174]'}  strafe right 0.10s
+1788926157.591 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 27.8, best 27.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926157.591 [cycles]       | [cycles]     it  53  k=173 -> 173  advanced        fix={'k': 174, 'k_float': 173.93629357904703, 'inliers': 173, 'dx': 31.199996948242188, 'dy': -87.09121704101562, 'scale': 0.9955959974427078, 'second': 135, 'second_k': 173, 'second_dx': 14.399993896484375, 'detail': 'k=174 (173.94) inliers=173 second=135 dx=+31 scale=0.996 window=[170,174] fitted=[170, 171, 172, 173, 174]'}
+1788926158.599 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 34.4, best 34.4, hazards none — one push, so `best` IS the whole leg's travel
+1788926158.599 [cycles]       | [cycles]     it  54  k=173 -> 176  stalled         fix={'k': 174, 'k_float': 173.88338964258688, 'inliers': 154, 'dx': 17.280029296875, 'dy': -87.60000610351562, 'scale': 0.9920114120747475, 'second': 113, 'second_k': 175, 'second_dx': -1.3824462890625, 'detail': 'k=174 (173.88) inliers=154 second=113 dx=+17 scale=0.992 window=[172,176] fitted=[172, 173, 174, 175, 176]'}
+1788926159.605 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 43.8, best 43.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926159.605 [cycles]       | [cycles]     it  55  k=173 -> 176  stalled         fix={'k': 172, 'k_float': 174.09020591257962, 'inliers': 176, 'dx': 15.679718017578125, 'dy': -97.93014526367188, 'scale': 1.1590559874800577, 'second': 169, 'second_k': 174, 'second_dx': -9.5999755859375, 'detail': 'k=172 (174.09) inliers=176 second=169 dx=+16 scale=1.159 window=[172,176] fitted=[172, 173, 174, 175, 176]'}
+1788926160.611 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 46.7, best 46.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926161.115 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 43.7, best 43.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926161.115 [cycles]       | [cycles]     it  56  k=173 -> 176  stalled         fix={'k': 173, 'k_float': 174.1887741241568, 'inliers': 145, 'dx': -35.831787109375, 'dy': -85.39999389648438, 'scale': 1.1268398612254515, 'second': 144, 'second_k': 176, 'second_dx': -64.89999389648438, 'detail': 'k=173 (174.19) inliers=145 second=144 dx=-36 scale=1.127 window=[172,176] fitted=[172, 173, 174, 175, 176]'}  strafe left 0.10s
+1788926161.620 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 49.7, best 49.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926162.125 [cycles]       | [cycles]     it  57  k=173 -> 176  escape:jump     fix={'k': 176, 'k_float': 174.6500401801862, 'inliers': 113, 'dx': -41.30615234375, 'dy': -77.06881713867188, 'scale': 0.8325690505006262, 'second': 109, 'second_k': 172, 'second_dx': -11.51995849609375, 'detail': 'k=176 (174.65) inliers=113 second=109 dx=-41 scale=0.833 window=[172,176] fitted=[172, 173, 174, 175, 176]'}
+1788926163.132 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 38.6, best 38.6, hazards none — one push, so `best` IS the whole leg's travel
+1788926163.132 [cycles]       | [cycles]     it  58  k=176 -> 176  advanced        fix={'k': 176, 'k_float': 176.0, 'inliers': 103, 'dx': -133.0560302734375, 'dy': -87.83999633789062, 'scale': 1.1126137879230622, 'second': 78, 'second_k': 175, 'second_dx': -139.2464141845703, 'detail': 'k=176 (176.00) inliers=103 second=78 dx=-133 scale=1.113 window=[172,176] fitted=[172, 173, 174, 175, 176]'}
+1788926164.654 [cycles]       | [cycles]         turn to 89.5: TURNED to 86.5 (err +3.0) in 1 push(es), asked +88.0 deg, stick 1.18s
+1788926165.658 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.21s, change 22.8, best 22.8, hazards none — one push, so `best` IS the whole leg's travel
+1788926165.658 [cycles]       | [cycles]     it  59  k=196 -> 196  turned-aligned to 89.491477293153  (125 inliers at the stop)
+1788926166.162 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 34.3, best 34.3, hazards none — one push, so `best` IS the whole leg's travel
+1788926167.168 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.17s, change 22.9, best 22.9, hazards none — one push, so `best` IS the whole leg's travel
+1788926167.168 [cycles]       | [cycles]     it  60  k=196 -> 197  stalled         fix={'k': 195, 'k_float': 195.0, 'inliers': 117, 'dx': -122.63998413085938, 'dy': -20.793548583984375, 'scale': 1.4038550390394933, 'second': 97, 'second_k': 199, 'second_dx': -114.39999389648438, 'detail': 'k=195 (195.00) inliers=117 second=97 dx=-123 scale=1.404 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe left 0.17s
+1788926167.672 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 45.7, best 45.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926168.678 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.14s, change 3.0, best 3.0, hazards SHORT — one push, so `best` IS the whole leg's travel
+1788926168.678 [cycles]       | [cycles]     it  61  k=197 -> 197  advanced        fix={'k': 197, 'k_float': 197.0, 'inliers': 109, 'dx': -98.51321411132812, 'dy': 10.243682861328125, 'scale': 1.897283408066286, 'second': 90, 'second_k': 198, 'second_dx': -93.27392578125, 'detail': 'k=197 (197.00) inliers=109 second=90 dx=-99 scale=1.897 window=[195,199] fitted=[195, 196, 197, 198, 199]'}  strafe left 0.14s
+1788926169.686 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 50.7, best 50.7, hazards none — one push, so `best` IS the whole leg's travel
+1788926169.686 [cycles]       | [cycles]   chain_walk: ARRIVED at iteration 62, k=197 (target 200 of 204), 57 push(es)
+1788926170.719 [cycles] at the table: arrived on walk 1 of 2, 79.8s walking, shots /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/cycle_frames/cycle01_try1
+1788926171.720   [balance] pause menu confirmed open on attempt 1 of 3
+1788926173.211   [api] 1/200 calls (~$0.01), 199 left
+1788926176.149 [cycles] read $246 off the pause menu
+1788926176.161 [cycles] progress reset: balance $246, record 14W/6L/0D carried forward
+1788926176.178 Resuming with 14 wins / 6 losses / 0 draws logged, $246 on hand. Target: 999 wins total.
+1788926176.181 [reveal] watcher started at 20 Hz, threshold 0.065, close gap 1.0s
+1788926178.533 Starting next match. $196 left, $50/$246 of session cap spent.
+1788926185.645   [ban] SCROLL DESYNC: press count says row 3, the scrollbar says 2. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788926186.708   [ban] SCROLL DESYNC: press count says row 5, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788926186.802 [reveal] episode closed (gap): t_first=1788926184.10 t_peak=1788926184.82 peak=0.1319 duration=1.68s samples=31
+1788926187.939   [ban] SCROLL DESYNC: press count says row 7, the scrollbar says 5. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788926187.939   [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+1788926188.993   [ban] SCROLL DESYNC: press count says row 9, the scrollbar says 7. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788926188.993   [ban] 3 position(s) not in the roster [(7, 1), (7, 4), (8, 2)] — skipping as ban candidates (trust_roster).
+1788926188.993 No roster coverage at rows 7+ — end of the catalogued collection, stopping the scan.
+1788926192.145 Read 23 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788926192.358 [reveal] episode closed (gap): t_first=1788926190.72 t_peak=1788926191.11 peak=0.1363 duration=0.62s samples=12
+1788926197.986   [ban] verified 3/3 bans placed.
+1788926198.771 [reveal] episode closed (gap): t_first=1788926193.95 t_peak=1788926197.24 peak=0.1309 duration=3.80s samples=68
+1788926200.544 Couldn't read the screen (turn screen with unusable phase: None), retrying... (1/15)
+1788926204.942 Couldn't read the screen (turn screen with unusable phase: None), retrying... (2/15)
+1788926211.079   [repair] phase read as 'pitching' but every player card in hand is a batter — trusting the hand, playing the batting turn
+1788926211.142 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788926212.784 [reveal] episode closed (gap): t_first=1788926210.10 t_peak=1788926210.26 peak=0.0785 duration=1.66s samples=30
+1788926218.697   [deal] waiting 5s of 20s — biggest delta 24.3 of the 15 needed
+1788926219.812   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 24.5)
+1788926224.143   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926224.201 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788926232.041   [deal] waiting 5s of 20s — biggest delta 22.1 of the 15 needed
+1788926233.162   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 22.6)
+1788926237.826   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926237.826   [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+1788926237.931   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788926237.958   [local-check] third_base: empty
+1788926237.970   [local-check] first_base: empty
+1788926238.002   [local-check] second_base: empty
+1788926238.002   [local-check] vision runners: []
+1788926268.508   [local-check] hand: all 5 slots agree with vision
+1788926268.572   [redraw] keeping the hand: best power 7 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788926268.572 Decision: Playing Batter (power 7); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788926273.092   [reveal] episode t_first=+3.4s after the play, peak 0.1610, 1.1s long, waited 1.3s (still open)
+1788926279.134 [reveal] episode closed (gap): t_first=1788926271.94 t_peak=1788926272.56 peak=0.1610 duration=6.19s samples=111
+1788926280.632   [deal] waiting 5s of 20s — biggest delta 50.3 of the 15 needed
+1788926281.734   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 50.3)
+1788926284.216   [api] 10/200 calls (~$0.12), 190 left
+1788926288.224   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926288.291   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926288.291 Decision: Playing Batter (power 8); no swing boost available — attaching speed boost to help baserunners advance
+1788926291.499   [reveal] episode t_first=+2.2s after the play, peak 0.1141, 1.0s long, waited 1.3s (still open)
+1788926293.574   [reveal] no OPPONENT card identified (ours='batter', revealed players=['Josef Bunz-Konicky', 'Johnny Drawers']) — turn not logged.
+1788926296.479 [reveal] episode closed (gap): t_first=1788926290.44 t_peak=1788926290.95 peak=0.1141 duration=5.02s samples=90
+1788926298.591   [deal] waiting 5s of 20s — biggest delta 54.8 of the 15 needed
+1788926299.705   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 54.8)
+1788926304.596   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926304.666   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926304.666 Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788926381.609   [reveal] no episode within 75s of the play vs threshold 0.065 -- {'reads': 3647, 'frames': 3647, 'misses': 0, 'errors': 0, 'episodes': 6, 'unavailable': None}
+1788926381.609   [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+1788926386.656   [deal] waiting 5s of 20s — biggest delta 10.8 of the 15 needed
+1788926391.761   [deal] waiting 10s of 20s — biggest delta 10.9 of the 15 needed
+1788926396.843   [deal] waiting 15s of 20s — biggest delta 11.2 of the 15 needed
+1788926401.706   [deal] no replacement card seen in 20s — reading anyway (the retry path will catch a bad read). Threshold 15, biggest delta 11.2: a biggest well UNDER the threshold means the gate is too high for this turn.
+1788926406.383   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926406.444   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926406.444 Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788926409.392   [reveal] episode t_first=+1.8s after the play, peak 0.1413, 1.1s long, waited 1.3s (still open)
+1788926411.494   [reveal] no OPPONENT card identified (ours='batter', revealed players=['Papa Jody Gain', 'Johnny Drawers']) — turn not logged.
+1788926416.553   [deal] waiting 5s of 20s — biggest delta 53.5 of the 15 needed
+1788926417.634   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 53.5)
+1788926418.708 [reveal] episode closed (gap): t_first=1788926408.28 t_peak=1788926408.85 peak=0.1413 duration=9.41s samples=169
+1788926421.427   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'pitching' stands UNVERIFIED — not confirmed.
+1788926421.427 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (1/15)
+1788926427.310   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788926427.367   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788926427.408   [local-check] third_base: empty
+1788926427.445   [local-check] first_base: empty
+1788926427.507   [local-check] second_base: empty
+1788926427.507   [local-check] vision runners: [{'name': 'Jedediah Wetters', 'power': 4, 'secondary': 2}, {'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788926457.515   [local-check] hand[3]: local power=8 sec=0  vs vision: power=8 sec=1  <<< DISAGREE
+1788926457.588   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926457.588 Decision: Playing Batter (power 8); no swing boost available — attaching speed boost to help baserunners advance
+1788926460.754   [reveal] episode t_first=+2.1s after the play, peak 0.1219, 1.0s long, waited 1.2s (still open)
+1788926463.775   [reveal] no OPPONENT card identified (ours='batter', revealed players=['Justin Young', 'Timmeh Rattycum']) — turn not logged.
+1788926467.955 [reveal] episode closed (gap): t_first=1788926459.69 t_peak=1788926460.19 peak=0.1219 duration=7.22s samples=129
+1788926468.887   [deal] waiting 5s of 20s — biggest delta 55.3 of the 15 needed
+1788926469.824   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 55.3)
+1788926475.612   [repair] phase NOT CHECKED against the hand: card '' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788926475.694   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926475.694 Decision: Playing  (power 8)
+1788926478.338   [reveal] episode t_first=+1.6s after the play, peak 0.0911, 1.0s long, waited 1.3s (still open)
+1788926481.439   [reveal] no OPPONENT card identified (ours='', revealed players=['Jedediah Wetters', 'Donny Mekesz']) — turn not logged.
+1788926486.493 [reveal] episode closed (gap): t_first=1788926477.29 t_peak=1788926482.70 peak=0.0995 duration=8.18s samples=135
+1788926486.631   [deal] waiting 5s of 20s — biggest delta 54.6 of the 15 needed
+1788926487.542   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 54.6)
+1788926488.610   [api] 20/200 calls (~$0.24), 180 left
+1788926491.124   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'batting' stands UNVERIFIED — not confirmed.
+1788926491.124 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (1/15)
+1788926495.970   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'pitching' stands UNVERIFIED — not confirmed.
+1788926495.970 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (2/15)
+1788926501.654   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926501.722 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788926509.743   [deal] waiting 5s of 20s — biggest delta 25.8 of the 15 needed
+1788926510.716   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 26.8)
+1788926515.171   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926515.171   [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+1788926515.251   [redraw] keeping the hand: best power 8 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788926515.252 Decision: Playing Pitcher (pitch focus 8)
+1788926519.069   [reveal] episode t_first=+2.9s after the play, peak 0.1057, 0.9s long, waited 1.2s (still open)
+1788926523.056 [reveal] episode closed (gap): t_first=1788926518.13 t_peak=1788926518.52 peak=0.1057 duration=3.90s samples=69
+1788926526.285   [deal] waiting 5s of 20s — biggest delta 49.2 of the 15 needed
+1788926527.199   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 49.2)
+1788926531.761   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926531.823   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788926531.858   [local-check] third_base: empty
+1788926531.868   [local-check] first_base: empty
+1788926531.902   [local-check] second_base: empty
+1788926531.902   [local-check] vision runners: []
+1788926562.900   [local-check] hand: local found 4 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+1788926562.900   [local-check]   vision hand[0]: tactics 'Fielding Play' bonus=1
+1788926562.900   [local-check]   vision hand[1]: power=6 sec=0
+1788926562.900   [local-check]   vision hand[2]: power=9 sec=0
+1788926562.900   [local-check]   vision hand[3]: power=6 sec=0
+1788926562.900   [local-check]   vision hand[4]: power=5 sec=0
+1788926563.020   [redraw] keeping the hand: best power 9 vs threshold 6, 1 discard(s) left — hand is strong enough
+1788926563.020 Decision: Playing Pitcher (pitch focus 9)
+1788926564.978   [reveal] episode t_first=+0.9s after the play, peak 0.1318, 1.0s long, waited 1.3s (still open)
+1788926567.336   [MISFIRE?] no revealed card has our played power 9 (or 9 with the boost) — revealed [('Thomas T', 0, [5]), ('Justin Young', 6, [6])]. Either a keystroke was dropped during card selection or the reveal misread. Not logging this turn.
+1788926567.336   [reveal] turn NOT logged — RuntimeError: intended card absent from reveal
+1788926568.986 [reveal] episode closed (gap): t_first=1788926563.90 t_peak=1788926564.41 peak=0.1318 duration=4.08s samples=72
+1788926572.487   [deal] waiting 5s of 20s — biggest delta 51.1 of the 15 needed
+1788926573.447   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 51.1)
+1788926578.648   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926578.716   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788926578.716 Decision: Playing Pitcher (pitch focus 9); attaching pitch boost (+1) — more focus never hurts
+1788926583.268   [reveal] episode t_first=+3.4s after the play, peak 0.1325, 1.1s long, waited 1.3s (still open)
+1788926587.309 [reveal] episode closed (gap): t_first=1788926582.13 t_peak=1788926585.14 peak=0.1368 duration=4.13s samples=74
+1788926590.454   [deal] waiting 5s of 20s — biggest delta 50.7 of the 15 needed
+1788926591.428   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 50.7)
+1788926596.287   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788926596.375 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788926604.089   [deal] waiting 5s of 20s — biggest delta 28.2 of the 15 needed
+1788926605.032   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 30.1)
+1788926606.105   [api] 30/200 calls (~$0.36), 170 left
+1788926609.853   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926609.944 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788926617.573   [deal] waiting 5s of 20s — biggest delta 12.8 of the 15 needed
+1788926620.140 [reveal] episode closed (gap): t_first=1788926612.69 t_peak=1788926617.10 peak=0.1386 duration=6.42s samples=115
+1788926622.663   [deal] waiting 10s of 20s — biggest delta 30.0 of the 15 needed
+1788926622.663   [deal] replacement card seen; released 10.1s after the play (threshold 15, biggest delta 30.0)
+1788926629.233   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788926629.233   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788926629.350   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788926629.374   [local-check] third_base: empty
+1788926629.411   [local-check] first_base: empty
+1788926629.417   [local-check] second_base: empty
+1788926629.417   [local-check] vision runners: []
+1788926657.858   [local-check] hand: local found 1 cards, expected 5 — skipping per-slot comparison (counts must match to align)
+1788926657.858   [local-check]   vision hand[0]: tactics 'Fielding Play' bonus=1
+1788926657.858   [local-check]   vision hand[1]: power=5 sec=0
+1788926657.858   [local-check]   vision hand[2]: power=6 sec=0
+1788926657.858   [local-check]   vision hand[3]: power=6 sec=0
+1788926657.858   [local-check]   vision hand[4]: power=5 sec=0
+1788926657.934   [redraw] keeping the hand: best power 6 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788926657.934 Decision: Playing Pitcher (pitch focus 6)
+1788926661.725   [reveal] episode t_first=+2.9s after the play, peak 0.1111, 0.8s long, waited 1.1s (still open)
+1788926665.944 [reveal] episode closed (gap): t_first=1788926660.85 t_peak=1788926661.19 peak=0.1111 duration=4.08s samples=71
+1788926669.224   [deal] waiting 5s of 20s — biggest delta 71.8 of the 15 needed
+1788926670.173   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 71.8)
+1788926673.594 WIN #15 logged. 984 to go.
+1788926676.920 Starting next match. $146 left, $100/$246 of session cap spent.
+1788926678.372 [reveal] episode closed (gap): t_first=1788926677.27 t_peak=1788926677.33 peak=0.0800 duration=0.05s samples=2
+1788926682.408 Read 23 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788926688.311   [ban] verified 3/3 bans placed.
+1788926688.530 [reveal] episode closed (gap): t_first=1788926684.21 t_peak=1788926686.84 peak=0.1362 duration=3.31s samples=60
+1788926691.422 Couldn't read the screen (turn screen with unusable phase: None), retrying... (1/15)
+1788926696.171   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'batting' stands UNVERIFIED — not confirmed.
+1788926696.171 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (2/15)
+1788926701.385   [repair] phase read as 'pitching' but every player card in hand is a batter — trusting the hand, playing the batting turn
+1788926701.480   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788926701.494   [local-check] third_base: empty
+1788926701.520   [local-check] first_base: empty
+1788926701.526   [local-check] second_base: empty
+1788926701.526   [local-check] vision runners: []

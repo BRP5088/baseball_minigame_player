@@ -1,0 +1,55 @@
+{"iteration": 1, "k": 3, "target": 3, "fix": null, "action": "turned", "lateral": null, "at_end": false, "seconds": 3.57, "elapsed": 3.82}
+{"iteration": 2, "k": 4, "target": 4, "fix": {"k": 6, "k_float": 6.0, "inliers": 36, "dx": -14.250213623046875, "dy": 18.363861083984375, "scale": 1.1154913345420423, "second": 19, "detail": "k=6 (6.00) inliers=36 second=19 dx=-14 scale=1.115 window=[2,6] fitted=[2, 3, 4, 5, 6]"}, "action": "advanced", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 4.76}
+{"iteration": 3, "k": 7, "target": 7, "fix": {"k": 7, "k_float": 7.0, "inliers": 18, "dx": 24.984100341796875, "dy": 23.020462036132812, "scale": 1.260190039514463, "second": 15, "detail": "k=7 (7.00) inliers=18 second=15 dx=+25 scale=1.260 window=[3,7] fitted=[3, 4, 5, 6, 7]"}, "action": "blind-advance", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 5.7}
+{"iteration": 4, "k": 10, "target": 10, "fix": {"k": 10, "k_float": 10.0, "inliers": 23, "dx": 40.320068359375, "dy": 51.5999755859375, "scale": 1.1746888047977138, "second": 14, "detail": "k=10 (10.00) inliers=23 second=14 dx=+40 scale=1.175 window=[6,10] fitted=[6, 7, 8, 9, 10]"}, "action": "blind-advance", "lateral": null, "at_end": false, "seconds": 0.96, "elapsed": 6.66}
+{"iteration": 5, "k": 13, "target": 13, "fix": {"k": 12, "k_float": 12.0, "inliers": 12, "dx": -179.87216186523438, "dy": 27.786285400390625, "scale": 1.28296191033162, "second": 11, "detail": "k=12 (12.00) inliers=12 second=11 dx=-180 scale=1.283 window=[9,13] fitted=[9, 10, 11, 12, 13]"}, "action": "blind-advance", "lateral": null, "at_end": false, "seconds": 1.04, "elapsed": 7.7}
+{"iteration": 6, "k": 16, "target": 16, "fix": null, "action": "blind-advance", "lateral": null, "at_end": false, "seconds": 1.04, "elapsed": 8.75}
+{"iteration": 7, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 9.69}
+{"iteration": 8, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.93, "elapsed": 10.62}
+{"iteration": 9, "k": 16, "target": 19, "fix": null, "action": "escape:jump", "lateral": null, "at_end": false, "seconds": 1.25, "elapsed": 11.88}
+{"iteration": 10, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.95, "elapsed": 12.83}
+{"iteration": 11, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.92, "elapsed": 13.77}
+{"iteration": 12, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.67, "elapsed": 15.44}
+{"iteration": 13, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.88, "elapsed": 16.34}
+{"iteration": 14, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.89, "elapsed": 17.23}
+{"iteration": 15, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.6, "elapsed": 18.84}
+{"iteration": 16, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.93, "elapsed": 19.77}
+{"iteration": 17, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.96, "elapsed": 20.73}
+{"iteration": 18, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.71, "elapsed": 22.44}
+{"iteration": 19, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 23.35}
+{"iteration": 20, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 24.25}
+{"iteration": 21, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.63, "elapsed": 25.89}
+{"iteration": 22, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 26.83}
+{"iteration": 23, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.99, "elapsed": 27.83}
+{"iteration": 24, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.76, "elapsed": 29.59}
+{"iteration": 25, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 30.49}
+{"iteration": 26, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.89, "elapsed": 31.39}
+{"iteration": 27, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.63, "elapsed": 33.03}
+{"iteration": 28, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.92, "elapsed": 33.95}
+{"iteration": 29, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 1.02, "elapsed": 34.98}
+{"iteration": 30, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.72, "elapsed": 36.71}
+{"iteration": 31, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 37.62}
+{"iteration": 32, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.88, "elapsed": 38.5}
+{"iteration": 33, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.62, "elapsed": 40.14}
+{"iteration": 34, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.95, "elapsed": 41.09}
+{"iteration": 35, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 42.04}
+{"iteration": 36, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.71, "elapsed": 43.75}
+{"iteration": 37, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.89, "elapsed": 44.64}
+{"iteration": 38, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.95, "elapsed": 45.6}
+{"iteration": 39, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.7, "elapsed": 47.3}
+{"iteration": 40, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.95, "elapsed": 48.25}
+{"iteration": 41, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.93, "elapsed": 49.19}
+{"iteration": 42, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.68, "elapsed": 50.88}
+{"iteration": 43, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.97, "elapsed": 51.86}
+{"iteration": 44, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.91, "elapsed": 52.78}
+{"iteration": 45, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.64, "elapsed": 54.42}
+{"iteration": 46, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 55.33}
+{"iteration": 47, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.95, "elapsed": 56.29}
+{"iteration": 48, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.76, "elapsed": 58.05}
+{"iteration": 49, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 58.95}
+{"iteration": 50, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.9, "elapsed": 59.85}
+{"iteration": 51, "k": 16, "target": 19, "fix": null, "action": "escape:right", "lateral": null, "at_end": false, "seconds": 1.64, "elapsed": 61.5}
+{"iteration": 52, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.99, "elapsed": 62.49}
+{"iteration": 53, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.97, "elapsed": 63.47}
+{"iteration": 54, "k": 16, "target": 19, "fix": null, "action": "escape:left", "lateral": null, "at_end": false, "seconds": 1.76, "elapsed": 65.23}
+{"iteration": 55, "k": 16, "target": 19, "fix": null, "action": "miss", "lateral": null, "at_end": false, "seconds": 0.94, "elapsed": 66.17}

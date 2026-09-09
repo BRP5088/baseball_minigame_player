@@ -1,0 +1,28 @@
+    anchor k=9 (fit k=11 inliers=7)
+  push 4/10 done, now near waypoint 9
+    anchor k=9
+  push 5/10 done, now near waypoint 9
+    anchor k=9
+  push 6/10 done, now near waypoint 9
+    anchor k=9
+  push 7/10 done, now near waypoint 9
+    anchor k=9
+  push 8/10 done, now near waypoint 9
+    anchor k=9
+  push 9/10 done, now near waypoint 9
+    anchor k=9
+  push 10/10 done, now near waypoint 9INLIERS vs DELAY MEASURED FROM THE STICK RELEASE (the shipped settle is SETTLE_SEC=0.35s, so every row below that is time the loop currently spends waiting):
+    delay    n  median inliers  abstains
+    0.00s    5            41.0         5
+    0.05s    4            62.0         6
+    0.10s    4            61.0         6
+    0.15s    4            43.5         6
+    0.20s    4            32.5         6
+    0.30s    4            25.0         6
+    0.45s    4            25.5         6
+    0.60s    4            25.5         6
+
+  CREDIBLE samples (>= 29 inliers): 18 of 80. If that is near zero the curve
+  below is noise about the wrong place, not a settling curve -- do not read it.
+  best median 62.0; first delay within 5% of it: 0.05
+  REPORTED, NOT APPLIED. Shortening a settle is a live change and belongs in an A/B scored on ARRIVAL, not on inliers alone.

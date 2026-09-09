@@ -1,0 +1,81 @@
+{
+  "route": [
+    "portrait_room",
+    "bar_pool_room",
+    "bar_jukebox"
+  ],
+  "runs": [
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 297.2
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 285.7
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 79.1
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 294.3
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": null,
+      "depth": null,
+      "seconds": null
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": true,
+      "depth": 3,
+      "seconds": 304.5
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": null,
+      "depth": null,
+      "seconds": null
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 266.3
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 409.0
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 386.9
+    },
+    {
+      "arm": "attempts_9",
+      "arrived": null,
+      "depth": null,
+      "seconds": null
+    },
+    {
+      "arm": "attempts_3",
+      "arrived": false,
+      "depth": 2,
+      "seconds": 360.7
+    }
+  ]
+}

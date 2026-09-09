@@ -87,3 +87,46 @@ agent_progress/*
 .console_busy
 armor_venv/
 models/
+
+# --- added 2026-09-09: run artefacts that made `git status` cost 26K tokens ---------
+#
+# A bare `git status` printed 101.5 KB because ~44,000 untracked files sat in the working
+# tree. The rule at the top of this file still decides each case: if losing it would only
+# cost TIME, ignore it; if losing it would cost a MEASUREMENT that cannot be retaken,
+# commit it. So the FRAMES are ignored and the FINDINGS beside them are not.
+#
+# Nothing here is deleted from disk. Ignoring a path only stops git tracking it.
+
+# Walk frames from the closed loop. 8.7G in 40,301 jpgs -- 91% of everything untracked,
+# and regenerable by walking the route again. The JOURNALS beside them (overnight/
+# chain_journals, 16M of jsonl) are the evidence and stay tracked.
+overnight/chain_frames/
+overnight/cycle_frames/
+
+# The stream recordings. overnight/runs/ is 13G, but only in the .mp4 files -- its
+# run.json, summary.json, events.jsonl and frames.jsonl are the measurement of each run
+# and are what make a result attributable to a build. Keep those.
+overnight/runs/**/*.mp4
+overnight/recordings/
+
+# Census frames. The .json findings in the same directory are the point and stay.
+overnight/census/**/*.jpg
+overnight/census/**/*.png
+
+# Failure frames. CLAUDE.md 10.15 says KEEP A FRAME, and they are kept -- on disk, where
+# the reader that needs them looks. They are photographs of one run's failures, not input
+# to any other, and they run to hundreds per batch.
+overnight/*failframes/
+overnight/resetfail/
+overnight/prompt_zone_frames/
+overnight/door_approach_frames/
+overnight/crawl_frames/
+overnight/ab_fast_extend_frames/
+overnight/ab_escape_gate_review/
+overnight/map_probe/
+overnight/_archive/
+
+# Recorded chains. chains/route_user_1853 IS committed -- it is the route the closed loop
+# actually walks. These are later recordings kept for comparison.
+chains/route_user_20260907_185336/
+chains/_idle_head_discard_185040/

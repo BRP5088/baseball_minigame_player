@@ -1,0 +1,12 @@
+{"step": 1, "change": 29.2, "null_change": 13.6, "delta_ratio": 2.147, "push_inliers": 28, "null_inliers": 200, "inlier_ratio": 0.14, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 2, "change": 23.4, "null_change": 22.9, "delta_ratio": 1.022, "push_inliers": 166, "null_inliers": 184, "inlier_ratio": 0.902, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 3, "change": 23.8, "null_change": 2.7, "delta_ratio": 8.815, "push_inliers": 148, "null_inliers": 200, "inlier_ratio": 0.74, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 4, "change": 12.1, "null_change": 22.5, "delta_ratio": 0.538, "push_inliers": 153, "null_inliers": 194, "inlier_ratio": 0.789, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 5, "change": 21.1, "null_change": 24.2, "delta_ratio": 0.872, "push_inliers": 164, "null_inliers": 185, "inlier_ratio": 0.886, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 6, "change": 24.1, "null_change": 2.0, "delta_ratio": 12.05, "push_inliers": 154, "null_inliers": 200, "inlier_ratio": 0.77, "k": null, "scale": null, "label": "desk", "recovered": true}
+{"step": 7, "change": 20.8, "null_change": 1.0, "delta_ratio": 20.8, "push_inliers": 11, "null_inliers": 200, "inlier_ratio": 0.055, "k": 7, "scale": 1.04, "label": "clean", "recovered": true}
+{"step": 8, "change": 17.6, "null_change": 3.3, "delta_ratio": 5.333, "push_inliers": 23, "null_inliers": 128, "inlier_ratio": 0.18, "k": 9, "scale": 1.06, "label": "clean", "recovered": true}
+{"step": 9, "change": 13.4, "null_change": 2.5, "delta_ratio": 5.36, "push_inliers": 28, "null_inliers": 200, "inlier_ratio": 0.14, "k": 11, "scale": 1.1, "label": "clean", "recovered": true}
+{"step": 10, "change": 11.4, "null_change": 1.9, "delta_ratio": 6.0, "push_inliers": 10, "null_inliers": 199, "inlier_ratio": 0.05, "k": 13, "scale": 1.18, "label": "clean", "recovered": true}
+{"step": 11, "change": 7.6, "null_change": 3.5, "delta_ratio": 2.171, "push_inliers": null, "null_inliers": 49, "inlier_ratio": null, "k": null, "scale": null, "label": "clean", "recovered": true}
+{"step": 12, "change": 7.9, "null_change": 1.3, "delta_ratio": 6.077, "push_inliers": null, "null_inliers": 10, "inlier_ratio": null, "k": null, "scale": null, "label": "clean", "recovered": true}

@@ -1,0 +1,50 @@
+{
+ "run": "20260909_100520_patch78_postdeal",
+ "build": {
+  "label": "patch78_postdeal",
+  "git_sha": "7667f30",
+  "tree_dirty": true,
+  "api_budget": 200,
+  "constants": {
+   "HAND_DEAL_THRESHOLD": 15.0,
+   "POST_PLAY_DEAL_MAX_WAIT": 20.0,
+   "POST_PLAY_MIN_WAIT": 6.0,
+   "post_play_wait_for_deal": true,
+   "REVEAL_EDGE_THRESHOLD": 0.065,
+   "REVEAL_MAX_WAIT": 15.0,
+   "PEAK_SETTLE_SEC": 0.5,
+   "CLOSE_GAP": 1.0,
+   "WALK_ATTEMPTS": 2
+  }
+ },
+ "minutes": 25.0,
+ "walk_arrived_on_attempt": "1",
+ "matches": {
+  "won": 3,
+  "lost": 0
+ },
+ "turns": {
+  "plays": 39,
+  "discard_decisions": 18,
+  "length_p50": 21.5,
+  "length_n": 60
+ },
+ "deal": {
+  "fired": 55,
+  "timed_out": 2,
+  "released_p50": 6.1,
+  "released_max": 13.2,
+  "seconds_lost_to_timeouts": 40.0
+ },
+ "reveal": {
+  "episodes_found": 34,
+  "none_found": 5,
+  "peak_read_p50": 0.13,
+  "misreads": 7
+ },
+ "reads": {
+  "api_calls": 120,
+  "mid_deal_retries": 8,
+  "local_hand_short": 0
+ }
+}

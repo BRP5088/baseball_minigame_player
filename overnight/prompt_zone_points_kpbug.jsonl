@@ -1,0 +1,10 @@
+{"walk": 1, "dx": 0.0, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": -0.05, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": -0.1, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.05, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": -0.1, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": -0.2, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": 0.0, "blocked": true, "turned": true}
+{"walk": 1, "dx": 0.0, "dy": 0.05, "blocked": true, "turned": true}

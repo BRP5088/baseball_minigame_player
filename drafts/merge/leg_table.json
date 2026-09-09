@@ -1,0 +1,247 @@
+[
+ {
+  "leg": "office_corridor -> office_door",
+  "n_steps": 7,
+  "bearing_spread_deg": 0.32,
+  "cam_spread_deg_route3": 0.66,
+  "cam_spread_deg_route2": null,
+  "bearing_spread_deg_route2": null,
+  "total_dur_s": 5.129,
+  "last_step_dur_s": 0.421,
+  "last_step_speed": 0.224,
+  "typical_step_dur_s": 0.783,
+  "speeds": "0.213-0.231",
+  "distance_units": 1.1676,
+  "merged_pushes_at_tol8_cap4": 2,
+  "merged_durs": [
+   3.922,
+   1.207
+  ],
+  "merged_bearings": [
+   270.22,
+   270.19
+  ],
+  "merged_speeds": [
+   0.231,
+   0.231
+  ],
+  "merged_distance_units": 1.1848,
+  "accelerations_removed": 5,
+  "settles_removed_s": 1.75,
+  "turns_removed": 5,
+  "r3_slice": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "r3_cam_mean": 269.23,
+  "r3_bearing_wmean": 270.21,
+  "r3_deltas_bearing_gt4": 0,
+  "r3_deltas_cam_gt4": 0,
+  "r3_transitions": 6
+ },
+ {
+  "leg": "office_door -> portrait_room",
+  "n_steps": 16,
+  "bearing_spread_deg": 30.46,
+  "cam_spread_deg_route3": 9.47,
+  "cam_spread_deg_route2": 3.07,
+  "bearing_spread_deg_route2": 13.37,
+  "total_dur_s": 11.036,
+  "last_step_dur_s": 0.357,
+  "last_step_speed": 0.35,
+  "typical_step_dur_s": 0.785,
+  "speeds": "0.253-0.435",
+  "distance_units": 4.1713,
+  "merged_pushes_at_tol8_cap4": 5,
+  "merged_durs": [
+   1.493,
+   1.727,
+   3.509,
+   3.95,
+   0.357
+  ],
+  "merged_bearings": [
+   338.62,
+   354.81,
+   3.86,
+   358.51,
+   3.95
+  ],
+  "merged_speeds": [
+   0.281,
+   0.42,
+   0.381,
+   0.435,
+   0.35
+  ],
+  "merged_distance_units": 4.325,
+  "accelerations_removed": 11,
+  "settles_removed_s": 3.85,
+  "turns_removed": 11,
+  "r3_slice": [
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22
+  ],
+  "r3_cam_mean": 1.26,
+  "r3_bearing_wmean": 357.15,
+  "r3_deltas_bearing_gt4": 5,
+  "r3_deltas_cam_gt4": 1,
+  "r3_transitions": 15
+ },
+ {
+  "leg": "portrait_room -> bar_pool_room",
+  "n_steps": 4,
+  "bearing_spread_deg": 6.59,
+  "cam_spread_deg_route3": 0.13,
+  "cam_spread_deg_route2": 1.76,
+  "bearing_spread_deg_route2": 5.67,
+  "total_dur_s": 1.967,
+  "last_step_dur_s": 0.225,
+  "last_step_speed": 0.25,
+  "typical_step_dur_s": 0.787,
+  "speeds": "0.250-0.454",
+  "distance_units": 0.7214,
+  "merged_pushes_at_tol8_cap4": 1,
+  "merged_durs": [
+   1.967
+  ],
+  "merged_bearings": [
+   288.53
+  ],
+  "merged_speeds": [
+   0.454
+  ],
+  "merged_distance_units": 0.893,
+  "accelerations_removed": 3,
+  "settles_removed_s": 1.05,
+  "turns_removed": 3,
+  "r3_slice": [
+   23,
+   24,
+   25,
+   26
+  ],
+  "r3_cam_mean": 281.19,
+  "r3_bearing_wmean": 288.53,
+  "r3_deltas_bearing_gt4": 2,
+  "r3_deltas_cam_gt4": 0,
+  "r3_transitions": 3
+ },
+ {
+  "leg": "bar_pool_room -> bar_jukebox",
+  "n_steps": 5,
+  "bearing_spread_deg": 2.65,
+  "cam_spread_deg_route3": 0.3,
+  "cam_spread_deg_route2": 0.95,
+  "bearing_spread_deg_route2": 28.78,
+  "total_dur_s": 3.304,
+  "last_step_dur_s": 0.138,
+  "last_step_speed": 0.319,
+  "typical_step_dur_s": 0.787,
+  "speeds": "0.268-0.327",
+  "distance_units": 1.0315,
+  "merged_pushes_at_tol8_cap4": 1,
+  "merged_durs": [
+   3.304
+  ],
+  "merged_bearings": [
+   0.81
+  ],
+  "merged_speeds": [
+   0.327
+  ],
+  "merged_distance_units": 1.0804,
+  "accelerations_removed": 4,
+  "settles_removed_s": 1.4,
+  "turns_removed": 4,
+  "r3_slice": [
+   27,
+   28,
+   29,
+   30,
+   31
+  ],
+  "r3_cam_mean": 2.82,
+  "r3_bearing_wmean": 0.81,
+  "r3_deltas_bearing_gt4": 0,
+  "r3_deltas_cam_gt4": 0,
+  "r3_transitions": 4
+ },
+ {
+  "leg": "bar_jukebox -> dealer_table",
+  "n_steps": 8,
+  "bearing_spread_deg": 25.64,
+  "cam_spread_deg_route3": 0.28,
+  "cam_spread_deg_route2": 2.51,
+  "bearing_spread_deg_route2": 5.98,
+  "total_dur_s": 4.073,
+  "last_step_dur_s": 0.396,
+  "last_step_speed": 0.202,
+  "typical_step_dur_s": 0.623,
+  "speeds": "0.185-0.207",
+  "distance_units": 0.8013,
+  "merged_pushes_at_tol8_cap4": 6,
+  "merged_durs": [
+   1.79,
+   0.623,
+   0.323,
+   0.785,
+   0.156,
+   0.396
+  ],
+  "merged_bearings": [
+   88.39,
+   71.99,
+   85.84,
+   97.63,
+   87.12,
+   75.46
+  ],
+  "merged_speeds": [
+   0.19,
+   0.207,
+   0.201,
+   0.204,
+   0.201,
+   0.202
+  ],
+  "merged_distance_units": 0.8055,
+  "accelerations_removed": 2,
+  "settles_removed_s": 0.7,
+  "turns_removed": 2,
+  "r3_slice": [
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39
+  ],
+  "r3_cam_mean": 86.81,
+  "r3_bearing_wmean": 86.17,
+  "r3_deltas_bearing_gt4": 6,
+  "r3_deltas_cam_gt4": 0,
+  "r3_transitions": 7
+ }
+]

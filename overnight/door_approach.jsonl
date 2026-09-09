@@ -1,0 +1,18 @@
+{"trial": 1, "pushes": 6, "inliers": 98, "k": 45, "scale": 0.815, "dx": -10.9, "heading": 1.0556225620144346}
+{"trial": 2, "pushes": 6.5, "inliers": 100, "k": 44, "scale": 0.899, "dx": -4.5, "heading": 359.3868772815995}
+{"trial": 3, "pushes": 7, "inliers": 123, "k": 39, "scale": 1.108, "dx": 64.3, "heading": 358.5501046127437}
+{"trial": 4, "pushes": 6, "inliers": 31, "k": 43, "scale": 1.019, "dx": -42.0, "heading": 1.393318511003379}
+{"trial": 5, "pushes": 6.5, "inliers": 104, "k": 45, "scale": 0.796, "dx": 19.0, "heading": 359.9868919182712}
+{"trial": 6, "pushes": 7, "inliers": 60, "k": 40, "scale": 1.015, "dx": 80.6, "heading": 1.1691770196397826}
+{"trial": 7, "pushes": 6, "inliers": 47, "k": 44, "scale": 0.869, "dx": -76.3, "heading": 1.7218407232524129}
+{"trial": 8, "pushes": 6.5, "inliers": 149, "k": 42, "scale": 1.047, "dx": 6.0, "heading": 1.4930831334490429}
+{"trial": 9, "pushes": 7, "inliers": 143, "k": 42, "scale": 0.999, "dx": 46.8, "heading": 359.89353040736705}
+{"trial": 1, "pushes": 6, "frame": "overnight/door_approach_frames/n6_t01.jpg", "inliers": 11, "k": 45, "scale": 0.665, "dx": -234.7, "heading": 2.258896996176854}
+{"trial": 2, "pushes": 6.5, "frame": "overnight/door_approach_frames/n6_5_t02.jpg", "inliers": 168, "k": 43, "scale": 1.033, "dx": 42.6, "heading": 359.1955153314913}
+{"trial": 3, "pushes": 7, "frame": "overnight/door_approach_frames/n7_t03.jpg", "inliers": 64, "k": 40, "scale": 1.03, "dx": 129.0, "heading": 357.9530801688412}
+{"trial": 4, "pushes": 6, "frame": "overnight/door_approach_frames/n6_t04.jpg", "inliers": 53, "k": 45, "scale": 0.854, "dx": -44.3, "heading": 0.33176655969605423}
+{"trial": 5, "pushes": 6.5, "frame": "overnight/door_approach_frames/n6_5_t05.jpg", "inliers": 27, "k": 44, "scale": 0.97, "dx": -67.2, "heading": 2.4982069350419827}
+{"trial": 6, "pushes": 7, "frame": "overnight/door_approach_frames/n7_t06.jpg", "inliers": 76, "k": 39, "scale": 1.053, "dx": 32.1, "heading": 2.4610323520131967}
+{"trial": 7, "pushes": 6, "frame": "overnight/door_approach_frames/n6_t07.jpg", "inliers": 16, "k": 43, "scale": 1.038, "dx": -104.7, "heading": 1.3019597333384922}
+{"trial": 8, "pushes": 6.5, "frame": "overnight/door_approach_frames/n6_5_t08.jpg", "inliers": 94, "k": 44, "scale": 0.965, "dx": -3.6, "heading": 358.9194298005639}
+{"trial": 9, "pushes": 7, "frame": "overnight/door_approach_frames/n7_t09.jpg", "inliers": 81, "k": 40, "scale": 1.016, "dx": 42.0, "heading": 1.5660674477885361}

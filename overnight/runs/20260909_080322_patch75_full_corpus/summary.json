@@ -1,0 +1,50 @@
+{
+ "run": "20260909_080322_patch75_full_corpus",
+ "build": {
+  "label": "patch75_full_corpus",
+  "git_sha": "1869f87",
+  "tree_dirty": true,
+  "api_budget": 200,
+  "constants": {
+   "HAND_DEAL_THRESHOLD": 15.0,
+   "POST_PLAY_DEAL_MAX_WAIT": 20.0,
+   "POST_PLAY_MIN_WAIT": 6.0,
+   "post_play_wait_for_deal": true,
+   "REVEAL_EDGE_THRESHOLD": 0.065,
+   "REVEAL_MAX_WAIT": 15.0,
+   "PEAK_SETTLE_SEC": 0.5,
+   "CLOSE_GAP": 1.0,
+   "WALK_ATTEMPTS": 2
+  }
+ },
+ "minutes": 25.7,
+ "walk_arrived_on_attempt": "1",
+ "matches": {
+  "won": 2,
+  "lost": 0
+ },
+ "turns": {
+  "plays": 31,
+  "discard_decisions": 30,
+  "length_p50": 19.7,
+  "length_n": 64
+ },
+ "deal": {
+  "fired": 58,
+  "timed_out": 3,
+  "released_p50": 6.1,
+  "released_max": 13.9,
+  "seconds_lost_to_timeouts": 60.0
+ },
+ "reveal": {
+  "episodes_found": 27,
+  "none_found": 4,
+  "peak_read_p50": 0.127,
+  "misreads": 6
+ },
+ "reads": {
+  "api_calls": 120,
+  "mid_deal_retries": 10,
+  "local_hand_short": 0
+ }
+}

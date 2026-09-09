@@ -1,0 +1,18 @@
+# TASK 4 progress — MERGE_STEPS_BY_LEG extension analysis (2026-09-07)Writing only under drafts/merge/. Read-only elsewhere.## Established so far
+- GRAVEYARD.md read in full. Merge row: 3/arm, depth [0,4,0] vs [3,2,4]; leg 1 revert 2/10 vs 10/10 p=0.000714 (overnight/ab_leg1.json).
+- STAIRS_APPROACH.md read: leg 1 "one merged 1.95s push" was the stairs-pose source; MERGED_TURN_TOLERANCE 1.0.
+- overnight/ab_leg1.json: shipped arm 2/10 (206.3, 212.9 arrived), 8 fail; 7 "unrecognised", 1 located portrait_room. kinds [] everywhere (no class census).
+- world_map.json links dumped: 5 legs, 7/16/4/5/8 steps.
+- route3_steps.json 40 steps, route2_steps.json 34 steps, both with cam.
+- graph_walk.py: MERGE_STEPS=False :375, MERGE_STEPS_BY_LEG=set() :402, use at :659-675.## Assumed / to check
+- what graph_walk's merge actually does (which steps merge, tolerance) -> read :360-420, :640-720
+- ab_leg1.py harness shape for the A/B template
+- per-leg arrival record at HEAD CLAUDE.md## Update 2 (after reading harness + logs)
+- graph_walk merge_steps: tol MERGE_TOL_DEG=8.0, cap MERGE_MAX_SEC=4.0, bearing = duration-weighted circular mean, speed = MAX of parts. Runs AFTER _scaled. MERGED_TURN_TOLERANCE=1.0 applies to every turn on a merged leg.
+- slow_traverse: SETTLE_SEC=0.35, TURN_TOLERANCE=4.0.
+- ab_leg1.log: shipped arm leg 1 = one 1.95s push, turn TURNED to <1 deg every time (err -0.4, -0.4, +0.7, 0.0...). Original arm leg 1 = 7 pushes, turn NO-OP x6 after first.
+- shipped arm failures: leg 2/3 "step 3/4 blocked but scene MOVING", "BLOCKED on step 4" (which leg? checking), "align: dx barely changed — blocked sideways".
+- ab_leg1.json: 7 of 8 shipped failures "unrecognised", 1 located portrait_room. kinds [] in all rows (no class census in that harness).
+- OPEN-5 (ab_attempts.json): attempts_9 9/9 (1 invalid), attempts_3 5/10.
+- 8(a) post-revert: 5/10 streak 2, wedged 4 overshot 1.
+- distance pin test: pins jukebox leg only vs route3[27:32]; floor 0.30 units per leg; no step > 0.60 speed.

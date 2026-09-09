@@ -1,0 +1,1016 @@
+1788967368.808 [cycles] 1 cycles, API budget 200 calls (~$2.40)
+1788967368.809 [cycles] === cycle 1 ===
+1788967368.844 [cycles]   [stream] up via find_bar (compass strip located; may be under an overlay)
+1788967368.844 [cycles] walking to the table in a child process: up to 2 walk(s), killed from outside after 720s
+1788967369.874 [cycles]       | [cycles] walking to the table with the closed loop (route_user_1853), up to 2 attempt(s)
+1788967371.389 [cycles]       | [cycles]   pause menu open (selected 'Resume')
+1788967372.905 [cycles]       | [cycles]   selected: Load Last Save
+1788967373.410 [cycles]       | [cycles]   confirmation dialog up (delta 81.0) -> YES
+1788967378.452 [cycles]       | [cycles]   world back after 3.2s, spawn bearing 87 (E)
+1788967378.452 [cycles]       | [cycles]   cleared match_in_progress in progress_testing.json — the reload discarded any match, so the record was stale
+1788967383.487 [cycles]       | [cycles]   chain_walk: 205 waypoints -> plan of 47 targets (41 push, 6 turn-only); the prompt is checked on every iteration; k rises by at most 1 per iteration, so >= 47 iteration(s). The 180s cap allows 3.83s each. At the last waypoint the walk may spend 3 more iteration(s) — 0.540 walk-units of forward push against OPEN-22's measured 0.05 — and then gives up rather than walking on past the table.
+1788967387.011 [cycles]       | [cycles]         turn to 271.3: TURNED to 273.3 (err -2.0) in 2 push(es), asked -175.7 deg, stick 2.50s
+1788967387.515 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 1.0, best 1.0, hazards SHORT — one push, so `best` IS the whole leg's travel
+1788967387.515 [cycles]       | [cycles]     it   1  k=  3 ->   3  turned-aligned to 271.3168428039934  (192 inliers at the stop)
+1788967388.020 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 20.8, best 20.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967388.525 [cycles]       | [cycles]     it   2  k=  4 ->   4  advanced-weak   fix={'k': 6, 'k_float': 6.0, 'inliers': 23, 'dx': -9.123779296875, 'dy': 18.480010986328125, 'scale': 1.140472702036385, 'second': 16, 'second_k': 5, 'second_dx': -65.48582458496094, 'detail': 'k=6 (6.00) inliers=23 second=16 dx=-9 scale=1.140 window=[2,6] fitted=[2, 3, 4, 5, 6]'}
+1788967389.027 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 18.1, best 18.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967389.027 [cycles]       | [cycles]     it   3  k=  7 ->   7  advanced-weak   fix={'k': 7, 'k_float': 7.0, 'inliers': 16, 'dx': 30.350433349609375, 'dy': 24.334182739257812, 'scale': 1.2846575154940056, 'second': 8, 'second_k': 5, 'second_dx': -94.02798461914062, 'detail': 'k=7 (7.00) inliers=16 second=8 dx=+30 scale=1.285 window=[3,7] fitted=[4, 5, 6, 7]'}
+1788967390.037 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 14.5, best 14.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967390.037 [cycles]       | [cycles]     it   4  k= 10 ->  10  advanced        fix={'k': 10, 'k_float': 10.0, 'inliers': 35, 'dx': 31.9681396484375, 'dy': 49.7664794921875, 'scale': 1.1636140101083565, 'second': 16, 'second_k': 9, 'second_dx': -58.001495361328125, 'detail': 'k=10 (10.00) inliers=35 second=16 dx=+32 scale=1.164 window=[6,10] fitted=[7, 8, 9, 10]'}
+1788967390.540 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 11.7, best 11.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967390.540 [cycles]       | [cycles]     it   5  k= 13 ->  13  blind-advance   fix={'k': 13, 'k_float': 13.0, 'inliers': 12, 'dx': -26.28692626953125, 'dy': 37.71171569824219, 'scale': 1.4265804115376992, 'second': 7, 'second_k': 12, 'second_dx': 74.066162109375, 'detail': 'k=13 (13.00) inliers=12 second=7 dx=-26 scale=1.427 window=[9,13] fitted=[11, 12, 13]'}
+1788967391.547 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 9.7, best 9.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967391.547 [cycles]       | [cycles]     it   6  k= 16 ->  16  blind-advance   fix=None
+1788967392.554 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 8.0, best 8.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967392.554 [cycles]       | [cycles]     it   7  k= 19 ->  19  blind-advance   fix=None
+1788967393.059 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 8.8, best 8.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967393.059 [cycles]       | [cycles]     it   8  k= 19 ->  39  door-step 1/1: one more push along 271.3 before the stop turns (the frame after it fits 0 inliers, scale None)
+1788967395.577 [cycles]       | [cycles]         turn to 1.6: TURNED to 359.0 (err +2.6) in 2 push(es), asked +88.3 deg, stick 1.33s
+1788967396.082 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.18s, change 10.2, best 10.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967396.082 [cycles]       | [cycles]     it   8  k= 39 ->  39  turned-aligned to 1.6055901753868653  (59 inliers at the stop)
+1788967397.093 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 14.7, best 14.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967397.597 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.13s, change 13.0, best 13.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967397.597 [cycles]       | [cycles]     it   9  k= 40 ->  40  advanced        fix={'k': 41, 'k_float': 41.0, 'inliers': 39, 'dx': 96.76802062988281, 'dy': 389.20001220703125, 'scale': 1.4634877343516093, 'second': 36, 'second_k': 38, 'second_dx': 130.44000244140625, 'detail': 'k=41 (41.00) inliers=39 second=36 dx=+97 scale=1.463 window=[38,42] fitted=[38, 39, 40, 41, 42]'}  strafe right 0.13s
+1788967398.102 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.2, best 24.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967398.606 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.18s, change 15.2, best 15.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967398.606 [cycles]       | [cycles]     it  10  k= 40 ->  43  stalled         fix={'k': 39, 'k_float': 39.0, 'inliers': 43, 'dx': 128.6400146484375, 'dy': 363.1680603027344, 'scale': 1.279930135544531, 'second': 41, 'second_k': 40, 'second_dx': 128.6400146484375, 'detail': 'k=39 (39.00) inliers=43 second=41 dx=+129 scale=1.280 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.18s
+1788967399.617 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 38.8, best 38.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967400.121 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.17s, change 16.3, best 16.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967400.121 [cycles]       | [cycles]     it  11  k= 43 ->  43  advanced        fix={'k': 43, 'k_float': 43.0, 'inliers': 47, 'dx': 125.90899658203125, 'dy': 315.760009765625, 'scale': 1.3736976402752505, 'second': 41, 'second_k': 42, 'second_dx': 133.0, 'detail': 'k=43 (43.00) inliers=47 second=41 dx=+126 scale=1.374 window=[39,43] fitted=[39, 40, 41, 42, 43]'}  strafe right 0.17s
+1788967401.127 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 31.7, best 31.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967401.631 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.18s, change 16.8, best 16.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967401.631 [cycles]       | [cycles]     it  12  k= 43 ->  46  stalled         fix={'k': 45, 'k_float': 45.0, 'inliers': 37, 'dx': 128.908935546875, 'dy': 277.1021728515625, 'scale': 1.460558541609687, 'second': 34, 'second_k': 46, 'second_dx': 119.40802001953125, 'detail': 'k=45 (45.00) inliers=37 second=34 dx=+129 scale=1.461 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.18s
+1788967402.137 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.4, best 21.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967403.142 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.14s, change 6.0, best 6.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967403.142 [cycles]       | [cycles]     it  13  k= 46 ->  46  advanced        fix={'k': 46, 'k_float': 46.0, 'inliers': 35, 'dx': 104.0400390625, 'dy': 232.55999755859375, 'scale': 1.5888044069608085, 'second': 35, 'second_k': 44, 'second_dx': 119.05242919921875, 'detail': 'k=46 (46.00) inliers=35 second=35 dx=+104 scale=1.589 window=[42,46] fitted=[42, 43, 44, 45, 46]'}  strafe right 0.14s
+1788967403.645 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 17.1, best 17.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967404.150 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.19s, change 3.7, best 3.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967404.150 [cycles]       | [cycles]     it  14  k= 49 ->  49  advanced        fix={'k': 49, 'k_float': 49.0, 'inliers': 102, 'dx': 134.28955078125, 'dy': 171.46585083007812, 'scale': 1.6771436243002178, 'second': 71, 'second_k': 48, 'second_dx': 150.4974365234375, 'detail': 'k=49 (49.00) inliers=102 second=71 dx=+134 scale=1.677 window=[45,49] fitted=[45, 46, 47, 48, 49]'}  strafe right 0.19s
+1788967405.156 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 20.4, best 20.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967405.661 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.19s, change 2.7, best 2.7, hazards SHORT — one push, so `best` IS the whole leg's travel
+1788967405.661 [cycles]       | [cycles]     it  15  k= 52 ->  52  advanced        fix={'k': 52, 'k_float': 52.0, 'inliers': 65, 'dx': 137.83697509765625, 'dy': 137.11685180664062, 'scale': 1.6628237954762541, 'second': 48, 'second_k': 51, 'second_dx': 165.7633056640625, 'detail': 'k=52 (52.00) inliers=65 second=48 dx=+138 scale=1.663 window=[48,52] fitted=[48, 49, 50, 51, 52]'}  strafe right 0.19s
+1788967406.669 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.5, best 24.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967406.669 [cycles]       | [cycles]     it  16  k= 55 ->  55  advanced        fix={'k': 55, 'k_float': 53.96970188714812, 'inliers': 41, 'dx': 21.024017333984375, 'dy': 253.20001220703125, 'scale': 1.115315306346669, 'second': 23, 'second_k': 53, 'second_dx': 278.1943359375, 'detail': 'k=55 (53.97) inliers=41 second=23 dx=+21 scale=1.115 window=[51,55] fitted=[51, 52, 53, 54, 55]'}
+1788967407.173 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 30.2, best 30.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967407.674 [cycles]       | [cycles]     it  17  k= 58 ->  58  advanced        fix={'k': 58, 'k_float': 58.0, 'inliers': 100, 'dx': 26.0, 'dy': 277.02801513671875, 'scale': 1.0808261420763359, 'second': 90, 'second_k': 56, 'second_dx': 23.867156982421875, 'detail': 'k=58 (58.00) inliers=100 second=90 dx=+26 scale=1.081 window=[54,58] fitted=[54, 55, 56, 57, 58]'}
+1788967408.178 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 32.4, best 32.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967408.178 [cycles]       | [cycles]     it  18  k= 58 ->  61  stalled         fix={'k': 59, 'k_float': 59.0, 'inliers': 127, 'dx': 28.79998779296875, 'dy': 295.1424560546875, 'scale': 1.1232119115056798, 'second': 117, 'second_k': 61, 'second_dx': 31.10400390625, 'detail': 'k=59 (59.00) inliers=127 second=117 dx=+29 scale=1.123 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+1788967409.184 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.1, best 24.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967409.184 [cycles]       | [cycles]     it  19  k= 61 ->  61  advanced        fix={'k': 61, 'k_float': 61.0, 'inliers': 109, 'dx': 32.160003662109375, 'dy': 307.20001220703125, 'scale': 1.1086083192350482, 'second': 107, 'second_k': 59, 'second_dx': 29.03997802734375, 'detail': 'k=61 (61.00) inliers=109 second=107 dx=+32 scale=1.109 window=[57,61] fitted=[57, 58, 59, 60, 61]'}
+1788967409.688 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.3, best 19.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967410.193 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 9.8, best 9.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967410.193 [cycles]       | [cycles]     it  20  k= 64 ->  64  advanced        fix={'k': 64, 'k_float': 64.0, 'inliers': 133, 'dx': 39.0, 'dy': 302.74566650390625, 'scale': 1.0647681855329696, 'second': 121, 'second_k': 61, 'second_dx': 33.120025634765625, 'detail': 'k=64 (64.00) inliers=133 second=121 dx=+39 scale=1.065 window=[60,64] fitted=[60, 61, 62, 63, 64]'}  strafe right 0.10s
+1788967411.196 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 11.4, best 11.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967411.196 [cycles]       | [cycles]     it  21  k= 88 ->  88  turned-aligned (skipped, same heading) to 1.3495539744498237  (104 inliers at the stop)
+1788967411.700 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 8.4, best 8.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967412.203 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 9.3, best 9.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967412.203 [cycles]       | [cycles]     it  22  k= 89 ->  89  advanced        fix={'k': 90, 'k_float': 90.0, 'inliers': 86, 'dx': 44.6400146484375, 'dy': 22.809600830078125, 'scale': 1.0533131304282881, 'second': 85, 'second_k': 91, 'second_dx': 38.87994384765625, 'detail': 'k=90 (90.00) inliers=86 second=85 dx=+45 scale=1.053 window=[87,91] fitted=[87, 88, 89, 90, 91]'}  strafe right 0.10s
+1788967413.208 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 4.2, best 4.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967413.208 [cycles]       | [cycles]     it  23  k= 89 ->  92  stalled         fix={'k': 91, 'k_float': 91.0, 'inliers': 85, 'dx': 34.55999755859375, 'dy': 25.20001220703125, 'scale': 1.0821669637765516, 'second': 81, 'second_k': 90, 'second_dx': 39.8131103515625, 'detail': 'k=91 (91.00) inliers=85 second=81 dx=+35 scale=1.082 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+1788967413.714 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 3.0, best 3.0, hazards SHORT — one push, so `best` IS the whole leg's travel
+1788967414.214 [cycles]       | [cycles]     it  24  k= 92 ->  92  advanced        fix={'k': 92, 'k_float': 92.0, 'inliers': 81, 'dx': 24.8831787109375, 'dy': 26.956787109375, 'scale': 1.065786905839326, 'second': 77, 'second_k': 90, 'second_dx': 39.60003662109375, 'detail': 'k=92 (92.00) inliers=81 second=77 dx=+25 scale=1.066 window=[88,92] fitted=[88, 89, 90, 91, 92]'}
+1788967414.719 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 16.0, best 16.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967414.719 [cycles]       | [cycles]     it  25  k= 94 ->  94  advanced        fix={'k': 94, 'k_float': 94.16674667431363, 'inliers': 96, 'dx': -32.348175048828125, 'dy': 11.520004272460938, 'scale': 1.0087085663096502, 'second': 89, 'second_k': 92, 'second_dx': 42.9981689453125, 'detail': 'k=94 (94.17) inliers=96 second=89 dx=-32 scale=1.009 window=[91,95] fitted=[91, 92, 93, 94, 95]'}
+1788967415.727 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 15.4, best 15.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967416.231 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 13.7, best 13.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967416.231 [cycles]       | [cycles]     it  26  k= 94 ->  96  stalled         fix={'k': 96, 'k_float': 95.99758950170556, 'inliers': 88, 'dx': -41.472015380859375, 'dy': 64.49726867675781, 'scale': 0.9999057272250179, 'second': 81, 'second_k': 94, 'second_dx': 41.4720458984375, 'detail': 'k=96 (96.00) inliers=88 second=81 dx=-41 scale=1.000 window=[93,97] fitted=[93, 94, 95, 96, 97]'}  strafe left 0.10s
+1788967417.237 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 17.2, best 17.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967417.237 [cycles]       | [cycles]     it  27  k= 96 ->  96  advanced        fix={'k': 97, 'k_float': 97.0, 'inliers': 117, 'dx': 34.79998779296875, 'dy': 16.0, 'scale': 1.075568885381339, 'second': 89, 'second_k': 95, 'second_dx': -0.863983154296875, 'detail': 'k=97 (97.00) inliers=117 second=89 dx=+35 scale=1.076 window=[93,97] fitted=[93, 94, 95, 96, 97]'}
+1788967417.742 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 16.8, best 16.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967417.742 [cycles]       | [cycles]     it  28  k= 96 ->  98  stalled         fix={'k': 96, 'k_float': 96.0, 'inliers': 146, 'dx': -2.48828125, 'dy': 5.760009765625, 'scale': 1.1592420306465723, 'second': 117, 'second_k': 98, 'second_dx': 48.0, 'detail': 'k=96 (96.00) inliers=146 second=117 dx=-2 scale=1.159 window=[95,99] fitted=[95, 96, 97, 98, 99]'}
+1788967418.748 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 18.3, best 18.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967418.749 [cycles]       | [cycles]     it  29  k= 98 ->  98  advanced        fix={'k': 98, 'k_float': 98.0, 'inliers': 118, 'dx': -0.839996337890625, 'dy': 10.946319580078125, 'scale': 1.162020236661032, 'second': 115, 'second_k': 99, 'second_dx': -13.934600830078125, 'detail': 'k=98 (98.00) inliers=118 second=115 dx=-1 scale=1.162 window=[95,99] fitted=[95, 96, 97, 98, 99]'}
+1788967419.753 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.0, best 21.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967419.753 [cycles]       | [cycles]     it  30  k=100 -> 100  advanced        fix={'k': 101, 'k_float': 101.0, 'inliers': 145, 'dx': -11.51995849609375, 'dy': 6.0, 'scale': 1.152161827856908, 'second': 122, 'second_k': 97, 'second_dx': -6.0675506591796875, 'detail': 'k=101 (101.00) inliers=145 second=122 dx=-12 scale=1.152 window=[97,101] fitted=[97, 98, 99, 100, 101]'}
+1788967420.256 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.9, best 23.9, hazards none — one push, so `best` IS the whole leg's travel
+1788967420.256 [cycles]       | [cycles]     it  31  k=102 -> 102  advanced        fix={'k': 103, 'k_float': 103.0, 'inliers': 162, 'dx': -34.81822204589844, 'dy': 2.073638916015625, 'scale': 1.2035669643498974, 'second': 141, 'second_k': 102, 'second_dx': -34.79998779296875, 'detail': 'k=103 (103.00) inliers=162 second=141 dx=-35 scale=1.204 window=[99,103] fitted=[99, 100, 101, 102, 103]'}
+1788967421.262 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.4, best 23.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967421.767 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 11.9, best 11.9, hazards none — one push, so `best` IS the whole leg's travel
+1788967421.767 [cycles]       | [cycles]     it  32  k=104 -> 104  advanced        fix={'k': 105, 'k_float': 105.0, 'inliers': 185, 'dx': -44.78973388671875, 'dy': 3.8016357421875, 'scale': 1.2010760644159137, 'second': 161, 'second_k': 104, 'second_dx': -46.079986572265625, 'detail': 'k=105 (105.00) inliers=185 second=161 dx=-45 scale=1.201 window=[101,105] fitted=[101, 102, 103, 104, 105]'}  strafe left 0.10s
+1788967422.776 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 26.1, best 26.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967422.776 [cycles]       | [cycles]     it  33  k=104 -> 107  stalled         fix={'k': 105, 'k_float': 105.0, 'inliers': 174, 'dx': -2.474639892578125, 'dy': -5.8319854736328125, 'scale': 1.3911796971718569, 'second': 168, 'second_k': 104, 'second_dx': 5.39141845703125, 'detail': 'k=105 (105.00) inliers=174 second=168 dx=-2 scale=1.391 window=[103,107] fitted=[103, 104, 105, 106, 107]'}
+1788967423.281 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 21.6, best 21.6, hazards none — one push, so `best` IS the whole leg's travel
+1788967423.786 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 12.1, best 12.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967423.786 [cycles]       | [cycles]     it  34  k=107 -> 107  advanced        fix={'k': 107, 'k_float': 107.0, 'inliers': 173, 'dx': -54.39739990234375, 'dy': -10.195159912109375, 'scale': 1.4525636187655653, 'second': 144, 'second_k': 104, 'second_dx': 11.810836791992188, 'detail': 'k=107 (107.00) inliers=173 second=144 dx=-54 scale=1.453 window=[103,107] fitted=[103, 104, 105, 106, 107]'}  strafe left 0.10s
+1788967424.793 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.8, best 19.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967425.298 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 11.4, best 11.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967425.298 [cycles]       | [cycles]     it  35  k=109 -> 109  advanced        fix={'k': 109, 'k_float': 109.0, 'inliers': 166, 'dx': -38.20509338378906, 'dy': -21.409194946289062, 'scale': 1.519981949933294, 'second': 147, 'second_k': 107, 'second_dx': -39.127960205078125, 'detail': 'k=109 (109.00) inliers=166 second=147 dx=-38 scale=1.520 window=[106,110] fitted=[106, 107, 108, 109, 110]'}  strafe left 0.10s
+1788967425.804 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.7, best 19.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967426.309 [cycles]       | [cycles]     it  36  k=109 -> 112  stalled         fix={'k': 110, 'k_float': 110.0, 'inliers': 141, 'dx': 31.569549560546875, 'dy': 6.4013671875, 'scale': 2.0388092421085857, 'second': 109, 'second_k': 111, 'second_dx': -26.687957763671875, 'detail': 'k=110 (110.00) inliers=141 second=109 dx=+32 scale=2.039 window=[108,112] fitted=[108, 109, 110, 111, 112]'}
+1788967426.815 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 22.6, best 22.6, hazards none — one push, so `best` IS the whole leg's travel
+1788967427.320 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 18.8, best 18.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967427.320 [cycles]       | [cycles]     it  37  k=109 -> 112  stalled         fix={'k': 110, 'k_float': 110.0, 'inliers': 73, 'dx': 43.2958984375, 'dy': -19.631378173828125, 'scale': 3.0903750879030363, 'second': 41, 'second_k': 111, 'second_dx': 37.701507568359375, 'detail': 'k=110 (110.00) inliers=73 second=41 dx=+43 scale=3.090 window=[108,112] fitted=[108, 109, 110, 111, 112]'}  strafe right 0.10s
+1788967428.330 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 40.0, best 40.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967428.330 [cycles]       | [cycles]     it  38  k=112 -> 112  blind-advance   fix=None
+1788967428.835 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 36.6, best 36.6, hazards none — one push, so `best` IS the whole leg's travel
+1788967429.339 [cycles]       | [cycles]     it  39  k=112 -> 114  turn-early: blind with the budget spent and a turn stop at 129 within 3 targets — turning to 303.34476843910807 now instead of pushing into whatever is in front
+1788967430.851 [cycles]       | [cycles]         turn to 303.3: TURNED to 304.5 (err -1.2) in 1 push(es), asked -55.7 deg, stick 0.74s
+1788967431.856 [cycles]       | [cycles]         turn to 278.3: TURNED to 281.3 (err -2.9) in 1 push(es), asked -26.2 deg, stick 0.40s
+1788967432.859 [cycles]       | [cycles]         turn to 328.3: TURNED to 325.0 (err +3.4) in 1 push(es), asked +47.1 deg, stick 0.63s
+1788967433.869 [cycles]       | [cycles]         turn to 303.3: TURNED to 303.0 (err +0.3) in 1 push(es), asked -21.6 deg, stick 0.40s
+1788967434.878 [cycles]       | [cycles]         turn to 280.1: TURNED to 281.6 (err -1.5) in 1 push(es), asked -22.9 deg, stick 0.40s
+1788967434.878 [cycles]       | [cycles]     it  40  k=129 -> 129  turned-looked to 303.34476843910807  (157 inliers at the stop)  STOP YAW -23.2 deg on -456 px, no strafe
+1788967435.379 [cycles]       | [cycles]         turn to 276.6: TURNED to 277.4 (err -0.8) in 1 push(es), asked -5.1 deg, stick 0.15s
+1788967436.389 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 12.4, best 12.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967436.891 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.30s, change 10.9, best 10.9, hazards none — one push, so `best` IS the whole leg's travel
+1788967436.891 [cycles]       | [cycles]     it  41  k=129 -> 130  stalled         fix={'k': 129, 'k_float': 129.0, 'inliers': 152, 'dx': 217.52003479003906, 'dy': -38.9918212890625, 'scale': 1.212956244127698, 'second': 146, 'second_k': 128, 'second_dx': 311.02001953125, 'detail': 'k=129 (129.00) inliers=152 second=146 dx=+218 scale=1.213 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe right 0.30s
+1788967437.895 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 14.2, best 14.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967438.399 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.24s, change 10.4, best 10.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967438.399 [cycles]       | [cycles]     it  42  k=129 -> 130  stalled         fix={'k': 129, 'k_float': 129.0, 'inliers': 185, 'dx': 170.17355346679688, 'dy': -48.759979248046875, 'scale': 1.4124606356389882, 'second': 174, 'second_k': 131, 'second_dx': 74.96067810058594, 'detail': 'k=129 (129.00) inliers=185 second=174 dx=+170 scale=1.412 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe right 0.24s
+1788967438.901 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 10.1, best 10.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967439.903 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 3.8, best 3.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967439.903 [cycles]       | [cycles]     it  43  k=130 -> 130  advanced        fix={'k': 131, 'k_float': 131.0, 'inliers': 156, 'dx': 85.14553833007812, 'dy': -69.88014221191406, 'scale': 1.422064185780674, 'second': 153, 'second_k': 129, 'second_dx': 180.68002319335938, 'detail': 'k=131 (131.00) inliers=156 second=153 dx=+85 scale=1.422 window=[128,132] fitted=[128, 129, 130, 131, 132]'}  strafe right 0.12s
+1788967439.903 [cycles]       | [cycles]         turn to 275.1: NO-OP, already inside 4.0 deg (at 277.4, err -2.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788967440.407 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 16.0, best 16.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967440.907 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.19s, change 4.8, best 4.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967440.907 [cycles]       | [cycles]     it  44  k=130 -> 133  stalled         fix={'k': 132, 'k_float': 132.0, 'inliers': 182, 'dx': 137.6376495361328, 'dy': -75.28988647460938, 'scale': 1.6967828067307305, 'second': 102, 'second_k': 129, 'second_dx': 236.1013946533203, 'detail': 'k=132 (132.00) inliers=182 second=102 dx=+138 scale=1.697 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe right 0.19s
+1788967441.917 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 19.6, best 19.6, hazards none — one push, so `best` IS the whole leg's travel
+1788967442.420 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.27s, change 20.1, best 20.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967442.420 [cycles]       | [cycles]     it  45  k=133 -> 133  advanced        fix={'k': 133, 'k_float': 133.0, 'inliers': 103, 'dx': 195.4619140625, 'dy': -137.5599822998047, 'scale': 2.102052922904043, 'second': 88, 'second_k': 129, 'second_dx': 280.54107666015625, 'detail': 'k=133 (133.00) inliers=103 second=88 dx=+195 scale=2.102 window=[129,133] fitted=[129, 130, 131, 132, 133]'}  strafe right 0.27s
+1788967443.425 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.5, best 24.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967443.928 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.19s, change 26.5, best 26.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967443.928 [cycles]       | [cycles]     it  46  k=136 -> 136  advanced        fix={'k': 136, 'k_float': 136.0, 'inliers': 63, 'dx': 138.47723388671875, 'dy': -177.7591094970703, 'scale': 2.3604415771089107, 'second': 63, 'second_k': 135, 'second_dx': 130.01226806640625, 'detail': 'k=136 (136.00) inliers=63 second=63 dx=+138 scale=2.360 window=[132,136] fitted=[132, 133, 134, 135, 136]'}  strafe right 0.19s
+1788967444.935 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 36.7, best 36.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967445.440 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 49.8, best 49.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967445.440 [cycles]       | [cycles]     it  47  k=136 -> 139  stalled         fix={'k': 137, 'k_float': 137.0, 'inliers': 36, 'dx': -86.91371154785156, 'dy': -159.54931640625, 'scale': 3.3595252581724764, 'second': 16, 'second_k': 139, 'second_dx': -59.76837158203125, 'detail': 'k=137 (137.00) inliers=36 second=16 dx=-87 scale=3.360 window=[135,139] fitted=[135, 136, 137, 138, 139]'}  strafe left 0.12s
+1788967446.450 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 25.8, best 25.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967446.955 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 33.0, best 33.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967446.955 [cycles]       | [cycles]     it  48  k=136 -> 139  stalled         fix={'k': 138, 'k_float': 138.0, 'inliers': 60, 'dx': 45.0322265625, 'dy': -185.523193359375, 'scale': 3.1092074192815264, 'second': 9, 'second_k': 139, 'second_dx': 32.175018310546875, 'detail': 'k=138 (138.00) inliers=60 second=9 dx=+45 scale=3.109 window=[135,139] fitted=[138, 139]'}  strafe right 0.10s
+1788967447.460 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.0, best 24.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967447.460 [cycles]       | [cycles]     it  49  k=139 -> 139  advanced        fix={'k': 139, 'k_float': 139.0, 'inliers': 64, 'dx': -32.471588134765625, 'dy': -159.04092407226562, 'scale': 2.9127304598713972, 'second': 29, 'second_k': 135, 'second_dx': -79.76226806640625, 'detail': 'k=139 (139.00) inliers=64 second=29 dx=-32 scale=2.913 window=[135,139] fitted=[135, 137, 138, 139]'}
+1788967448.467 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.1, best 24.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967448.467 [cycles]       | [cycles]     it  50  k=142 -> 142  advanced        fix={'k': 142, 'k_float': 142.0, 'inliers': 135, 'dx': -18.2015380859375, 'dy': -162.482666015625, 'scale': 2.200452910593566, 'second': 44, 'second_k': 138, 'second_dx': -105.71702575683594, 'detail': 'k=142 (142.00) inliers=135 second=44 dx=-18 scale=2.200 window=[138,142] fitted=[138, 139, 141, 142]'}
+1788967450.480 [cycles]       | [cycles]         turn to 2.2: TURNED to 3.7 (err -1.4) in 2 push(es), asked +84.9 deg, stick 1.28s
+1788967450.983 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.11s, change 15.1, best 15.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967450.983 [cycles]       | [cycles]     it  51  k=166 -> 166  turned-aligned to 2.2489998976495684  (69 inliers at the stop)
+1788967451.990 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 32.4, best 32.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967452.494 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 22.4, best 22.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967452.494 [cycles]       | [cycles]     it  52  k=166 -> 167  stalled         fix={'k': 166, 'k_float': 166.0, 'inliers': 74, 'dx': 49.59362030029297, 'dy': -62.47679138183594, 'scale': 1.2969077408007927, 'second': 65, 'second_k': 169, 'second_dx': 47.760009765625, 'detail': 'k=166 (166.00) inliers=74 second=65 dx=+50 scale=1.297 window=[165,169] fitted=[165, 166, 167, 168, 169]'}  strafe right 0.10s
+1788967453.500 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.3, best 28.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967453.500 [cycles]       | [cycles]     it  53  k=166 -> 167  stalled         fix={'k': 166, 'k_float': 166.0, 'inliers': 60, 'dx': 15.840019226074219, 'dy': -113.6966323852539, 'scale': 1.314037252370085, 'second': 53, 'second_k': 167, 'second_dx': 15.759384155273438, 'detail': 'k=166 (166.00) inliers=60 second=53 dx=+16 scale=1.314 window=[165,169] fitted=[165, 166, 167, 168, 169]'}
+1788967454.004 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.2, best 28.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967454.004 [cycles]       | [cycles]     it  54  k=166 -> 167  stalled         fix={'k': 166, 'k_float': 166.0, 'inliers': 59, 'dx': -4.2854156494140625, 'dy': -125.11274719238281, 'scale': 1.4329578284719762, 'second': 57, 'second_k': 169, 'second_dx': -4.6559906005859375, 'detail': 'k=166 (166.00) inliers=59 second=57 dx=-4 scale=1.433 window=[165,169] fitted=[165, 166, 167, 168, 169]'}
+1788967455.009 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 32.2, best 32.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967455.512 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 17.2, best 17.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967455.512 [cycles]       | [cycles]     it  55  k=167 -> 167  advanced-past   fix={'k': 166, 'k_float': 166.0, 'inliers': 36, 'dx': -35.21998596191406, 'dy': -141.90750122070312, 'scale': 1.6213078732180277, 'second': 36, 'second_k': 165, 'second_dx': -34.98045349121094, 'detail': 'k=166 (166.00) inliers=36 second=36 dx=-35 scale=1.621 window=[165,169] fitted=[165, 166, 167, 168, 169]'}  strafe left 0.10s
+1788967455.512 [cycles]       | [cycles]         turn to 4.3: NO-OP, already inside 4.0 deg (at 3.7, err +0.6) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788967456.520 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 33.3, best 33.3, hazards none — one push, so `best` IS the whole leg's travel
+1788967457.022 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 18.2, best 18.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967457.022 [cycles]       | [cycles]     it  56  k=169 -> 169  advanced-past   fix={'k': 167, 'k_float': 167.0, 'inliers': 34, 'dx': -52.578224182128906, 'dy': -160.19088745117188, 'scale': 1.838203080045084, 'second': 33, 'second_k': 170, 'second_dx': -51.83998107910156, 'detail': 'k=167 (167.00) inliers=34 second=33 dx=-53 scale=1.838 window=[166,170] fitted=[166, 167, 168, 169, 170]'}  strafe left 0.10s
+1788967457.022 [cycles]       | [cycles]         turn to 2.2: NO-OP, already inside 4.0 deg (at 3.6, err -1.4) — nothing was sent, the recorded curve was discarded, and the caller's step line will look like a turn that happened
+1788967458.034 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 26.7, best 26.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967458.537 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 19.1, best 19.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967458.537 [cycles]       | [cycles]     it  57  k=171 -> 171  advanced        fix={'k': 171, 'k_float': 171.0, 'inliers': 50, 'dx': -63.65507507324219, 'dy': -169.42691040039062, 'scale': 1.9333090245886846, 'second': 48, 'second_k': 172, 'second_dx': -57.212364196777344, 'detail': 'k=171 (171.00) inliers=50 second=48 dx=-64 scale=1.933 window=[168,172] fitted=[168, 169, 170, 171, 172]'}  strafe left 0.10s
+1788967459.043 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 23.2, best 23.2, hazards none — one push, so `best` IS the whole leg's travel
+1788967459.043 [cycles]       | [cycles]     it  58  k=171 -> 173  stalled         fix={'k': 173, 'k_float': 172.9282417828178, 'inliers': 71, 'dx': 14.0, 'dy': 80.8800048828125, 'scale': 0.9106730222427608, 'second': 53, 'second_k': 174, 'second_dx': -11.47998046875, 'detail': 'k=173 (172.93) inliers=71 second=53 dx=+14 scale=0.911 window=[170,174] fitted=[170, 171, 172, 173, 174]'}
+1788967460.047 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.6, best 24.6, hazards none — one push, so `best` IS the whole leg's travel
+1788967460.047 [cycles]       | [cycles]     it  59  k=173 -> 173  advanced        fix={'k': 174, 'k_float': 173.49918347582297, 'inliers': 32, 'dx': 16.0, 'dy': 109.10000610351562, 'scale': 0.9409041551696116, 'second': 30, 'second_k': 173, 'second_dx': -56.08000183105469, 'detail': 'k=174 (173.50) inliers=32 second=30 dx=+16 scale=0.941 window=[170,174] fitted=[170, 171, 172, 173, 174]'}
+1788967461.058 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 24.8, best 24.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967461.058 [cycles]       | [cycles]     it  60  k=176 -> 176  blind-advance   fix={'k': 173, 'k_float': 173.0, 'inliers': 6, 'dx': 511.1904296875, 'dy': -159.96678161621094, 'scale': 0.5212533843152268, 'second': 6, 'second_k': 175, 'second_dx': 43.293914794921875, 'detail': 'k=173 (173.00) inliers=6 second=6 dx=+511 scale=0.521 window=[172,176] fitted=[173, 175]'}
+1788967463.076 [cycles]       | [cycles]         turn to 89.5: TURNED to 89.8 (err -0.3) in 2 push(es), asked +85.9 deg, stick 1.30s
+1788967465.087 [cycles]       | [cycles]         turn to 64.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967468.607 [cycles]       | [cycles]         turn to 114.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967472.127 [cycles]       | [cycles]         turn to 89.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967474.643 [cycles]       | [cycles]         chain back: 1 chunk(s) of 0.50s, change 25.5, best 25.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967474.643 [cycles]       | [cycles]     it  61  k=176 -> 196  turn-back: nothing fits head-on or either side; one step back for clearance
+1788967476.663 [cycles]       | [cycles]         turn to 64.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967478.679 [cycles]       | [cycles]         turn to 114.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967480.192 [cycles]       | [cycles]         turn to 89.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967482.712 [cycles]       | [cycles]     it  62  k=176 -> 196  turn-wait: nothing fits head-on or either side; waited 2s for whatever is there to move
+1788967485.739 [cycles]       | [cycles]         turn to 64.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967487.247 [cycles]       | [cycles]         turn to 114.5: TURNED to 113.3 (err +1.2) in 1 push(es), asked +55.8 deg, stick 0.75s
+1788967489.766 [cycles]       | [cycles]         turn to 89.5: NO compass reading, abandoned BEFORE turning — the caller's 'got --' is an unread heading, not a heading that was reached
+1788967491.778 [cycles]       | [cycles]     it  63  k=196 -> 196  turned-unverified (skipped, same heading) to 89.491477293153  (13 inliers at the stop)
+1788967492.279 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.8, best 28.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967493.288 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.30s, change 14.8, best 14.8, hazards none — one push, so `best` IS the whole leg's travel
+1788967493.288 [cycles]       | [cycles]     it  64  k=182 -> 197  regressed       fix={'k': 182, 'k_float': 182.0, 'inliers': 173, 'dx': -250.82269287109375, 'dy': -121.79998779296875, 'scale': 1.2969537942151785, 'second': 168, 'second_k': 184, 'second_dx': -1.212921142578125, 'detail': 'k=182 (182.00) inliers=173 second=168 dx=-251 scale=1.297 window=[175,199] fitted=[175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 193, 194, 197]'}  strafe left 0.30s
+1788967495.303 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.22s, change 1.4, best 1.4, hazards SHORT — one push, so `best` IS the whole leg's travel
+1788967495.303 [cycles]       | [cycles]     it  65  k=196 -> 196  turned-aligned (skipped, same heading) to 89.491477293153  (15 inliers at the stop)
+1788967496.307 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 22.0, best 22.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967496.811 [cycles]       | [cycles]     it  66  k=197 -> 197  blind-advance   fix={'k': 196, 'k_float': 196.0, 'inliers': 6, 'dx': -173.91656494140625, 'dy': -75.96000671386719, 'scale': 0.8024338018275892, 'second': 6, 'second_k': 198, 'second_dx': -7.1884918212890625, 'detail': 'k=196 (196.00) inliers=6 second=6 dx=-174 scale=0.802 window=[195,199] fitted=[196, 198]'}
+1788967497.316 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 25.4, best 25.4, hazards none — one push, so `best` IS the whole leg's travel
+1788967497.821 [cycles]       | [cycles]     it  67  k=200 -> 200  blind-advance   fix={'k': 197, 'k_float': 197.0, 'inliers': 8, 'dx': 76.33613586425781, 'dy': -56.94108581542969, 'scale': 0.8156530028536468, 'second': 7, 'second_k': 198, 'second_dx': 80.02435302734375, 'detail': 'k=197 (197.00) inliers=8 second=7 dx=+76 scale=0.816 window=[196,200] fitted=[196, 197, 198, 200]'}
+1788967498.828 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 28.1, best 28.1, hazards none — one push, so `best` IS the whole leg's travel
+1788967498.828 [cycles]       | [cycles]     it  68  k=200 -> 203  weak            fix={'k': 199, 'k_float': 199.0, 'inliers': 17, 'dx': 61.51678466796875, 'dy': -67.4000244140625, 'scale': 0.6634523597528308, 'second': 17, 'second_k': 203, 'second_dx': 126.01593017578125, 'detail': 'k=199 (199.00) inliers=17 second=17 dx=+62 scale=0.663 window=[199,203] fitted=[199, 200, 201, 202, 203]'}
+1788967499.835 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 26.5, best 26.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967500.340 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.12s, change 24.5, best 24.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967500.340 [cycles]       | [cycles]     it  69  k=200 -> 203  stalled         fix={'k': 199, 'k_float': 199.0, 'inliers': 37, 'dx': 88.08001708984375, 'dy': -117.00003051757812, 'scale': 0.6886976926991031, 'second': 37, 'second_k': 201, 'second_dx': 95.55996704101562, 'detail': 'k=199 (199.00) inliers=37 second=37 dx=+88 scale=0.689 window=[199,203] fitted=[199, 200, 201, 202, 203]'}  strafe right 0.12s
+1788967501.350 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 46.5, best 46.5, hazards none — one push, so `best` IS the whole leg's travel
+1788967501.855 [cycles]       | [cycles]         chain strafe: 1 chunk(s) of 0.10s, change 28.9, best 28.9, hazards none — one push, so `best` IS the whole leg's travel
+1788967501.855 [cycles]       | [cycles]     it  70  k=200 -> 203  stalled         fix={'k': 199, 'k_float': 199.0, 'inliers': 67, 'dx': 67.79998779296875, 'dy': -110.30404663085938, 'scale': 0.7982752072709453, 'second': 64, 'second_k': 203, 'second_dx': 88.58929443359375, 'detail': 'k=199 (199.00) inliers=67 second=64 dx=+68 scale=0.798 window=[199,203] fitted=[199, 200, 201, 202, 203]'}  strafe right 0.10s
+1788967502.865 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 49.0, best 49.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967503.369 [cycles]       | [cycles]     it  71  k=200 -> 203  escape:jump     fix={'k': 199, 'k_float': 199.0, 'inliers': 94, 'dx': 45.5, 'dy': -101.77920532226562, 'scale': 0.963557443529298, 'second': 93, 'second_k': 201, 'second_dx': 53.250030517578125, 'detail': 'k=199 (199.00) inliers=94 second=93 dx=+46 scale=0.964 window=[199,203] fitted=[199, 200, 201, 202, 203]'}
+1788967504.372 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 38.7, best 38.7, hazards none — one push, so `best` IS the whole leg's travel
+1788967504.372 [cycles]       | [cycles]     it  72  k=200 -> 203  stalled         fix={'k': 202, 'k_float': 201.93534332218846, 'inliers': 123, 'dx': 62.2080078125, 'dy': -92.16000366210938, 'scale': 0.9926648138997194, 'second': 116, 'second_k': 200, 'second_dx': 51.798553466796875, 'detail': 'k=202 (201.94) inliers=123 second=116 dx=+62 scale=0.993 window=[199,203] fitted=[199, 200, 201, 202, 203]'}
+1788967504.877 [cycles]       | [cycles]         chain push: 1 chunk(s) of 0.40s, change 44.0, best 44.0, hazards none — one push, so `best` IS the whole leg's travel
+1788967504.877 [cycles]       | [cycles]   chain_walk: ARRIVED at iteration 73, k=200 (target 203 of 204), 65 push(es)
+1788967506.419 [cycles] at the table: arrived on walk 1 of 2, 121.8s walking, shots /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/cycle_frames/cycle01_try1
+1788967507.458   [balance] pause menu confirmed open on attempt 1 of 3
+1788967509.181   [api] 1/200 calls (~$0.01), 199 left
+1788967512.439 [cycles] read $246 off the pause menu
+1788967512.457 [cycles] progress reset: balance $246, record 23W/7L/2D carried forward
+1788967512.467 Resuming with 23 wins / 7 losses / 2 draws logged, $246 on hand. Target: 999 wins total.
+1788967512.475 [reveal] watcher started at 20 Hz, threshold 0.065, close gap 1.0s
+1788967515.054 Starting next match. $196 left, $50/$246 of session cap spent.
+1788967518.072 Match-start prompt still up after start_match — not re-debiting (1/15).
+1788967518.166   [C5] ...but the dealer's "Play ($50)" prompt is on screen, so no match is actually running — retrying the press without re-debiting.
+1788967519.385 [reveal] episode closed (gap): t_first=1788967512.47 t_peak=1788967514.81 peak=0.0713 duration=5.88s samples=101
+1788967527.068 [reveal] episode closed (gap): t_first=1788967525.02 t_peak=1788967525.30 peak=0.1328 duration=1.02s samples=19
+1788967527.734   [ban] SCROLL DESYNC: press count says row 5, the scrollbar says 4. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788967529.365   [ban] SCROLL DESYNC: press count says row 7, the scrollbar says 6. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788967529.365   [ban] 1 position(s) not in the roster [(6, 4)] — skipping as ban candidates (trust_roster).
+1788967530.431   [ban] SCROLL DESYNC: press count says row 9, the scrollbar says 7. Trusting the scrollbar — the press count cannot see a dropped keystroke, and a wrong row bans a card the player does not own.
+1788967530.431   [ban] 3 position(s) not in the roster [(7, 1), (7, 4), (8, 2)] — skipping as ban candidates (trust_roster).
+1788967530.431 No roster coverage at rows 7+ — end of the catalogued collection, stopping the scan.
+1788967533.596 Read 26 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788967533.812 [reveal] episode closed (gap): t_first=1788967532.21 t_peak=1788967532.38 peak=0.1274 duration=0.56s samples=11
+1788967539.440 [reveal] episode closed (gap): t_first=1788967536.65 t_peak=1788967538.09 peak=0.1449 duration=1.72s samples=30
+1788967539.498   [ban] WARNING: only 1 of 3 bans registered. The match will start with a ban set the engine did not choose.
+1788967542.368 Unrecognized screen (other), waiting... (1/6) [api 5 calls spent]
+1788967547.854 Unrecognized screen (other), waiting... (2/6) [api 6 calls spent]
+1788967554.036 [reveal] episode closed (gap): t_first=1788967551.42 t_peak=1788967552.49 peak=0.0763 duration=1.60s samples=28
+1788967555.036   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967555.155   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967555.178   [local-check] third_base: empty
+1788967555.187   [local-check] first_base: empty
+1788967555.211   [local-check] second_base: empty
+1788967555.211   [local-check] vision runners: []
+1788967555.279   [local-check] hand: 5/5 read locally, all agree with vision
+1788967555.336   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967555.336 Decision: Playing Batter (power 7); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967559.457   [reveal] episode t_first=+3.0s after the play, peak 0.1600, 1.0s long, waited 1.2s (still open)
+1788967565.638 [reveal] episode closed (gap): t_first=1788967558.38 t_peak=1788967558.86 peak=0.1600 duration=6.22s samples=107
+1788967567.001   [deal] waiting 5s of 20s — biggest delta 52.0 of the 15 needed
+1788967568.162   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 52.0)
+1788967577.806   [repair] phase NOT CHECKED against the hand: card 'Curly Vance' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788967577.884   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967577.905   [local-check] third_base: empty
+1788967577.951   [local-check] first_base: empty
+1788967577.980   [local-check] second_base: empty
+1788967577.980   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967578.074   [local-check] hand: 4/5 read locally, all agree with vision
+1788967578.128   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967578.128 Decision: Playing Curly Vance (power 8); no swing boost available — attaching speed boost to help baserunners advance
+1788967582.026   [reveal] episode t_first=+2.8s after the play, peak 0.1293, 1.1s long, waited 1.3s (still open)
+1788967582.035   [api] 10/200 calls (~$0.12), 190 left
+1788967584.685   [reveal] no OPPONENT card identified (ours='curly vance', revealed players=['Charlie Pepper', 'Johnny Drawers', 'Austin "Cur" Bunz']) — turn not logged.
+1788967589.808   [deal] waiting 5s of 20s — biggest delta 52.9 of the 15 needed
+1788967590.228 [reveal] episode closed (gap): t_first=1788967580.92 t_peak=1788967581.46 peak=0.1293 duration=8.27s samples=143
+1788967590.788   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 52.9)
+1788967599.068   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967599.148   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967599.174   [local-check] third_base: empty
+1788967599.183   [local-check] first_base: empty
+1788967599.235   [local-check] second_base: empty
+1788967599.235   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967599.273   [local-check] hand: local found 3 positions, vision 5 — counts differ, no per-slot comparison
+1788967599.331 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788967607.084   [deal] waiting 5s of 20s — biggest delta 24.0 of the 15 needed
+1788967608.051   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 24.0)
+1788967613.608   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967613.685   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967613.718   [local-check] third_base: empty
+1788967613.728   [local-check] first_base: empty
+1788967613.785   [local-check] second_base: empty
+1788967613.786   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967613.881   [local-check] hand: 5/5 read locally, all agree with vision
+1788967613.935 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788967622.532   [deal] waiting 5s of 20s — biggest delta 11.3 of the 15 needed
+1788967627.602   [deal] waiting 10s of 20s — biggest delta 11.3 of the 15 needed
+1788967632.723   [deal] waiting 15s of 20s — biggest delta 12.3 of the 15 needed
+1788967637.511   [deal] no replacement card seen in 20s — reading anyway (the retry path will catch a bad read). Threshold 15, biggest delta 12.3: a biggest well UNDER the threshold means the gate is too high for this turn.
+1788967642.857   [repair] phase NOT CHECKED against the hand: card '' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788967642.950   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967642.959   [local-check] third_base: empty
+1788967642.983   [local-check] first_base: empty
+1788967643.017   [local-check] second_base: empty
+1788967643.017   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967643.057   [local-check] hand: 5/5 read locally, all agree with vision
+1788967643.119 Decision: best card is weak (power 5) and 1 discard(s) left — discarding the weakest (power 4) instead of playing
+1788967651.687   [deal] waiting 5s of 20s — biggest delta 18.5 of the 15 needed
+1788967652.858   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 18.5)
+1788967659.944   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967660.026   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967660.031   [local-check] third_base: empty
+1788967660.063   [local-check] first_base: empty
+1788967660.121   [local-check] second_base: empty
+1788967660.121   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967660.218   [local-check] hand: 5/5 read locally, all agree with vision
+1788967660.275 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788967668.886   [deal] waiting 5s of 20s — biggest delta 13.3 of the 15 needed
+1788967672.311 [reveal] episode closed (gap): t_first=1788967664.09 t_peak=1788967668.33 peak=0.1356 duration=7.15s samples=122
+1788967673.898   [deal] waiting 10s of 20s — biggest delta 13.3 of the 15 needed
+1788967674.904   [deal] replacement card seen; released 11.1s after the play (threshold 15, biggest delta 36.4)
+1788967680.693   [repair] phase NOT CHECKED against the hand: card '' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788967680.792   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967680.797   [local-check] third_base: empty
+1788967680.824   [local-check] first_base: empty
+1788967680.862   [local-check] second_base: empty
+1788967680.862   [local-check] vision runners: [{'name': 'Johnny Drawers', 'power': 7, 'secondary': 1}]
+1788967680.908   [local-check] hand: 5/5 read locally, all agree with vision
+1788967680.981   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967680.981 Decision: Playing  (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967686.941   [reveal] episode t_first=+4.8s after the play, peak 0.1310, 1.2s long, waited 1.4s (still open)
+1788967696.813   [deal] waiting 5s of 20s — biggest delta 47.5 of the 15 needed
+1788967697.814   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 47.5)
+1788967698.579 [reveal] episode closed (gap): t_first=1788967685.74 t_peak=1788967686.38 peak=0.1310 duration=11.76s samples=202
+1788967705.909   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967705.909   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788967706.008   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788967706.012   [local-check] third_base: empty
+1788967706.039   [local-check] first_base: empty
+1788967706.054   [local-check] second_base: empty
+1788967706.054   [local-check] vision runners: []
+1788967706.139   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788967706.205   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788967706.205 Decision: Playing Batter (power 5); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967711.178   [reveal] episode t_first=+3.8s after the play, peak 0.1128, 1.1s long, waited 1.4s (still open)
+1788967713.638   [reveal] no OPPONENT card identified (ours='batter', revealed players=['Justin Young', 'Jake Saucepan Black']) — turn not logged.
+1788967718.691   [deal] waiting 5s of 20s — biggest delta 56.0 of the 15 needed
+1788967719.726   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 56.0)
+1788967721.531 [reveal] episode closed (gap): t_first=1788967710.01 t_peak=1788967714.02 peak=0.1234 duration=10.47s samples=180
+1788967725.971   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'batting' stands UNVERIFIED — not confirmed.
+1788967725.971   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788967725.971 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (1/15)
+1788967728.224   [api] 20/200 calls (~$0.24), 180 left
+1788967730.293 Unrecognized screen (other), waiting... (2/6) [api 20 calls spent]
+1788967737.056   [repair] phase 'pitching' CONFIRMED by an unanimous pitcher hand.
+1788967737.131   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788967737.173   [local-check] third_base: empty
+1788967737.182   [local-check] first_base: empty
+1788967737.209   [local-check] second_base: empty
+1788967737.209   [local-check] vision runners: []
+1788967737.247   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788967737.322   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967737.322 Decision: Playing Pitcher (pitch focus 7); attaching pitch boost (+1) — more focus never hurts
+1788967741.844   [reveal] episode t_first=+3.5s after the play, peak 0.1319, 1.0s long, waited 1.2s (still open)
+1788967745.895 [reveal] episode closed (gap): t_first=1788967740.80 t_peak=1788967741.27 peak=0.1319 duration=4.08s samples=72
+1788967749.441   [deal] waiting 5s of 20s — biggest delta 50.8 of the 15 needed
+1788967750.409   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 50.8)
+1788967757.781   [repair] phase 'pitching' CONFIRMED by an unanimous pitcher hand.
+1788967757.857   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788967757.893   [local-check] third_base: empty
+1788967757.903   [local-check] first_base: empty
+1788967757.927   [local-check] second_base: empty
+1788967757.927   [local-check] vision runners: []
+1788967758.013   [local-check] hand: 4/5 read locally, all agree with vision
+1788967758.076   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967758.076 Decision: Playing Pitcher (pitch focus 9)
+1788967762.419   [reveal] episode t_first=+3.2s after the play, peak 0.1069, 1.1s long, waited 1.4s (still open)
+1788967765.750   [reveal] no OPPONENT card identified (ours='pitcher', revealed players=['Jacob "Cheesehead" McQueen', 'Joel Blunt']) — turn not logged.
+1788967770.740 [reveal] episode closed (gap): t_first=1788967761.32 t_peak=1788967766.15 peak=0.1336 duration=8.35s samples=142
+1788967770.847   [deal] waiting 5s of 20s — biggest delta 52.6 of the 15 needed
+1788967771.871   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 52.6)
+1788967779.821   [repair] phase read as 'batting' but every player card in hand is a pitcher — trusting the hand, playing the pitching turn
+1788967779.950   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788967779.982   [local-check] third_base: empty
+1788967780.008   [local-check] first_base: empty
+1788967780.060   [local-check] second_base: empty
+1788967780.060   [local-check] vision runners: [{'name': 'Jacob "Cheesehead" McQueen', 'power': 1, 'secondary': 0}]
+1788967780.106   [local-check] hand: 3/5 read locally, all agree with vision
+1788967780.181   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967780.181 Decision: Playing Pitcher (focus 7) — runners on; attaching fielding boost (no pitch boost held)
+1788967785.893   [reveal] episode t_first=+4.5s after the play, peak 0.1352, 1.1s long, waited 1.4s (still open)
+1788967793.060 [reveal] episode closed (gap): t_first=1788967784.72 t_peak=1788967785.33 peak=0.1352 duration=7.27s samples=124
+1788967796.857   [deal] waiting 5s of 20s — biggest delta 46.9 of the 15 needed
+1788967797.844   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 46.9)
+1788967803.224   [repair] phase NOT CHECKED against the hand: card '' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788967803.224   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788967803.297   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788967803.334   [local-check] third_base: empty
+1788967803.350   [local-check] first_base: empty
+1788967803.431   [local-check] second_base: empty
+1788967803.431   [local-check] vision runners: [{'name': 'Jacob "Cheesehead" McQueen', 'power': 9, 'secondary': 1}, {'name': 'Donny Mekesz', 'power': 5, 'secondary': 3}]
+1788967803.498   [local-check] hand: 5/5 read locally, all agree with vision
+1788967803.577   [redraw] keeping the hand: best power 7 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788967803.577 Decision: Playing  (focus 7) — runners on
+1788967808.116   [reveal] episode t_first=+3.2s after the play, peak 0.1415, 1.3s long, waited 1.5s (still open)
+1788967810.471   [reveal] no OPPONENT card identified (ours='', revealed players=['Thomas Thomas', 'Jacob "Cheesehead" McQueen']) — turn not logged.
+1788967815.520   [deal] waiting 5s of 20s — biggest delta 58.2 of the 15 needed
+1788967816.202 [reveal] episode closed (gap): t_first=1788967806.76 t_peak=1788967807.53 peak=0.1415 duration=8.39s samples=141
+1788967816.476   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 58.2)
+1788967825.532   [repair] phase NOT CHECKED against the hand: card 'M.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788967825.532   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788967825.643   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 1, 1]}  vs vision: your=2 opp=1
+1788967825.658   [local-check] third_base: empty
+1788967825.691   [local-check] first_base: empty
+1788967825.723   [local-check] second_base: empty
+1788967825.723   [local-check] vision runners: [{'name': 'Jacob "Cheesehead" McQueen', 'power': 9, 'secondary': 1}]
+1788967825.816   [local-check] hand: local found 4 positions, vision 2 — counts differ, no per-slot comparison
+1788967825.879   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788967825.879 Decision: Playing M.J. Gain (focus 5) — runners on
+1788967829.766   [reveal] episode t_first=+2.9s after the play, peak 0.1490, 1.0s long, waited 1.2s (still open)
+1788967829.775   [api] 30/200 calls (~$0.36), 170 left
+1788967835.937 [reveal] episode closed (gap): t_first=1788967828.75 t_peak=1788967829.21 peak=0.1490 duration=6.11s samples=103
+1788967837.217   [deal] waiting 5s of 20s — biggest delta 59.8 of the 15 needed
+1788967838.235   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 69.2)
+1788967845.324 WIN #24 logged. 975 to go.
+1788967850.232 Starting next match. $146 left, $100/$246 of session cap spent.
+1788967851.444 [reveal] episode closed (gap): t_first=1788967845.88 t_peak=1788967848.04 peak=0.0708 duration=4.55s samples=79
+1788967855.841 Read 26 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788967861.687 [reveal] episode closed (gap): t_first=1788967858.98 t_peak=1788967860.28 peak=0.1332 duration=1.67s samples=29
+1788967861.766   [ban] WARNING: only 2 of 3 bans registered. The match will start with a ban set the engine did not choose.
+1788967865.941 Unrecognized screen (other), waiting... (1/6) [api 34 calls spent]
+1788967874.429   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967874.491   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967874.539   [local-check] third_base: empty
+1788967874.550   [local-check] first_base: empty
+1788967874.575   [local-check] second_base: empty
+1788967874.575   [local-check] vision runners: []
+1788967874.617   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788967874.694   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967874.694 Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967876.272 [reveal] episode closed (gap): t_first=1788967873.56 t_peak=1788967874.99 peak=0.0769 duration=1.67s samples=30
+1788967881.087   [reveal] episode t_first=+5.2s after the play, peak 0.1321, 1.2s long, waited 1.4s (still open)
+1788967885.050 [reveal] episode closed (gap): t_first=1788967879.89 t_peak=1788967880.54 peak=0.1321 duration=4.08s samples=70
+1788967886.328   [reveal] no OPPONENT card identified (ours='batter', revealed players=['P.J. Ga...', 'Jedediah Wetters']) — turn not logged.
+1788967891.456   [deal] waiting 5s of 20s — biggest delta 42.5 of the 15 needed
+1788967892.476   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 42.5)
+1788967898.587   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967898.683   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967898.697   [local-check] third_base: empty
+1788967898.730   [local-check] first_base: empty
+1788967898.746   [local-check] second_base: empty
+1788967898.746   [local-check] vision runners: []
+1788967898.833   [local-check] hand: 5/5 read locally, all agree with vision
+1788967898.893   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967898.893 Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967905.151   [reveal] episode t_first=+5.1s after the play, peak 0.1485, 1.1s long, waited 1.3s (still open)
+1788967907.497   [MISFIRE?] no revealed card has our played power 8 (or 10 with the boost) — revealed [('Johnny C-Train Goudenberg', 7, [7]), ('Timmeh Rattycum', 4, [4])]. Either a keystroke was dropped during card selection or the reveal misread. Not logging this turn.
+1788967907.497   [reveal] turn NOT logged — RuntimeError: intended card absent from reveal
+1788967909.145 [reveal] episode closed (gap): t_first=1788967904.02 t_peak=1788967904.60 peak=0.1485 duration=4.11s samples=72
+1788967912.689   [deal] waiting 5s of 20s — biggest delta 50.5 of the 15 needed
+1788967913.565   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 50.5)
+1788967922.420   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967922.534   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788967922.549   [local-check] third_base: empty
+1788967922.587   [local-check] first_base: empty
+1788967922.605   [local-check] second_base: empty
+1788967922.605   [local-check] vision runners: []
+1788967922.647   [local-check] hand: 4/5 read locally, all agree with vision
+1788967922.727   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967922.727 Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967929.153   [reveal] episode t_first=+5.2s after the play, peak 0.1310, 1.2s long, waited 1.4s (still open)
+1788967929.158   [api] 40/200 calls (~$0.48), 160 left
+1788967936.600   [deal] waiting 5s of 20s — biggest delta 47.3 of the 15 needed
+1788967937.660   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 47.3)
+1788967938.573 [reveal] episode closed (gap): t_first=1788967927.94 t_peak=1788967932.49 peak=0.1369 duration=9.58s samples=165
+1788967946.100   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967946.203   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788967946.243   [local-check] third_base: empty
+1788967946.254   [local-check] first_base: empty
+1788967946.282   [local-check] second_base: empty
+1788967946.282   [local-check] vision runners: []
+1788967946.374   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788967946.447   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967946.447 Decision: Playing Batter (power 8); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788967952.812   [reveal] episode t_first=+5.2s after the play, peak 0.1438, 1.2s long, waited 1.4s (still open)
+1788967955.621   [reveal] no OPPONENT card identified (ours='batter', revealed players=['Josef Bunz-Konicky', 'Austin "Cur" Bunz']) — turn not logged.
+1788967958.969 [reveal] episode closed (gap): t_first=1788967951.61 t_peak=1788967952.26 peak=0.1438 duration=6.31s samples=109
+1788967960.696   [deal] waiting 5s of 20s — biggest delta 45.2 of the 15 needed
+1788967961.733   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 45.2)
+1788967971.683   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788967971.800   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788967971.813   [local-check] third_base: empty
+1788967971.846   [local-check] first_base: empty
+1788967971.862   [local-check] second_base: empty
+1788967971.862   [local-check] vision runners: []
+1788967971.901   [local-check] hand: 4/5 read locally, all agree with vision
+1788967971.977   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788967971.977 Decision: Playing Batter (power 7)
+1788967989.722   [reveal] no episode within 15s of the play vs threshold 0.065 -- {'reads': 8254, 'frames': 8156, 'misses': 98, 'errors': 0, 'episodes': 22, 'unavailable': None}
+1788967989.722   [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+1788967994.791   [deal] waiting 5s of 20s — biggest delta 20.2 of the 15 needed
+1788967995.803   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 20.2)
+1788968003.504   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968003.588   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788968003.643   [local-check] third_base: empty
+1788968003.653   [local-check] first_base: empty
+1788968003.691   [local-check] second_base: empty
+1788968003.691   [local-check] vision runners: []
+1788968003.766   [local-check] hand: 4/5 read locally, all agree with vision
+1788968003.831   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968003.831 Decision: Playing Batter (power 7)
+1788968007.805   [reveal] episode t_first=+2.9s after the play, peak 0.1638, 1.1s long, waited 1.3s (still open)
+1788968011.989 [reveal] episode closed (gap): t_first=1788968006.72 t_peak=1788968007.26 peak=0.1638 duration=4.16s samples=71
+1788968017.779   [deal] waiting 5s of 20s — biggest delta 51.0 of the 15 needed
+1788968018.847   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 51.0)
+1788968026.883   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788968026.998   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788968027.011   [local-check] third_base: empty
+1788968027.049   [local-check] first_base: empty
+1788968027.063   [local-check] second_base: empty
+1788968027.063   [local-check] vision runners: []
+1788968027.108   [local-check] hand: local found 2 positions, vision 5 — counts differ, no per-slot comparison
+1788968027.216   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968027.216 Decision: Playing Pitcher (power 9)
+1788968045.628   [reveal] no episode within 15s of the play vs threshold 0.065 -- {'reads': 9208, 'frames': 9106, 'misses': 102, 'errors': 0, 'episodes': 23, 'unavailable': None}
+1788968045.628   [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+1788968050.697   [deal] waiting 5s of 20s — biggest delta 17.9 of the 15 needed
+1788968051.720   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 17.9)
+1788968059.095   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968059.208   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788968059.224   [local-check] third_base: empty
+1788968059.265   [local-check] first_base: empty
+1788968059.282   [local-check] second_base: empty
+1788968059.282   [local-check] vision runners: []
+1788968059.368   [local-check] hand: 4/5 read locally, all agree with vision
+1788968059.435   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968059.435 Decision: Playing Pitcher (pitch focus 9)
+1788968077.880   [reveal] no episode within 15s of the play vs threshold 0.065 -- {'reads': 9758, 'frames': 9652, 'misses': 106, 'errors': 0, 'episodes': 23, 'unavailable': None}
+1788968077.880   [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+1788968082.916   [deal] waiting 5s of 20s — biggest delta 19.6 of the 15 needed
+1788968083.978   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 19.6)
+1788968092.400   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'batting' stands UNVERIFIED — not confirmed.
+1788968092.513   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788968092.517   [local-check] third_base: empty
+1788968092.553   [local-check] first_base: empty
+1788968092.569   [local-check] second_base: empty
+1788968092.569   [local-check] vision runners: []
+1788968092.613   [local-check] hand: 4/5 read locally, all agree with vision
+1788968092.696   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968092.696 Decision: Playing Pitcher (power 9)
+1788968097.589   [reveal] episode t_first=+3.6s after the play, peak 0.1380, 1.2s long, waited 1.4s (still open)
+1788968100.624   [reveal] no OPPONENT card identified (ours='pitcher', revealed players=['Jake Sauceper', 'Bartholomew Creasley']) — turn not logged.
+1788968105.734   [deal] waiting 5s of 20s — biggest delta 58.1 of the 15 needed
+1788968106.821   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 58.1)
+1788968109.217 [reveal] episode closed (gap): t_first=1788968096.34 t_peak=1788968097.03 peak=0.1380 duration=11.79s samples=203
+1788968110.615   [api] 50/200 calls (~$0.60), 150 left
+1788968114.891 Unrecognized screen (other), waiting... (1/6) [api 50 calls spent]
+1788968120.662   [repair] 'Fielding Play' read as a player card — re-labelled tactics/fielding_boost (bonus 1)
+1788968120.662   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968120.740   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968120.791   [local-check] third_base: empty
+1788968120.801   [local-check] first_base: empty
+1788968120.845   [local-check] second_base: empty
+1788968120.845   [local-check] vision runners: []
+1788968120.937   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968121.008   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968121.008 Decision: Playing Pitcher (pitch focus 9); attaching pitch boost (+1) — more focus never hurts
+1788968126.390   [reveal] episode t_first=+4.2s after the play, peak 0.1369, 1.1s long, waited 1.4s (still open)
+1788968130.298 [reveal] episode closed (gap): t_first=1788968125.24 t_peak=1788968125.84 peak=0.1369 duration=4.04s samples=69
+1788968135.433   [deal] waiting 5s of 20s — biggest delta 48.6 of the 15 needed
+1788968136.401   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 48.6)
+1788968143.386   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968143.515   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968143.539   [local-check] third_base: empty
+1788968143.576   [local-check] first_base: empty
+1788968143.597   [local-check] second_base: empty
+1788968143.597   [local-check] vision runners: []
+1788968143.641   [local-check] hand: 4/5 read locally, all agree with vision
+1788968143.722 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788968152.579   [deal] waiting 5s of 20s — biggest delta 16.6 of the 15 needed
+1788968153.436   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 16.6)
+1788968162.857   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968162.980   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968162.995   [local-check] third_base: empty
+1788968163.037   [local-check] first_base: empty
+1788968163.054   [local-check] second_base: empty
+1788968163.054   [local-check] vision runners: []
+1788968163.135   [local-check] hand: 4/5 read locally, all agree with vision
+1788968163.204 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788968171.092   [deal] waiting 5s of 20s — biggest delta 27.1 of the 15 needed
+1788968171.945   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 27.1)
+1788968179.086   [repair] phase NOT CHECKED against the hand: card 'R.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968179.207   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968179.219   [local-check] third_base: empty
+1788968179.260   [local-check] first_base: empty
+1788968179.267   [local-check] second_base: empty
+1788968179.267   [local-check] vision runners: []
+1788968179.313   [local-check] hand: 4/5 read locally, all agree with vision
+1788968179.386   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968179.386 Decision: Playing Pitcher (pitch focus 7); attaching pitch boost (+1) — more focus never hurts
+1788968184.449   [reveal] episode t_first=+3.9s after the play, peak 0.1264, 1.1s long, waited 1.3s (still open)
+1788968188.768   [reveal] no OPPONENT card identified (ours='pitcher', revealed players=['Rube Sharp', 'Johnny C-Train Goudenberg']) — turn not logged.
+1788968190.632 [reveal] episode closed (gap): t_first=1788968183.28 t_peak=1788968187.36 peak=0.1551 duration=6.28s samples=108
+1788968193.956   [deal] waiting 5s of 20s — biggest delta 51.8 of the 15 needed
+1788968194.814   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 51.8)
+1788968201.905   [repair] 'Fielding Play' read as a player card — re-labelled tactics/fielding_boost (bonus 1)
+1788968201.906   [repair] phase NOT CHECKED against the hand: card 'Glowette' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968202.025   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968202.030   [local-check] third_base: empty
+1788968202.077   [local-check] first_base: empty
+1788968202.090   [local-check] second_base: empty
+1788968202.090   [local-check] vision runners: []
+1788968202.164   [local-check] hand: 4/5 read locally, all agree with vision
+1788968202.239   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968202.239 Decision: Playing Glowette (pitch focus 7)
+1788968205.955   [reveal] episode t_first=+2.7s after the play, peak 0.0985, 1.0s long, waited 1.3s (still open)
+1788968209.956 [reveal] episode closed (gap): t_first=1788968204.89 t_peak=1788968205.37 peak=0.0985 duration=4.02s samples=67
+1788968213.206   [deal] waiting 5s of 20s — biggest delta 51.2 of the 15 needed
+1788968214.307   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 51.2)
+1788968223.098   [repair] phase NOT CHECKED against the hand: card 'Mickey' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968223.098   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788968223.177   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 1, 1]}  vs vision: your=1 opp=0
+1788968223.239   [local-check] third_base: empty
+1788968223.250   [local-check] first_base: empty
+1788968223.282   [local-check] second_base: empty
+1788968223.282   [local-check] vision runners: []
+1788968223.326   [local-check] hand: 4/5 read locally, all agree with vision
+1788968223.406   [redraw] keeping the hand: best power 6 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968223.406 Decision: Playing Mickey (pitch focus 6)
+1788968227.304   [reveal] episode t_first=+2.7s after the play, peak 0.1062, 1.1s long, waited 1.5s (still open)
+1788968227.314   [api] 60/200 calls (~$0.72), 140 left
+1788968231.205 [reveal] episode closed (gap): t_first=1788968226.14 t_peak=1788968226.73 peak=0.1062 duration=3.95s samples=66
+1788968234.478   [deal] waiting 5s of 20s — biggest delta 66.6 of the 15 needed
+1788968235.334   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 70.1)
+1788968243.189 Draw logged (3 total).
+1788968246.830 Starting next match. $96 left, $150/$246 of session cap spent.
+1788968248.001 [reveal] episode closed (gap): t_first=1788968243.67 t_peak=1788968245.88 peak=0.0713 duration=3.29s samples=56
+1788968252.270 Read 26 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788968258.444   [ban] verified 3/3 bans placed.
+1788968258.730 [reveal] episode closed (gap): t_first=1788968254.21 t_peak=1788968254.21 peak=0.1397 duration=3.43s samples=59
+1788968261.613 Couldn't read the screen (turn screen with unusable phase: None), retrying... (1/15)
+1788968266.175 Couldn't read the screen (turn screen with unusable phase: None), retrying... (2/15)
+1788968271.935   [repair] 'Power Swing' read as a player card — re-labelled tactics/swing_boost (bonus 1)
+1788968271.935   [repair] 'Power Swing' read as a player card — re-labelled tactics/swing_boost (bonus 2)
+1788968271.935   [repair] phase NOT CHECKED against the hand: card 'Cur Vain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968272.008   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788968272.060   [local-check] third_base: empty
+1788968272.073   [local-check] first_base: empty
+1788968272.107   [local-check] second_base: empty
+1788968272.107   [local-check] vision runners: []
+1788968272.184   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968272.256   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968272.256 Decision: Playing Cur Vain (pitch focus 8)
+1788968276.043   [reveal] episode t_first=+2.6s after the play, peak 0.1225, 1.1s long, waited 1.4s (still open)
+1788968282.944   [deal] waiting 5s of 20s — biggest delta 47.2 of the 15 needed
+1788968283.996   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 47.2)
+1788968285.337 [reveal] episode closed (gap): t_first=1788968274.88 t_peak=1788968279.19 peak=0.1482 duration=9.42s samples=162
+1788968290.077   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'pitching' stands UNVERIFIED — not confirmed.
+1788968290.077 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (1/15)
+1788968295.395   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968295.473   [local-check] scoreboard OCR: {'your': [1, 0, 1], 'opponent': [0, 0, 0]}  vs vision: your=1 opp=0
+1788968295.530   [local-check] third_base: empty
+1788968295.542   [local-check] first_base: empty
+1788968295.577   [local-check] second_base: empty
+1788968295.577   [local-check] vision runners: []
+1788968295.616   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968295.697   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968295.697 Decision: Playing Batter (power 7); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788968300.687   [reveal] episode t_first=+3.9s after the play, peak 0.1507, 1.1s long, waited 1.2s (still open)
+1788968300.695   [api] 70/200 calls (~$0.84), 130 left
+1788968308.000   [deal] waiting 5s of 20s — biggest delta 45.4 of the 15 needed
+1788968309.049   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 45.4)
+1788968310.239 [reveal] episode closed (gap): t_first=1788968299.60 t_peak=1788968300.13 peak=0.1507 duration=9.53s samples=164
+1788968320.236   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968320.316   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968320.376   [local-check] third_base: empty
+1788968320.387   [local-check] first_base: empty
+1788968320.436   [local-check] second_base: empty
+1788968320.436   [local-check] vision runners: []
+1788968320.527   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968320.601 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788968329.066   [deal] waiting 5s of 20s — biggest delta 18.9 of the 15 needed
+1788968330.139   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 18.9)
+1788968339.778   [repair] 'Power Swing' read as a player card — re-labelled tactics/swing_boost (bonus 1)
+1788968339.778   [repair] 'Power Swing' read as a player card — re-labelled tactics/swing_boost (bonus 2)
+1788968339.778   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968339.900   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968339.906   [local-check] third_base: empty
+1788968339.951   [local-check] first_base: empty
+1788968339.972   [local-check] second_base: empty
+1788968339.972   [local-check] vision runners: []
+1788968340.020   [local-check] hand: 4/5 read locally, all agree with vision
+1788968340.096 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788968347.898   [deal] waiting 5s of 20s — biggest delta 11.3 of the 15 needed
+1788968348.230 [reveal] episode closed (gap): t_first=1788968342.98 t_peak=1788968343.57 peak=0.1334 duration=4.19s samples=72
+1788968350.725   [deal] replacement card seen; released 7.9s after the play (threshold 15, biggest delta 25.3)
+1788968358.189   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968358.320   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968358.336   [local-check] third_base: empty
+1788968358.382   [local-check] first_base: empty
+1788968358.401   [local-check] second_base: empty
+1788968358.401   [local-check] vision runners: []
+1788968358.480   [local-check] hand: 4/5 read locally, all agree with vision
+1788968358.553   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968358.553 Decision: Playing Batter (power 8); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788968363.256   [reveal] episode t_first=+3.6s after the play, peak 0.1513, 1.1s long, waited 1.2s (still open)
+1788968369.485 [reveal] episode closed (gap): t_first=1788968362.16 t_peak=1788968362.71 peak=0.1513 duration=6.27s samples=108
+1788968370.795   [deal] waiting 5s of 20s — biggest delta 45.0 of the 15 needed
+1788968371.915   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 45.0)
+1788968379.598   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968379.598   [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+1788968379.676   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968379.736   [local-check] third_base: empty
+1788968379.748   [local-check] first_base: empty
+1788968379.800   [local-check] second_base: empty
+1788968379.800   [local-check] vision runners: []
+1788968379.839   [local-check] hand: 4/5 read locally, all agree with vision
+1788968379.923   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968379.923 Decision: Playing Batter (power 5); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788968386.479   [reveal] episode t_first=+5.4s after the play, peak 0.1436, 1.2s long, waited 1.4s (still open)
+1788968390.491   [reveal] no OPPONENT card identified (ours='batter', revealed players=['P.J. Gain', 'Jake Saucepan Black']) — turn not logged.
+1788968394.780 [reveal] episode closed (gap): t_first=1788968385.28 t_peak=1788968385.93 peak=0.1436 duration=8.45s samples=143
+1788968395.554   [deal] waiting 5s of 20s — biggest delta 50.3 of the 15 needed
+1788968396.677   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 50.3)
+1788968404.558   [C5] match_start_prompt while a paid match is already running (likely a ROUND/transition overlay misread) — NOT debiting again.
+1788968410.317   [repair] phase NOT CHECKED against the hand: card 'R.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968410.456   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968410.471   [local-check] third_base: empty
+1788968410.517   [local-check] first_base: empty
+1788968410.525   [local-check] second_base: empty
+1788968410.525   [local-check] vision runners: []
+1788968410.603   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968410.683   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968410.683 Decision: Playing P.J. Gain (pitch focus 9); attaching pitch boost (+1) — more focus never hurts
+1788968415.814   [reveal] episode t_first=+4.0s after the play, peak 0.1370, 1.1s long, waited 1.3s (still open)
+1788968418.016   [MISFIRE?] no revealed card has our played power 9 (or 10 with the boost) — revealed [('Zachary Lee', 6, [6]), ('R.J. Gain', 5, [5])]. Either a keystroke was dropped during card selection or the reveal misread. Not logging this turn.
+1788968418.016   [input] misfire #2 — ACTION_DELAY raised to 0.40s and focus caching disabled for the rest of the run.
+1788968418.016   [reveal] turn NOT logged — RuntimeError: intended card absent from reveal
+1788968422.013 [reveal] episode closed (gap): t_first=1788968414.69 t_peak=1788968419.00 peak=0.1508 duration=6.23s samples=105
+1788968423.140   [deal] waiting 5s of 20s — biggest delta 54.0 of the 15 needed
+1788968424.056   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 54.0)
+1788968427.339   [api] 80/200 calls (~$0.96), 120 left
+1788968430.741   [repair] phase 'pitching' CONFIRMED by an unanimous pitcher hand.
+1788968430.820   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968430.867   [local-check] third_base: empty
+1788968430.877   [local-check] first_base: empty
+1788968430.916   [local-check] second_base: empty
+1788968430.916   [local-check] vision runners: []
+1788968430.959   [local-check] hand: 5/5 read locally, all agree with vision
+1788968431.035   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968431.035 Decision: Playing Pitcher (pitch focus 9)
+1788968436.253   [reveal] episode t_first=+3.9s after the play, peak 0.1356, 1.2s long, waited 1.3s (still open)
+1788968440.211 [reveal] episode closed (gap): t_first=1788968434.97 t_peak=1788968435.69 peak=0.1356 duration=4.21s samples=72
+1788968443.512   [deal] waiting 5s of 20s — biggest delta 54.9 of the 15 needed
+1788968444.577   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 54.9)
+1788968449.265   [repair] phase 'pitching' CONFIRMED by an unanimous pitcher hand.
+1788968449.418   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968449.432   [local-check] third_base: empty
+1788968449.481   [local-check] first_base: empty
+1788968449.498   [local-check] second_base: empty
+1788968449.498   [local-check] vision runners: []
+1788968449.572   [local-check] hand: 5/5 read locally, all agree with vision
+1788968449.651   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968449.651 Decision: Playing Pitcher (pitch focus 9)
+1788968454.880   [reveal] episode t_first=+4.1s after the play, peak 0.1075, 1.1s long, waited 1.2s (still open)
+1788968458.954 [reveal] episode closed (gap): t_first=1788968453.78 t_peak=1788968454.32 peak=0.1075 duration=4.13s samples=71
+1788968462.045   [deal] waiting 5s of 20s — biggest delta 55.2 of the 15 needed
+1788968462.930   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 55.2)
+1788968471.055   [repair] phase NOT CHECKED against the hand: card 'M. J. GAIN' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968471.132   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968471.137   [local-check] third_base: empty
+1788968471.146   [local-check] first_base: empty
+1788968471.202   [local-check] second_base: empty
+1788968471.202   [local-check] vision runners: []
+1788968471.241   [local-check] hand: 5/5 read locally, all agree with vision
+1788968471.390 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788968480.489   [deal] waiting 5s of 20s — biggest delta 14.9 of the 15 needed
+1788968485.561   [deal] waiting 10s of 20s — biggest delta 14.9 of the 15 needed
+1788968486.694   [deal] replacement card seen; released 11.4s after the play (threshold 15, biggest delta 15.8)
+1788968493.344   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968493.476   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968493.490   [local-check] third_base: empty
+1788968493.537   [local-check] first_base: empty
+1788968493.556   [local-check] second_base: empty
+1788968493.556   [local-check] vision runners: []
+1788968493.631   [local-check] hand: 5/5 read locally, all agree with vision
+1788968493.708 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788968502.703   [deal] waiting 5s of 20s — biggest delta 17.1 of the 15 needed
+1788968503.782   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 17.1)
+1788968508.861   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968508.998   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968509.004   [local-check] third_base: empty
+1788968509.051   [local-check] first_base: empty
+1788968509.071   [local-check] second_base: empty
+1788968509.071   [local-check] vision runners: []
+1788968509.113   [local-check] hand: 5/5 read locally, all agree with vision
+1788968509.191   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968509.191 Decision: Playing Pitcher (pitch focus 7)
+1788968513.849   [reveal] episode t_first=+3.6s after the play, peak 0.1071, 1.0s long, waited 1.2s (still open)
+1788968517.884 [reveal] episode closed (gap): t_first=1788968512.81 t_peak=1788968513.28 peak=0.1071 duration=3.97s samples=68
+1788968521.283   [deal] waiting 5s of 20s — biggest delta 53.2 of the 15 needed
+1788968522.363   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 53.2)
+1788968531.495   [repair] phase NOT CHECKED against the hand: card 'M. J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968531.495   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788968531.633   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968531.648   [local-check] third_base: empty
+1788968531.701   [local-check] first_base: empty
+1788968531.723   [local-check] second_base: empty
+1788968531.723   [local-check] vision runners: []
+1788968531.818   [local-check] hand: 4/5 read locally, all agree with vision
+1788968531.900   [redraw] keeping the hand: best power 6 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968531.900 Decision: Playing Pitcher (pitch focus 6)
+1788968536.211   [reveal] episode t_first=+3.1s after the play, peak 0.1190, 1.2s long, waited 1.3s (still open)
+1788968544.083   [deal] waiting 5s of 20s — biggest delta 53.8 of the 15 needed
+1788968545.004   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 53.8)
+1788968546.774 [reveal] episode closed (gap): t_first=1788968534.95 t_peak=1788968539.11 peak=0.1233 duration=10.70s samples=182
+1788968549.325   [api] 90/200 calls (~$1.08), 110 left
+1788968552.600 WIN #25 logged. 974 to go.
+1788968556.337 Starting next match. $46 left, $200/$246 of session cap spent.
+1788968557.626 [reveal] episode closed (gap): t_first=1788968553.23 t_peak=1788968553.87 peak=0.0710 duration=3.29s samples=56
+1788968563.923 Read 26 cards. Banning: ['Johnny "Blaze" Sweets', 'Joshua Diaz', 'William Brown'] at [(1, 3), (2, 1), (3, 3)]
+1788968572.580 [reveal] episode closed (gap): t_first=1788968566.59 t_peak=1788968570.91 peak=0.1398 duration=4.97s samples=84
+1788968572.872   [ban] verified 3/3 bans placed.
+1788968576.050 Unrecognized screen (other), waiting... (1/6) [api 93 calls spent]
+1788968582.247 Couldn't read the screen (turn screen with unusable phase: None), retrying... (2/15)
+1788968589.317   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968589.398   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788968589.472   [local-check] third_base: empty
+1788968589.494   [local-check] first_base: empty
+1788968589.535   [local-check] second_base: empty
+1788968589.535   [local-check] vision runners: []
+1788968589.580   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968589.665 Decision: best card is weak (power 5) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788968599.832   [deal] waiting 5s of 20s — biggest delta 13.3 of the 15 needed
+1788968604.918   [deal] waiting 10s of 20s — biggest delta 14.5 of the 15 needed
+1788968610.104   [deal] waiting 15s of 20s — biggest delta 14.5 of the 15 needed
+1788968614.750   [deal] no replacement card seen in 20s — reading anyway (the retry path will catch a bad read). Threshold 15, biggest delta 14.5: a biggest well UNDER the threshold means the gate is too high for this turn.
+1788968624.772   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968624.772   [repair] discards_left 5 outside 0-2 — treating as 0 (no discard)
+1788968624.909   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788968624.925   [local-check] third_base: empty
+1788968624.980   [local-check] first_base: empty
+1788968624.989   [local-check] second_base: empty
+1788968624.989   [local-check] vision runners: []
+1788968625.067   [local-check] hand: 4/5 read locally, all agree with vision
+1788968625.146   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968625.146 Decision: Playing Batter (power 5); attaching swing boost (+2) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788968630.690   [reveal] episode t_first=+4.6s after the play, peak 0.1124, 0.9s long, waited 1.1s (still open)
+1788968638.209   [deal] waiting 5s of 20s — biggest delta 51.1 of the 15 needed
+1788968639.038 [reveal] episode closed (gap): t_first=1788968629.73 t_peak=1788968630.15 peak=0.1124 duration=8.25s samples=140
+1788968639.171   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 51.1)
+1788968650.387   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968650.460   [local-check] scoreboard OCR: {'your': [0, 0, 0], 'opponent': [0, 0, 0]}  vs vision: your=0 opp=0
+1788968650.532   [local-check] third_base: Jake Saucepan Black (pwr=5 sec=3)
+1788968650.543   [local-check] first_base: empty
+1788968650.596   [local-check] second_base: empty
+1788968650.596   [local-check] vision runners: [{'name': 'Jake Saucepan Black', 'power': 5, 'secondary': 3}]
+1788968650.636   [local-check] hand: local found 2 positions, vision 5 — counts differ, no per-slot comparison
+1788968650.721   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968650.721 Decision: Playing Batter (power 7); attaching swing boost (+1) — more power never hurts, and it raises the odds of a 3+ margin home run
+1788968656.922   [reveal] episode t_first=+4.9s after the play, peak 0.1384, 1.2s long, waited 1.3s (still open)
+1788968665.940   [deal] waiting 5s of 20s — biggest delta 47.0 of the 15 needed
+1788968667.098   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 47.0)
+1788968667.385 [reveal] episode closed (gap): t_first=1788968655.65 t_peak=1788968656.36 peak=0.1384 duration=10.70s samples=182
+1788968673.020   [api] 100/200 calls (~$1.20), 100 left
+1788968676.835   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968676.914   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968676.977   [local-check] third_base: empty
+1788968676.987   [local-check] first_base: empty
+1788968677.030   [local-check] second_base: empty
+1788968677.030   [local-check] vision runners: []
+1788968677.102   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968677.189   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968677.189 Decision: Playing Batter (power 8)
+1788968682.618   [reveal] episode t_first=+4.6s after the play, peak 0.1100, 0.8s long, waited 0.9s (still open)
+1788968689.008 [reveal] episode closed (gap): t_first=1788968681.76 t_peak=1788968686.17 peak=0.1204 duration=6.16s samples=105
+1788968689.911   [deal] waiting 5s of 20s — biggest delta 50.8 of the 15 needed
+1788968690.803   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 50.8)
+1788968700.229   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968700.229   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788968700.376   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968700.381   [local-check] third_base: empty
+1788968700.435   [local-check] first_base: empty
+1788968700.443   [local-check] second_base: empty
+1788968700.443   [local-check] vision runners: [{'name': 'Rube Sharp', 'power': 8, 'secondary': 1}]
+1788968700.489   [local-check] hand: 4/5 read locally, all agree with vision
+1788968700.578   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968700.578 Decision: Playing Batter (power 5); no swing boost available — attaching speed boost to help baserunners advance
+1788968720.120   [reveal] no episode within 15s of the play vs threshold 0.065 -- {'reads': 20708, 'frames': 20500, 'misses': 208, 'errors': 0, 'episodes': 45, 'unavailable': None}
+1788968720.120   [reveal] turn NOT logged — RuntimeError: reveal cards never appeared
+1788968725.175   [deal] waiting 5s of 20s — biggest delta 23.8 of the 15 needed
+1788968726.288   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 23.8)
+1788968733.749   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968733.749   [repair] discards_left 3 outside 0-2 — treating as 0 (no discard)
+1788968733.811   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968733.859   [local-check] third_base: empty
+1788968733.870   [local-check] first_base: empty
+1788968733.912   [local-check] second_base: empty
+1788968733.912   [local-check] vision runners: [{'name': 'Rube Sharp', 'power': 8, 'secondary': 1}]
+1788968733.949   [local-check] hand: 4/5 read locally, all agree with vision
+1788968734.026   [redraw] keeping the hand: best power 5 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968734.026 Decision: Playing Batter (power 5); no swing boost available — attaching speed boost to help baserunners advance
+1788968739.776   [reveal] episode t_first=+4.5s after the play, peak 0.1484, 1.2s long, waited 1.3s (still open)
+1788968742.449   [reveal] no OPPONENT card identified (ours='batter', revealed players=['R.J. Gain', 'Rube Sharp', 'Brandon "Binger" Ortiz']) — turn not logged.
+1788968745.905 [reveal] episode closed (gap): t_first=1788968738.54 t_peak=1788968739.22 peak=0.1484 duration=6.31s samples=111
+1788968747.490   [deal] waiting 5s of 20s — biggest delta 57.4 of the 15 needed
+1788968748.635   [deal] replacement card seen; released 6.2s after the play (threshold 15, biggest delta 60.5)
+1788968756.323   [repair] phase 'batting' CONFIRMED by an unanimous batter hand.
+1788968756.323   [repair] discards_left 4 outside 0-2 — treating as 0 (no discard)
+1788968756.399   [local-check] scoreboard OCR: {'your': [2, 0, 2], 'opponent': [0, 0, 0]}  vs vision: your=2 opp=0
+1788968756.447   [local-check] third_base: empty
+1788968756.459   [local-check] first_base: empty
+1788968756.532   [local-check] second_base: empty
+1788968756.532   [local-check] vision runners: [{'name': 'Rube Sharp', 'power': 8, 'secondary': 1}]
+1788968756.600   [local-check] hand: 4/5 read locally, all agree with vision
+1788968756.678   [redraw] keeping the hand: best power 8 vs threshold 6, 0 discard(s) left — NO DISCARDS LEFT — this hand was not kept on merit
+1788968756.678 Decision: Playing Batter (power 8); no swing boost available — attaching speed boost to help baserunners advance
+1788968762.343   [reveal] episode t_first=+4.5s after the play, peak 0.1411, 1.1s long, waited 1.2s (still open)
+1788968770.681   [deal] waiting 5s of 20s — biggest delta 52.1 of the 15 needed
+1788968771.572   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 52.1)
+1788968773.928 [reveal] episode closed (gap): t_first=1788968761.21 t_peak=1788968765.68 peak=0.1445 duration=11.69s samples=202
+1788968779.193   [reveal] outcome unscorable: your_score missing from the follow-up read; dropping the pending row for our_power 8.
+1788968779.326 Unrecognized screen (other), waiting... (1/6) [api 107 calls spent]
+1788968789.454   [repair] phase NOT CHECKED against the hand: card 'P.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968789.594   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 0, 0]}  vs vision: your=4 opp=0
+1788968789.610   [local-check] third_base: empty
+1788968789.662   [local-check] first_base: empty
+1788968789.668   [local-check] second_base: empty
+1788968789.668   [local-check] vision runners: []
+1788968789.713   [local-check] hand: local found 1 positions, vision 5 — counts differ, no per-slot comparison
+1788968789.827   [redraw] keeping the hand: best power 7 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968789.827 Decision: Playing Pitcher (pitch focus 7); attaching pitch boost (+1) — more focus never hurts
+1788968798.650   [reveal] episode t_first=+7.6s after the play, peak 0.1315, 1.2s long, waited 1.3s (still open)
+1788968802.580 [reveal] episode closed (gap): t_first=1788968797.38 t_peak=1788968798.08 peak=0.1315 duration=4.11s samples=72
+1788968806.244   [deal] waiting 5s of 20s — biggest delta 54.7 of the 15 needed
+1788968807.326   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 54.7)
+1788968811.466   [api] 110/200 calls (~$1.32), 90 left
+1788968815.167   [repair] phase NOT CHECKED against the hand: card 'P.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968815.245   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 0, 0]}  vs vision: your=4 opp=0
+1788968815.305   [local-check] third_base: empty
+1788968815.315   [local-check] first_base: empty
+1788968815.375   [local-check] second_base: empty
+1788968815.375   [local-check] vision runners: []
+1788968815.451   [local-check] hand: 4/5 read locally, all agree with vision
+1788968815.534   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968815.534 Decision: Playing Pitcher (pitch focus 9)
+1788968821.625   [reveal] episode t_first=+5.1s after the play, peak 0.1047, 0.9s long, waited 1.1s (still open)
+1788968825.804 [reveal] episode closed (gap): t_first=1788968820.63 t_peak=1788968823.61 peak=0.1068 duration=4.12s samples=70
+1788968829.048   [deal] waiting 5s of 20s — biggest delta 53.6 of the 15 needed
+1788968829.928   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 53.6)
+1788968837.275   [repair] 'Fielding Play' read as a player card — re-labelled tactics/fielding_boost (bonus 1)
+1788968837.275   [repair] phase NOT CHECKED against the hand: card 'P.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968837.410   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 0, 0]}  vs vision: your=4 opp=0
+1788968837.424   [local-check] third_base: empty
+1788968837.477   [local-check] first_base: empty
+1788968837.485   [local-check] second_base: empty
+1788968837.485   [local-check] vision runners: []
+1788968837.549   [local-check] hand: 4/5 read locally, all agree with vision
+1788968837.644 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 4) instead of playing
+1788968846.777   [deal] waiting 5s of 20s — biggest delta 13.2 of the 15 needed
+1788968852.019   [deal] waiting 10s of 20s — biggest delta 13.2 of the 15 needed
+1788968857.083   [deal] waiting 16s of 20s — biggest delta 13.2 of the 15 needed
+1788968861.786   [deal] no replacement card seen in 20s — reading anyway (the retry path will catch a bad read). Threshold 15, biggest delta 13.2: a biggest well UNDER the threshold means the gate is too high for this turn.
+1788968869.502   [repair] phase NOT CHECKED against the hand: card 'P.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968869.577   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 0, 0]}  vs vision: your=4 opp=0
+1788968869.626   [local-check] third_base: empty
+1788968869.637   [local-check] first_base: empty
+1788968869.683   [local-check] second_base: empty
+1788968869.683   [local-check] vision runners: []
+1788968869.759   [local-check] hand: 4/5 read locally, all agree with vision
+1788968869.844 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788968879.826   [deal] waiting 5s of 20s — biggest delta 14.6 of the 15 needed
+1788968884.875   [deal] waiting 10s of 20s — biggest delta 14.6 of the 15 needed
+1788968890.007   [deal] waiting 15s of 20s — biggest delta 14.6 of the 15 needed
+1788968894.825   [deal] no replacement card seen in 20s — reading anyway (the retry path will catch a bad read). Threshold 15, biggest delta 14.6: a biggest well UNDER the threshold means the gate is too high for this turn.
+1788968902.365   [repair] phase NOT CHECKED against the hand: card 'M.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968902.517   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 0, 0]}  vs vision: your=4 opp=0
+1788968902.529   [local-check] third_base: empty
+1788968902.582   [local-check] first_base: empty
+1788968902.598   [local-check] second_base: empty
+1788968902.598   [local-check] vision runners: []
+1788968902.654   [local-check] hand: 4/5 read locally, all agree with vision
+1788968902.739 Decision: best card is weak (power 6) and 2 discard(s) left — discarding the weakest (power 5) instead of playing
+1788968913.356   [deal] waiting 5s of 20s — biggest delta 18.7 of the 15 needed
+1788968914.201   [deal] replacement card seen; released 6.0s after the play (threshold 15, biggest delta 18.7)
+1788968918.823 [reveal] episode closed (gap): t_first=1788968908.25 t_peak=1788968912.82 peak=0.1394 duration=9.55s samples=167
+1788968922.799   [repair] phase NOT CHECKED against the hand: banners are empty (no player cards) — a mixed or empty hand proves nothing. 'pitching' stands UNVERIFIED — not confirmed.
+1788968922.799 Couldn't read the screen (turn screen with no player card in hand (likely a mid-deal or partial read): []), retrying... (4/15)
+1788968928.613   [repair] phase 'pitching' CONFIRMED by an unanimous pitcher hand.
+1788968928.679   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 1, 1]}  vs vision: your=4 opp=0
+1788968928.737   [local-check] third_base: empty
+1788968928.747   [local-check] first_base: empty
+1788968928.803   [local-check] second_base: empty
+1788968928.803   [local-check] vision runners: []
+1788968928.868   [local-check] hand: local found 0 positions, vision 5 — counts differ, no per-slot comparison
+1788968928.951   [redraw] keeping the hand: best power 8 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968928.951 Decision: Playing Pitcher (pitch focus 8); attaching pitch boost (+1) — more focus never hurts
+1788968937.124   [reveal] episode t_first=+6.9s after the play, peak 0.1238, 1.2s long, waited 1.3s (still open)
+1788968939.583   [MISFIRE?] no revealed card has our played power 8 (or 9 with the boost) — revealed [('Timmeh Rattycum', 4, [4]), ('Justin Young', 0, [6])]. Either a keystroke was dropped during card selection or the reveal misread. Not logging this turn.
+1788968939.583   [input] misfire #3 — ACTION_DELAY raised to 0.45s and focus caching disabled for the rest of the run.
+1788968939.583   [reveal] turn NOT logged — RuntimeError: intended card absent from reveal
+1788968941.028 [reveal] episode closed (gap): t_first=1788968935.87 t_peak=1788968936.55 peak=0.1238 duration=4.14s samples=73
+1788968944.599   [deal] waiting 5s of 20s — biggest delta 46.4 of the 15 needed
+1788968945.695   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 46.4)
+1788968953.700   [repair] phase NOT CHECKED against the hand: card 'J.J. Gain' is a real player name or was unreadable, so the hand carries no phase evidence. 'pitching' stands UNVERIFIED — not confirmed.
+1788968953.774   [local-check] scoreboard OCR: {'your': [4, 0, 4], 'opponent': [0, 1, 1]}  vs vision: your=4 opp=0
+1788968953.824   [local-check] third_base: empty
+1788968953.833   [local-check] first_base: empty
+1788968953.883   [local-check] second_base: empty
+1788968953.883   [local-check] vision runners: []
+1788968953.927   [local-check] hand: 5/5 read locally, all agree with vision
+1788968954.014   [redraw] keeping the hand: best power 9 vs threshold 6, 2 discard(s) left — hand is strong enough
+1788968954.014 Decision: Playing Pitcher (pitch focus 9); attaching pitch boost (+1) — more focus never hurts
+1788968959.375   [reveal] episode t_first=+4.5s after the play, peak 0.1055, 0.8s long, waited 1.0s (still open)
+1788968963.581 [reveal] episode closed (gap): t_first=1788968958.47 t_peak=1788968958.80 peak=0.1055 duration=4.06s samples=72
+1788968966.473   [deal] waiting 5s of 20s — biggest delta 73.6 of the 15 needed
+1788968967.529   [deal] replacement card seen; released 6.1s after the play (threshold 15, biggest delta 73.6)
+1788968971.377   [api] 120/200 calls (~$1.44), 80 left
+1788968975.753 WIN #26 logged. 973 to go.
+1788968979.084 Only $46 left — can't afford the next $50 match. Stopping.
+1788968979.131 [reveal] episode closed (watcher stopped): t_first=1788968976.32 t_peak=1788968978.76 peak=0.0709 duration=2.73s samples=47
+1788968979.131   [settle] observed latency at the real 0.15s poll rate:
+1788968979.131     ban      n=   4  p50= 0.52s  p90= 0.56s  max= 0.56s  truncated=0/4 (0%)
+1788968979.131     default  n=   9  p50= 0.49s  p90= 0.97s  max= 0.97s  truncated=0/9 (0%)
+1788968979.131     match_start n=   6  p50= 0.74s  p90= 2.23s  max= 2.23s  truncated=0/6 (0%)
+1788968979.131     turn     n=  55  p50= 0.48s  p90= 1.01s  max= 2.55s  truncated=0/55 (0%)
+1788968979.131   [input] 41 cards played, 3 suspected misfire(s) (7.3%) — RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py
+1788968979.131   [input] no keypresses sent
+1788968979.131   [input] press delivery: 0 FIFO inject, 655 background Quartz, 0 focus+pyautogui (of 655)
+1788968979.131   [input] 3 misfire(s); ACTION_DELAY ended at 0.45s (+0.20s), FOCUS_TTL 0.0s
+1788968979.131 Stopped early at 26/999 wins (7 losses, 3 draws). Progress is saved — just rerun the script to pick back up.
+1788968979.132 [cycles] after cycle 1: 26W/7L/3D, $46 left, 121 API calls used (~$1.45)
+1788968979.134 [cycles] DONE: 26W/7L/3D, $46 on hand, 121 API calls (~$1.45)

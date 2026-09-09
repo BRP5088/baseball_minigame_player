@@ -1,0 +1,24 @@
+# progress — TASK 1 re-record legs from verified arrival poses (2026-09-07)Convention: §10.16 — written as I go. Established = verified with a file/cmd; Assumed = working from.## Established so far
+- GRAVEYARD.md read in full: "Reference pose: bot vs human" row = 5/10 vs 6/10, permutation p=1.0, REFERENCE_POSE="bot"; "A better (bearing,duration) for the jukebox leg" is in "Also do not retry"; re-record row VOID (4.3x short).
+- STAIRS_APPROACH.md read: pitch uncontrolled in production; leg 2 opening bearing 338.11 ~30 deg off where leg 1 lands.
+- Bretts_walk.py cmd_record_leg: ONE (bearing,dur,speed) step, uses walk_steps.turn_to/walk_forward (NOT slow_traverse), 0.8s chunks with 0.2s gaps (= chunking, a graveyard family), confirms via places.identify (or at_table for GOAL), then worldmap.connect(one_way=True, note=...). _to_node uses go_to_node_verified(attempts=2).
+- world_map.json: 5 legs; jukebox leg lacks t0/cam and is stamped "A/B arm, set by ab_jukebox_leg.py".
+- world_log.Recorder: 6Hz, saves q82 JPEG, index.jsonl with heading/at_table/place/score/margin; note() puts commands in the timeline.## Assumed (to verify)
+- map_build.py _confident thresholds (file not yet read)
+- worldmap.connect signature/body (truncated in output)
+- tests/routing/test_leg_distances_match_recording.py content
+- overnight/_harness.py run_trial / walk_leg_under_test signatures## Established (batch 2)
+- graph_walk REFERENCE_POSE block (graph_walk.py ~1600-1700): measured bot-vs-human separation portrait_room dx -71.1 dy +65.7 (heading 0.74 deg); bar_pool_room dx -212.2 dy -87.1 (6.87 deg); bar_jukebox dx -135.5 dy -85.4 (1.81 deg). align_at_node docstring: at 18.8 px/deg the 6.87 deg accounts for ~129px of the -212.2 (62%). "The coherent end state is bot references WITH legs re-recorded from those same poses" — the premise of TASK 1 is literally written in graph_walk.py as the intended end state.
+- HUMAN_REFERENCE_DIR = places_backup_20260903_020639 (holds route_*.jpg for portrait_room, bar_pool_room, bar_jukebox only). places/<node>/ holds live_00.jpg + route_*.jpg (bot frames overwrote route_*.jpg on 2026-09-03).
+- worldmap.connect(a,b,steps,one_way=True,note="") -> writes links[a][b] = {cost, steps, recorded}; never touches landmarks/trail (confirmed by reading body).
+- world_map.json links carry t0/cam on 4 legs; jukebox leg has NO cam/t0 (set by ab_jukebox_leg.py). test_leg_distances_match_recording.py pins jukebox leg against route3_steps.json[27:32] within 15%, literal 0.85<d<1.20, len>=4, every leg >0.30 units, no step speed >0.60.
+- _harness.run_trial(script, arg, timeout, cwd=None, log=None, check_stream=True): subprocess `python <script> --one-trial <arg>`, kill from outside, alive() check after; walk_leg_under_test(gw,m,start,target,shots,log,attempts=1) via follow_verified with start_hint=start; report_leg_arm prints census split by provenance.
+- ab_leg1.json: shipped 2/10 (median ~323s) vs original 10/10 (median 51.6s). ab_reference_pose.json: bot 5/10, human 6/10 — but NOTE this harness used gw.follow() (not verified primitive), signal.alarm timeout (in-process), TRIAL_TIMEOUT=200, no start_hint, no failure class. It predates _harness. Valid as a flat null on arrival, weak on everything else.
+- tests/harness/test_overnight_start_hint.py: AST scan over overnight/*.py; any scope with reset_environment + go_to_node_verified/follow_verified must pass start_hint. My draft script lives in drafts/ so not scanned, but should comply anyway.
+- test_harness_restores_shipped_value.py: literal `gw.FLAG = <literal>` must equal shipped; arms from variables; subprocess harnesses exempt from restore rule.
+- route3_steps.json: 40 steps, total 7.893 units; steps carry bearing/dur/speed/t0/cam.
+- pose.py: ALIGN_TOL_PX 35, PX_PER_STRAFE_SEC 2400, STRAFE_MAG 0.30, ALIGN_MIN_SEC 0.10, STUCK_PX 20, DIVERGENCE_FACTOR 1.5, ALIGN_MAX_STEPS 6.## Open
+- read phase1_step4_rerecord.py (the previous executor-pose re-record that produced the 4.3x short leg)
+- slow_traverse.walk_leg/turn_to signatures; analog_replay API; reset_env signature
+- build_world_map.py (how legs slice route3_steps.json)
+- ab_attempts.json (Sep 7 01:55) — is this the second "tonight" A/B?

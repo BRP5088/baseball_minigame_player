@@ -1,0 +1,17 @@
+{"t": 1788935005.177, "kind": "regions", "seq": 859392, "dump_mono_ns": 50079969685166, "gameplay": {"scoreboard": [0.018, 0.175, 0.205, 0.405], "hand": [0.25, 0.716, 0.76, 1.0], "third_base": [0.3225, 0.32, 0.4375, 0.53], "first_base": [0.55, 0.32, 0.665, 0.53], "second_base": [0.43, 0.08, 0.58, 0.32]}, "reveal_centre": [0.42, 0.28, 0.58, 0.58], "ban_cols": [[0.145, 0.275], [0.28, 0.41000000000000003], [0.41500000000000004, 0.545], [0.55, 0.68], [0.685, 0.8150000000000001]], "ban_rows": [[0.195, 0.385], [0.395, 0.585]], "prompt_text_box": [0.36, 0.535, 0.72, 0.725], "settle_width": 2000, "screenshot_max_width": 2000, "reveal_threshold": 0.065}
+{"t": 1788935006.6584, "kind": "press", "seq": 859479, "dump_mono_ns": 50081454419958, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935011.3941, "kind": "press", "seq": 859761, "dump_mono_ns": 50086192519791, "action": "cross", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935014.2695, "kind": "press", "seq": 859931, "dump_mono_ns": 50089067761166, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935019.2346, "kind": "press", "seq": 860228, "dump_mono_ns": 50094035092083, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935034.2319, "kind": "press", "seq": 861127, "dump_mono_ns": 50109032327208, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1788935035.9538, "kind": "press", "seq": 861230, "dump_mono_ns": 50110757001375, "action": "look_left", "hold": 0.3, "post_delay": 0.4}
+{"t": 1788935040.0554, "kind": "press", "seq": 861476, "dump_mono_ns": 50114855552625, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935044.9152, "kind": "press", "seq": 861767, "dump_mono_ns": 50119708889041, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935049.8577, "kind": "press", "seq": 862063, "dump_mono_ns": 50124649031958, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935064.8028, "kind": "press", "seq": 862959, "dump_mono_ns": 50139597718041, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1788935066.5141, "kind": "press", "seq": 863061, "dump_mono_ns": 50141297888625, "action": "look_left", "hold": 0.3, "post_delay": 0.4}
+{"t": 1788935070.6024, "kind": "press", "seq": 863307, "dump_mono_ns": 50145404482875, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935075.5056, "kind": "press", "seq": 863600, "dump_mono_ns": 50150290101125, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935080.4191, "kind": "press", "seq": 863895, "dump_mono_ns": 50155216987666, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1788935095.3971, "kind": "press", "seq": 864793, "dump_mono_ns": 50170199887125, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1788935097.1245, "kind": "press", "seq": 864897, "dump_mono_ns": 50171928525041, "action": "look_left", "hold": 0.3, "post_delay": 0.4}

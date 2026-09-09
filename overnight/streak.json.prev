@@ -1,0 +1,23 @@
+{
+  "outcomes": [
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    false,
+    true,
+    false
+  ],
+  "best_streak": 3,
+  "arrived": 6,
+  "valid": 10,
+  "route": [
+    "portrait_room",
+    "bar_pool_room",
+    "bar_jukebox"
+  ],
+  "seconds": 3383.8
+}

@@ -1,0 +1,17 @@
+{
+ "label": "patch69_localhand",
+ "git_sha": "c859f61",
+ "tree_dirty": false,
+ "api_budget": 200,
+ "constants": {
+  "HAND_DEAL_THRESHOLD": 15.0,
+  "POST_PLAY_DEAL_MAX_WAIT": 20.0,
+  "POST_PLAY_MIN_WAIT": 6.0,
+  "post_play_wait_for_deal": true,
+  "REVEAL_EDGE_THRESHOLD": 0.065,
+  "REVEAL_MAX_WAIT": 75.0,
+  "PEAK_SETTLE_SEC": 0.5,
+  "CLOSE_GAP": 1.0,
+  "WALK_ATTEMPTS": 2
+ }
+}

@@ -1,0 +1,50 @@
+{
+ "run": "20260909_074809_patch73_74_tactics",
+ "build": {
+  "label": "patch73_74_tactics",
+  "git_sha": "79ae781",
+  "tree_dirty": true,
+  "api_budget": 200,
+  "constants": {
+   "HAND_DEAL_THRESHOLD": 15.0,
+   "POST_PLAY_DEAL_MAX_WAIT": 20.0,
+   "POST_PLAY_MIN_WAIT": 6.0,
+   "post_play_wait_for_deal": true,
+   "REVEAL_EDGE_THRESHOLD": 0.065,
+   "REVEAL_MAX_WAIT": 15.0,
+   "PEAK_SETTLE_SEC": 0.5,
+   "CLOSE_GAP": 1.0,
+   "WALK_ATTEMPTS": 2
+  }
+ },
+ "minutes": 9.6,
+ "walk_arrived_on_attempt": "1",
+ "matches": {
+  "won": 1,
+  "lost": 0
+ },
+ "turns": {
+  "plays": 14,
+  "discard_decisions": 5,
+  "length_p50": 20.3,
+  "length_n": 20
+ },
+ "deal": {
+  "fired": 18,
+  "timed_out": 1,
+  "released_p50": 6.1,
+  "released_max": 10.0,
+  "seconds_lost_to_timeouts": 20.0
+ },
+ "reveal": {
+  "episodes_found": 10,
+  "none_found": 4,
+  "peak_read_p50": 0.123,
+  "misreads": 2
+ },
+ "reads": {
+  "api_calls": 40,
+  "mid_deal_retries": 3,
+  "local_hand_short": 0
+ }
+}

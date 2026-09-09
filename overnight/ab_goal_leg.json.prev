@@ -1,0 +1,303 @@
+{
+  "question": "goal leg as recorded (walk_link) vs approach_goal(), then reach_table in both",
+  "start": "bar_jukebox",
+  "target": "dealer_table",
+  "trials": 10,
+  "setup_attempts": 9,
+  "timeout": 1200,
+  "shipped_config": {
+    "GOAL_LEG_AS_RECORDED": false,
+    "APPROACH_STEP_SEC": 0.4,
+    "APPROACH_OVERSHOOT": 1.6,
+    "TRUST_RESET_SPAWN": true,
+    "RECOVER_MISSED": true,
+    "NULL_YAW_BEFORE_ALIGN": true
+  },
+  "runs": [
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 215.5,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 0,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 59.6,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": false,
+      "seconds": 71.9,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 605.8,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 237.5,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 0,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 68.1,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": null,
+      "reason": "setup did not reach bar_jukebox",
+      "reached_start": false,
+      "setup_seconds": 919.0,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": null,
+      "reason": "unmeasurable",
+      "seconds": 1200.5
+    },
+    {
+      "arm": "recorded",
+      "arrived": false,
+      "seconds": 62.6,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "unplaced"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "unplaced"
+      ],
+      "reached_start": true,
+      "setup_seconds": 220.6,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 261.9,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 0,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 618.1,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": false,
+      "seconds": 69.5,
+      "located": "bar_jukebox",
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 1018.8,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": true,
+      "seconds": 88.1,
+      "located": "dealer_table",
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 0,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": true,
+      "failure_kinds": [],
+      "failure_sources": [],
+      "failure_kinds_leg_end": [],
+      "reached_start": true,
+      "setup_seconds": 304.3,
+      "recheck_at_table": true,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": true,
+      "seconds": 25.5,
+      "located": "dealer_table",
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": true,
+      "failure_kinds": [],
+      "failure_sources": [],
+      "failure_kinds_leg_end": [],
+      "reached_start": true,
+      "setup_seconds": 60.2,
+      "recheck_at_table": true,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": null,
+      "reason": "setup did not reach bar_jukebox",
+      "reached_start": false,
+      "setup_seconds": 1064.6,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": false,
+      "seconds": 59.7,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 156.8,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "shipped",
+      "arrived": false,
+      "seconds": 68.1,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 0,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "wedged"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "wedged"
+      ],
+      "reached_start": true,
+      "setup_seconds": 58.6,
+      "recheck_at_table": false,
+      "measurable": true
+    },
+    {
+      "arm": "recorded",
+      "arrived": false,
+      "seconds": 61.6,
+      "located": null,
+      "abandoned": false,
+      "stall_events": 0,
+      "steps_walked": 8,
+      "fan_ran": false,
+      "fan_rescued": false,
+      "verified_arrived": false,
+      "failure_kinds": [
+        "overshot"
+      ],
+      "failure_sources": [
+        "the leg's own end"
+      ],
+      "failure_kinds_leg_end": [
+        "overshot"
+      ],
+      "reached_start": true,
+      "setup_seconds": 61.3,
+      "recheck_at_table": false,
+      "measurable": true
+    }
+  ]
+}
