@@ -124,7 +124,12 @@ struct AVFrame;
 // At most one dump per this many milliseconds (~20 Hz). The readers here poll
 // at a few Hz at most, so a higher rate buys nothing and every dump costs a
 // GPU->CPU readback on the thread that feeds the renderer.
-#define FRAME_DUMP_MIN_INTERVAL_MS 50
+// 0 = EVERY FRAME (2026-09-08). Was 50 (16 fps delivered of a 60 fps stream, 44 fps
+// skipped), then 10 (51 fps delivered: frames decoded in a burst still fell inside
+// the window). The user wants the dump to match the game's rate so a recording is
+// the source of truth; push_us is ~78, so every frame costs ~5 ms of the frame
+// thread per second. At 0 the C++ throttle scenario checks that nothing is dropped.
+#define FRAME_DUMP_MIN_INTERVAL_MS 0
 
 // Open (creating if needed) the mapping named by CHIAKI_FRAME_DUMP. Safe to
 // call repeatedly; only the first call does anything. No-op when the variable

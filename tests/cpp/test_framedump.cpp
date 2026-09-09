@@ -400,23 +400,47 @@ static void scenario_throttle(const char *path)
 		return;
 	}
 
+	// Three pushes BACK TO BACK, then one read. The read used to sit between the
+	// first push and the "immediate" ones, and slurp() copies the whole mapping,
+	// which takes longer than a 10 ms window -- so at FRAME_DUMP_MIN_INTERVAL_MS
+	// 10 (2026-09-08, the 60 fps dump) the "immediate" pushes were not immediate
+	// and the check failed for a reason that had nothing to do with the writer.
+	// The span is MEASURED by this process, and a span that reaches the window
+	// makes the two throttle checks INCONCLUSIVE rather than false (CLAUDE.md:
+	// every timing assertion is bounded by a clock the process measures).
+	const auto t_push0 = std::chrono::steady_clock::now();
 	FrameDumpPush(f);
+	FrameDumpPush(f);
+	FrameDumpPush(f);
+	const auto span_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - t_push0).count();
 	std::vector<unsigned char> buf = slurp(path);
 	Hdr h;
 	memcpy(&h, buf.data(), sizeof(h));
 	check(CORRECT, "the first push publishes frame 1",
-	      h.seq_after == 1, fmt("seq_after %llu", (unsigned long long)h.seq_after));
-
-	// Immediately again: inside FRAME_DUMP_MIN_INTERVAL_MS, so it must be
-	// dropped rather than published.
-	FrameDumpPush(f);
-	FrameDumpPush(f);
-	buf = slurp(path);
-	memcpy(&h, buf.data(), sizeof(h));
-	check(CORRECT, "pushes inside the throttle window are dropped, not published",
-	      h.seq_after == 1,
-	      fmt("seq_after %llu after two more immediate pushes",
-	          (unsigned long long)h.seq_after));
+	      h.seq_after >= 1, fmt("seq_after %llu", (unsigned long long)h.seq_after));
+	if(FRAME_DUMP_MIN_INTERVAL_MS == 0)
+	{
+		// No throttle: every push publishes and nothing is counted as dropped.
+		check(CORRECT, "pushes inside the throttle window are dropped, not published",
+		      h.seq_after == 3,
+		      fmt("interval 0: seq_after %llu after three pushes (want 3)",
+		          (unsigned long long)h.seq_after));
+	}
+	else if(span_ms >= FRAME_DUMP_MIN_INTERVAL_MS)
+	{
+		inconc("pushes inside the throttle window are dropped, not published",
+		       fmt("the three pushes spanned %lld ms, not inside the %d ms window; "
+		           "re-run on a quieter machine",
+		           (long long)span_ms, FRAME_DUMP_MIN_INTERVAL_MS));
+	}
+	else
+	{
+		check(CORRECT, "pushes inside the throttle window are dropped, not published",
+		      h.seq_after == 1,
+		      fmt("seq_after %llu after two more pushes within %lld ms",
+		          (unsigned long long)h.seq_after, (long long)span_ms));
+	}
 
 	// Past the window, the next push must go through -- otherwise "throttled"
 	// and "broken" look the same, which is this project's signature failure.
@@ -424,10 +448,19 @@ static void scenario_throttle(const char *path)
 	FrameDumpPush(f);
 	buf = slurp(path);
 	memcpy(&h, buf.data(), sizeof(h));
+	const unsigned long long want_seq = FRAME_DUMP_MIN_INTERVAL_MS == 0 ? 4 : 2;
 	check(CORRECT, "...and a push after the window publishes frame 2 (the control)",
-	      h.seq_after == 2, fmt("seq_after %llu", (unsigned long long)h.seq_after));
-	check(CORRECT, "the dropped counter counted the two it refused",
-	      h.dropped >= 2, fmt("dropped %u", h.dropped));
+	      h.seq_after == want_seq,
+	      fmt("seq_after %llu (want %llu)", (unsigned long long)h.seq_after, want_seq));
+	if(FRAME_DUMP_MIN_INTERVAL_MS == 0)
+		check(CORRECT, "the dropped counter counted the two it refused",
+		      h.dropped == 0, fmt("interval 0: dropped %u (want 0)", h.dropped));
+	else if(span_ms >= FRAME_DUMP_MIN_INTERVAL_MS)
+		inconc("the dropped counter counted the two it refused",
+		       fmt("the pushes were not inside the window (%lld ms)", (long long)span_ms));
+	else
+		check(CORRECT, "the dropped counter counted the two it refused",
+		      h.dropped >= 2, fmt("dropped %u", h.dropped));
 
 	av_frame_free(&f);
 }
@@ -628,20 +661,26 @@ static void scenario_concurrent(const char *path)
 	std::vector<unsigned char> buf = slurp(path);
 	Hdr h;
 	memcpy(&h, buf.data(), sizeof(h));
-	const uint64_t expect_min = (uint64_t)(SECONDS * 1000 / FRAME_DUMP_MIN_INTERVAL_MS) / 2;
+	// At FRAME_DUMP_MIN_INTERVAL_MS 0 (every frame, 2026-09-08) the writers' own
+	// 5 ms sleep is the effective interval, and there are two of them.
+	const int interval_for_bound = FRAME_DUMP_MIN_INTERVAL_MS > 0 ? FRAME_DUMP_MIN_INTERVAL_MS : 5;
+	const uint64_t expect_min = (uint64_t)(SECONDS * 1000 / interval_for_bound) / 2;
 	check(CORRECT, "...and the writers really were publishing throughout",
 	      h.seq_after >= expect_min && h.seq_after >= 5,
-	      fmt("%llu frames published in %ds (throttle is %dms, so >= %llu expected)",
-	          (unsigned long long)h.seq_after, SECONDS, FRAME_DUMP_MIN_INTERVAL_MS,
+	      fmt("%llu frames published in %ds (interval %dms, so >= %llu expected)",
+	          (unsigned long long)h.seq_after, SECONDS, interval_for_bound,
 	          (unsigned long long)expect_min));
 	// And the throttle held under two writers pushing as fast as they can: at
 	// 5ms apart from each of two threads over 3s, an unthrottled writer would
 	// publish ~1200 frames instead of ~60.
+	const uint64_t ceiling = FRAME_DUMP_MIN_INTERVAL_MS > 0
+		? (uint64_t)(SECONDS * 1000 / FRAME_DUMP_MIN_INTERVAL_MS) + 10
+		: (uint64_t)(2 * SECONDS * 1000 / 5) + 10;   // two writers, 5 ms apart each
 	check(CORRECT, "the throttle held with two threads pushing",
-	      h.seq_after <= (uint64_t)(SECONDS * 1000 / FRAME_DUMP_MIN_INTERVAL_MS) + 10,
-	      fmt("%llu frames, ceiling %d",
-	          (unsigned long long)h.seq_after,
-	          SECONDS * 1000 / FRAME_DUMP_MIN_INTERVAL_MS + 10));
+	      h.seq_after <= ceiling,
+	      fmt("%llu frames, ceiling %llu (interval %d ms)",
+	          (unsigned long long)h.seq_after, (unsigned long long)ceiling,
+	          FRAME_DUMP_MIN_INTERVAL_MS));
 }
 
 static void summary()
