@@ -1610,7 +1610,7 @@ LOCAL_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 RECORDED_CROPS = ("hand", "scoreboard", "third_base", "first_base", "second_base")
 
 
-def record_local_hand(crops, rows, state_json):
+def record_local_hand(crops, rows, state_json, hand_src="vision-crop"):
     """Keep one labelled example of EVERY gameplay region. Never raises into the turn loop.
 
     `crops` is the gameplay crop dict and `state_json` the paid model's whole answer, which
@@ -1634,6 +1634,7 @@ def record_local_hand(crops, rows, state_json):
                 # "crop", "local" and "vision" keep their exact original shape: every
                 # analysis script written against the hands already on disk still reads.
                 "t": stamp, "crop": saved.get("hand"), "crops": saved,
+                "hand_src": hand_src,
                 "local": [{"x": r["x"], "kind": r["kind"], "digit": r["digit"],
                            "score": r["score"], "type": r.get("type"),
                            "type_score": r.get("type_score")} for r in rows],
@@ -1696,12 +1697,18 @@ def log_local_read_comparison(state_json: dict):
         # possible way to build the corpus: it rides on turns already paid for.
         import local_hand
         vision_hand = {c.get("hand_index"): c for c in (state_json.get("hand") or [])}
+        # PREFER THE POST-DEAL FRAME. The vision crop is taken later, by which time the
+        # cursor is resting on a card and that card is lifted, brightened and occluding
+        # its neighbour. The post-deal frame has nothing lifted, which is the user's own
+        # fix and removes the cause rather than compensating for it.
+        hand_img = take_post_deal_hand() or crops["hand"]
+        hand_src = "post-deal" if hand_img is not crops["hand"] else "vision-crop"
         try:
-            rows = local_hand.read_hand(crops["hand"])
+            rows = local_hand.read_hand(hand_img)
         except Exception as e:
             print(f"  [local-check] hand: local reader failed ({e})")
             rows = []
-        record_local_hand(crops, rows, state_json)
+        record_local_hand(dict(crops, hand=hand_img), rows, state_json, hand_src)
 
         # ALIGNMENT IS BY POSITION, so it is only valid when the counts match.
         # A missed or invented card shifts every later column by one and would
@@ -2771,6 +2778,20 @@ def pop_hand_baseline():
     return img
 
 
+# The hand as it looked the instant the deal finished, with nothing lifted. Set by
+# wait_for_hand_deal and CLEARED ON USE, so a hand from an earlier turn can never be
+# mistaken for this turn's -- a stale frame that looks fresh is exactly the failure this
+# project keeps producing.
+_POST_DEAL_HAND = None
+
+
+def take_post_deal_hand():
+    """The post-deal hand crop, or None. Clears the stash."""
+    global _POST_DEAL_HAND
+    img, _POST_DEAL_HAND = _POST_DEAL_HAND, None
+    return img
+
+
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                        poll_interval: float = 0.15, baseline=None) -> bool:
     """Block until the replacement card has visibly landed in the hand.
@@ -2819,6 +2840,14 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         # measurement above, so keep polling; return on the first poll at or past
         # the floor once an edge has been seen.
         if seen and time.time() - start >= POST_PLAY_MIN_WAIT:
+            # THE POST-DEAL HAND, kept for the local reader. At this instant the
+            # replacement card has landed and NO card is lifted -- the game raises and
+            # brightens whichever card the cursor rests on, and a lifted card both hides
+            # its own disc and occludes its neighbour. Every one of the 16 abstentions
+            # across 57 user-reviewed hands was a lifted or occluded card. Same fractional
+            # box as the vision crop, so the reader's slot anchors apply unchanged.
+            global _POST_DEAL_HAND
+            _POST_DEAL_HAND = cur
             print(f"  [deal] replacement card seen; released {time.time() - start:.1f}s "
                   f"after the play (threshold {th:g}, biggest delta {biggest:.1f})")
             return True
