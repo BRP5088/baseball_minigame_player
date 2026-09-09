@@ -87,5 +87,42 @@ check("read_runners returns bases and a count",
 check("and a count with a hole in it is None, never a partial number",
       out["count"] is None or isinstance(out["count"], int))
 
+# ---- 5. THE RUNNERS READER, against the user's own eyes ------------------------------
+# Every third-base crop the reader calls occupied was shown to the user, who confirmed all
+# twenty hold a runner: 20 of 20, ZERO false positives. On a separate 8-row sheet third was
+# empty every time and the reader agreed on all 8 -- 28 judgements, 28 agreements. Second
+# base: 4 of 4. First base: of 4 occupied it read 1 and ABSTAINED on 3, never wrong, and the
+# user diagnosed the cause by eye ("the crop box should be shifted up"), fixed in patch83.
+RFIX = os.path.join(_ROOT, "test_fixtures", "runners")
+rtruth = json.load(open(os.path.join(RFIX, "truth.json")))
+occ_right = occ_wrong = occ_abst = 0
+for c in rtruth["crops"]:
+    b = ls.read_base(Image.open(os.path.join(RFIX, c["file"])).convert("RGB"))
+    if b["occupied"] is None:
+        occ_abst += 1
+    elif b["occupied"] == c["occupied"]:
+        occ_right += 1
+    else:
+        occ_wrong += 1
+check("every user-confirmed third-base runner is still read as occupied",
+      occ_wrong == 0 and occ_abst == 0,
+      f"{occ_right} right, {occ_wrong} WRONG, {occ_abst} abstained of {len(rtruth['crops'])}")
+check("and there are enough of them to mean something", len(rtruth["crops"]) >= 20,
+      f"{len(rtruth['crops'])} crops")
+
+# The base crop boxes: first and third were cut too low, measured at y 0.299..0.494 for the
+# card against a box starting at 0.320. second_base has a different placement and reads
+# correctly, so it is deliberately NOT aligned with them.
+import orchestrator                                                     # noqa: E402
+FR = orchestrator.GAMEPLAY_REGIONS_FRAC
+check("first and third base share the corrected vertical box",
+      FR["first_base"][1] == FR["third_base"][1] == 0.290
+      and FR["first_base"][3] == FR["third_base"][3] == 0.500,
+      f"third {FR['third_base']}, first {FR['first_base']}")
+check("the box now starts ABOVE the card's measured top (0.299)",
+      FR["first_base"][1] < 0.299, str(FR["first_base"][1]))
+check("second_base is left alone -- it is the one that reads correctly",
+      FR["second_base"] == (0.430, 0.080, 0.580, 0.320), str(FR["second_base"]))
+
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)

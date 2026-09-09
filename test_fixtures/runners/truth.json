@@ -1,0 +1,126 @@
+{
+ "source": "the user, by eye, 2026-09-09",
+ "note": "All 20 third-base crops the reader calls occupied were shown to the user, who confirmed: 'in the 20 photo, all of them had a runner.' So the reader is 20/20 on third with ZERO false positives. Earlier in the same review they had said 'I didn't see any runners on third' -- that was about a different 8-row sheet, where third genuinely was empty every time, and the reader agreed on all 8. Together: 28 third-base judgements, 28 agreements.\nSecond base: 4 of 4 correct on the same 8-row sheet.\nFirst base: of 4 occupied, 1 read and 3 ABSTAINED -- never wrong. The user diagnosed the cause by eye ('the crop box should be shifted up') and it was measured and fixed in patch83.",
+ "crops": [
+  {
+   "file": "third_occupied_01.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_02.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_03.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_04.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_05.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_06.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_07.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_08.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_09.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_10.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_11.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_12.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_13.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_14.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_15.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_16.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_17.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_18.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_19.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  },
+  {
+   "file": "third_occupied_20.png",
+   "base": "third",
+   "occupied": true,
+   "local_power": null
+  }
+ ]
+}

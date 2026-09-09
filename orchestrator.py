@@ -1458,8 +1458,13 @@ GAMEPLAY_REGIONS_FRAC = {
     # against ground truth: hands parsed exactly right 6/13 -> 9/13,
     # false negatives 13 -> 3. See LOCAL_VISION_EXPERIMENTS.md §21.
     "hand": (0.250, 0.716, 0.760, 1.000),
-    "third_base": (0.3225, 0.320, 0.4375, 0.530),
-    "first_base": (0.550, 0.320, 0.665, 0.530),
+    # MEASURED 2026-09-09 from recorded frames, not from the crops: a base CARD sits at
+    # y 0.299..0.494 while these boxes started at 0.320, so the card's top -- its banner
+    # and its power disc -- fell OUTSIDE and 0.038 of the box was bare table below. The
+    # user spotted it by eye on both bases before it was measured. second_base is not
+    # touched: it has a different vertical placement and reads correctly.
+    "third_base": (0.3225, 0.290, 0.4375, 0.500),
+    "first_base": (0.550, 0.290, 0.665, 0.500),
     "second_base": (0.430, 0.080, 0.580, 0.320),
 }
 
