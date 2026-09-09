@@ -171,6 +171,56 @@ try:
 finally:
     o.time = _rt
 
+# --- patch67: the baseline is taken AT THE PLAY -----------------------------------
+# Measured over 28 recorded plays: how far the hand had ALREADY moved from its
+# at-the-play state by the moment the gate began. The eight that timed out are the
+# subset; against a threshold of 15.0 every one of them clears when measured from the
+# play, and none of them cleared when measured from the gate's start.
+MOVED_BEFORE_GATE_ON_TIMEOUTS = [13.4, 19.7, 20.1, 21.9, 27.8, 29.6, 53.5, 60.0]
+FROM_PLAY_ON_TIMEOUTS = [15.5, 23.0, 23.9, 26.8, 29.6, 30.5, 77.4, 82.0]
+check(min(FROM_PLAY_ON_TIMEOUTS) >= o.HAND_DEAL_THRESHOLD,
+      "measured from the PLAY, all 8 timed-out turns clear the 15.0 threshold")
+check(sum(1 for x in MOVED_BEFORE_GATE_ON_TIMEOUTS if x >= o.HAND_DEAL_THRESHOLD) == 7,
+      "7 of those 8 had already passed the threshold BEFORE the gate opened -- the deal was over")
+
+import inspect
+check("baseline=None" in inspect.signature(o.wait_for_hand_deal).__str__() or
+      o.wait_for_hand_deal.__defaults__ is not None,
+      "wait_for_hand_deal takes a baseline")
+_src2 = open(os.path.join(_ROOT, "orchestrator.py")).read()
+check("wait_for_hand_deal(baseline=pop_hand_baseline())" in _src2, "the turn loop passes the play-time baseline")
+check("stash_hand_baseline(_grab_settle_regions" in _src2, "...which it stashed beside the reveal mark")
+o.stash_hand_baseline("X")
+check(o.pop_hand_baseline() == "X", "the stash round-trips")
+check(o.pop_hand_baseline() is None, "...and a second pop yields None, so no turn inherits the last one's hand")
+_i_base = _src2.index("stash_hand_baseline(_grab_settle_regions")
+_i_play = _src2.index("select_and_play(player_idx, tactics_idx)")
+check(_i_base < _i_play, "the baseline is captured BEFORE the commit press, not after")
+
+# A GIVEN baseline must be used -- and no capture taken at entry.
+_rt = o.time
+class _C2:
+    def __init__(s): s.t = 0.0
+    def time(s): return s.t
+    def sleep(s, d): s.t += d
+try:
+    o.time = _C2()
+    grabs = {"n": 0}
+    o._grab_settle_regions = lambda names: (grabs.__setitem__("n", grabs["n"] + 1), {n: "LIVE" for n in names})[1]
+    seen = {}
+    def _mad(a, b):
+        seen.setdefault("base", a)
+        return 99.0
+    o._mean_abs_delta = _mad
+    o.wait_for_hand_deal(max_wait=5.0, poll_interval=0.15, baseline="GIVEN")
+    check(seen.get("base") == "GIVEN", f"the GIVEN baseline is what the poll compares against (got {seen.get('base')!r})")
+    before = grabs["n"]
+    o.time = _C2(); seen.clear(); grabs["n"] = 0
+    o.wait_for_hand_deal(max_wait=5.0, poll_interval=0.15)
+    check(seen.get("base") == "LIVE", "with no baseline given it still captures its own, as before")
+finally:
+    o.time = _rt
+
 if fails:
     print(f"\n{len(fails)} FAILED"); sys.exit(1)
 print("\nall green")

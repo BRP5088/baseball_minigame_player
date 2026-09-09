@@ -43,7 +43,7 @@ check(_o.post_play_wait_for_deal({}) is True, "deal wait is ON with the env unse
 check(_o.post_play_wait_for_deal({"BASEBALL_DEAL_WAIT": "0"}) is False, "BASEBALL_DEAL_WAIT=0 turns it off")
 check(_o.post_play_wait_for_deal({"BASEBALL_DEAL_WAIT": "1"}) is True, "BASEBALL_DEAL_WAIT=1 keeps it on")
 src = open(os.path.join(_ROOT, "orchestrator.py")).read()
-check("if post_play_wait_for_deal():\n                    wait_for_hand_deal()" in src,
+check("if post_play_wait_for_deal():\n                    wait_for_hand_deal(baseline=pop_hand_baseline())" in src,
       "the turn loop asks post_play_wait_for_deal() at CALL time")
 check("if POST_PLAY_WAIT_FOR_DEAL:\n" not in src, "the loop no longer reads the import-time constant")
 

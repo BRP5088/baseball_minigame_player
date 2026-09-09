@@ -2692,8 +2692,28 @@ def hand_deal_seen(deltas, threshold=None):
     return any(d >= th for d in deltas)
 
 
+# THE HAND AT THE PLAY, handed from play_one_turn to the deal gate in run(). POPPED,
+# never merely read: a turn that does not set one must not inherit the previous turn's
+# hand, which would have the gate compare against a stale picture and return at once.
+# That is graph_walk's _LAST_LEG_END pattern, here for the same reason -- and the two
+# sites are in DIFFERENT functions, which is why a plain local would have been a
+# NameError (the patch asserts the setter and the popper are not the same function).
+_HAND_BASELINE = None
+
+
+def stash_hand_baseline(img):
+    global _HAND_BASELINE
+    _HAND_BASELINE = img
+
+
+def pop_hand_baseline():
+    global _HAND_BASELINE
+    img, _HAND_BASELINE = _HAND_BASELINE, None
+    return img
+
+
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
-                       poll_interval: float = 0.15) -> bool:
+                       poll_interval: float = 0.15, baseline=None) -> bool:
     """Block until the replacement card has visibly landed in the hand.
 
     Returns True if the deal was seen, False on timeout. Rising-edge trigger on
@@ -2704,7 +2724,14 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
     # compared against THIS, not against its predecessor, so a gradual deal accumulates
     # instead of being divided among the polls that carried it.
-    baseline = _grab_settle_regions(("hand",))["hand"]
+    # THE BASELINE IS THE HAND AT THE PLAY when the caller has it (patch67). Captured
+    # here instead, it photographs a hand the game has usually already refilled: over 28
+    # recorded plays the hand had moved a median 53.5 from its at-the-play state by the
+    # time this function began, and all eight of the timeouts were changes that finished
+    # during the reveal read. None is a supported value -- every existing caller keeps
+    # the old behaviour.
+    if baseline is None:
+        baseline = _grab_settle_regions(("hand",))["hand"]
     seen = False
     th = hand_deal_threshold()
     biggest = 0.0
@@ -4545,6 +4572,12 @@ def play_one_turn(state_json: dict, batters_used: int):
     # t_mark` alone. Taken BEFORE the press rather than after, so no part of
     # the flip can land in the gap between the two.
     _reveal_mark = reveal_mark()
+    # THE HAND AS IT IS AT THE PLAY, for the deal gate that run() reaches further down.
+    # Taken here, beside the reveal mark and before the press, because the replacement
+    # card can land while the reveal is being read and a baseline captured after that is
+    # already post-deal. It crosses functions the way graph_walk carries a leg-end frame:
+    # a module stash that the consumer POPS, so a turn can never inherit the last one.
+    stash_hand_baseline(_grab_settle_regions(("hand",))["hand"])
     select_and_play(player_idx, tactics_idx)
 
     matchup_info = {
@@ -5735,7 +5768,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # the source of the empty-hand / power-0 reads that pushed
                 # should_redraw() into discarding a hand that was actually fine.
                 if post_play_wait_for_deal():
-                    wait_for_hand_deal()
+                    wait_for_hand_deal(baseline=pop_hand_baseline())
                 wait_for_screen_to_settle(max_wait=8.0, regions="turn")
                 time.sleep(0.4)  # small buffer past "settled" before the next read
 
