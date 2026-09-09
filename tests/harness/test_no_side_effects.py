@@ -225,7 +225,33 @@ else:
 
 after = snapshot()
 
+# THE FILES A LIVE RUN WRITES ITSELF, one row or one save per played turn. A change to
+# one of these while a console process is running is the GAME's doing, not the suite's --
+# see the module note above. Anything not in this set still fails, and so does a change to
+# one of these with no live process to explain it.
+LIVE_WRITTEN = {"match_log.jsonl", "progress.json", "progress_testing.json"}
+
+
+def _live_console():
+    """The names of any console-driving processes running right now."""
+    import subprocess
+    out = []
+    for pat in ("run_cycles.py", "chain_trials.py", "run_tonight.py", "run_testing.py",
+                "run_one_match.py", "play_now.py", "record_stream.py"):
+        try:
+            r = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True,
+                               timeout=10)
+        except Exception:
+            continue
+        if r.returncode == 0 and r.stdout.strip():
+            out.append(pat)
+    return out
+
+
+_LIVE = _live_console()
+
 failures = []
+inconclusive = []
 for key in sorted(set(before) | set(after)):
     b, a = before.get(key), after.get(key)
     if b == a:
@@ -246,11 +272,21 @@ for key in sorted(set(before) | set(after)):
     elif a is None:
         failures.append(f"{key} was DELETED by the suite — tests must never "
                         "remove real project data")
+    elif _LIVE and key in LIVE_WRITTEN:
+        # The game is playing RIGHT NOW and this is a file it writes per turn. The
+        # suite cannot be blamed and cannot be cleared -- say so, do not pass quietly.
+        inconclusive.append(
+            f"{key} changed while a live run was active ({', '.join(_LIVE)}). "
+            f"The game writes this file per turn, so this run cannot tell a test's "
+            f"write from the game's. Re-run with the console idle to check it.")
     else:
         failures.append(
             f"{key} was MODIFIED by the suite. This is how 30 synthetic rows "
             f"got into match_log.jsonl. Redirect the write with an env var and "
             f"point the test at a temp path.")
+
+for line in inconclusive:
+    print(f"INCONCLUSIVE: {line}")
 
 if failures:
     for f in failures:
