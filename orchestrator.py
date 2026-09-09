@@ -2396,23 +2396,44 @@ def wait_for_reveal_cards(max_wait: float = REVEAL_MAX_WAIT, poll_interval: floa
 # says. Falling through on timeout is deliberate and matches
 # wait_for_screen_to_settle: the caller still gets a frame and the existing
 # retry path handles a bad one.
-POST_PLAY_DEAL_MAX_WAIT = 25.0
-# DEFAULT OFF. The DIAGNOSIS behind this is solid (88/88 plays read ~15 s
-# early, 46.8% false-still during the animation), but replaying this particular
-# gate over the logged frames only closes about half the gap — median earliness
-# 11.3 s -> 5.5 s, plays released >1 s early 79/87 -> 66/87 — and 2 of 87 plays
-# hit the timeout. That is not enough to change the shipped default on. Turn it
-# on for one live session with BASEBALL_DEAL_WAIT=1 and read the failed-read
-# count and settle_stats_summary() afterwards; tune from those, not from the
-# 0.57 s frame log, which cannot resolve the 0.15 s poll rate.
-POST_PLAY_WAIT_FOR_DEAL = bool(os.environ.get("BASEBALL_DEAL_WAIT"))
+# 35, was 25: the worst deal measured 2026-09-08 landed 21.95 s after the play (n=9);
+# 25 left 3 s of margin. The cap costs time only on a turn that already failed.
+POST_PLAY_DEAL_MAX_WAIT = 35.0
+# THE DEAL EDGE, between two measured populations (2026-09-08, 20 Hz on the frame
+# dump, n=9 turns; agent_progress/ocr-timing/TIMING_REPORT.md):
+#   dead window (max d_hand between the play burst and the deal burst)  7.25 .. 15.44
+#   the deal burst (its peak d_hand)                                    31.83 .. 41.15
+# SETTLE_THRESHOLDS["hand"] = 8.0 sits BELOW the dead window -- inside the noise this
+# gate must ignore (10.4) -- which is why the deal wait alone closed only half the
+# gap. 25.0 sits in the gap; 16..30 all release at p50 ~10 s. CAVEAT: measured at a
+# 0.060 s sample gap; the live poll is 0.15 s, so both populations rise in
+# production. Re-check against the first live session's [deal] lines.
+HAND_DEAL_THRESHOLD = 25.0
+# No post-play read before this, edge or no edge: between the fastest release the
+# old gate produced (2.16 s, n=85 live) and the earliest a hand was readable by eye
+# (8.43 s, n=9).
+POST_PLAY_MIN_WAIT = 6.0
+# ON BY DEFAULT since 2026-09-08. The diagnosis (88/88 plays read ~15 s early) was
+# never in doubt; the replay that closed only half the gap did so because the
+# threshold sat inside the noise -- see HAND_DEAL_THRESHOLD. Measured directly on
+# the frame dump the deal lands 11.5 / 19.0 / 23.0 s (p50/p90/max, n=9) after the
+# play and the old gate released at 0.38 s. Read at CALL time (10.18);
+# BASEBALL_DEAL_WAIT=0 turns it off for one session.
+def post_play_wait_for_deal(env=None):
+    raw = (os.environ if env is None else env).get("BASEBALL_DEAL_WAIT")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "off", "no", "")
+
+
+POST_PLAY_WAIT_FOR_DEAL = post_play_wait_for_deal()
 
 
 def hand_deal_seen(deltas, threshold=None):
     """Pure decision function over a stream of hand-region deltas: True once a
     deal-sized motion has been observed. Split out from the polling loop so it
     can be replayed against logged frames — see the replay validation."""
-    th = SETTLE_THRESHOLDS["hand"] if threshold is None else threshold
+    th = HAND_DEAL_THRESHOLD if threshold is None else threshold
     return any(d >= th for d in deltas)
 
 
@@ -2426,12 +2447,19 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     """
     start = time.time()
     prev = _grab_settle_regions(("hand",))["hand"]
+    seen = False
     while time.time() - start < max_wait:
         time.sleep(poll_interval)
         cur = _grab_settle_regions(("hand",))["hand"]
-        if _mean_abs_delta(prev, cur) >= SETTLE_THRESHOLDS["hand"]:
-            return True
+        if _mean_abs_delta(prev, cur) >= HAND_DEAL_THRESHOLD:
+            seen = True
         prev = cur
+        # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
+        # measurement above, so keep polling; return on the first poll at or past
+        # the floor once an edge has been seen.
+        if seen and time.time() - start >= POST_PLAY_MIN_WAIT:
+            print(f"  [deal] replacement card seen; released {time.time() - start:.1f}s after the play")
+            return True
     print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
           "reading anyway (the retry path will catch a bad read).")
     return False
@@ -5390,7 +5418,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # a wasted vision call plus a 2s retry each time — and it is
                 # the source of the empty-hand / power-0 reads that pushed
                 # should_redraw() into discarding a hand that was actually fine.
-                if POST_PLAY_WAIT_FOR_DEAL:
+                if post_play_wait_for_deal():
                     wait_for_hand_deal()
                 wait_for_screen_to_settle(max_wait=8.0, regions="turn")
                 time.sleep(0.4)  # small buffer past "settled" before the next read

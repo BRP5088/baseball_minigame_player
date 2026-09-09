@@ -261,7 +261,7 @@ if failures:
 from orchestrator import (POST_PLAY_DEAL_MAX_WAIT, POST_PLAY_WAIT_FOR_DEAL,
                           hand_deal_seen, wait_for_hand_deal)
 
-_th = _o.SETTLE_THRESHOLDS["hand"]
+_th = _o.HAND_DEAL_THRESHOLD
 
 # The pure decision function: a deal is a RISING EDGE above the hand threshold.
 if not hand_deal_seen([0.0, 1.0, _th + 5]):
@@ -272,19 +272,17 @@ if hand_deal_seen([0.0, 1.0, _th - 0.1]):
 if hand_deal_seen([]):
     failures.append("an empty delta stream reports a deal")
 
-# It must be a threshold, not a constant: mutating SETTLE_THRESHOLDS["hand"]
+# It must be a threshold, not a constant: mutating HAND_DEAL_THRESHOLD
 # must move the boundary.
 if not hand_deal_seen([_th], threshold=_th):
     failures.append("a delta exactly AT the threshold is not counted")
 if hand_deal_seen([_th], threshold=_th + 1):
     failures.append("threshold argument is ignored")
 
-# Default OFF: the replay closes only about half the gap (11.3s -> 5.5s early)
-# and 2 of 87 plays hit the timeout, so this stays opt-in until one live
-# session validates it. BASEBALL_DEAL_WAIT=1 turns it on.
-if POST_PLAY_WAIT_FOR_DEAL and not os.environ.get("BASEBALL_DEAL_WAIT"):
-    failures.append("the deal gate is on without BASEBALL_DEAL_WAIT being set")
-if POST_PLAY_DEAL_MAX_WAIT < 20:
+# ON by default since 2026-09-08 (patch63); BASEBALL_DEAL_WAIT=0 is the only off switch.
+if not POST_PLAY_WAIT_FOR_DEAL and (os.environ.get("BASEBALL_DEAL_WAIT") or "1").strip().lower() not in ("0", "false", "off", "no"):
+    failures.append("the deal gate is OFF by default -- patch63 turned it on")
+if POST_PLAY_DEAL_MAX_WAIT < 22:
     failures.append(f"POST_PLAY_DEAL_MAX_WAIT={POST_PLAY_DEAL_MAX_WAIT} is below "
                     "the p50 deal time of ~16.9s plus margin — it would time out "
                     "on ordinary plays and silently revert to reading early")
