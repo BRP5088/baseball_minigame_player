@@ -85,3 +85,5 @@ tests_quarantine/__pycache__/
 agent_progress/*
 !agent_progress/README.md
 .console_busy
+armor_venv/
+models/

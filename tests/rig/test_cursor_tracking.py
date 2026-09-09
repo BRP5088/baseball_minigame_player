@@ -107,7 +107,13 @@ print("  all navigations select the requested card")
 # event that leaves the real cursor somewhere other than where we think. A
 # stale belief would turn one dropped press into a run of wrong cards.
 ic.invalidate_cursor()
-emit(ic.select_and_play, 2)
+# THE BELIEF IS ESTABLISHED BY NAVIGATING, not by playing. select_and_play used to
+# leave one behind and this line used it for convenience; since 2026-09-09 a play
+# deliberately FORGETS, because a play re-deals the hand and the cursor ends up
+# wherever the game put it. Measured that day: play turns that happened to home first
+# logged the right card 4 of 4, those that did not 0 of 6 (Fisher p = 0.0048). See
+# tests/minigame/test_play_homes_cursor.py, which pins the new behaviour.
+emit(ic._move_cursor_to, 2)
 assert ic._cursor_col == 2, "belief not established"
 for _ in range(ic.MISFIRES_BEFORE_BACKOFF):
     ic.report_misfire()
@@ -129,8 +135,24 @@ assert ic.MAX_HAND_SIZE == 5, (
 assert cold == 4 + 4 + 2, (
     f"cold path is {cold} presses; it must still home (4) then navigate, "
     "i.e. exactly the old behaviour")
+# A SECOND PLAY COSTS THE SAME AS THE FIRST, DELIBERATELY, since 2026-09-09. This
+# used to assert a saving across plays, and that saving WAS the defect: the belief
+# survived a play, the play re-dealt the hand, and the next selection navigated from
+# a position the cursor no longer held. Six of ten play turns in one measured match
+# ran that way and every one played the wrong card.
 warm = len(emit(ic.select_and_play, 4))
-assert warm < cold, f"warm path ({warm}) saves nothing over cold ({cold})"
+assert warm == cold, (
+    f"a second play took {warm} presses against the first's {cold}; a play must "
+    "home every time, because it re-deals the hand")
 
-print(f"  cold path {cold} presses (unchanged), warm path {warm} — "
-      f"{cold - warm} saved per selection")
+# The belief still pays WITHIN a turn, where nothing has re-dealt anything: moving to
+# the player card and then to the tactics card is two navigations, one home.
+ic.invalidate_cursor()
+first = len(emit(ic._move_cursor_to, 4))
+second = len(emit(ic._move_cursor_to, 2))
+assert second < first, (
+    f"the second navigation inside one turn took {second} presses against {first}; "
+    "the cursor belief buys nothing and the saving it exists for is gone")
+
+print(f"  a play always homes: {cold} presses cold, {warm} warm (equal by design)")
+print(f"  within a turn the belief still saves: {first} then {second} presses")

@@ -664,7 +664,29 @@ def select_and_play(card_index: int, tactics_index: int = None):
     Navigate from the leftmost hand position to the target player card,
     select it, optionally also select a tactics card, then confirm Play.
     Indices are 0-based positions in the 5-card hand.
+
+    IT HOMES FIRST AND FORGETS AFTERWARDS, exactly as select_and_discard does, and
+    for the same reason its comment gives: a play RE-DEALS the hand, so the cursor
+    ends up wherever the game put it, not where we left it. Without this the belief
+    survives into the next turn and every move is measured from a position the
+    cursor no longer holds.
+
+    MEASURED, run 20260908_235423, one match of 15 turns:
+
+        play turns that homed first (2, 9, 11, 14)      logged correctly 4 of 4
+        play turns that did not (3, 4, 5, 6, 7, 10)     logged correctly 0 of 6
+        Fisher exact p = 0.0048
+
+    A turn only homed when a discard or a misfire happened to invalidate first.
+    Turn 3 is the worked example, agreed by four independent sources: the hand read
+    before the play held 8/1 at index 2 and 5/2 at index 3, the engine chose the 8,
+    the reveal frame shows the 5/2 card at home plate, and the hand read afterwards
+    still holds the 8. The selection landed one slot right of the target every time.
+
+    Cost: four presses on a turn that would not otherwise have homed, about 0.32 s
+    each, so roughly 7.6 s a match against six turns of wrong cards.
     """
+    reset_hand_cursor(force=True)
     _move_cursor_to(card_index)
     press("select_card")
 
@@ -673,6 +695,8 @@ def select_and_play(card_index: int, tactics_index: int = None):
         press("select_card")
 
     press("confirm_play")
+    # The hand is re-dealt behind this press. Drop the belief rather than guess.
+    invalidate_cursor()
 
 
 def select_and_discard(card_index: int):

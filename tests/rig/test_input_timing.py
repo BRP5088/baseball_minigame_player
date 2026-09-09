@@ -432,16 +432,22 @@ check(s3.index("move_right") > s3.index("move_left"),
 check(s3.index("select_card") > max(i for i, a in enumerate(s3) if a == "move_right"),
       f"select_card fired before the cursor finished moving: {s3}")
 
-# WARM path: with the position known, the four blind homing presses are the
-# whole saving and must not be sent. Worst case must still equal the old
-# behaviour, which the cold assertions above pin.
-_warm = seq(ic.select_and_play, 3)          # cursor is at 3 from s3
-check(_warm.count("move_left") == 0 and _warm.count("move_right") == 0,
-      f"a warm re-selection of the SAME card still navigated: {_warm}")
-_warm2 = seq(ic.select_and_play, 1)         # from 3 to 1 is two lefts, no home
-check(_warm2.count("move_left") == 2,
-      f"warm 3->1 sent {_warm2.count('move_left')} move_left, expected 2 "
-      f"(homing again would be {ic.MAX_HAND_SIZE - 1} + 1): {_warm2}")
+# A PLAY NEVER RUNS WARM, since 2026-09-09. These two checks used to require the
+# opposite -- that a second play skipped the four homing presses because the position
+# was known -- and that saving was the defect. A play RE-DEALS the hand, so the
+# cursor ends up wherever the game put it, and the next selection was navigating from
+# a position it no longer held. Measured over one match: play turns that happened to
+# home first logged the right card 4 of 4; those that did not, 0 of 6, Fisher exact
+# p = 0.0048. The saving still exists where nothing re-deals: two navigations inside
+# one turn, pinned in tests/rig/test_cursor_tracking.py.
+_warm = seq(ic.select_and_play, 3)          # the cursor is believed to be at 3
+check(_warm.count("move_left") == ic.MAX_HAND_SIZE - 1,
+      f"a second play must home again, not trust the belief: {_warm}")
+_warm2 = seq(ic.select_and_play, 1)
+check(_warm2.count("move_left") == ic.MAX_HAND_SIZE - 1 and _warm2.count("move_right") == 1,
+      f"a play to index 1 must home ({ic.MAX_HAND_SIZE - 1} left) then step right once: {_warm2}")
+check(ic._cursor_col is None,
+      f"a play must forget the cursor afterwards, got {ic._cursor_col!r}")
 ic.invalidate_cursor()
 
 # --- select_and_discard: must NOT confirm a play -------------------------

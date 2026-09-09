@@ -34,9 +34,14 @@ def check(name, cond):
         FAILS.append(name)
 
 
-SKIP_DIRS = {".venv", "paddle_venv", "chiaki-ng-src", "chiaki-ng-build",
+SKIP_DIRS = {".venv", "paddle_venv", "armor_venv", "models",
+             "chiaki-ng-src", "chiaki-ng-build",
              "_obsolete", "tests_quarantine", "places_quarantine",
              "__pycache__", "demos", "screenshot_log"}
+# armor_venv and models arrived 2026-09-09 with the local-OCR bake-off: a third venv
+# on Python 3.11 for ArmorOCR and its downloaded weights. Vendored code, like the
+# other two venvs -- torch's own dependencies carry Python 2 leftovers such as
+# `unicode` and `xrange`, which are not this project's undefined names to fix.
 
 # DELIBERATELY BROKEN FILES, excluded BY NAME rather than by directory.
 #
