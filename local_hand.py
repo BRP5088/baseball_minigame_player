@@ -361,6 +361,38 @@ def tactics_banner_vector(img, slot):
     return None if n < 1e-6 else a / n
 
 
+# THE TWO TYPES THAT ADD POWER. CLAUDE.md section 4: a speed or fielding boost carries a
+# nonzero bonus that adds NONE, and decision_engine branches on exactly this.
+ADDS_POWER = frozenset({"swing_boost", "pitch_boost"})
+# The binary question is easier than the 4-way name and it is the one the caller asks.
+# Measured across SESSIONS (train on one, test on another hours later, 198/61 cards):
+#     gate 0.70   binary 42 right  9 WRONG   84% read      4-way 41 right 10 WRONG
+#     gate 0.77   binary 38 right  0 WRONG   62% read      4-way 37 right  1 WRONG
+#     gate 0.85   binary 22 right  0 WRONG   36% read
+# 0.77 is the operating point: zero wrong on unseen data at the best coverage that holds.
+MIN_ADDS_POWER_SCORE = 0.77
+
+
+def reads_adds_power(img, slot):
+    """(True|False, score) for "does this tactics card add power", or (None, score).
+
+    None means NOT READ and the caller must ask the paid model. It never guesses: a speed
+    boost played as if it added power is a wrong card in a $50 match, and an abstention is
+    one API call.
+    """
+    bank = _type_templates()
+    v = tactics_banner_vector(img, slot)
+    if bank is None or v is None:
+        return None, 0.0
+    vecs, types = bank
+    scores = vecs @ v
+    k = int(scores.argmax())
+    best = float(scores[k])
+    if best < MIN_ADDS_POWER_SCORE:
+        return None, best
+    return (types[k] in ADDS_POWER), best
+
+
 def read_tactics_type(img, slot):
     """(type, score) for the tactics card in `slot`, or (None, score) when unsure.
 
@@ -442,6 +474,10 @@ def _read_fan(img, strong):
             # The type is what decides play, so it is read here and NEVER guessed.
             row["type"], ts = read_tactics_type(img, i)
             row["type_score"] = round(ts, 3)
+            # AND THE QUESTION THE DECISION ACTUALLY ASKS, which is easier and therefore
+            # answered more often: does this card add power at all?
+            row["adds_power"], aps = reads_adds_power(img, i)
+            row["adds_power_score"] = round(aps, 3)
         out.append(row)
     return out
 

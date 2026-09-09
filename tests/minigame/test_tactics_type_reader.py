@@ -132,5 +132,48 @@ check("read_hand carries a type field on every tactics row",
 check("and never carries one on a player row",
       all("type" not in r for r in rows if r["kind"] == "player"))
 
+# ---- 8. THE QUESTION THE DECISION ACTUALLY ASKS: does this card add power?
+# CLAUDE.md section 4 -- only swing and pitch boosts do; speed and fielding carry a nonzero
+# bonus that adds NONE, and decision_engine branches on exactly that. The binary is easier
+# than the 4-way name and therefore answered more often, which is the whole point.
+#
+# MEASURED ACROSS SESSIONS (train on one run, test on another hours later, 198/61 cards),
+# because a leave-one-hand-out on this corpus LEAKS: two hands from the same match holding
+# the same cards in a different order land in different groups while being nearly the same
+# picture (CLAUDE.md 10.22, written the same day).
+#     gate 0.70   binary 42 right  9 WRONG   84% read      4-way 41 right 10 WRONG
+#     gate 0.77   binary 38 right  0 WRONG   62% read      4-way 37 right  1 WRONG
+#     gate 0.85   binary 22 right  0 WRONG   36% read
+check("MIN_ADDS_POWER_SCORE is 0.77", local_hand.MIN_ADDS_POWER_SCORE == 0.77,
+      str(local_hand.MIN_ADDS_POWER_SCORE))
+check("only swing and pitch boosts count as adding power",
+      set(local_hand.ADDS_POWER) == {"swing_boost", "pitch_boost"},
+      str(sorted(local_hand.ADDS_POWER)))
+
+both = disagree = binary_only = 0
+for fname, meta in sorted(expected.items()):
+    img = Image.open(os.path.join(FIX, fname)).convert("RGB")
+    for i, c in enumerate(meta["paid"]):
+        if c["kind"] != "tactics":
+            continue
+        name, _ = local_hand.read_tactics_type(img, i)
+        ap, _ = local_hand.reads_adds_power(img, i)
+        if name is not None and ap is not None:
+            both += 1
+            disagree += (name in local_hand.ADDS_POWER) != ap
+        elif name is None and ap is not None:
+            binary_only += 1
+        if ap is not None and c.get("type"):
+            truth = c["type"] in local_hand.ADDS_POWER
+            check(f"{fname} slot {i}: adds_power {ap} matches the paid type {c['type']}",
+                  ap == truth, f"got {ap}, truth {truth}")
+check("the binary never contradicts the 4-way name", disagree == 0, f"{disagree} of {both}")
+check("and it ANSWERS on cards the 4-way name abstains on -- the whole point",
+      binary_only >= 1, f"{binary_only} such card(s)")
+
+for slot in range(5):
+    ap, sc = local_hand.reads_adds_power(noise, slot)
+    check(f"noise abstains on adds_power at slot {slot}", ap is None, f"{ap!r} @{sc:.3f}")
+
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)
