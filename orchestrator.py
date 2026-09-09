@@ -1605,22 +1605,50 @@ LOCAL_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "overnight", "local_hand")
 
 
-def record_local_hand(crop, rows, vision_cards):
-    """Keep one labelled example. Never raises into the turn loop."""
+# The five gameplay regions, all of which the paid call has just answered for. Saving only
+# the hand meant three of the four remaining local readers had no corpus at all.
+RECORDED_CROPS = ("hand", "scoreboard", "third_base", "first_base", "second_base")
+
+
+def record_local_hand(crops, rows, state_json):
+    """Keep one labelled example of EVERY gameplay region. Never raises into the turn loop.
+
+    `crops` is the gameplay crop dict and `state_json` the paid model's whole answer, which
+    is the LABEL for all of it -- names and phase for the banner reader, runners for the
+    base reader, discards_left for the dot counter, secondary for the shield.
+    """
     try:
         os.makedirs(LOCAL_HAND_DIR, exist_ok=True)
         stamp = time.time_ns()
-        name = f"hand_{stamp}.png"
-        crop.save(os.path.join(LOCAL_HAND_DIR, name))
+        saved = {}
+        for region in RECORDED_CROPS:
+            img = (crops or {}).get(region)
+            if img is None:
+                continue
+            fname = f"{region}_{stamp}.png"
+            img.save(os.path.join(LOCAL_HAND_DIR, fname))
+            saved[region] = fname
+        cards = state_json.get("hand") or []
         with open(os.path.join(LOCAL_HAND_DIR, "agreement.jsonl"), "a") as f:
             f.write(json.dumps({
-                "t": stamp, "crop": name,
+                # "crop", "local" and "vision" keep their exact original shape: every
+                # analysis script written against the hands already on disk still reads.
+                "t": stamp, "crop": saved.get("hand"), "crops": saved,
                 "local": [{"x": r["x"], "kind": r["kind"], "digit": r["digit"],
-                           "score": r["score"]} for r in rows],
+                           "score": r["score"], "type": r.get("type"),
+                           "type_score": r.get("type_score")} for r in rows],
                 "vision": [{"i": c.get("hand_index"), "kind": c.get("kind"),
+                            "name": c.get("name"),
                             "power": c.get("power"), "secondary": c.get("secondary"),
                             "bonus": c.get("bonus"), "type": c.get("type")}
-                           for c in vision_cards],
+                           for c in cards],
+                "state": {"screen": state_json.get("screen"),
+                          "phase": state_json.get("phase"),
+                          "your_score": state_json.get("your_score"),
+                          "opp_score": state_json.get("opp_score"),
+                          "discards_left": state_json.get("discards_left"),
+                          "batters_used": state_json.get("batters_used"),
+                          "runners": state_json.get("runners")},
             }) + "\n")
     except Exception:
         pass
@@ -1673,7 +1701,7 @@ def log_local_read_comparison(state_json: dict):
         except Exception as e:
             print(f"  [local-check] hand: local reader failed ({e})")
             rows = []
-        record_local_hand(crops["hand"], rows, state_json.get("hand") or [])
+        record_local_hand(crops, rows, state_json)
 
         # ALIGNMENT IS BY POSITION, so it is only valid when the counts match.
         # A missed or invented card shifts every later column by one and would

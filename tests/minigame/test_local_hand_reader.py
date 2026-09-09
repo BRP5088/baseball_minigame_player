@@ -92,14 +92,26 @@ saved = orchestrator.LOCAL_HAND_DIR
 try:
     orchestrator.LOCAL_HAND_DIR = tmp
     small = Image.new("RGB", (8, 8), (0, 0, 0))
+    crops = {r: small for r in orchestrator.RECORDED_CROPS}
     for _ in range(3):
-        orchestrator.record_local_hand(small, [], [])
+        orchestrator.record_local_hand(crops, [], {"hand": [], "screen": "turn"})
     lines = open(os.path.join(tmp, "agreement.jsonl")).read().strip().splitlines()
     check("recorder appends rather than truncating", len(lines) == 3, f"{len(lines)} lines")
-    check("recorder writes one crop per call",
-          len([f for f in os.listdir(tmp) if f.endswith(".png")]) == 3)
+    # EVERY gameplay region, not just the hand: three of the four remaining local readers
+    # (phase from the banner, runners from the base discs, discards from the dot counter)
+    # had no corpus at all while only the hand was kept.
+    n_png = len([f for f in os.listdir(tmp) if f.endswith(".png")])
+    check("recorder writes every gameplay crop, on every call",
+          n_png == 3 * len(orchestrator.RECORDED_CROPS),
+          f"{n_png} files for {len(orchestrator.RECORDED_CROPS)} regions x 3 calls")
+    row = json.loads(lines[0])
+    check("the old keys are unchanged, so existing corpora still read",
+          row.get("crop") and "local" in row and "vision" in row, str(sorted(row)))
+    check("and the paid answer's own state is kept as the label",
+          "state" in row and "runners" in row["state"], str(row.get("state")))
     # It must never raise into the turn loop, whatever it is handed.
     orchestrator.record_local_hand(None, None, None)
+    orchestrator.record_local_hand({}, [], {})
     check("recorder swallows its own failures", True)
 finally:
     orchestrator.LOCAL_HAND_DIR = saved
