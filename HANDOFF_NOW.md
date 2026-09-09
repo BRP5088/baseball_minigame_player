@@ -9,8 +9,14 @@
   had been untracked -- the working directory was the only copy.
 - **The chiaki binary** (frame-dump build) is backed up at
   `chiaki-ng-build/chiaki.app.backup-20260908-framedump/`; rebuildable from `chiaki-patch/`.
-- **In flight, both as patch SCRIPTS not yet applied:** patch58 (`run_cycles._walk_to_table` ->
-  chain_walk + reload; the continuous loop's one defect; money-path skeptic assigned) and patch59
+- **patch58 LANDED (4ff684e, 20:15):** `run_cycles._walk_to_table` spawns `run_cycles.py --one-trial <n>`
+  through `_harness.run_trial` (killed from outside at `ceiling_for(attempts)`), the child retries
+  through `chain_trials.walk_attempts` (default 2, env `BASEBALL_CYCLE_WALK_ATTEMPTS`),
+  `_reset_progress` reads the wallet AFTER the walk. 70 checks, 12 mutants, suite 154 green.
+  **THE SMOKE TEST IS RUNNING since 20:16** (`overnight/smoke_cycle_wrapper.log`, `smoke_cycle.log`;
+  BASEBALL_API_BUDGET=200). Acceptance, pre-registered in the patch docstring: ARRIVED + attempt
+  number; orchestrator.run started; >=1 match RESULT; the loop stopped on its own.
+- **Still a patch SCRIPT, workflow w8wn7t1ua building it:** patch59
   (gate the escape ladder on the push before/after match count that crawl mode validated --
   blocked 148-166 inliers vs moved 10-28, n=6 each; ships OFF; removes the bar detours the user
   sees). Land order does not matter: no shared files.
