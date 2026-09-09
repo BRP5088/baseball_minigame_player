@@ -31,6 +31,13 @@
   `reveal_edge_frames_20260908/`); the 4 Hz poll logs peak 0.0535 = the FACE-DOWN phase, so it is
   not looking during the flip. Recording of match 4 at 20 Hz per region + 2 Hz frames:
   `overnight/census/match_timeline_20260908/`.
+- **patch59 A/B DONE (21:24-22:12):** off 9/10, on 10/10, Fisher 1.0; the 129 no-jump rule never fired
+  (no blockage at 129 in 20 walks); the raw-inlier moved/blocked signal reads "blocked" on 70% of
+  live pushes, 68% of which advanced -- REFUTED live, unimodal p10 31/p50 110/p90 173 (n=957).
+  ESCAPE_GATE stays OFF. `overnight/ab_escape_gate.*`.
+- **patch63 LANDED (2f133e7):** the post-play read waits for the DEAL at HAND_DEAL_THRESHOLD 25.0
+  (between 15.44 and 31.83), floor 6.0 s, cap 35, ON by default (BASEBALL_DEAL_WAIT=0 off); 6 mutants
+  caught. Pre-registered live acceptance in the patch docstring. NOT yet measured live.
 - **IN BUILD (workflows):** patch60 reveal watcher (20 Hz thread on the dump records each reveal
   episode; the loop reads the peak frame -- makes the timing irrelevant); patch59 escape by region;
   the OCR timing study (`agent_progress/ocr-timing/TIMING_REPORT.md`). Then F1 (discard ledger)
