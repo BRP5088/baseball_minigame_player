@@ -859,12 +859,19 @@ LOCK_CONFIRM_TRIES = 4
 # counter that was legible the whole time.
 BAN_COUNTER_READ_TRIES = 5
 
-# Run the local-vs-vision read comparison on every Nth turn, not every turn.
-# The hand half of it costs 25.57s (measured) against 0.33s for the base crops,
-# because hand_digit_reader reloads the PaddleOCR models per call. It is a
-# diagnostic that drives no decision, and drift between the two readers shows
-# up just as clearly in a sample. 1 = every turn (the old behaviour).
-LOCAL_CHECK_EVERY = 4
+# Run the local-vs-vision read comparison on every Nth turn.
+#
+# This was 4, and the reason was cost: the hand half took 25.57s (measured)
+# against 0.33s for the base crops, because the old reader reloaded the
+# PaddleOCR models on every call. So one turn in four paid twenty-five seconds
+# for a diagnostic that drives no decision -- and turn TIME is the thing this
+# project is currently trying to cut.
+#
+# patch69 replaced that reader with local_hand, at 4.5 ms. The cost that
+# justified sampling is gone, and every turn is now a labelled example of the
+# tactics art the local reader still cannot read (vision supplies the label),
+# so sampling would throw away three quarters of the corpus for nothing.
+LOCAL_CHECK_EVERY = 1
 
 
 def _settled_lock_grid(tries: int = LOCK_CONFIRM_TRIES):
