@@ -62,7 +62,7 @@ class Hazard:
 
 
 def walk_leg(lx, ly, seconds, capture, read_heading, label="", log=print,
-             step_sec=None, on_release=None):
+             step_sec=None, on_release=None, on_pair=None):
     """Walk one leg, reporting travel per step and any hazard.
 
     `step_sec` is how long a single continuous push lasts. It defaults to
@@ -80,7 +80,14 @@ def walk_leg(lx, ly, seconds, capture, read_heading, label="", log=print,
     4.5s — it does not require breaking up a 0.8s one.
     """
     hazards = []
-    prev = _grey(capture())
+    # THE PIL FRAME IS KEPT, NOT ONLY ITS GREY ARRAY (patch59). `_grey` returns
+    # an unmasked float array; anything that wants ORB features has to go
+    # through `places.keypoints`, whose `_as_gray` crops the compass, the quest
+    # list and the health coin -- pixel-identical furniture that would hand any
+    # two frames free "matches" and bias every answer toward "did not move".
+    # Keeping the image costs a reference, not a capture.
+    prev_im = capture()
+    prev = _grey(prev_im)
     best = 0.0
     spent = 0.0
     quiet = 0
@@ -101,9 +108,22 @@ def walk_leg(lx, ly, seconds, capture, read_heading, label="", log=print,
         time.sleep(SETTLE_SEC)
         spent += step
 
-        now = _grey(capture())
+        now_im = capture()
+        now = _grey(now_im)
         moved = _change(now, prev)
-        prev = now
+        # THE PAIR THIS FUNCTION HAS ALWAYS HELD AND ALWAYS DISCARDED. `moved`
+        # is the frame delta, which CLAUDE.md 10.4 measured as one population
+        # (null 1-12 against push 7-24, overlapping) and therefore unusable as
+        # a blocked/moved gate. The FRAMES are a different matter, and the
+        # caller is handed them rather than a verdict: what to compute from
+        # them is the caller's question, not this module's.
+        #
+        # Once per CHUNK. A chain push is one chunk (`step_sec == seconds`), so
+        # there it is once per push; a long chunked leg gets one call per chunk
+        # and the caller sees the last one.
+        if on_pair is not None:
+            on_pair(prev_im, now_im)
+        prev_im, prev = now_im, now
         best = max(best, moved)
         series.append(moved)
 

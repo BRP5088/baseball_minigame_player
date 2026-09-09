@@ -678,6 +678,155 @@ BLIND_LOOK_MAX = 1
 # (10.1), which is why the failing look records a row at all.
 BLIND_LOOK_ACTION = "blind-look"
 BLIND_LOOK_FOUND_ACTION = "relocalised-look"
+
+# THE ESCAPE GATE (patch59): the ladder's rung at the BAR-ENTRANCE STOP, and no
+# rung at all when the push that led to it MOVED.
+#
+# The user, watching the stream: "the navigation is jumping around in the bar
+# area. getting onto the bar and ramming into it and somehow ending up at the
+# mini game table."
+#
+# THE CENSUS IS A SCRIPT, NOT PROSE:
+# agent_progress/closed-loop/escape_gate/census.py regenerates every number
+# here from the journals. The first draft of this patch carried a hand-copied
+# table and three of its seven rows were wrong.
+#
+# Over the last 60 journals, 94 rungs fired; whether a CREDIBLE fit (>=
+# FIX_MIN_INLIERS) followed within three rows, split at the boundary
+# tools/collision_census.py already uses:
+#
+#     region          rung   n   credible   no fit
+#     BAR-A 115-129   jump    7   0 (  0%)   7/7    <- ALL SEVEN AT k=129
+#     BAR-A 115-129   back    7   0 (  0%)   7/7
+#     BAR-A 115-129   left    7   7 (100%)   0/7    <- but see the confound
+#     BAR-B 130-150   jump   15  13 ( 87%)   1/15   <- the BEST rung anywhere
+#     elsewhere       jump   41  33 ( 80%)   3/41
+#     elsewhere       back    7   4 ( 57%)   2/7
+#     elsewhere       left    5   2 ( 40%)   3/5
+#     elsewhere       right   3   1 ( 33%)   2/3
+#
+# THE CONFOUND, AND IT IS WHY THE COMMENT IS THIS LONG. The ladder is jump,
+# back, left, right and IT STOPS WHEN IT WORKS, so the last rung tried always
+# looks like the rung that worked. All seven k=129 blockages are the identical
+# triple (jump., back., leftC) at exactly MISS_MAX iterations apart, with the
+# next credible fit exactly 7 iterations after the first rung -- one
+# deterministic trajectory observed seven times, not seven samples. Left is
+# NEVER tried first anywhere in this dataset, so its 7 of 7 is an artefact of
+# the ORDER (CLAUDE.md 10.2's STALL_CHANGE shape) and is a HYPOTHESIS here.
+#
+# What survives is position-matched only: JUMP ALWAYS WENT FIRST and at k=129
+# it is 0 of 7 with the picture lost on 7 of 7 -- which is exactly the hop the
+# user watched -- while everywhere else, first as well, it is 33 of 41. BACK
+# always went second and is 0 of 7 here (LOST_RESCUE_MAX's comment below has
+# carried "escape:back 0 of 27 times in the bar stretch" since patch43 without
+# anything acting on it).
+#
+# NOT TOUCHED, and recorded so nobody reads its absence as a claim: at k=166
+# every rung fails (jump 0/3, back 0/3, left 0/3, right 0/2, ten of eleven
+# losing the picture). No rung order helps there.
+#
+# THIS REMOVES AND REDIRECTS MOVEMENT rather than adding any. GRAVEYARD's
+# summary is that every failed navigation change MOVED the character and both
+# survivors move nothing.
+#
+# Ships OFF; `--flag ESCAPE_GATE` measures it. Instruments: at k=129 the
+# fraction of escapes followed by a credible fit (baseline 7 of 21) and the
+# number followed by NO fit (14 of 21); the rungs per affected walk (baseline
+# exactly 3 on 7 of 7); the iterations from the first rung to the next credible
+# fit (baseline exactly 7 on 7 of 7 -- the instrument the confound demands);
+# and the two-population check on the journalled push signal.
+ESCAPE_GATE = False
+# THE WINDOW IS ONE WAYPOINT, inclusive at both ends, IN THIS CHAIN
+# (chains/route_user_1853): k = 129 is the bar-entrance stop. It is a range of
+# one because that is the whole of the evidence -- every failing bar jump is
+# there, and at k 130-139 jump is 13 of 15, the best rung in the dataset, so a
+# wider window would ban it exactly where it works. The 115-150 span the first
+# draft used came from a census bucket and hid that split.
+#
+# The test `k` is the ESTIMATE, which is what the census bucketed and which can
+# be wrong; a rung chosen from a wrong estimate is the same risk the rest of
+# the loop already runs, and every firing records its `k` so instrument (e) can
+# throw out a firing that was not really here.
+BAR_ESCAPE_FROM_K = 129
+BAR_ESCAPE_TO_K = 129
+# JUMP IS ABSENT, and that is the SUPPORTED half: it is the rung that always
+# went first, 0 of 7 at this stop, and the one that loses the picture entirely,
+# 7 times in 7 -- the hop the user watched climb the counter.
+#
+# LEFT FIRST IS A HYPOTHESIS, NOT A MEASUREMENT. Its 7 of 7 comes from the
+# third rung of a ladder that stops when it works; nothing here has ever tried
+# it first. RIGHT second: the same clearance on the other side. BACK last, and
+# kept only because a two-rung ladder alternates sidesteps down the counter for
+# ever while back is the one rung that changes the distance to whatever is in
+# front -- NOT because it works (0 of 7 as the second rung, 0 of 27 in the
+# older census). Which side "left" is relative to the counter is not
+# established either.
+BAR_ESCAPE_RUNGS = ("left", "right", "back")
+# Today's `escapes % 4`, written out so the two orders sit side by side. With
+# the gate off this is the order everywhere and the ladder is byte-identical.
+DEFAULT_ESCAPE_RUNGS = ("jump", "back", "left", "right")
+# THE MOVED/BLOCKED THRESHOLD, in RANSAC inliers between the frame before a
+# push and the frame after it (tools/crawl.py:pair_inliers, imported not
+# reimplemented). The twelve hand labels in overnight/crawl_labelled.jsonl:
+#
+#     BLOCKED (pressed on the desk, the push moved nothing)  148 153 154 164 166
+#     MOVED   (travelled)                    10 11 23 28, and two with NO FIT
+#
+# 88 is the MIDPOINT of 28 | 148. Step 1 of that file is labelled `desk` at 28
+# and belongs to the MOVED population: crawl.py's labels name what was HIT, and
+# step 1 is the push that travelled INTO the desk -- its `change` is the
+# largest of the twelve and its frame is a different viewpoint from step 2's.
+# n = 5 and 7, UNDER 10.3's power floor (0.72 at n=6, 0.94 at n=10). This is a
+# gap between two thin populations, not a calibrated gate; the raw count is
+# journalled on every push, on BOTH arms, so the next batch calibrates it at
+# scale.
+#
+# CLAUDE.md OPEN-1 measured the RAW count as unusable and only the PAIRED ratio
+# (push / a null taken at the same spot) as usable. The raw count separates
+# here because these nulls sit at pose._MAX_MATCHES (184-200 on the blocked
+# rows); a null costs a second measurement window per push, which the loop
+# cannot pay for. Rows 11-12 are the counter-case (nulls of 49 and 10), and
+# they fail toward MOVED -- which suppresses an escape on a stuck character.
+# ESCAPE_SUPPRESS_MAX below is the bound that exists for exactly that.
+#
+# IT IS ALSO THE KEYPOINT FLOOR, by arithmetic and not by choice: inliers <=
+# matches <= min(keypoints), so a pair with fewer keypoints than this CANNOT
+# read BLOCKED and its low count is an artefact rather than an answer (10.1's
+# "a measurement that returns the same number everywhere"). Under the floor the
+# verdict is None -- NO SIGNAL, today's behaviour -- and never "moved".
+PUSH_BLOCKED_MIN_INLIERS = 88
+PUSH_MOVED = "moved"
+PUSH_BLOCKED = "blocked"
+# THE LAST RESORT'S BOUND: this many consecutive suppressions per blockage,
+# after which every trigger fires its rung until the walk moves on evidence.
+#
+# DERIVED FROM THE LOOP'S OWN CADENCES, not borrowed -- the first draft set it
+# to MISS_MAX (3) and that could remove EVERY rung. Two families reach the
+# ladder and both increment `lost` under one budget, LOST_MAX:
+#
+#     the MISS family (fix is None)   cadence MISS_MAX  = 3 -> lost 3, 6, 9, 12
+#     the WEAK family (a thin fit)    cadence STALL_MAX = 4 -> lost 4, 8, 12
+#
+# LOST_MAX's own comment derives 13 as MISS_MAX*4+1, "let all four rungs fire
+# and be seen" -- true of the miss family, false of the weak one, which gets
+# only THREE triggers inside the budget. At a cap of 3 all three were
+# suppressed and the walk reached LOST_MAX having attempted no physical
+# recovery at all, with a failure line identical to today's. Reproduced on a
+# scratch copy: cap 3 -> rungs [], cap 2 -> rungs [jump].
+#
+# So: the shortest trigger sequence any family gets is THREE, and a cap of TWO
+# leaves at least one real rung in every family. A loop that can never escape
+# is worse than one that escapes too often, and the failure this bounds is a
+# real one: a scene whose own frames do not match each other (crawl rows 11-12)
+# reads MOVED however stuck the character is.
+ESCAPE_SUPPRESS_MAX = 2
+# The action a suppressed trigger records. It deliberately does NOT start with
+# "escape:", because tools/collision_census.py counts waste with
+# `startswith("escape:")` and a rung not taken is the opposite of waste; and it
+# is not in PROGRESS_ACTIONS, because it is not evidence the walk moved on. A
+# no-op path and a working path must not have identical output (10.1), which is
+# why a suppression writes a row at all.
+ESCAPE_SKIPPED_ACTION = "escape-skipped"
 # THE ACTION THE EXTRA PUSH RECORDS, and the reason it is a name and not a
 # bare literal: it is the FIRST row this module has ever written that shares
 # an iteration number with another row, and three readers select "one
@@ -792,6 +941,113 @@ UNEVIDENCED_ACTIONS = ("turned-unverified", "turned-past")
 # So: POSITIVE lx = RIGHT, and dx > 0 -> strafe RIGHT.
 RIGHT = +1.0
 LEFT = -1.0
+
+
+def escape_rungs(k, gate, from_k, to_k, bar_order, default_order):
+    """The escape ladder's rung ORDER at estimate `k`.
+
+    Pure, and every argument is a PARAMETER rather than a module-level default
+    (10.18): a knob captured in a default cannot be redirected by a test or an
+    A/B arm, which is how `leg_reliability.STORE` silently served one store to
+    both arms.
+
+    Three clauses, each of which a mutant can delete, each driven directly:
+
+      gate         with the flag off this returns `default_order` for every k,
+                   so the ladder is byte-identical to the one that has always
+                   shipped. That is what makes the off arm today's build.
+      k is not None  the estimate is never None in the loop today, but a rung
+                   chosen from a missing estimate would be chosen from
+                   `None <= 129`, which raises. Explicit beats a TypeError in
+                   a live walk.
+      from_k <= k <= to_k   inclusive at both ends. The shipped window is a
+                   RANGE OF ONE (129..129), so both ends are the same waypoint
+                   and an off-by-one at either is a firing in the wrong place.
+    """
+    if gate and k is not None and from_k <= k <= to_k:
+        return bar_order
+    return default_order
+
+
+def push_verdict(inliers, kp_before, kp_after, thresh):
+    """Did this push MOVE the character, or was it BLOCKED? None = no signal.
+
+    `inliers` is tools/crawl.py's `pair_inliers` between the frame before the
+    push and the frame after it -- None from it means UNMEASURABLE (too few
+    surviving matches to fit), never "identical".
+
+    THE KEYPOINT FLOOR COMES FIRST, and it is arithmetic rather than judgement:
+    inliers <= matches <= min(keypoints), so a pair with fewer keypoints than
+    the threshold cannot reach BLOCKED at all, and its low count would be a
+    number that is low everywhere -- 10.1's measurement that reads as a verdict.
+    Below the floor the answer is NO SIGNAL, which falls through to today's
+    behaviour. It is never "moved": a suppressed escape on a stuck character is
+    the expensive direction to be wrong in.
+
+    ABOVE the floor, NO FIT IS THE MOVED POPULATION. Two of the six clean rows
+    in overnight/crawl_labelled.jsonl have `push_inliers` None. What the floor
+    cannot catch is a scene whose frames do not match each other at all (those
+    same two rows have nulls of 49 and 10 on plenty of keypoints), and that
+    case reads MOVED -- which is why the caller's suppression is bounded.
+    """
+    if min(kp_before, kp_after) < thresh:
+        return None
+    if inliers is None:
+        return PUSH_MOVED
+    return PUSH_BLOCKED if inliers >= thresh else PUSH_MOVED
+
+
+def escape_is_suppressed(gate, verdict, suppressed, cap):
+    """Should THIS escape trigger fire no rung at all?
+
+    Pure, so each of the three clauses can be driven and mutated directly --
+    patch55 learned that a guard reachable only through a scripted walk lets its
+    mutant survive.
+
+      gate                 the arm.
+      verdict == MOVED     BLOCKED fires the rung, and so does NO SIGNAL. Only
+                           a positive reading of "the character travelled"
+                           earns a suppression.
+      suppressed < cap     the bound, and it is load-bearing: at a cap of 3 the
+                           WEAK family (cadence STALL_MAX = 4, three triggers
+                           inside LOST_MAX = 13) had every one of its rungs
+                           suppressed and reached the end of the walk having
+                           attempted no physical recovery at all. See
+                           ESCAPE_SUPPRESS_MAX.
+    """
+    return bool(gate) and verdict == PUSH_MOVED and suppressed < cap
+
+
+def pair_signal(before, after, thresh=None):
+    """One ORB match on the two frames around a push -> the journal's row.
+
+    -> {"inliers": int|None, "kp_before": int, "kp_after": int,
+        "verdict": "moved"|"blocked"|None}
+
+    `pair_inliers` is IMPORTED from tools/crawl.py, which is where it was
+    validated against the user's own labels, and NOT reimplemented here.
+    CLAUDE.md records what a reimplementation of a project function costs: the
+    localiser mirror that used a raw `len(bf.match(...))` instead of
+    `places.match_count`'s Hamming filter scored the reference set 3 of 9 where
+    the original scores 9 of 9, and a whole finding was written on it.
+
+    The features come from `places.keypoints`, whose `_as_gray` masks the
+    compass, the quest list and the coin -- pixel-identical HUD that would hand
+    any two frames free matches and bias the answer toward BLOCKED.
+
+    `thresh=None` resolves the constant at CALL time, so an A/B or a test can
+    move `PUSH_BLOCKED_MIN_INLIERS` and be obeyed (10.18).
+    """
+    import places
+    import tools.crawl as crawl
+    t = PUSH_BLOCKED_MIN_INLIERS if thresh is None else thresh
+    ka, da = places.keypoints(before)
+    kb, db = places.keypoints(after)
+    n_a = 0 if ka is None else len(ka)
+    n_b = 0 if kb is None else len(kb)
+    inliers = crawl.pair_inliers(ka, da, kb, db)
+    return {"inliers": inliers, "kp_before": n_a, "kp_after": n_b,
+            "verdict": push_verdict(inliers, n_a, n_b, t)}
 
 
 def _strong_ahead(chain, img, k, n):
@@ -1369,6 +1625,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
 
         turn_to(heading)        turn the camera to an absolute bearing
         push(mag, secs)         ONE continuous forward push, mag > 0 = forward
+                                -> this push's MOVED/BLOCKED signal, or None
+                                   when there is none (patch59). A stub that
+                                   returns None is a stub with no signal, which
+                                   is exactly today's behaviour.
         back(mag, secs)         ONE continuous BACKWARD push
         strafe(lx, secs)        ONE continuous sidestep, lx > 0 = RIGHT
         jump()                  press Cross once
@@ -1390,13 +1650,53 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             # step_sec == seconds is ONE continuous push. Chunking it would
             # re-accelerate from a standstill and cover less ground -- the
             # GRAVEYARD row that ended two rooms adrift.
-            # Forwarded ONLY when there is one, so the shipped call is the
-            # call it has always been -- four tests stub walk_leg with today's
-            # signature, and passing on_release=None to them is a TypeError.
+            # `on_release` is forwarded ONLY when there is one: it is the
+            # settle probe's hook, it is off unless the environment arms it,
+            # and passing on_release=None to a stub written before patch54 is
+            # a TypeError.
+            #
+            # `on_pair` is forwarded ALWAYS, and that is a deliberate change to
+            # the shipped call (patch59). The signal is journalled on every
+            # push whether or not ESCAPE_GATE is on -- that is the whole point
+            # of part 3, since a measurement taken only on the arm that uses it
+            # cannot be compared -- so there is nothing to make it conditional
+            # ON. The one stub in the tree that had to grow the parameter is in
+            # tests/routing/test_chain_walk.py's DefaultConsoleWrappers.
+            #
+            # WHAT IT COSTS, STATED HONESTLY: one ORB match per push (~28 ms)
+            # on two frames walk_leg has already captured. No extra capture, no
+            # extra push, no console call -- which is why the off arm's event
+            # list is unchanged. But this closure is shared, and the forward
+            # push call `push(PUSH_MAG, ...)` is made from FOUR places in this
+            # file: the two tracked forward pushes whose signal reaches the
+            # journal, plus DOOR_STOP_EXTRA_PUSH (once per walk at one stop)
+            # and the turn-retry (up to TURN_RETRY_MAX per stop). Those two
+            # discard the return, so the match still runs and its answer is
+            # thrown away -- up to four extra matches a walk, ~112 ms. That is
+            # a cost paid, not a cost avoided, and it is written here rather
+            # than left to be discovered.
+            sig = {}
+
+            def _pair(before, after, _sig=sig):
+                # A MEASUREMENT MUST NEVER KILL A LIVE WALK. The failure is
+                # recorded in the row rather than swallowed, so it cannot look
+                # like "there was no signal here" -- a silent no-op and a
+                # working path with identical output is 10.1's first entry.
+                try:
+                    _sig.update(pair_signal(before, after) or {})
+                except Exception as exc:
+                    _sig.update({"error": repr(exc)})
+                    log(f"        push signal FAILED, the walk carries on: "
+                        f"{exc!r}")
+
             extra = {} if on_release is None else {"on_release": on_release}
-            return _st.walk_leg(0.0, -abs(mag), secs, capture, read_heading,
-                                label="chain push", log=log, step_sec=secs,
-                                **extra)
+            _st.walk_leg(0.0, -abs(mag), secs, capture, read_heading,
+                         label="chain push", log=log, step_sec=secs,
+                         on_pair=_pair, **extra)
+            # walk_leg's own (spent, best, hazards) was already discarded by
+            # every caller of this wrapper; the signal replaces it as the
+            # return value rather than being smuggled out through a closure.
+            return sig or None
     if back is None:
         import slow_traverse as st
         def back(mag, secs, _st=st):
@@ -1513,6 +1813,8 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
     blind_looks = 0             # BLIND_LOOK_AROUND firings in the CURRENT
                                 # blind stretch (the budget; reset with `blind`)
     blind_looks_total = 0       # ... and over the whole walk, for the report
+    escape_suppressed = 0       # ESCAPE_GATE suppressions in THIS blockage;
+                                # reset wherever the ladder itself re-arms
     bar_turned_early = False    # the once-per-walk latch for
                                 # BAR_STOP_EARLY_TURN
     door_stepped = False        # this SERVICING of DOOR_STOP_INDEX has had
@@ -1554,32 +1856,82 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 f"{min_iters} iterations at >= {iteration_sec_floor}s each "
                 f"= {need:.0f}s > {time_cap:.0f}s")
 
-    def escape():
-        """One escape. Jump first, then sidesteps alternating LEFT, RIGHT, ...
+    def escape(order=None):
+        """One escape, taking the rung ORDER it should cycle through.
 
-        Jump first because it moves nothing sideways, which is what a passage
-        with stools on one side and a wall on the other requires; measured
-        escape outcomes against real blockers were None, None, jump, None, None,
-        None, wait, jump (§8(g)).
+        Jump first in the DEFAULT order because it moves nothing sideways,
+        which is what a passage with stools on one side and a wall on the other
+        requires; measured escape outcomes against real blockers were None,
+        None, jump, None, None, None, wait, jump (§8(g)). At the bar-entrance
+        stop the order has no jump at all -- see BAR_ESCAPE_RUNGS: there it is
+        the rung that always went first and never worked, 0 of 7, losing the
+        picture 7 of 7.
+
+        `order` defaults to DEFAULT_ESCAPE_RUNGS, so a caller that has not been
+        told about regions gets exactly the ladder that has always shipped.
         """
         nonlocal escapes
-        which = escapes % 4          # the ladder CYCLES: jump, back, left, right, jump, ...
+        rungs = DEFAULT_ESCAPE_RUNGS if not order else tuple(order)
+        # THE LADDER CYCLES its order, as `escapes % 4` did over
+        # jump/back/left/right. The modulus is the order's own length, so a
+        # three-rung order cycles three.
+        rung = rungs[escapes % len(rungs)]
         escapes += 1
-        if which == 0:
+        if rung == "jump":
             # Jump comes round again: the one arrival that beat the patron
             # wedge (batch 5c trial 2) had a jump; batch 5e trial 7, whose jump
             # had fired earlier in the street, got only sidesteps there.
             jump()
             return "escape:jump"
-        if which == 1:
+        if rung == "back":
             back(PUSH_MAG, BACK_SEC)
             return "escape:back"
         nonlocal detour_side, detour_until
-        side = LEFT if which == 2 else RIGHT
+        side = LEFT if rung == "left" else RIGHT
         secs = ESCAPE_STRAFE_SEC * (2 if (side > 0 and detour_side is not None and detour_side < 0) else 1)
         strafe(side * ESCAPE_STRAFE_MAG, secs)
         detour_side, detour_until = side, k + DETOUR_TARGETS
         return "escape:left" if side < 0 else "escape:right"
+
+    def escape_now(sig):
+        """ONE escape TRIGGER: a rung and its order, or a suppression.
+
+        -> (action, escaped, row). All three escape triggers go through here so
+        the decision exists in ONE place; with ESCAPE_GATE off it resolves to
+        `escape()` over the default order, which is the call the three sites
+        made before this patch.
+
+        `escaped` is what the iteration sets on itself, and a suppression does
+        NOT set it: nothing displaced the character between the fit and now, so
+        the lateral correction computed from that fit is still valid, and so is
+        patch57's pitch press, which blocks on `escaped or escaped_prev`. That
+        is the same reasoning those guards are built on, applied in the
+        direction that gives the correction back.
+
+        A suppression touches NOTHING ELSE -- not `lost`, not `misses`, not
+        `stalls`, not `k`. The iteration count of a blockage is identical
+        either way, so this cannot push a walk into LOST_MAX or NO_PROGRESS_MAX
+        that would not have got there anyway. What it CAN do, unbounded, is
+        reach LOST_MAX having fired no rung at all; ESCAPE_SUPPRESS_MAX is
+        derived from the two trigger cadences so that it cannot.
+        """
+        nonlocal escape_suppressed
+        verdict = (sig or {}).get("verdict")
+        order = escape_rungs(k, ESCAPE_GATE, BAR_ESCAPE_FROM_K,
+                             BAR_ESCAPE_TO_K, BAR_ESCAPE_RUNGS,
+                             DEFAULT_ESCAPE_RUNGS)
+        if escape_is_suppressed(ESCAPE_GATE, verdict, escape_suppressed,
+                                ESCAPE_SUPPRESS_MAX):
+            escape_suppressed += 1
+            return (ESCAPE_SKIPPED_ACTION, False,
+                    {"rung": None, "verdict": verdict, "k": k,
+                     "order": list(order), "suppressed": escape_suppressed,
+                     "cap": ESCAPE_SUPPRESS_MAX})
+        rung = escape(order)
+        return (rung, True,
+                {"rung": rung, "verdict": verdict, "k": k,
+                 "order": list(order), "suppressed": escape_suppressed,
+                 "cap": ESCAPE_SUPPRESS_MAX})
 
     # THE FIRST FRAME, BEFORE ANYTHING MOVES. A chain recorded to the table ends
     # at the prompt, so a walk started from there is already finished; pushing
@@ -1681,6 +2033,10 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
         # the same trial (batch 7 trial 1) -- were never retried there.
         if action is not None and action.startswith(PROGRESS_ACTIONS):
             escapes = 0
+            # ... and the gate's suppression budget, on the same event and for
+            # the same reason: the budget is PER BLOCKAGE, and a progress
+            # action is this loop's own definition of a blockage ending.
+            escape_suppressed = 0
             if action not in UNEVIDENCED_ACTIONS:
                 # A turn-early is spent until the walk moves ON EVIDENCE. An
                 # unverified turn is not that evidence -- it advances k at a
@@ -1909,6 +2265,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             last_cmd = heading
             turned = True
         settle_rows = None       # this iteration's probe samples, if armed
+        push_sig = None          # ... and this iteration's MOVED/BLOCKED
+                                 # measurement, from the frames walk_leg holds
+                                 # around the push. None on an iteration that
+                                 # did not push, which is why a turn-only stop
+                                 # and a blind look can never be gated.
         if do_push:
             probe = None
             if settle_probe_on():
@@ -1925,9 +2286,9 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                                        "inliers": None if f is None else f.inliers,
                                        "k": None if f is None else f.k})
 
-                push(PUSH_MAG, PUSH_SEC, on_release=_sample)
+                push_sig = push(PUSH_MAG, PUSH_SEC, on_release=_sample)
             else:
-                push(PUSH_MAG, PUSH_SEC)
+                push_sig = push(PUSH_MAG, PUSH_SEC)
             settle_rows = probe          # attached to this iteration's row
             res["pushes"] += 1
             if heading is not None:
@@ -2406,6 +2767,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     pi = 0
 
         escaped = False
+        escape_row = None        # this iteration's escape decision, journalled
         if regressed:
             misses = 0
             stalls = 0
@@ -2516,8 +2878,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 lost += 1
                 misses += 1
                 if misses >= MISS_MAX:
-                    action = escape()
-                    escaped = True
+                    action, escaped, escape_row = escape_now(push_sig)
                     misses = 0
                 else:
                     action = "miss"
@@ -2526,8 +2887,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                 misses = 0
                 stalls += 1
                 if stalls >= STALL_MAX:
-                    action = escape()
-                    escaped = True
+                    action, escaped, escape_row = escape_now(push_sig)
                     stalls = 0
                 else:
                     action = "weak"
@@ -2612,6 +2972,11 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                     stalls = 0
                     blind = 0
                     escapes = 0
+                    # patch59, beside `escapes` and for the same reason: the
+                    # suppression budget is per BLOCKAGE, the rescue has just
+                    # ended one, and "rescued" carries no PROGRESS_ACTIONS
+                    # prefix so the top-of-loop re-arm never catches it.
+                    escape_suppressed = 0
                     unverified_turn = False
                     early_stop = False
                     # THE RESCUE MOVED THE CHARACTER AND THE ESTIMATE, so two
@@ -2714,8 +3079,7 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
             else:
                 stalls += 1
                 if stalls >= STALL_MAX:
-                    action = escape()
-                    escaped = True
+                    action, escaped, escape_row = escape_now(push_sig)
                     stalls = 0
                 else:
                     action = "stalled"
@@ -2859,6 +3223,13 @@ def walk(chain, capture, read_heading, log=print, time_cap=None, shots=None,
                "at_end": at_end,
                **({"pitch": pitch_row} if pitch_row else {}),
                **({"settle": settle_rows} if settle_rows else {}),
+               # patch59, ON EITHER ARM. `push_signal` is the measurement --
+               # the inlier count, both frames' keypoint totals and the
+               # verdict -- and `escape` is the decision, with the k and the
+               # rung order it was made from so a firing outside the bar
+               # stretch is not read as evidence about the bar.
+               **({"push_signal": push_sig} if push_sig else {}),
+               **({"escape": escape_row} if escape_row else {}),
                "seconds": round(now() - it_t0, 2),
                "elapsed": round(now() - t0, 2)}
         record(row)
