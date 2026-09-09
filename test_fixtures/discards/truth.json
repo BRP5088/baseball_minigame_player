@@ -1,0 +1,62 @@
+{
+ "source": "the user, by eye, 2026-09-09",
+ "note": "Eight scoreboards where the local dot counter and the paid vision model disagreed. The user adjudicated all eight: LOCAL 8/8, PAID 0/8. The paid model answers 2 on 286 of 360 turns, which is a default and not a reading; it also returned an impossible 3 in a live run. The user named the likely mechanism -- the fat middle of the S in DISCARDS reads as an extra dot -- and the pixel scan supports it: everything left of x=202 sits at brightness 194-197 while the reader samples only x=215 and x=241, so the local reader never sees the letters at all.",
+ "boards": [
+  {
+   "file": "sb_01_left0.png",
+   "discards_left": 0,
+   "round": 1,
+   "local_said": 0,
+   "paid_said": 2
+  },
+  {
+   "file": "sb_02_left0.png",
+   "discards_left": 0,
+   "round": 2,
+   "local_said": 0,
+   "paid_said": 2
+  },
+  {
+   "file": "sb_03_left1.png",
+   "discards_left": 1,
+   "round": 1,
+   "local_said": 1,
+   "paid_said": 0
+  },
+  {
+   "file": "sb_04_left1.png",
+   "discards_left": 1,
+   "round": 2,
+   "local_said": 1,
+   "paid_said": 2
+  },
+  {
+   "file": "sb_05_left1.png",
+   "discards_left": 1,
+   "round": 1,
+   "local_said": 1,
+   "paid_said": 2
+  },
+  {
+   "file": "sb_06_left1.png",
+   "discards_left": 1,
+   "round": 1,
+   "local_said": 1,
+   "paid_said": 0
+  },
+  {
+   "file": "sb_07_left2.png",
+   "discards_left": 2,
+   "round": 5,
+   "local_said": 2,
+   "paid_said": 0
+  },
+  {
+   "file": "sb_08_left2.png",
+   "discards_left": 2,
+   "round": 4,
+   "local_said": 2,
+   "paid_said": 0
+  }
+ ]
+}
