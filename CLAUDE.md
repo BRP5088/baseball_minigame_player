@@ -1843,6 +1843,16 @@ is measured the way `at_table()` is: over every frame on disk, where one false p
 anywhere is a veto. A 29-frame result is enough to DISQUALIFY and never enough to CERTIFY;
 the 500-frame sample that said 0 and fired on the 701st is the precedent.
 
+**AND IT IS A LABELLING AID, NOT PART OF THE LADDER.** The user's call the same evening,
+after the sweep came back clean: *"for the record, Snoopy was used to help speed you up in
+labeling. I wouldn't wire it up in the ladder."* Snoopy is a SECOND MACHINE for offline
+work -- labelling corpora, adjudicating frames, running sweeps that would otherwise
+saturate this Mac (10.13). It is NOT a runtime dependency of the live loop, and nothing on
+the $50 path may come to depend on a model being up on another box. A clean 422-frame
+sweep is a reason to trust it for LABELLING, not a reason to wire it into `read_game_state`
+-- and `result` still has no local detector, which stays an open gap rather than being
+quietly filled by a network call to another computer.
+
 
 
 ---
