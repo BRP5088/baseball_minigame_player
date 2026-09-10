@@ -1889,6 +1889,36 @@ it is what settled this -- but every press is a real move, and the escape from a
 has to be known BEFORE it is made (section 4: NO = circle, YES = cross).
 
 
+**29. AN INVESTIGATION THAT LEAVES STATE BEHIND POISONS THE NEXT EXPERIMENT, AND THE
+RESULT STILL LOOKS LIKE A FINDING.** 2026-09-09, live, caught by the user watching the
+stream.
+
+Probing why a card could not be read, I pressed `select_card` on it. `close_result`
+afterwards did NOT deselect -- it opened the "Give up?" dialog, which was answered NO --
+so the card stayed SELECTED. Several minutes later `select_and_play(2)` ran to test whether
+playing the neighbour would uncover it. `confirm_play` played the card that was ALREADY
+committed: the hidden card itself, not its neighbour.
+
+**THE RESULT READ PERFECTLY AS A SUCCESS.** Slot 1 went from unreadable to "5" and the hand
+came back COMPLETE, which is exactly what the experiment predicted. It was reported as
+"your test worked, the hidden card is a 5". It was a NEW card in that slot.
+
+**THE EVIDENCE WAS IN MY OWN OUTPUT.** Before `[tactics, ?, 4, 4, 5]`, after
+`[tactics, 5, 4, 4, 5]` -- slots 2, 3 and 4 UNCHANGED, so the neighbour was never
+replaced. One glance at the row I had already printed says which card was played.
+
+**AND IT NEARLY BECAME A SECOND WRONG DIAGNOSIS.** The next step drafted was a cursor-map
+sweep to hunt an off-by-one in `select_and_play`, a function whose docstring carries a
+Fisher p = 0.0048 for the homing fix it already has. There was no off-by-one. The user
+stopped it.
+
+**THE RULES THIS EARNS.** Before any experiment on a live match, ASSERT THE STARTING STATE
+rather than assume it -- nothing selected, no dialog up. After any probe that presses a
+button, RESTORE what it changed and verify the restore landed; `close_result` is not a
+deselect. And when an experiment confirms its own prediction, check the control -- here,
+the three slots that should have been untouched.
+
+
 
 ---
 
