@@ -1800,6 +1800,54 @@ all caught). It takes the WHOLE frame -- handed a crop, the scaled templates col
 4x4 and `matchTemplate` returned a number anyway (10.1's "a success path and a no-op path
 with identical output"), so there is now a floor on the input width.
 
+**31. A CLASSIFIER WITH A MISSING CLASS DOES NOT ABSTAIN -- IT MANUFACTURES NEGATIVES, AND
+THEY POISON THE CENSUS THAT WOULD HAVE CAUGHT IT.** 2026-09-10, the same reader, hours later.
+
+The result reader shipped knowing WINNER and LOSER. There is also a **DRAW!**, and 5 of the
+52 matches on record are draws. The reader called every draw "not a result screen" at
+0.42-0.49, `local_game_state` fell through to the hand reader, and the loop reported
+`hand: 0 rows, expected 5` about a screen with no hand on it.
+
+**THE SELF-CONCEALING PART.** The census that was supposed to catch this listed its top four
+"non-result" frames by score. **Two of them were draws** -- `r2_0092` and `r3_0073`, both
+plainly showing DRAW! over the medallion. They ranked highest among the negatives precisely
+BECAUSE they were the thing the reader could not name, and being unnameable is what filed
+them as negatives. One was even promoted to a test fixture called
+`top_negative_turn_768.jpg`. So the missing class inflated its own false-negative rate into
+the negative population and reported the gap as healthy headroom. **A census cannot discover
+a class its own labeller does not have.** The only thing that broke it was opening the frames
+a stalled run was staring at.
+
+**IT ALSO HID A SECOND FORM OF THE SAME WORDS.** Every shipped template was the SETTLED form
+-- a small ARCHED word on a thin bright arc. Mid-animation, before the arch sets, the word is
+LARGER and FLAT and scores ~0.50. A visibly-legible LOSER read "not a result screen".
+
+**AND A DRAW IS NOT A LOSS.** `run()` prefers a score comparison over `result_won` for
+exactly this reason -- `result_won` is a bool and cannot express a tie. But `ocr_scoreboard`
+is not reliable on the RESULT screen: over 76 draw frames it reads both rows on **12**, and
+one of those 12 returns `[0,1,5]` against a board plainly showing `1 0 1 / 0 1 1`. A wrong
+score is worse than no score, because `run()` acts on it. So the reader supplies NO scores
+and names the outcome directly, and `run()` prefers that over both. Mapping draw ->
+`result_won=False` would have logged every draw as a loss; that mutant is pinned.
+
+**THE GATE MOVED, AND NOT TO THE MIDPOINT.** With three classes the negative population
+reaches **0.742** (seven frames extracted and adjudicated: all of them the world -- the bar,
+the dealer prompt, the office door), which left the old 0.75 with 0.008 of headroom. The two
+errors are not symmetric: a false positive logs a match that never finished, a false
+negative costs one poll because the banner holds 4.0 s at its shortest. `RESULT_MIN = 0.80`
+sits 0.058 clear of every adjudicated negative and far under the held-out p05 of 0.954. It
+costs exactly one of 342 held-out frames -- a half-transparent DRAW! ghosting in.
+
+**A TEMPLATE CUT "EVENLY ACROSS THE RANGE" GRABS THE FADE.** Spreading the new bank across
+the word's area range took 14x39 and 10x36 crops holding a stroke or two. A tiny template
+correlates with anything: a turn frame with no banner on it read DRAW at 0.935, and every
+negative rose (the quest log 0.543 -> 0.682). Verified words run 82-102 px wide at reference
+scale and fragments 36-39, so the floor sits between two measured populations.
+
+**THE SHAPE TO RECOGNISE.** Before trusting any classifier's negative population, ask what
+it CANNOT name -- and go and look at its highest-scoring negatives, because that is exactly
+where the unnameable class will be sitting.
+
 
 **24. THE PAID VISION MODEL DOES NOT READ CARDS -- IT ANSWERS WITH A DEFAULT, AND THAT
 DEFAULT WAS HIDING EVERY LOCAL NUMBER BEHIND IT.** 2026-09-09, at the user's call:

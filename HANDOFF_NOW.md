@@ -1,116 +1,86 @@
 # HANDOFF — what is running and what happens next
 
-**Updated 2026-09-10 01:30 — the user has gone to bed and asked explicitly that NO work
-continue after the ban-screen measurement agents finish: *"I won't be there to catch you
-being stuck."* So: collect their findings, write them down, STOP. Do not wire the detector,
-do not relaunch a run, do not touch the console.**
+**Updated 2026-09-10 05:40. EVERYTHING OFFLINE IS DONE. The next step is the live run, and
+it is one command. Nothing is running; the console has not been touched since 01:14.**
 
-## THE STATE ON DISK RIGHT NOW
+## START HERE
 
-- **`progress_testing.json`: 37W/10L/5D, balance $196, `match_in_progress: true`,
-  `bans_done_this_match: false`. All of that is CORRECT, not stale.** A real match is on
-  screen — the BANNED CARDS notebook at 0/3 — with the $50 already committed. Do NOT clear
-  `match_in_progress` by hand. The tracked $196 was confirmed against the pause menu's own
-  counter earlier in the evening, so the money record and the game agree.
-- **The console is IDLE.** `run_cycles.py` and the stream recorder both exited on their own.
-  Nothing is driving the PS5, so it will auto-sleep; §1's standing permission covers waking
-  it. The game is paused on the ban screen and the match survives a sleep.
-- **The suite is green (172 files) and the tree is clean** apart from run outputs
-  (`match_log.jsonl`, `overnight/cycle_journals/`, `overnight/local_hand/agreement.jsonl`).
+    ./restart_chiaki.sh                        # chiaki EXITED overnight -- see below
+    zsh tools/measured_cycle.sh ban_reader
 
-## WHAT LANDED TONIGHT (committed)
+The run resumes into the match that is already paid for. Do NOT clear `match_in_progress`.
 
-    3f653ff  the local RESULT screen reader -- the last paid call leaves the turn loop
-    912e3d0  the floor probe: measure POST_PLAY_MIN_WAIT instead of arguing about it
+## THE STATE ON DISK
+
+- `progress_testing.json`: 37W/10L/5D, balance **$196**, `match_in_progress: true`,
+  `bans_done_this_match: false`. All CORRECT, not stale -- the $196 was confirmed against
+  the pause menu's own counter, and a real match is sitting on the BANNED CARDS screen with
+  its $50 already committed.
+- **chiaki EXITED at about 23:20** (the frame dump went stale, `tools/doctor.py` reports
+  `chiaki running False`). The PS5 will have slept. §1's standing permission covers waking
+  it. The game and the match survive both.
+- Suite: **171 of 172 green.** The one failure is `tests/routing/test_frozen_stream_is_invalid.py`
+  and it is NOT a regression -- it injects a fake capture but `_look_around_for_a_node ->
+  ws.read_heading` reaches for the REAL game window, so it only passes while chiaki is up.
+  It was green all evening for exactly that reason. Filed as its own task; do not let it
+  block the run.
+
+## WHAT LANDED (all committed, all mutation-tested)
+
+    3f653ff  the local RESULT screen reader
+    912e3d0  the floor probe for POST_PLAY_MIN_WAIT
     e2c4148  test_readable_hand_gate drives the SIGNATURE seam
+    35c3f50  DRAW!, the ban screen, and a gap message that names the screen
+    1837152  RESULT_MIN 0.75 -> 0.80
 
-`local_state.read_result(full_frame)`: 31 held-out result screens across four sessions and
-three geometries at 0.955-0.988, against 72,318 non-result frames whose maximum is 0.733.
-`RESULT_MIN = 0.75` sits in the empty band. Zero false positives. Its four highest sub-gate
-scores were extracted and LOOKED AT — all four are result screens caught HALF FADED, so the
-reader's only error is an abstention during the fade, and the banner then sits fully opaque
-for a measured 4.0 s minimum (median 7.0 s over 25 sightings). Seven mutants, all caught.
+**The 01:11 run stalled on BANNED CARDS 0/3 and reported `hand: 0 rows, expected 5`.** Three
+defects, all mine, all found by opening the frames the stalled loop was staring at:
 
-## WHAT STOPPED THE RUN, AND IT IS THE NEXT THING TO BUILD
+1. **DRAW! is a third banner** and the reader had no template for it. 5 of 52 matches are
+   draws, and unlike a fade a draw never settles into a word a two-class reader knows -- it
+   stalls forever. Worse, the census that should have caught it had **two draws sitting in
+   its own top-four "non-result" frames**, one of them promoted to a fixture called
+   `top_negative_turn_768.jpg`. A census cannot discover a class its labeller lacks
+   (CLAUDE.md 31).
+2. **The word has two forms** -- the settled ARCHED one every shipped template came from,
+   and a LARGER FLAT one mid-animation that scored ~0.50.
+3. **The ban screen was unreachable, and the regression is mine to the commit:** 3f653ff
+   routed the loop through `read_state_for_turn`, which asks the paid model once per run().
+   `local_game_state` knew only "result" and "turn". The stall was 16 minutes later.
 
-`overnight/runs/20260910_011156_result_reader/` — the first live run with the result reader.
-It reloaded, walked the chain, ARRIVED at the prompt, paid $50, and then **stalled on the
-BANNED CARDS screen**, 15 retries and out, 2 paid API calls total.
+Now: 22 templates over three words and both forms, trained on ONE run per class and scored
+on every other -- **342 held-out frames, 0 class errors**. Negatives: **72,725 frames**,
+sub-gate max 0.742 with the seven highest adjudicated by eye (all world frames).
+`read_ban_counter` classifies the ban screen -- an independently-measured 0 false positives
+in 105,896 frames, ~94% per-frame recall, so it is polled not single-shot. All four frames
+that stalled the run now come back `ban_screen`.
 
-    [state] orientation read (PAID): screen='match_start_prompt'
-    Couldn't read the screen (LOCAL STATE GAP: hand: 0 rows, expected 5) x15
-    Stuck too long on unreadable screens — stopping.
+**A DRAW IS NOT A LOSS.** run() prefers scores over `result_won` because a bool cannot
+express a tie -- but `ocr_scoreboard` misreads the RESULT screen (both rows readable on 12
+of 76 draw frames, and one of those 12 wrong). So the reader supplies NO scores and names
+the outcome; run() prefers `result_outcome` over both. The paid path sets no such key and is
+untouched.
 
-**`local_game_state()` classifies exactly TWO screens, `result` and `turn`.** A ban screen is
-neither, so it falls through to the hand reader, which reports `hand: 0 rows, expected 5`.
-The hand reader was working perfectly — there was no hand. **The gap named the wrong reader**,
-which is the same family as CLAUDE.md 10.1 and is a second defect in its own right: a gap
-message that misdirects sends the next session to fix a reader that is not broken.
+## WHAT THE RUN IS FOR -- three numbers, none ever observed live
 
-The frame is saved: `diagnostics/20260910_011410_7802/screen_at_stall.png` (+ three
-`after_stall_*.png`). The user identified it from the stream before I opened the frame.
+1. **reads/turn with `result` AND `ban_screen` local.** Was 1.44 before the paid card reads
+   were cut, then 5.00 and 8.67 under two regressions, then 2.6. It should now be ONE paid
+   call for the whole cycle -- the orientation read.
+2. **`hand first settled at Xs (floor held it Ys)`** (912e3d0). The archived logs cannot say
+   whether `POST_PLAY_MIN_WAIT = 6.0` still earns its place: the settle rule only RUNS after
+   the floor, so every release on disk sits at 6.30 s, exactly floor plus two polls, and 24
+   of 54 land on that earliest instant. The probe watches from the first poll and only
+   prints.
+3. **The "hand STABLE" gate has never released in an archived run** -- every logged release
+   uses the older "READ CLEAN" wording. This is its first live exercise.
 
-**ESTABLISHED, measured directly:** `orchestrator.read_ban_counter()` — which OCRs the `N/3`
-counter at PSM 7 with whitelist `0123456789/` and returns `None` rather than guessing —
-reads **0 on all five of those frames**, at 2000x1125 (tonight's live capture geometry,
-which appears in NO archived corpus) and at 1920x1080. So the detector very likely already
-exists and needs no new template.
+## IF IT STALLS AGAIN
 
-**NOT ESTABLISHED, and it is the veto:** its FALSE POSITIVE rate over every frame on disk.
-That verdict gates a $50 path, so it takes the `at_table()` standard — measured on every
-frame in the archives, one false positive anywhere is a veto. The precedent is in CLAUDE.md:
-a 500-frame census said zero and the frame that fired was the 701st.
-
-## WHAT IS RUNNING WHILE THE USER SLEEPS
-
-One workflow, `ban-screen-detector` (run id `wf_5671e0e3-ad9`), OFFLINE — no console, no
-money, no writes to any shipped module. Four measurement agents, each with an independent
-skeptic afterwards. Notes land in these directories and are written AS THEY GO (10.16):
-
-    agent_progress/ban-counter-census/     read_ban_counter's false positives, every corpus
-    agent_progress/ban-title-template/     the BANNED CARDS title as a matchTemplate signal
-    agent_progress/ban-consumer-audit/     does run()'s ban branch work from a LOCAL state
-    agent_progress/ban-gap-naming/         every "LOCAL STATE GAP" string in the archives,
-                                           adjudicated against its own frame -> the ranked
-                                           list of screens the turn loop actually meets
-    agent_progress/verify-<key>/           the four skeptics
-
-**If they were killed mid-flight, those progress.md files are the record.** Re-read them
-before re-running anything; a half-finished analysis reads exactly as authoritative as a
-finished one, so trust only what sits under ESTABLISHED with its command.
-
-## THE PLAN, IN ORDER, FOR THE MORNING
-
-1. **Read the four progress.md files and the skeptics' verdicts.** Default to refuted where
-   a skeptic and its agent disagree.
-2. **If the census is clean:** classify `ban_screen` in `local_game_state()` BEFORE the hand
-   reader, the same ordering the result reader already uses and for the same reason — a
-   screen with no hand on it must not be reported as a hand failure. Single writer: one
-   session edits `local_state.py` / `orchestrator.py`, nobody else.
-3. **Fix the gap message regardless of the census.** When no screen classifies, say
-   "unrecognised screen", not "hand: 0 rows". The ranked list from `ban-gap-naming` says
-   which reader is next after this one.
-4. **Test + mutate.** A fixture from `diagnostics/20260910_011410_7802/` at BOTH geometries,
-   the gate pinned as a literal (10.11), and mutants that prove the guard can FAIL.
-   `tests/minigame/test_result_reader.py` is the pattern.
-5. **Only then relaunch** `zsh tools/measured_cycle.sh ban_reader`. It resumes into the
-   committed match rather than paying again.
-
-## THE TWO NUMBERS THAT RUN IS STILL WAITING TO PRODUCE
-
-Neither has ever been observed live, and tonight's run died before either could be:
-
-- **reads/turn with `result` local.** It was 1.44 before the paid card reads were cut, then
-  5.00 and 8.67 under two regressions I caused, then 2.6. With `result` and `ban_screen`
-  local the turn loop should need ZERO paid calls after the one orientation read.
-- **`hand first settled at Xs (floor held it Ys)`** — the floor probe from 912e3d0. The
-  archived logs CANNOT answer whether `POST_PLAY_MIN_WAIT = 6.0` still earns its place,
-  because the settle rule only RUNS once the floor has passed: every release on disk sits at
-  6.30 s, exactly floor plus the two polls the rule needs, and 24 of 54 land on that earliest
-  permitted instant. The probe watches from the first poll and only prints. One run answers it.
-
-Also unobserved: the **"hand STABLE" gate has never released in an archived run.** Every
-logged release uses the older "READ CLEAN" wording, so the current deal gate is untested live.
+The gap message now names the SCREEN, not the hand. Expect
+`UNRECOGNISED SCREEN -- not a result (best word 0.NNN against 0.8), not a ban grid (no N/3
+counter), and the hand reader says: ...`. **That string names the next reader to build.**
+`agent_progress/ban-gap-naming/` ranked what the loop actually meets, with example frames;
+read it before building anything.
 
 ---
 
