@@ -51,16 +51,20 @@ def drive(readable_from, floor=0.0, max_wait=6.0):
     def fake_delta(a, b):
         return 999.0                       # the edge is always seen, so only the new rule decides
 
-    def fake_cards(img):
-        return ({"x": 1} if calls["n"] >= readable_from else None), None
+    def fake_sig(img):
+        # THE GATE NOW ASKS FOR A SIGNATURE, not for a complete hand: it releases when the
+        # hand STOPS CHANGING. Requiring completeness cost 280 SECONDS of timeouts over one
+        # 46-play run, and the hand memory makes an incomplete hand usable anyway.
+        # Before `readable_from` the signature changes every poll; after it, it is steady.
+        return ("steady",) if calls["n"] >= readable_from else ("moving", calls["n"])
 
     saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-             orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+             orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
              orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT)
     try:
         orchestrator._grab_settle_regions = fake_grab_settle
         orchestrator._mean_abs_delta = fake_delta
-        orchestrator.local_hand_cards = fake_cards
+        orchestrator._hand_signature = fake_sig
         orchestrator._fast_grab = lambda: object()
         orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
         orchestrator.POST_PLAY_MIN_WAIT = floor
@@ -69,7 +73,7 @@ def drive(readable_from, floor=0.0, max_wait=6.0):
         return out, calls["n"]
     finally:
         (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-         orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
          orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT) = saved
 
 
@@ -95,12 +99,16 @@ def flicker(img):
 
 
 saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-         orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
          orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT)
 try:
     orchestrator._grab_settle_regions = lambda names: {n: object() for n in names}
     orchestrator._mean_abs_delta = lambda a, b: 999.0
-    orchestrator.local_hand_cards = flicker
+    _n = {"i": 0}
+    def flicker_sig(img):
+        _n["i"] += 1
+        return ("steady",) if _n["i"] in (2, 3) else ("moving", _n["i"])
+    orchestrator._hand_signature = flicker_sig
     orchestrator._fast_grab = lambda: object()
     orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
     orchestrator.POST_PLAY_MIN_WAIT = 0.0
@@ -108,7 +116,7 @@ try:
                                           baseline=object())
 finally:
     (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-     orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+     orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
      orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT) = saved
 check("a single clean frame mid-animation does NOT release it", out is False, str(out))
 
@@ -125,12 +133,16 @@ def spaced(img):
 
 
 saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-         orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
          orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT)
 try:
     orchestrator._grab_settle_regions = lambda names: {n: object() for n in names}
     orchestrator._mean_abs_delta = lambda a, b: 999.0
-    orchestrator.local_hand_cards = spaced
+    _m = {"i": 0}
+    def spaced_sig(img):
+        _m["i"] += 1
+        return ("steady",) if _m["i"] in (2, 6) else ("moving", _m["i"])
+    orchestrator._hand_signature = spaced_sig
     orchestrator._fast_grab = lambda: object()
     orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
     orchestrator.POST_PLAY_MIN_WAIT = 0.0
@@ -138,21 +150,21 @@ try:
                                           baseline=object())
 finally:
     (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-     orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+     orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
      orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT) = saved
 check("two clean frames with a bad one between them do NOT release it",
       out is False, f"{out} (clean on polls 2 and 6, unreadable between)")
 
 # ---- 4. it must never raise into the turn loop --------------------------------------
 saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-         orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
          orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT)
 try:
     orchestrator._grab_settle_regions = lambda names: {n: object() for n in names}
     orchestrator._mean_abs_delta = lambda a, b: 999.0
     def boom(img):
         raise RuntimeError("reader exploded")
-    orchestrator.local_hand_cards = boom
+    orchestrator._hand_signature = boom
     orchestrator._fast_grab = lambda: object()
     orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
     orchestrator.POST_PLAY_MIN_WAIT = 0.0
@@ -163,7 +175,7 @@ except Exception as exc:
     check("a reader that raises does not take the turn loop with it", False, repr(exc))
 finally:
     (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
-     orchestrator.local_hand_cards, orchestrator.crop_gameplay_regions,
+     orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
      orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT) = saved
 
 # ---- 5. THE OLD BEHAVIOUR IS STILL THERE, and the flag really switches it ------------
