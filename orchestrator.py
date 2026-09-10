@@ -3285,10 +3285,67 @@ def read_game_state(mask_low_contrast: bool = False) -> dict:
     # to happen BEFORE anything that reads state["hand"] -- repair_phase_from_hand did,
     # and silently saw an empty list.
     apply_local_readers(state)
+    _retry_local_hand(state)
     repair_misread_cards(state)
     repair_phase_from_hand(state)
     validate_game_state(state)
     return state
+
+
+# A LOCAL FAILURE MUST NOT COST A PAID CALL.
+#
+# Measured on the first live run of the readable-hand gate: 26 of 31 paid calls were
+# read_game_state, and the loop went from 1.44 reads per turn to 5.00. The mechanism was
+# mine: the all-or-nothing local hand build refused 16 hands, each refusal raised out of
+# validate_game_state, and the caller's retry is a WHOLE FRESH PAID CALL. So the retry
+# loop was pointed at the wrong thing -- a re-grab costs ~21 ms of local reading, a paid
+# retry costs a call and several seconds.
+LOCAL_HAND_REGRABS = 4
+LOCAL_HAND_REGRAB_SLEEP = 0.25
+REFUSED_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "overnight", "refused_hands")
+
+
+def _save_refused_hand(img, why):
+    """Keep a frame the local reader refused. Never raises into the turn loop."""
+    if img is None:
+        return
+    try:
+        os.makedirs(REFUSED_HAND_DIR, exist_ok=True)
+        stamp = time.time_ns()
+        img.save(os.path.join(REFUSED_HAND_DIR, f"hand_{stamp}.png"))
+        with open(os.path.join(REFUSED_HAND_DIR, "why.jsonl"), "a") as fh:
+            fh.write(json.dumps({"t": stamp, "why": why}) + "\n")
+    except Exception:
+        pass
+
+
+def _retry_local_hand(state):
+    """Re-grab and re-read LOCALLY when the hand did not build. Never raises.
+
+    The paid call has already happened by the time this runs, so this does not save that
+    one -- it saves the NEXT one, by not letting validate_game_state raise and send the
+    caller round for a fresh paid read.
+    """
+    if not state.get("_hand_unread") or PAID_READS_CARDS:
+        return
+    for i in range(LOCAL_HAND_REGRABS):
+        try:
+            time.sleep(LOCAL_HAND_REGRAB_SLEEP)
+            hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
+            if hand_img is None:
+                continue
+            cards, why = local_hand_cards(hand_img)
+        except Exception:
+            continue
+        if cards is not None:
+            state["hand"] = cards
+            state.pop("_hand_unread", None)
+            print(f"  [local] hand read on local re-grab {i + 1} "
+                  f"-- no paid retry needed")
+            return
+    print(f"  [local] hand still unread after {LOCAL_HAND_REGRABS} local re-grabs "
+          f"({state.get('_hand_unread')}) -- the paid path takes it from here")
 
 
 def local_hand_cards(hand_img):
@@ -3382,9 +3439,14 @@ def apply_local_readers(state: dict, crops: dict = None) -> None:
             state["hand"] = cards
         else:
             # NOT READ is a real answer and it must look different from an empty hand.
-            # validate_game_state turns this into the retry the caller already handles.
             state["hand"] = []
             state["_hand_unread"] = why
+            # AND THE REFUSED FRAME IS KEPT. It was not, and that was a blind spot of
+            # exactly the shape CLAUDE.md 10.1 names: record_local_hand only fires after
+            # the PAID read succeeds, so every frame the local reader refused was
+            # captured, rejected and discarded. A live run refused 16 hands and every one
+            # of the 6 frames it did save read COMPLETE -- the failures were unseeable.
+            _save_refused_hand(crops.get("hand"), why)
             print(f"  [local] hand NOT READ: {why}")
 
     if crops.get("scoreboard") is not None:
