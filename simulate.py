@@ -136,11 +136,84 @@ def power_bonus(tactics_card) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------------------
+# BASERUNNING. Added 2026-09-10 from rules the user supplied against a community guide and
+# a Reddit write-up. Before this, a hit was `runners.append(batter_card)` and SPEED WAS
+# NEVER READ -- so a speed boost was worth exactly zero in here by construction, and every
+# tournament that compared tactics was really comparing "a boost" against "nothing".
+#
+# WHAT IS CONFIRMED (rule, sourced, and where noted observed live on 2026-09-10):
+#   * a batter's `secondary` is SPEED: how many bases they run.
+#     Observed: a speed-1 batter advanced exactly 1 base, and a speed-1 runner advanced
+#     exactly 1 base on the next hit. Speed >= 2 is UNTESTED.
+#   * a TIE (equal power) is a coin flip, and winning one is CAPPED AT FIRST BASE for the
+#     batter regardless of speed.
+#   * a LOSING at-bat can still advance runners.
+#   * black pitcher buffs (FIELDING) SUBTRACT movement from the batting side's runners.
+#
+# WHAT IS NOT CONFIRMED, and is therefore a KNOB rather than a number invented here:
+#   * how far runners advance on a losing at-bat            -> OUT_RUNNER_ADVANCE
+#   * how many bases a point of fielding removes            -> FIELDING_SUBTRACT_PER_POINT
+#   * whether existing runners advance on a TIE win         -> TIE_RUNNERS_ADVANCE
+#     (observed once: on our 5-v-5 tie a speed-1 runner DID move first -> second, so the
+#      default is True -- but that is n=1)
+# Every one of them is swept by `python3 simulate.py --sweep`, which prints how the answer
+# moves across the grid. A conclusion that changes with a knob is not a conclusion.
+
+TIE_WIN_PROB = 0.5                 # confirmed shape: a coin flip
+TIE_RUNNERS_ADVANCE = True         # n=1 observation
+OUT_RUNNER_ADVANCE = "one"         # "none" | "one" | "speed"   -- UNMEASURED
+FIELDING_SUBTRACT_PER_POINT = 1    # bases removed per point of fielding -- UNMEASURED
+MODEL_SPEED = True                 # False reproduces the pre-2026-09-10 model exactly
+
+
+def fielding_of(pitcher_card, tactics_card) -> int:
+    """The defence's movement-subtracting stat: the pitcher's own fielding plus a
+    FIELDING_BOOST if one was attached. A pitch boost does NOT count -- that is power."""
+    f = getattr(pitcher_card, "secondary", 0) or 0
+    if tactics_card is not None and tactics_card.kind == TacticsType.FIELDING_BOOST:
+        f += tactics_card.bonus
+    return f
+
+
+def _step(card, fielding) -> int:
+    """How many bases this runner takes, after the defence subtracts movement."""
+    if not MODEL_SPEED:
+        return 1
+    speed = getattr(card, "secondary", 0) or 0
+    return max(0, speed - FIELDING_SUBTRACT_PER_POINT * fielding)
+
+
+def advance_runners(runners, fielding, mode="speed"):
+    """Move every runner. Returns (still_on_base, runs_scored).
+
+    `runners` is a list of (card, base) with base in 1..3. A runner reaching 4 scores.
+    Runners can be lapped in the real game (CLAUDE.md 4), so no attempt is made to stop
+    one passing another -- bases are not treated as exclusive.
+    """
+    still, scored = [], 0
+    for card, base in runners:
+        if mode == "none":
+            step = 0
+        elif mode == "one":
+            step = 1
+        else:
+            step = _step(card, fielding)
+        nb = base + step
+        if nb >= 4:
+            scored += 1
+        else:
+            still.append((card, nb))
+    return still, scored
+
+
 def resolve(offense_power: int, defense_power: int) -> str:
-    """Confirmed rule: a hit just needs offense > defense; beating it by
-    3+ is a home run."""
-    if offense_power <= defense_power:
+    """Confirmed rule: a hit needs offense > defense; beating it by 3+ is a home run.
+    EQUAL power is a TIE -- a coin flip -- which this used to fold into "out"."""
+    if offense_power < defense_power:
         return "out"
+    if offense_power == defense_power:
+        return "tie"
     if offense_power - defense_power >= 3:
         return "home_run"
     return "hit"
@@ -169,20 +242,20 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
     for round_idx in range(5):
         hand_players, hand_tactics = draw_hand("batting", player_pool)
         state = GameState(half="batting", batters_used=round_idx, your_score=score,
-                           opp_score=0, runners=list(runners), redraws_left=redraws_left)
+                           opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
 
         if redraw_fn(hand_players, state):
             redraws_left -= 1
             hand_players = replace_weakest(hand_players, player_pool)
             state = GameState(half="batting", batters_used=round_idx, your_score=score,
-                              opp_score=0, runners=list(runners), redraws_left=redraws_left)
+                              opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
         decision = batting_heuristic(hand_players, hand_tactics, state)
         batter_card = decision.player_card
         batter_power = batter_card.power + power_bonus(decision.tactics_card)
 
         p_hand_players, p_hand_tactics = draw_hand("pitching", defender_player_pool)
         p_state = GameState(half="pitching", batters_used=round_idx, your_score=0, opp_score=score,
-                             target_score=defender_target_score, runners=list(runners),
+                             target_score=defender_target_score, runners=[c for c, _ in runners],
                              redraws_left=defender_redraws_left)
 
         # Fixed 2026-08-23 (caught in QA + Gemini review): the real game's
@@ -196,17 +269,42 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
             p_hand_players = replace_weakest(p_hand_players, defender_player_pool)
             p_state = GameState(half="pitching", batters_used=round_idx, your_score=0,
                                 opp_score=score, target_score=defender_target_score,
-                                runners=list(runners), redraws_left=defender_redraws_left)
+                                runners=[c for c, _ in runners], redraws_left=defender_redraws_left)
         p_decision = pitching_heuristic(p_hand_players, p_hand_tactics, p_state)
         pitcher_card = p_decision.player_card
         pitcher_power = pitcher_card.power + power_bonus(p_decision.tactics_card)
 
         outcome = resolve(batter_power, pitcher_power)
+        fielding = fielding_of(pitcher_card, p_decision.tactics_card)
+        batter_speed = getattr(batter_card, "secondary", 0) or 0
+
+        if outcome == "tie":
+            # A coin flip. Losing it is an out; winning it is a hit whose batter is CAPPED
+            # at first base regardless of speed.
+            if random.random() < TIE_WIN_PROB:
+                if TIE_RUNNERS_ADVANCE:
+                    runners, gained = advance_runners(runners, fielding, "speed")
+                    score += gained
+                runners.append((batter_card, 1))
+            else:
+                outcome = "out"
+
         if outcome == "home_run":
             score += 1 + len(runners)
             runners = []
         elif outcome == "hit":
-            runners.append(batter_card)
+            runners, gained = advance_runners(runners, fielding, "speed")
+            score += gained
+            # the batter runs their OWN speed; at least one base, or it was not a hit
+            steps = max(1, _step(batter_card, fielding)) if MODEL_SPEED else 1
+            if steps >= 4:
+                score += 1
+            else:
+                runners.append((batter_card, steps))
+        elif outcome == "out":
+            # A losing at-bat can still advance runners (rule, magnitude unmeasured).
+            runners, gained = advance_runners(runners, fielding, OUT_RUNNER_ADVANCE)
+            score += gained
 
     return score
 
@@ -281,3 +379,43 @@ if __name__ == "__main__":
     run_tournament(CURRENT, ALWAYS_BOOST, "current heuristic", "naive (always boost)")
     print()
     run_tournament(NO_TACTICS, ALWAYS_BOOST, "naive (no tactics)", "naive (always boost)")
+
+
+# ---------------------------------------------------------------------------------------
+# THE SWEEP. Three of the baserunning inputs are RULES with unmeasured MAGNITUDES, so any
+# single run of this model is one guess about them. This sweeps the grid and prints how the
+# answer moves. A conclusion that flips across the grid is not a conclusion -- it is a
+# statement about the guess (CLAUDE.md 10.4's shape, one level up).
+def sweep(n_matches=400, seeds=(1, 2, 3)):
+    import itertools, statistics
+    global MODEL_SPEED, OUT_RUNNER_ADVANCE, FIELDING_SUBTRACT_PER_POINT, TIE_RUNNERS_ADVANCE
+    saved = (MODEL_SPEED, OUT_RUNNER_ADVANCE, FIELDING_SUBTRACT_PER_POINT, TIE_RUNNERS_ADVANCE)
+    grid = list(itertools.product([False, True], ["none", "one", "speed"], [0, 1], [True]))
+    print(f"{'speed':6s} {'out-adv':8s} {'field/pt':9s} | current vs always-boost "
+          f"(mean win% over {len(seeds)} seeds x {n_matches})")
+    print("-" * 78)
+    rows = []
+    try:
+        for ms, oa, fs, tr in grid:
+            MODEL_SPEED, OUT_RUNNER_ADVANCE, FIELDING_SUBTRACT_PER_POINT, TIE_RUNNERS_ADVANCE = ms, oa, fs, tr
+            cur, alt = [], []
+            for sd in seeds:
+                random.seed(sd)
+                a = b = 0
+                for _ in range(n_matches):
+                    x, y = simulate_match(CURRENT, ALWAYS_BOOST)
+                    if x > y: a += 1
+                    elif y > x: b += 1
+                cur.append(100 * a / n_matches); alt.append(100 * b / n_matches)
+            c, t = statistics.mean(cur), statistics.mean(alt)
+            rows.append((ms, oa, fs, c, t))
+            flag = "current AHEAD" if c - t > 3 else ("always-boost AHEAD" if t - c > 3 else "tie")
+            print(f"{str(ms):6s} {oa:8s} {str(fs):9s} | {c:5.1f}% vs {t:5.1f}%   {flag}")
+    finally:
+        MODEL_SPEED, OUT_RUNNER_ADVANCE, FIELDING_SUBTRACT_PER_POINT, TIE_RUNNERS_ADVANCE = saved
+    spread = max(r[3] for r in rows) - min(r[3] for r in rows)
+    print("-" * 78)
+    print(f"  current-heuristic win% ranges {min(r[3] for r in rows):.1f}..{max(r[3] for r in rows):.1f} "
+          f"across the grid (spread {spread:.1f} points)")
+    print(f"  every cell: {'the two are within 3 points -- the heuristic does NOT beat the naive baseline' if all(abs(r[3]-r[4])<=3 for r in rows) else 'the ordering CHANGES across the grid -- unmeasured knobs decide the answer'}")
+    return rows
