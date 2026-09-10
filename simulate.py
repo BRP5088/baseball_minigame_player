@@ -419,3 +419,104 @@ def sweep(n_matches=400, seeds=(1, 2, 3)):
           f"across the grid (spread {spread:.1f} points)")
     print(f"  every cell: {'the two are within 3 points -- the heuristic does NOT beat the naive baseline' if all(abs(r[3]-r[4])<=3 for r in rows) else 'the ordering CHANGES across the grid -- unmeasured knobs decide the answer'}")
     return rows
+
+
+# ---------------------------------------------------------------------------------------
+# A SPEED-AWARE BATTER. The first heuristic here that can see the mechanics added on
+# 2026-09-10, and the first that can be COMPARED against the incumbent on them -- before
+# today the model scored a speed boost as worth zero by construction, so this question could
+# not be asked at all.
+#
+# It scores each (batter, tactics) pair by EXPECTED RUNS against the pitcher-power
+# distribution of the card pool, rather than by raw power. That lets it weigh the four
+# things the incumbent cannot:
+#   * a fast batter that wins outright travels further than a slow one that wins by more
+#   * a TIE is a coin flip capped at first, so power that lands exactly on a common pitcher
+#     value is worth less than power one point off it
+#   * runners already on base are driven in by their OWN speed
+#   * a 3+ margin clears everything, so raw power still matters at the top
+#
+# The pitcher distribution is the POOL's, not the opponent's actual hand, which is unknown at
+# selection time in the real game too (card selection is blind -- see best_batting_play).
+def _pitcher_power_distribution(pool=CARD_POOL):
+    """(power, probability) for the pitcher we are likely to face, pool-wide.
+
+    Includes the pitch boost the defending heuristic usually attaches: it plays one whenever
+    it holds one, and TACTICS_FRACTION says roughly half a hand is tactics, so a boost is
+    common. Modelled as an independent draw from the pitching tactics pool, which is a
+    SIMPLIFICATION and is why the sweep matters.
+    """
+    from collections import Counter
+    boosts = [t.bonus for t in TACTICS_POOL_PITCHING if t.kind == TacticsType.PITCH_BOOST]
+    counts = Counter()
+    n = 0
+    for c in pool:
+        for b in [0] + boosts:            # 0 = no boost attached
+            counts[c.power + b] += 1
+            n += 1
+    return [(p, k / n) for p, k in sorted(counts.items())]
+
+
+_PITCHER_DIST = None
+
+
+def expected_runs_play(hand_players, hand_tactics, state) -> Decision:
+    """Pick the (batter, tactics) pair with the highest expected runs this at-bat.
+
+    MEASURED AND IT LOSES -- KEPT AS THE NEGATIVE RESULT, NOT AS A CANDIDATE.
+
+        current heuristic vs this, 5 seeds x 400 matches:  39.8% vs 35.5%,
+        current ahead in 4 of 5 seeds
+        naive always-boost vs this, 600 matches:           41.3% vs 35.7%
+
+    It loses to BOTH baselines, and the mechanism is visible rather than mysterious. Over 400
+    hands they disagree on 117, and on those this picks power 6.32 / speed 1.85 against the
+    incumbent's power 7.16 / speed 1.45 -- it pays 0.84 power for 0.40 speed.
+
+    That trade is bad because A BATTER'S OWN SPEED IS NEARLY WORTHLESS TO THEM. They start at
+    home and advance `speed` bases, so scoring needs speed >= 4, which almost no card has.
+    Speed pays off LATER, when that player is a runner and someone else hits. This function
+    scores a SINGLE AT-BAT, so it cannot see the deferred value -- while it can see, and
+    spends, the power it gives up.
+
+    So this is not evidence that speed is worthless. It is evidence that a myopic
+    expected-runs rule is worse than power-first, and that testing the speed question
+    properly needs either a multi-round evaluation or a measured value-of-being-on-base.
+    Power-first survives its first real test against the mechanics.
+    """
+    global _PITCHER_DIST
+    if _PITCHER_DIST is None:
+        _PITCHER_DIST = _pitcher_power_distribution()
+    runners = [(c, 1) for c in state.runners]      # base unknown to a heuristic; assume first
+    options = [None] + list(hand_tactics)
+    best, best_ev, best_why = None, -1.0, ""
+    for batter in hand_players:
+        for tac in options:
+            power = batter.power + power_bonus(tac)
+            speed = (batter.secondary or 0)
+            if tac is not None and tac.kind == TacticsType.SPEED_BOOST:
+                speed += tac.bonus
+            ev = 0.0
+            for p, prob in _PITCHER_DIST:
+                if power < p:                                   # out
+                    _, gained = advance_runners(runners, 0, OUT_RUNNER_ADVANCE)
+                    ev += prob * gained
+                elif power == p:                                # tie: coin flip, capped
+                    _, gained = advance_runners(runners, 0, "speed")
+                    ev += prob * TIE_WIN_PROB * gained
+                elif power - p >= 3:                            # home run
+                    ev += prob * (1 + len(runners))
+                else:                                           # hit
+                    _, gained = advance_runners(runners, 0, "speed")
+                    steps = max(1, speed)
+                    ev += prob * (gained + (1 if steps >= 4 else 0))
+            if ev > best_ev:
+                best, best_ev, best_why = (batter, tac), ev, (
+                    f"EV {ev:.3f}: power {batter.power}+{power_bonus(tac)} "
+                    f"speed {batter.secondary}"
+                    + (f" +{tac.bonus}" if tac is not None and tac.kind == TacticsType.SPEED_BOOST else ""))
+    batter, tac = best
+    return Decision(batter, tac, f"expected-runs: {best_why}")
+
+
+EXPECTED_RUNS = {"batting": expected_runs_play, "pitching": best_pitching_play}
