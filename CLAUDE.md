@@ -1854,6 +1854,41 @@ sweep is a reason to trust it for LABELLING, not a reason to wire it into `read_
 quietly filled by a network call to another computer.
 
 
+**28. A CARD CAN BE UNREADABLE FROM EVERY FRAME, AND NO INPUT UNCOVERS IT. THE HAND MUST
+SURVIVE THAT.** 2026-09-09, live on the console, at the user's prompting.
+
+A hand sat with slot 1's power disc hidden under its neighbour in the fan. Everything was
+tried, on the live console, one press at a time:
+
+    move the cursor RIGHT one slot      disc still hidden
+    move the cursor ONTO the card       the card RISES above its neighbours -- still hidden
+    SELECT the card (cross)             "kind unknown" -> "player, power unread"; still no digit
+    four local re-grabs, 0.25 s apart   0 of 15 recovered
+
+The occlusion is STABLE, not an animation, so re-grabbing the same scene four times gets
+the same answer four times. That was a fix I shipped without thinking the mechanism
+through, and the frames it added are what disproved it the same hour.
+
+**IT IS NOT ONE BAD CARD.** The user's hypothesis, and worth testing because it would have
+been a cheap fix. Within one match it looks true -- 15 of 15 refusals were the same card at
+slot 1. Across the corpus it is false: 10 refusals spanning 08:17 to 13:34 and many matches
+fall at FOUR different slots (1 x5, 2 x2, 4 x2, 3 x1) on visibly different cards, one of
+them a named "PEPAN BLACK". So it is an OCCLUSION that can happen to any card, and once it
+happens it persists for the whole hand.
+
+**WHAT THAT MEANS FOR THE DESIGN.** ALL-OR-NOTHING WAS TOO STRICT. A hand with four cards
+read and one genuinely invisible is still playable -- you simply do not play the invisible
+one -- and rejecting the whole hand instead turns an unreadable CARD into an unreadable
+STATE, which then costs a paid call per turn. Measured: that mistake took the loop from
+1.44 read_game_state calls per turn to 5.00, and then to 8.67.
+
+**AND A WARNING ABOUT PRESSING BUTTONS TO INVESTIGATE.** The sequence above ended with a
+"Give up?" dialog on screen, one CROSS away from forfeiting a paid match. Circle answered
+NO and the match survived. Investigating a live match with real presses is worth doing --
+it is what settled this -- but every press is a real move, and the escape from a wrong one
+has to be known BEFORE it is made (section 4: NO = circle, YES = cross).
+
+
 
 ---
 
