@@ -17,9 +17,18 @@ Simplifications, clearly flagged rather than hidden:
   - Hands are drawn randomly from the real 33-card collection scanned
     live from this save on 2026-08-23 (see CARD_POOL), not the true
     unknown draw distribution.
-  - Runner-capacity, fielding/speed stat effects on hit distance, and
-    exact discard-redraw odds beyond "draw one random replacement card"
-    aren't confirmed rules — modeled as the simplest reasonable guess.
+  - Runner-capacity and exact discard-redraw odds beyond "draw one random
+    replacement card" aren't confirmed rules — modeled as the simplest
+    reasonable guess.
+  - SPEED IS NOT MODELLED AT ALL, and that is load-bearing. A hit is
+    `runners.append(batter_card)`; the batter's speed stat is never read, so
+    a SPEED_BOOST is worth exactly zero in here. Any tournament run in this
+    model can show that a swing boost beats NOTHING; none of them can compare
+    a swing boost against a speed boost. The rules the user supplied on
+    2026-09-10 (CLAUDE.md §4) say speed decides how many bases a runner takes,
+    that a tie is a coin flip capped at first base, and that a losing at-bat
+    can still advance runners. None of those exist here. Do not quote this
+    model's win rates on any question that touches baserunning.
   - Both simulated teams draw from the identical CARD_POOL/TACTICS pools,
     so the comparison is apples-to-apples even where these guesses are
     imperfect.

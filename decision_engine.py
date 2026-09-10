@@ -76,13 +76,23 @@ def best_batting_play(hand_players: List[PlayerCard],
     Heuristics:
     - Always play the highest-power batter — it raises both the odds of
       any hit and the odds of a 3+ margin for a home run.
-    - Always attach a swing boost when one's available. Simulation-
-      informed (2026-08-23, see simulate.py): a 500-match heuristic-vs-
-      heuristic tournament showed always-boosting beats holding tactics
-      back "for a bigger payoff turn" by a wide margin (79% win rate).
-      Makes sense given the rule above — extra power is never wasted,
-      it only raises hit and home-run odds, and hands redraw fresh each
-      round rather than depleting a shared pool worth conserving.
+    - Always attach a swing boost when one's available. BUT READ WHAT THAT
+      NUMBER ACTUALLY COMPARES: simulate.py's 500-match tournament
+      (2026-08-23) gave always-boosting a 79% win rate against holding
+      tactics back "for a bigger payoff turn" — and in that simulation a
+      hit is `runners.append(batter_card)` with SPEED NEVER CONSULTED, so
+      a speed boost does nothing there BY CONSTRUCTION. The 79% therefore
+      shows swing-boost beats NOTHING. It has never compared swing against
+      speed, and it must not be cited as though it had.
+      The power half of the reasoning does stand on the confirmed rule:
+      extra power raises both hit odds and the odds of a 3+ margin.
+    - The speed alternative is UNEVALUATED, not rejected. Per the rules the
+      user supplied 2026-09-10 (CLAUDE.md §4), a batter's `secondary` is
+      SPEED — how many bases they run — so a fast batter that wins outright
+      can be worth more than a slow one that wins by more. This function
+      cannot see that: it sorts on power alone, and reaches for a speed
+      boost only as a fallback, and only when runners are ALREADY on base.
+      Settling it needs speed in the simulation first.
     - No swing boost available: fall back to a speed boost if runners
       are on base, to help them advance.
     """
@@ -109,11 +119,19 @@ def best_batting_play(hand_players: List[PlayerCard],
 
 
 # How much pitch focus we are willing to trade for fielding when runners are on.
-# 1 is a deliberate hedge, not a measurement. The fielding effect is UNCONFIRMED
-# (run `python3 analyze_match_log.py` for the live figure; 2026-08-26 read
-# p=0.192 on 19 usable rows) while the power rule IS confirmed. If fielding
-# turns out to matter, a 1-power premium is cheap; if it does not, the cost is
-# bounded. Set to 0 for pure power-first once the question is settled.
+# THE QUESTION IS SETTLED, AND IT SETTLED THE OTHER WAY -- DO NOT ZERO THIS.
+#
+# This used to read "the fielding effect is UNCONFIRMED ... Set to 0 for pure power-first
+# once the question is settled" (it measured p=0.192 on 19 usable rows, which is too few to
+# tell). On 2026-09-10 the user supplied the rule from a community guide and a Reddit
+# write-up: the BLACK PITCHER BUFFS subtract movement spaces from the batting side's
+# runners. Fielding is that effect. So it is real, and it does something only when there
+# ARE runners to slow -- which is exactly the condition best_pitching_play already gates on.
+#
+# 1 stays because the EFFECT is confirmed and its MAGNITUDE is not: nothing here has
+# measured how many bases a point of fielding removes, so nothing justifies paying more than
+# a point of power for it. Raise it only against a measurement, and do not lower it on the
+# strength of the old comment, which is now wrong.
 FIELDING_POWER_BUDGET = 1
 
 # Redraw when the best card in hand is at or below this. Measured, not chosen:
