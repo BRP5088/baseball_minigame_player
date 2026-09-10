@@ -1754,6 +1754,53 @@ anchor DIRECTLY, because the reader's own fallback tries both anchors and would
 have masked it.
 
 
+**30. A TEMPLATE MUST BE KEPT AT ITS NATIVE SIZE AND NEVER AVERAGED ACROSS EXAMPLES.**
+2026-09-10, building the RESULT screen reader -- the last field with no local answer, and
+the one paid call left in the turn loop. Three attempts, and the first two produced
+populations that OVERLAPPED:
+
+    what was cut / how it was scored                 result frames   non-result MAX
+    the union of every bright blob in a wide band      0.497-0.547        0.603
+    the word, STRETCHED to one size, banks AVERAGED    0.370-0.441        0.428
+    the word, at NATIVE size, one template per example 0.955-0.988        0.733
+
+The first is 10.23 in a new place: the union swallowed the matchbox labels along the top
+edge, so two thirds of the "template" was scenery. The second is the new lesson and it
+has two halves, both of which read as tidiness:
+
+  * **STRETCHING destroys the discrimination.** WINNER is wider than LOSER; resizing both
+    to one box made them the same shape, and after `TM_CCOEFF_NORMED` normalises away
+    brightness there was almost nothing left to tell apart. Every WINNER frame matched the
+    LOSER bank. It also means the template no longer has the size of the thing on screen,
+    so the search is looking for something that is not there.
+  * **AVERAGING blurs two different things into one.** The banner's arch FLATTENS as it
+    animates in: the same word measures 102x22 in one frame and 95x14 in another. Averaged,
+    neither is matched. Keeping each example as its own template costs nothing -- the score
+    is the max over the bank -- and is what took the reader from 0.44 to 0.98.
+
+**AND SCORE IT ACROSS SESSIONS, BECAUSE A TEMPLATE MATCHES ITS OWN SOURCE AT 1.000.** The
+native-size version's first table read "result frames 1.000, non-result max 0.495, EMPTY
+band" -- and every one of those 1.000s was a frame that had supplied a template (10.22's
+shape). The real measurement came from 31 result screens found in OTHER runs' `stream.mp4`
+recordings, at 960x540 and 1920x1080: 0.955-0.988, both classes, adjudicated by eye.
+
+**THE CENSUS SIZE IS THE at_table LESSON AGAIN, AND THIS TIME IT PAID.** A 16,381-frame
+still census put the non-result maximum at 0.543. Sweeping every 20th frame of all 17
+archived run videos -- 55,937 more frames -- raised it to **0.733**, against a gate of 0.75.
+The four highest were extracted and LOOKED AT: all four are result screens caught HALF
+FADED, on the way in or out. So they are not false positives, they are the reader
+abstaining during the fade, and that costs nothing because the banner then sits fully
+opaque for a measured 4.0 s at its shortest (25 sightings, median 7.0 s). Zero false
+positives in 72,318 frames. **Had the four not been looked at, the honest reading of the
+same numbers would have been "the gate has 0.017 of headroom" and the reader would have
+been rebuilt for nothing.**
+
+`local_state.read_result(full_frame)`; `tests/minigame/test_result_reader.py` (7 mutants,
+all caught). It takes the WHOLE frame -- handed a crop, the scaled templates collapsed to
+4x4 and `matchTemplate` returned a number anyway (10.1's "a success path and a no-op path
+with identical output"), so there is now a floor on the input width.
+
+
 **24. THE PAID VISION MODEL DOES NOT READ CARDS -- IT ANSWERS WITH A DEFAULT, AND THAT
 DEFAULT WAS HIDING EVERY LOCAL NUMBER BEHIND IT.** 2026-09-09, at the user's call:
 *"comment out the API reads for all card reading... leaving them in is hiding the real

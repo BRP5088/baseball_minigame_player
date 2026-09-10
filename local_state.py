@@ -1,7 +1,7 @@
 """LOCAL READERS for game-state fields the paid vision call currently supplies.
 
-Three readers, each built and then re-derived by an INDEPENDENT SKEPTIC who rewrote the
-scoring before reading the original. Every one ABSTAINS rather than guesses: None means
+Four readers, the first three built and then re-derived by an INDEPENDENT SKEPTIC who
+rewrote the scoring before reading the original. Every one ABSTAINS rather than guesses: None means
 ASK THE PAID MODEL, because an abstention costs one API call while a wrong answer plays
 the wrong card in a $50 match.
 
@@ -12,6 +12,9 @@ the wrong card in a $50 match.
                                          leave-one-phase-run-out AND on a train-early /
                                          test-late split.
     read_runners(third, second, first)   15 of 15 occupied bases, 168 of 168 empty.
+    read_result(full_frame)              31 held-out result screens across four sessions
+                                         and three geometries, every class right, and ZERO
+                                         false positives in 72,318 frames.
 
 WHY EACH ABSTAINS, in its own terms:
   * discards   every dot must read clearly lit or clearly spent, the lit ones must form a
@@ -24,8 +27,14 @@ WHY EACH ABSTAINS, in its own terms:
   * runners    a base is occupied only when a real power disc is found there; anything
                ambiguous is not called empty, it is not called at all.
 
-STILL NEEDING THE PAID MODEL: the SCREEN type, result_won, the ban-screen collection, and
-batters_used.
+  * result     the word must be found at a correlation no non-result frame in a 72,318-frame
+               census reaches. The fade in and out of the banner scores below that and comes
+               back "not a result screen", which is right: the banner then sits fully opaque
+               for at least 4.0 s (median 7.0 s over 25 sightings) and the caller polls.
+
+STILL NEEDING THE PAID MODEL: the ban-screen collection, and batters_used. `screen` is now
+answered locally for the two screens the turn loop meets -- "result" and "turn" -- and
+anything else is a NAMED GAP rather than a guess.
 """
 import base64
 import os
@@ -551,3 +560,146 @@ def read_runners(third_img, second_img, first_img):
     count = None if any(v is None for v in vals) else sum(1 for v in vals if v)
     return {"bases": bases, "count": count}
 
+
+
+# --------------------------------------------------------------------------------------
+# THE RESULT SCREEN (is the match over, and did we win)
+# --------------------------------------------------------------------------------------
+# The last field with no local answer, and the one that kept a paid call in the turn loop.
+#
+# The word WINNER / LOSER is arched white text on a bright arc, dead centre, above the
+# medallion. It is a SPRITE, so it is SEARCHED for, not cropped at an anchor -- it rides up
+# and down and its arch FLATTENS as the medallion animates in.
+#
+# TWO WRONG TURNS, both settled by looking at the frames and not at the numbers
+# (agent_progress/result-reader/):
+#   1. The template was cut as "the union of every bright blob in a wide band". That union
+#      swallowed the matchbox labels along the top edge, so the template was two thirds
+#      scenery: result frames 0.497-0.547 against a non-result MAX of 0.603. OVERLAP.
+#   2. Every example was then STRETCHED to one fixed size and the two class banks AVERAGED.
+#      WINNER is wider than LOSER, so stretching made them the same shape, and the arch
+#      flattens between frames (r1_0066's word is 95x14 where r1_0040's is 102x22), so
+#      averaging blurred two different words together. Every WINNER frame then matched the
+#      LOSER bank. Templates are kept at NATIVE size, one per example, never averaged.
+#
+# THE GATE SITS BETWEEN TWO MEASURED POPULATIONS, held out across sessions and geometries.
+# The census is deliberately large: at_table's brightness-normalised retry was measured
+# clean on 500 route frames and the frame that fired was the 701st.
+#
+#     STILL FRAMES
+#       RESULT, none of which supplied a template
+#          7 winners, match_timeline_20260908 at 960x540       0.969 .. 0.979
+#         24 result screens from three run videos at 1920x1080 0.955 .. 0.987
+#            (both classes, adjudicated by eye -- losers.png)
+#       NON-RESULT
+#            422 bulk match frames at 768x432                  max 0.495
+#          1,522 timeline + world/quest-log frames             max 0.543
+#         14,437 match frames at 1920x1080 (screenshot_log)    max 0.467
+#
+#     VIDEO -- every 20th frame of all 17 archived run recordings, 55,937 frames
+#         at or above the gate     759 frames, 25 distinct result screens, 0.759 .. 0.988
+#         below it              55,178 frames, max 0.733
+#
+# ZERO FALSE POSITIVES IN 72,318 FRAMES -- and the four highest sub-gate scores are not
+# negatives at all. They were pulled out of the videos and LOOKED AT
+# (agent_progress/result-reader/nearmiss.png): every one has WINNER visibly on screen,
+# HALF FADED, on its way in or out. So the reader's error is always an ABSTENTION during
+# the fade, never a wrong answer -- which is the direction that costs nothing, because the
+# banner then sits fully opaque for a MEASURED 4.0 s at its shortest (25 sightings, median
+# 7.0 s) and the caller polls many times inside that.
+#
+# An empty band 0.733 .. 0.759 on the video census, 0.543 .. 0.955 on the stills.
+# RESULT_MIN 0.75 sits inside both.
+RESULT_TEMPLATES = os.path.join(_HERE, "result_templates.npz")
+RESULT_REF_W = 768.0
+RESULT_SEARCH = (0.28, 0.12, 0.72, 0.42)
+RESULT_MIN = 0.75
+# `full_frame` means the WHOLE game frame. Handed a CROP instead, the scaled templates
+# collapse to a few pixels and matchTemplate happily returns a number -- the shape
+# CLAUDE.md 10.1 calls "a success path and a no-op path with identical output". Below half
+# the reference width the word is under 51 px wide and 11 px tall and its strokes are
+# sub-pixel, so there is nothing left to match. This is a validity floor on the INPUT
+# geometry, not a discriminator between two populations, and it is written down as such.
+RESULT_MIN_FRAME_W = RESULT_REF_W / 2
+# WINNER against LOSER is a different question from result-against-everything, and it has
+# its own measured margin: on every held-out result frame the winning class beats the other
+# by 0.53-0.58. RESULT_MARGIN is NOT fitted to a population -- it is a tie-breaker floor,
+# an order of magnitude below every real margin, so that two words scoring alike abstain
+# rather than pick. That is stated plainly rather than dressed up as a measurement.
+RESULT_MARGIN = 0.10
+
+_result_tpls = None
+
+
+def result_templates():
+    """[(class, native template), ...] -- one per example frame, never averaged."""
+    global _result_tpls
+    if _result_tpls is None:
+        z = np.load(RESULT_TEMPLATES)
+        _result_tpls = [(k.split("__")[0], z[k]) for k in z.files]
+    return _result_tpls
+
+
+def result_scores(img):
+    """{"winner": float, "loser": float} -- the best correlation of each word, or {}.
+
+    {} means the crop cannot hold a template at this scale. It is NOT a low score and must
+    never be read as "not a result screen".
+    """
+    w = img.width
+    if w < RESULT_MIN_FRAME_W:
+        return {}
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    b = g[int(g.shape[0] * RESULT_SEARCH[1]):int(g.shape[0] * RESULT_SEARCH[3]),
+          int(w * RESULT_SEARCH[0]):int(w * RESULT_SEARCH[2])]
+    s = w / RESULT_REF_W
+    out = {}
+    for k, t in result_templates():
+        tw, th = int(round(t.shape[1] * s)), int(round(t.shape[0] * s))
+        if b.shape[0] < th or b.shape[1] < tw:
+            continue
+        tt = t if abs(s - 1.0) < 1e-6 else cv2.resize(t, (tw, th),
+                                                      interpolation=cv2.INTER_LANCZOS4)
+        mx = float(cv2.matchTemplate(b, tt, cv2.TM_CCOEFF_NORMED).max())
+        out[k] = max(out.get(k, -1.0), mx)
+    return out
+
+
+def read_result(full_frame):
+    """Is this the end-of-match RESULT screen, and did we win.
+
+    `full_frame` is the WHOLE game frame, not a crop -- the search window is a fraction of
+    it. Returns {"is_result": True|False|None, "won": True|False|None,
+                 "winner": float, "loser": float, "why": str}.
+
+    None on either field means NOT READ: ask the paid model. `is_result` False is a real
+    answer (no word is on screen); `won` None alongside `is_result` True means the screen is
+    there but the two words scored too close to call, which has never been observed and is
+    the abstention rather than a coin flip.
+
+    HONEST LIMIT: the frame where the medallion is still animating in scores ~0.43 and comes
+    back False. That is correct -- the banner is not up yet -- but it means a single frame
+    grabbed at the wrong instant reads "not a result screen", so the caller polls.
+    """
+    sc = result_scores(full_frame)
+    out = {"is_result": None, "won": None, "winner": sc.get("winner", -1.0),
+           "loser": sc.get("loser", -1.0), "why": ""}
+    if "winner" not in sc or "loser" not in sc:
+        out["why"] = (f"frame too small for the word templates "
+                      f"({full_frame.width}px wide, floor {RESULT_MIN_FRAME_W:g})")
+        return out
+    best = max(sc, key=sc.get)
+    top = sc[best]
+    other = min(sc.values())
+    if top < RESULT_MIN:
+        out["is_result"] = False
+        out["why"] = f"no result word found (best {top:.3f} < {RESULT_MIN})"
+        return out
+    out["is_result"] = True
+    if top - other < RESULT_MARGIN:
+        out["why"] = (f"result screen, but WINNER {sc['winner']:.3f} and LOSER "
+                      f"{sc['loser']:.3f} are too close to call")
+        return out
+    out["won"] = (best == "winner")
+    out["why"] = f"{best} ({top:.3f} against {other:.3f})"
+    return out

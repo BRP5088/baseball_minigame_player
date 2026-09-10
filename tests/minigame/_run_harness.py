@@ -243,7 +243,13 @@ class Harness:
 
         _real_save = o.save_progress
         patches = {
+            # run()'s loop reads state through read_state_for_turn -- the paid model once
+            # per cycle, the local readers every turn after. Both seams are scripted, so
+            # these files keep pinning run()'s own logic rather than which reader answered;
+            # leaving read_state_for_turn live would have the local readers grab the real
+            # desktop.
             "read_game_state": lambda *a, **k: self._next_state(),
+            "read_state_for_turn": lambda *a, **k: self._next_state(),
             "screen_is_moving": self._screen_is_moving,
             "_grab_settle_regions": lambda names: {n: self._frame_bytes() for n in names},
             # OVERNIGHT_AUDIT: unpatched, this took a REAL screenshot of the

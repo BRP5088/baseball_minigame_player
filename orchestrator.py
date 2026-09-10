@@ -2855,6 +2855,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         baseline = _grab_settle_regions(("hand",))["hand"]
     seen = False
     good = 0
+    last_sig = None
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
@@ -2908,12 +2909,21 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 return True
             try:
                 hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
-                readable = hand_img is not None and local_hand_cards(hand_img)[0] is not None
+                # STABLE, NOT COMPLETE. Requiring a COMPLETE hand made this gate wait out
+                # its whole budget whenever one card was unreadable: measured over a
+                # 46-play run, 14 timeouts and 280 SECONDS lost. Since the hand memory
+                # landed, an incomplete hand is perfectly usable -- the missing card is
+                # carried forward or dropped -- so completeness is the wrong question.
+                # What the gate is actually for is "has the deal FINISHED", and the
+                # answer to that is that the hand stops changing.
+                sig = _hand_signature(hand_img)
+                readable = sig is not None and sig == last_sig
+                last_sig = sig
             except Exception:
-                readable = False          # never let the gate raise into the turn loop
+                readable, last_sig = False, None   # never raise into the turn loop
             good = good + 1 if readable else 0
             if good >= READABLE_POLLS:
-                print(f"  [deal] hand READ CLEAN {READABLE_POLLS}x; released "
+                print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f})")
                 return True
@@ -3234,6 +3244,124 @@ def validate_game_state(state: dict) -> None:
                 f"partial read): {hand!r}")
 
 
+# ---------------------------------------------------------------------------------------
+# ONE PAID STATE READ PER CYCLE. THE REST IS LOCAL.
+#
+# The user's call, after watching a run spend 41 paid state reads on 36 turns: "there
+# should only be the one to determine if we are in the middle of the game... if we get
+# stuck, we know the next spot that needs local OCR."
+#
+# THE LOCAL PATH WAS ALREADY COMPUTING ALL OF IT, every turn, as [local-check] -- the
+# scoreboard, the three bases, the hand -- and agreeing with the paid answer. It simply
+# was not the authority. Measured on the run that prompted this (36 plays):
+#
+#     hand      21 turns at 4/5 read, 7 at 5/5, ALL agreeing with vision
+#     scoreboard OCR agreed with vision on every turn it was compared
+#     bases     agreed on every turn
+#     paid state reads 41, of which 40 told us what the local readers already knew
+#
+# AND GETTING STUCK IS THE POINT. When the local path cannot answer, that is a MEASUREMENT
+# of the next reader to build -- paying to paper over it hides exactly the gap worth
+# finding. So a local failure raises with the reason named, rather than buying an answer.
+#
+# NOTHING IS DELETED. Set PAID_STATE_ONCE = False and every turn asks the paid model again,
+# exactly as before.
+PAID_STATE_ONCE = True
+_paid_state_done = False
+
+
+def begin_cycle_state():
+    """A new cycle: the next state read is the ORIENTATION read, and it is paid."""
+    global _paid_state_done
+    _paid_state_done = False
+
+
+def local_game_state():
+    """The state, read entirely locally. (state, None) or (None, what is missing).
+
+    `screen` is "result" or "turn". The RESULT screen is read first, because a match that
+    has ended has no hand to read and the hand reader would report the missing hand as the
+    gap -- naming the wrong reader. Anything else comes back as a NAMED GAP.
+    """
+    try:
+        import local_state
+    except Exception as exc:
+        return None, f"local_state unavailable ({exc})"
+    try:
+        full = _fast_grab()
+        crops = dict(crop_gameplay_regions(full))
+    except Exception as exc:
+        return None, f"could not capture ({exc})"
+
+    # THE RESULT SCREEN FIRST. It is the one screen with no hand on it, so asking the hand
+    # reader first would blame the hand for a match that is simply over.
+    try:
+        res = local_state.read_result(full)
+    except Exception as exc:
+        return None, f"result reader failed ({exc})"
+    if res.get("is_result"):
+        if res.get("won") is None:
+            return None, f"result screen, but WIN/LOSE unread: {res['why']}"
+        return {"screen": "result", "result_won": bool(res["won"]), "hand": [],
+                "batters_used": None, "collection": [], "runners": None,
+                "discards_left": None, "phase": None,
+                "your_score": None, "opp_score": None}, None
+    if res.get("is_result") is None:
+        return None, f"result reader could not run: {res.get('why')}"
+
+    hand_img = crops.get("hand")
+    if hand_img is None:
+        return None, "no hand crop"
+    cards, why = local_hand_cards(hand_img)
+    if cards is None:
+        return None, f"hand: {why}"
+
+    st = {"screen": "turn", "hand": cards, "batters_used": None, "result_won": None,
+          "collection": []}
+
+    sb = crops.get("scoreboard")
+    if sb is not None:
+        try:
+            got = local_state.read_discards_left(sb)
+            if got is not None:
+                st["discards_left"] = got
+        except Exception:
+            pass
+        try:
+            sc = ocr_scoreboard(sb)
+            st["your_score"] = (sc.get("your") or [None, None, None])[-1]
+            st["opp_score"] = (sc.get("opponent") or [None, None, None])[-1]
+        except Exception:
+            pass
+    st.setdefault("discards_left", None)
+
+    try:
+        ph, _ = local_state.read_phase(hand_img)
+        st["phase"] = ph
+    except Exception:
+        st["phase"] = None
+
+    bases = ("third_base", "second_base", "first_base")
+    if all(crops.get(b) is not None for b in bases):
+        try:
+            out = local_state.read_runners(*[crops[b] for b in bases])
+            if out and out.get("count") is not None:
+                st["runners"] = [{"name": None, "power": None, "secondary": None}
+                                 for _ in range(out["count"])]
+        except Exception:
+            pass
+    st.setdefault("runners", None)
+
+    # THE FIELDS THAT DECIDE A PLAY. Without a phase the engine silently runs the pitching
+    # strategy on a batting turn (see validate_game_state), so an unread phase is a GAP,
+    # not a default.
+    if st.get("phase") is None:
+        return None, "phase not read locally"
+    if st.get("runners") is None:
+        return None, "runners not read locally"
+    return st, None
+
+
 def read_game_state(mask_low_contrast: bool = False) -> dict:
     """Ask Claude to read the current screenshot into structured state.
     mask_low_contrast is passed straight through to capture_state_images_b64().
@@ -3452,6 +3580,24 @@ def _hail_mary_card(row):
         return None
 
 
+def _hand_signature(hand_img):
+    """What the reader currently sees, as a comparable tuple, or None.
+
+    Two identical signatures a poll apart mean the hand has stopped moving. It counts
+    UNREADABLE slots too -- a slot that reads nothing twice running is just as settled as
+    one that reads a 7, and the hand memory covers it downstream.
+    """
+    if hand_img is None:
+        return None
+    try:
+        import local_hand
+        rows = local_hand.read_hand(hand_img)
+    except Exception:
+        return None
+    return tuple((r.get("kind"), r.get("digit"), r.get("secondary"), r.get("type"))
+                 for r in rows)
+
+
 def local_hand_cards(hand_img):
     """(cards, None) in the paid schema's shape, or (None, why) when the hand is not
     fully readable.
@@ -3578,6 +3724,26 @@ def local_hand_cards(hand_img):
     if dropped:
         return cards, f"played without slots {dropped} (unreadable)"
     return cards, None
+
+
+def read_state_for_turn():
+    """The state the turn loop reads. PAID once per cycle, LOCAL every turn after.
+
+    A local failure RAISES with the gap named. The caller already retries and counts
+    stuck attempts, so the run surfaces the missing reader instead of buying past it.
+    """
+    global _paid_state_done
+    if not PAID_STATE_ONCE or not _paid_state_done:
+        st = read_game_state()
+        _paid_state_done = True
+        print(f"  [state] orientation read (PAID): screen={st.get('screen')!r} "
+              f"-- every turn after this one is local")
+        return st
+    st, gap = local_game_state()
+    if st is not None:
+        return st
+    raise ValueError(f"LOCAL STATE GAP: {gap} -- this is the next reader to build; "
+                     f"no paid call was made")
 
 
 def apply_local_readers(state: dict, crops: dict = None) -> None:
@@ -5185,6 +5351,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     used) — independent of the real in-game balance, which keeps getting
     tracked accurately either way.
     """
+    begin_cycle_state()   # this run's FIRST state read is the paid orientation one
     if compare_local_reads:
         # C4: verify the PaddleOCR venv ONCE, loudly, at startup. Otherwise a
         # stale/missing interpreter surfaces as a swallowed per-turn exception
@@ -5346,7 +5513,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 motion_wait_started = None
 
             try:
-                state_json = read_game_state()
+                state_json = read_state_for_turn()
             except Exception as e:
                 stuck_count += 1
                 record_observation(screen="<read failed>", error=str(e)[:200],

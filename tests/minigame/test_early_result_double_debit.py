@@ -149,7 +149,13 @@ class Harness:
                       bans_done_this_match=bans_done_this_match)
 
         patches = {
+            # run()'s loop reads state through read_state_for_turn, which asks the paid
+            # model ONCE per cycle and the local readers every turn after. Both seams are
+            # scripted here: this file pins run()'s early-result GATE, not which reader
+            # supplied the screen, and leaving read_state_for_turn live would have the
+            # local readers grab the real desktop.
             "read_game_state": lambda *a, **k: self._next_state(),
+            "read_state_for_turn": lambda *a, **k: self._next_state(),
             "screen_is_moving": lambda *a, **k: False,
             "_grab_settle_regions": lambda names: {n: self._frame_bytes() for n in names},
             "_safe_prompt_check": lambda *a, **k: None,
