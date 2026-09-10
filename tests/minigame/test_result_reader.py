@@ -250,21 +250,62 @@ for seen, want in (("WINNER", "win"), ("WINER", "win"), ("LOSER", "loss"),
 got, _ = result_ocr.match_word([("WINNER", 0.10)])
 check(got is None, f"a word under MIN_CONF is not believed (got {got!r})")
 
-# (c) it is the LAST resort: a screen the templates CAN read must never reach OCR, because
-# OCR costs ~0.9s and the templates cost ~1ms.
+# (c) OCR NAMES THE OUTCOME on a result screen, and is not spent anywhere else.
+# Held out by run over an OCR-labelled corpus the templates had no hand in selecting, the
+# word bank scores WIN at min 0.969 with 0 of 33 errors and DRAW at min 0.652 with 5 of 10
+# read as WINNER. A draw called a win writes a win that never happened into the record and
+# the money arithmetic, so templates DETECT and OCR NAMES.
 _calls = []
 _real_banner = result_ocr.read_banner
 try:
+    # a NON-result screen that another reader classifies must never spend an OCR call
     result_ocr.read_banner = lambda *a, **k: (_calls.append(1), (None, "stub"))[1]
-    for name, d in (("heldout_winner_a.jpg", FIX), ("heldout_draw_768.jpg", FIX),
-                    ("ban_0of3_1920x1080.jpg", BAN)):
+    for name, d in (("ban_0of3_1920x1080.jpg", BAN),
+                    ("ban_0of3_2000x1125.jpg", BAN)):
         try:
             orchestrator._fast_grab = lambda _p=os.path.join(d, name): Image.open(_p)
             orchestrator.local_game_state()
         finally:
             orchestrator._fast_grab = _grab2
     check(len(_calls) == 0,
-          f"a screen the templates can read never spends an OCR call (spent {len(_calls)})")
+          f"a ban screen never spends an OCR call (spent {len(_calls)})")
+
+    # ...but a RESULT screen does, and OCR's answer overrides the templates'
+    _calls.clear()
+    result_ocr.read_banner = lambda *a, **k: (_calls.append(1), ("draw", "DRAW!"))[1]
+    try:
+        orchestrator._fast_grab = lambda: img(FIX, "heldout_winner_a.jpg")
+        st, _ = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(len(_calls) == 1 and st is not None and st.get("result_outcome") == "draw",
+          f"OCR names the outcome and OVERRIDES the template answer "
+          f"(calls={len(_calls)}, outcome={st and st.get('result_outcome')!r} -- the "
+          f"templates say 'win' on this frame)")
+
+    # ...and when OCR RAN and found no word, the template answer is NOT trusted alone,
+    # because it misreads half the held-out draws.
+    _calls.clear()
+    result_ocr.read_banner = lambda *a, **k: (_calls.append(1), (None, "no result word in []"))[1]
+    try:
+        orchestrator._fast_grab = lambda: img(FIX, "heldout_winner_a.jpg")
+        st, gap = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(st is None and gap is not None and "not trusted alone" in gap,
+          f"OCR running and finding nothing is a GAP, not a template guess "
+          f"(screen={st and st.get('screen')!r})")
+
+    # ...but if OCR is UNAVAILABLE the template answer is better than nothing.
+    result_ocr.read_banner = lambda *a, **k: (None, "paddle venv missing at /nope")
+    try:
+        orchestrator._fast_grab = lambda: img(FIX, "heldout_winner_a.jpg")
+        st, gap = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(st is not None and st.get("result_outcome") == "win",
+          f"with OCR unavailable the template answer is used rather than stalling "
+          f"(got {st and st.get('result_outcome')!r})")
 
     # ...and a screen NOTHING else can read DOES reach it, and its answer is believed.
     _calls.clear()

@@ -60,6 +60,15 @@ def look(step):
                     "words": {k: round(v, 3) for k, v in res["scores"].items()},
                     "why": res["why"]} if res else {"error": err})
 
+    # OCR NAMES THE OUTCOME on a result screen -- templates only detect one. Shown here
+    # beside the template scores so a disagreement between them is visible at the step it
+    # happened, not inferred from a log afterwards.
+    if res and res.get("is_result"):
+        import result_ocr
+        (r["ocr_outcome"], r["ocr_detail"]), r["ocr_err"] = _try(result_ocr.read_banner, img)
+    else:
+        r["ocr_outcome"] = r["ocr_detail"] = None
+
     r["ban_counter"], r["ban_err"] = _try(o.read_ban_counter, img)
 
     def _at_table(im):
@@ -117,7 +126,12 @@ def show(r):
     print(f"  SCREEN         : {g.get('screen')!r}" + (f"   gap: {g['gap']}" if g.get("gap") else ""))
     res = r.get("result", {})
     if "words" in res:
-        print(f"  result word    : {res['outcome']!r}  is_result={res['is_result']}  {res['words']}")
+        print(f"  result word    : templates {res['outcome']!r}  is_result={res['is_result']}  {res['words']}")
+        if res.get("is_result"):
+            print(f"  result OCR     : {r.get('ocr_outcome')!r}   read {r.get('ocr_detail')!r}"
+                  + ("   <-- DISAGREES WITH THE TEMPLATES"
+                     if r.get("ocr_outcome") and res.get("outcome")
+                     and r["ocr_outcome"] != res["outcome"] else ""))
     print(f"  ban counter    : {r.get('ban_counter')!r}      dealer prompt: {r.get('dealer_prompt')!r}")
     print(f"  phase          : {r.get('phase')!r}        discards_left: {r.get('discards_left')!r}"
           f"   scoreboard: {r.get('scoreboard')}")

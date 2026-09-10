@@ -3347,8 +3347,40 @@ def local_game_state():
     except Exception as exc:
         return None, f"result reader failed ({exc})"
     if res.get("is_result"):
+        # THE TEMPLATES DETECT; OCR NAMES. Held out by run over an OCR-labelled corpus the
+        # templates had no hand in selecting, the word bank scores WIN at min 0.969 and 0/33
+        # errors -- and DRAW at min 0.652 with 5 of 10 read as WINNER. A draw called a win
+        # writes a win that never happened into the permanent record and into the money
+        # arithmetic, which is the same class of error as the draw-logged-as-loss fixed
+        # earlier today. Detection is what templates are reliable at, so that is all they do.
+        #
+        # OCR is shape-blind and reads the renderings that defeat every template, including
+        # the arched DRAW that stalled a live run at 0.671. It costs 0.92 s and runs ONCE per
+        # match, on the one screen that ends it.
+        ocr_outcome = None
+        try:
+            import result_ocr
+            ocr_outcome, ocr_detail = result_ocr.read_banner(full)
+        except Exception as exc:
+            ocr_detail = f"reader unavailable ({exc})"
+        if ocr_outcome is not None:
+            if res.get("outcome") and res["outcome"] != ocr_outcome:
+                print(f"  [state] result: templates said {res['outcome']!r}, OCR read "
+                      f"{ocr_detail!r} -> {ocr_outcome!r}. OCR wins.")
+            res = dict(res, outcome=ocr_outcome, why=f"OCR {ocr_detail!r}")
+        elif res.get("outcome") is not None:
+            # OCR could not read it. The templates have an answer, but on DRAW they are wrong
+            # half the time, so it is only taken when OCR is UNAVAILABLE -- not when OCR ran
+            # and found no word, which is evidence the screen is not what we think.
+            if "unavailable" in str(ocr_detail) or "missing" in str(ocr_detail):
+                print(f"  [state] result: OCR unavailable ({ocr_detail}); falling back to the "
+                      f"template answer {res['outcome']!r}, which is unreliable on draws")
+            else:
+                return None, (f"result screen, but OCR could not name it ({ocr_detail}) and "
+                              f"the template answer {res['outcome']!r} is not trusted alone "
+                              f"-- it misreads 5 of 10 held-out draws as WINNER")
         if res.get("outcome") is None:
-            return None, f"result screen, but the outcome is unread: {res['why']}"
+            return None, f"result screen, but the outcome is unread: {res['why']} / {ocr_detail}"
         # NO SCORES ARE SUPPLIED HERE, DELIBERATELY. run() prefers a score comparison over
         # result_won because result_won cannot express a draw -- but ocr_scoreboard misreads
         # the RESULT screen (12 of 76 draw frames readable at all, and one of those 12 wrong;
