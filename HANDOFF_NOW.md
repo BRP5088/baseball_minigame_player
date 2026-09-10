@@ -8,7 +8,32 @@ it is one command. Nothing is running; the console has not been touched since 01
     ./restart_chiaki.sh                        # chiaki EXITED overnight -- see below
     zsh tools/measured_cycle.sh ban_reader
 
-The run resumes into the match that is already paid for. Do NOT clear `match_in_progress`.
+**It does NOT resume the match on screen.** Verified against the 01:11 log, not assumed:
+cycle 1 RELOADS the save, which discards whatever match was running, restores the wallet to
+$246 and clears `match_in_progress` itself ("the reload discarded any match, so the record
+was stale"). Then it walks to the table and pays a fresh $50. So the committed $50 is
+refunded by the reload and nothing is lost -- but do NOT clear `match_in_progress` by hand;
+run_cycles clears it at the one moment that is safe, after a CONFIRMED reload.
+
+## PREFLIGHT: run it against the RIGHT FILE, and know that nothing runs it for you
+
+    .venv/bin/python -B preflight.py progress_testing.json
+
+Two defects in the check itself, found 2026-09-10 when the user asked whether preflight had
+been run (it had not):
+
+1. **It defaults to `progress.json`, which the live run does not use.** `preflight.py:107`
+   takes the progress file as `sys.argv[1]` and defaults to `progress.json`. Run bare it
+   reports "$246 on hand, 4W/4L/1D" -- a file no live run touches -- and its
+   `match_in_progress` blocker CANNOT FIRE on the file that matters. Against
+   `progress_testing.json` it correctly reports the in-progress match.
+2. **`tools/measured_cycle.sh` never calls preflight at all.** Only `run_tonight.py` does
+   (`grep -rn preflight`). So a NOT READY verdict does not stop the command in this handoff.
+
+Current verdict against the right file: the `match_in_progress` blocker fires and is
+CORRECT -- a real match is on screen. run_cycles handles it via the reload above. The only
+other blocker is the offline suite, which is red solely because
+`test_frozen_stream_is_invalid.py` needs chiaki running; restart chiaki and it goes green.
 
 ## THE STATE ON DISK
 
