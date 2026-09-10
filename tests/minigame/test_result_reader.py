@@ -230,6 +230,68 @@ check(0 < i_local < i_scores,
       "...and it is read BEFORE the score comparison -- the word is measured reliable on "
       "the result screen and ocr_scoreboard is not")
 
+# --- 10. THE OCR LAST RESORT -----------------------------------------------------------
+# The template reader matches a SHAPE, so each new rendering of a word is a fresh failure --
+# and each one hid itself, because the templates were harvested BY template matching
+# (CLAUDE.md 31). OCR does not care about shape, and runs only after everything else has
+# declined.
+import result_ocr
+
+# (a) the closed vocabulary. PURE -- no paddle process, no images. A card banner must NOT
+# match: "PITCHER" and "BATTER" are on ordinary turn screens.
+for seen, want in (("WINNER", "win"), ("WINER", "win"), ("LOSER", "loss"),
+                   ("DRAW", "draw"), ("DRAWI", "draw"),
+                   ("PITCHER", None), ("BATTER", None), ("BANNEDCARDS", None),
+                   ("W", None), ("ATCHES", None), ("", None)):
+    got, _ = result_ocr.match_word([(seen, 1.0)])
+    check(got == want, f"OCR vocabulary: {seen!r} -> {got!r} (wanted {want!r})")
+
+# (b) low confidence is not a reading
+got, _ = result_ocr.match_word([("WINNER", 0.10)])
+check(got is None, f"a word under MIN_CONF is not believed (got {got!r})")
+
+# (c) it is the LAST resort: a screen the templates CAN read must never reach OCR, because
+# OCR costs ~0.9s and the templates cost ~1ms.
+_calls = []
+_real_banner = result_ocr.read_banner
+try:
+    result_ocr.read_banner = lambda *a, **k: (_calls.append(1), (None, "stub"))[1]
+    for name, d in (("heldout_winner_a.jpg", FIX), ("heldout_draw_768.jpg", FIX),
+                    ("ban_0of3_1920x1080.jpg", BAN)):
+        try:
+            orchestrator._fast_grab = lambda _p=os.path.join(d, name): Image.open(_p)
+            orchestrator.local_game_state()
+        finally:
+            orchestrator._fast_grab = _grab2
+    check(len(_calls) == 0,
+          f"a screen the templates can read never spends an OCR call (spent {len(_calls)})")
+
+    # ...and a screen NOTHING else can read DOES reach it, and its answer is believed.
+    _calls.clear()
+    result_ocr.read_banner = lambda *a, **k: (_calls.append(1), ("draw", "DRAW!"))[1]
+    try:
+        orchestrator._fast_grab = lambda: img(FIX, "top_negative_questlog_0543.jpg")
+        st, gap = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(len(_calls) == 1 and st is not None and st.get("screen") == "result"
+          and st.get("result_outcome") == "draw" and st.get("result_won") is None,
+          f"an unrecognised screen reaches OCR and its answer is used "
+          f"(calls={len(_calls)}, screen={st and st.get('screen')!r})")
+
+    # ...and OCR saying None must stay a GAP, never "no result screen".
+    _calls.clear()
+    result_ocr.read_banner = lambda *a, **k: (None, "no text found")
+    try:
+        orchestrator._fast_grab = lambda: img(FIX, "top_negative_questlog_0543.jpg")
+        st, gap = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(st is None and gap is not None and "UNRECOGNISED SCREEN" in gap,
+          f"OCR abstaining leaves an honest gap, not a claim (got {st and st.get('screen')!r})")
+finally:
+    result_ocr.read_banner = _real_banner
+
 if fails:
     print(f"\n{len(fails)} FAILED")
     raise SystemExit(1)

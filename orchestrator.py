@@ -3312,6 +3312,15 @@ def begin_cycle_state():
     """A new cycle: the next state read is the ORIENTATION read, and it is paid."""
     global _paid_state_done
     _paid_state_done = False
+    # Warm the OCR banner reader now. Its cost is the MODEL LOAD (3.1 s) and not the read
+    # (0.92 s), so paying it here means the one frame per match that needs it is never the
+    # frame that also pays the load. Failure is fine and silent -- the reader is a last
+    # resort and everything upstream of it still works.
+    try:
+        import result_ocr
+        result_ocr.start()
+    except Exception:
+        pass
 
 
 def local_game_state():
@@ -3402,9 +3411,31 @@ def local_game_state():
         # component. The hand reader's own reason is kept, because when this IS a turn it is
         # the right answer.
         best_word = max((res.get("scores") or {}).values(), default=-1.0)
+        # LAST RESORT: ASK OCR. The template reader matches a SHAPE, so every new rendering
+        # of a word is a fresh failure -- over one night it missed DRAW entirely, then the
+        # large flat WINNER/LOSER, then the ARCHED draw at 0.671 while the word sat crisp on
+        # a motionless screen. Each miss stalled a live run for 35 s or ended it, and each
+        # hid itself, because the templates were harvested BY template matching and the
+        # census could only contain renderings that already matched (CLAUDE.md 31).
+        #
+        # OCR does not care about shape. It runs ONLY here -- after result, ban, prompt and
+        # hand have all declined -- so it never touches a normal turn, and it costs 0.92 s
+        # against a stall that costs 35 s. A None answer is NOT READ, never "no result".
+        try:
+            import result_ocr
+            outcome, detail = result_ocr.read_banner(full)
+        except Exception as exc:
+            outcome, detail = None, f"reader unavailable ({exc})"
+        if outcome is not None:
+            print(f"  [state] the templates missed this banner; OCR read it: {detail!r}")
+            won = {"win": True, "loss": False, "draw": None}[outcome]
+            return {"screen": "result", "result_outcome": outcome, "result_won": won,
+                    "hand": [], "batters_used": None, "collection": [], "runners": None,
+                    "discards_left": None, "phase": None,
+                    "your_score": None, "opp_score": None}, None
         return None, (f"UNRECOGNISED SCREEN -- not a result (best word {best_word:.3f} "
-                      f"against {local_state.RESULT_MIN}), not a ban grid (no N/3 counter), "
-                      f"and the hand reader says: {why}")
+                      f"against {local_state.RESULT_MIN}; OCR: {detail}), not a ban grid "
+                      f"(no N/3 counter), and the hand reader says: {why}")
 
     st = {"screen": "turn", "hand": cards, "batters_used": None, "result_won": None,
           "collection": []}
