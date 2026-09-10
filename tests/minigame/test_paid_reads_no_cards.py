@@ -122,6 +122,15 @@ try:
     cards, why = orchestrator.local_hand_cards(blank)
     check("CONTROL: the intact stub hand builds", cards is not None, str(why))
 
+    # THE RULE CHANGED, DELIBERATELY, AND THESE FOUR CHECKS CHANGED WITH IT.
+    # They used to require that ANY unreadable card killed the whole hand. That turned an
+    # unreadable CARD into an unreadable STATE and cost a paid call every time: measured
+    # live, the loop went 1.44 -> 5.00 -> 8.67 read_game_state calls per turn. A hand with
+    # one invisible card is still playable -- that card simply is not played.
+    #
+    # So the card is DROPPED and the rest survive, and what is guarded now is that the
+    # drop is honest: the bad slot is gone, the good ones keep their hand_index so input
+    # targeting still hits the right card, and `why` says which slots went.
     for name, slot, patch in CASES:
         def stub(img, _s=slot, _p=patch):
             rows = [dict(c) for c in FULL]
@@ -129,7 +138,29 @@ try:
             return rows
         local_hand.read_hand = stub
         cards, why = orchestrator.local_hand_cards(blank)
-        check(f"{name} yields NO hand at all", cards is None, f"got {cards!r}")
+        idx = [c["hand_index"] for c in (cards or [])]
+        check(f"{name}: that card is dropped, the hand survives",
+              cards is not None and slot not in idx, f"got {idx}")
+        check(f"{name}: the survivors keep their own hand_index",
+              idx == [i for i in range(len(FULL)) if i != slot], f"got {idx}")
+        check(f"{name}: and the drop is REPORTED, not silent",
+              why and str(slot) in why, f"why={why!r}")
+
+    # AND THERE IS A FLOOR. Dropping is not free -- the decision engine then chooses from
+    # fewer cards believing that is the hand -- so below MIN_LOCAL_HAND_CARDS the honest
+    # answer is to refuse and let the paid path take it.
+    def gut(img):
+        rows = [dict(c) for c in FULL]
+        for i in (1, 2, 3):
+            rows[i]["digit"] = None
+        return rows
+    local_hand.read_hand = gut
+    cards, why = orchestrator.local_hand_cards(blank)
+    check("below the floor, the whole hand is refused",
+          cards is None and why, f"got {cards!r} / {why!r}")
+    check("MIN_LOCAL_HAND_CARDS is pinned as a literal",
+          orchestrator.MIN_LOCAL_HAND_CARDS == 3,
+          str(orchestrator.MIN_LOCAL_HAND_CARDS))
 finally:
     local_hand.read_hand = _real
 

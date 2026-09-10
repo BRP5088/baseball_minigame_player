@@ -3348,6 +3348,71 @@ def _retry_local_hand(state):
           f"({state.get('_hand_unread')}) -- the paid path takes it from here")
 
 
+# How few cards may remain before the hand is not a hand. Four of five survive a turn only
+# 45% of the time -- measured, after the user pointed out the assumption was wrong: the
+# real spread is 2 to 5 with a mean of 2.77, because a turn can play a card, play a card
+# WITH a tactics card attached, or discard.
+MIN_LOCAL_HAND_CARDS = 3
+# The hail mary's gate. Art correlation, measured: the four true recoveries scored
+# 0.948-0.989 and nothing else in 445 hands reached 0.90.
+HAIL_MARY_MIN_ART = 0.90
+HAIL_MARY_KEEP = 24
+_hail_mary_seen = []
+
+
+def _card_art(img, r):
+    """A card's ART as a unit vector -- deliberately NOT including the disc, because the
+    disc is the thing that is missing when this is needed."""
+    try:
+        import numpy as _np
+        s = img.width / local_hand_module().ANCHOR_W
+        x, y = r.get("x"), r.get("y")
+        if y is None:
+            return None
+        b = (max(0, int(x - 56 * s)), max(0, int(y + 18 * s)),
+             min(img.width, int(x + 10 * s)), min(img.height, int(y + 92 * s)))
+        if b[2] - b[0] < 12 or b[3] - b[1] < 12:
+            return None
+        from PIL import Image as _I
+        a = _np.asarray(_I.fromarray(_np.asarray(img.convert("L"))[b[1]:b[3], b[0]:b[2]])
+                        .resize((32, 32), _I.LANCZOS), dtype=_np.float32).ravel()
+        a -= a.mean()
+        n = float(_np.linalg.norm(a))
+        return None if n < 1e-6 else a / n
+    except Exception:
+        return None
+
+
+def local_hand_module():
+    import local_hand
+    return local_hand
+
+
+def _remember_card(vec, digit, sec):
+    if vec is None:
+        return
+    _hail_mary_seen.append((vec, int(digit), int(sec)))
+    del _hail_mary_seen[:-HAIL_MARY_KEEP]
+
+
+def _hail_mary_card(row):
+    """(power, secondary) for a card whose disc did not read, from a RECENT hand where the
+    same card did. None when nothing matches. Never guesses: the gate is measured."""
+    vec = row.get("_art")
+    if vec is None or not _hail_mary_seen:
+        return None
+    try:
+        import numpy as _np
+        best, bv = None, -1.0
+        for v, d, s in _hail_mary_seen:
+            sc = float(_np.dot(vec, v))
+            if sc > bv:
+                best, bv = (d, s), sc
+        return best if bv >= HAIL_MARY_MIN_ART else None
+    except Exception:
+        return None
+
+
 def local_hand_cards(hand_img):
     """(cards, None) in the paid schema's shape, or (None, why) when the hand is not
     fully readable.
@@ -3375,25 +3440,65 @@ def local_hand_cards(hand_img):
     want = len(local_hand.SLOT_PLAYER)
     if len(rows) != want:
         return None, f"{len(rows)} rows, expected {want}"
+    # Each row carries its own ART, so the hail mary has something to match on and so a
+    # card that DID read can be remembered for the next hand that cannot read it.
+    for r in rows:
+        r["_art"] = _card_art(hand_img, r)
     cards = []
+    dropped = []
     for i, r in enumerate(rows):
         kind = r.get("kind")
         if kind == "player":
-            if r.get("digit") is None:
-                return None, f"slot {i}: power unread"
-            if r.get("secondary") is None:
-                return None, f"slot {i}: shield unread"
-            cards.append({"kind": "player", "name": None, "power": int(r["digit"]),
-                          "secondary": int(r["secondary"]), "hand_index": i})
+            digit, sec = r.get("digit"), r.get("secondary")
+            if digit is None:
+                # THE HAIL MARY (the user's idea, and their framing). Before giving up on
+                # a card, look for the SAME CARD in a recent hand, where its disc may have
+                # been readable. Measured over 445 recorded hands: it recovers 4 of 25
+                # refused cards (16%), and all four were adjudicated correct by eye.
+                #
+                # WHAT IT ACTUALLY RESCUES, which is narrower than it sounds: in all four
+                # the disc WAS on screen and simply scored under the gate. A genuinely
+                # OCCLUDED card -- the disc hidden under its neighbour -- is only
+                # recovered if that card was in an earlier hand unoccluded.
+                got = _hail_mary_card(r)
+                if got is not None:
+                    digit, sec = got
+                    print(f"  [local] slot {i}: power unread, recovered as {digit} "
+                          f"from a recent hand (hail mary)")
+            if digit is None or sec is None:
+                # A CARD THAT CANNOT BE READ IS NOT A HAND THAT CANNOT BE READ.
+                # Rejecting the whole hand turned an unreadable CARD into an unreadable
+                # STATE, and every one of those cost a paid call: measured live, the loop
+                # went 1.44 -> 5.00 -> 8.67 read_game_state calls per turn. A hand with
+                # one invisible card is still playable -- that card simply is not played.
+                # hand_index is preserved on the others, so input targeting still hits the
+                # right card.
+                dropped.append(i)
+                continue
+            cards.append({"kind": "player", "name": None, "power": int(digit),
+                          "secondary": int(sec), "hand_index": i})
+            # remember it, so a LATER hand that cannot read this card can borrow the value
+            _remember_card(r.get("_art"), digit, sec)
         elif kind == "tactics":
-            if r.get("type") is None:
-                return None, f"slot {i}: tactics type unread"
-            if r.get("bonus") is None:
-                return None, f"slot {i}: tactics bonus unread"
+            if r.get("type") is None or r.get("bonus") is None:
+                # Same rule. An unread tactics card is one card not played, not a dead
+                # hand -- the screen-gate work reached the same conclusion independently:
+                # "a tactics card whose adds_power did not read is simply not played".
+                dropped.append(i)
+                continue
             cards.append({"kind": "tactics", "name": r["type"], "type": r["type"],
                           "bonus": int(r["bonus"]), "hand_index": i})
         else:
-            return None, f"slot {i}: kind unknown"
+            dropped.append(i)
+            continue
+    # THE FLOOR. Dropping is not free: the decision engine then chooses from fewer cards
+    # believing that is the hand. One missing card is a worse choice; three missing is not
+    # a hand at all, and asking the paid model is the honest answer.
+    if len(cards) < MIN_LOCAL_HAND_CARDS:
+        return None, (f"only {len(cards)} of {len(rows)} cards read "
+                      f"(slots {dropped} unreadable)")
+    if dropped:
+        return cards, f"played without slots {dropped} (unreadable)"
     return cards, None
 
 
