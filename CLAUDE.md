@@ -356,6 +356,47 @@ Game rules:
   nonzero bonus that adds NO power — analysis needs the tactics KIND.
 - **Runners can be lapped**: this game lets base runners pass each other, so
   real-baseball intuitions about ordering are unsafe.
+
+### The baserunning rules (from the user, 2026-09-10, with two sources)
+
+Supplied by the user against a community guide and a Reddit write-up, and each
+one CHANGES A DECISION the engine currently makes blind. Confirmed live where
+noted; the rest is the user's reading, not this project's measurement.
+
+- **SPEED (the `secondary` stat on a batter) is how many bases that player runs.**
+  The badge it is read from made it look like a "shield" and this file called it
+  that; it is speed. On a pitcher the same field is FIELDING. `decision_engine`
+  already says so in one comment (`secondary: speed (batter) or fielding
+  (pitcher)`) and nothing downstream used it.
+  *Observed live:* a speed-1 batter advanced exactly 1 base, and a speed-1 runner
+  advanced exactly 1 base on the next hit. Speed >= 2 is UNTESTED.
+- **A TIE IS A COIN FLIP, AND WINNING ONE IS CAPPED AT FIRST BASE** regardless of
+  the batter's speed. So landing exactly on the pitcher's power is the worst
+  place to be: half the time nothing, half the time a minimum-value hit.
+  *This invalidated a conclusion drawn here the same hour* — a speed-2 batter that
+  stopped at first was read as "the batter always goes to first", when it was a
+  5-v-5 tie. Two data points, one of them a special case, and a rule was written
+  from them.
+- **A LOSING AT-BAT CAN STILL ADVANCE RUNNERS.** An out is not "nothing happens".
+  This is the missing explanation for the animation spread: outs have a median
+  reveal of 4.2 s and a MAXIMUM of 14.9 s (n=160), which had been read as noise.
+- **BLACK PITCHER BUFFS SUBTRACT RUNNER MOVEMENT** — that is what FIELDING does,
+  and it is why it only matters with runners on base.
+  **This settles `decision_engine.FIELDING_POWER_BUDGET`, whose own comment says
+  "the fielding effect is UNCONFIRMED ... Set to 0 for pure power-first once the
+  question is settled" (it measured p=0.192 on 19 rows).** The question is now
+  settled the OTHER way: do NOT zero it. The existing rule already pays the
+  premium only when runners are on, which is exactly when the effect exists.
+
+**WHAT THE ENGINE STILL CANNOT SEE.** `best_batting_play` sorts on POWER alone and
+attaches a speed boost only as a fallback, and only when runners are already on
+base. It therefore cannot value a fast batter who wins outright, and has no notion
+of tie risk at all. Neither can `simulate.py` settle it: a hit there is
+`runners.append(batter_card)` with speed never consulted, and its own docstring
+flags speed effects as "not confirmed rules — modeled as the simplest reasonable
+guess". **So the 79% win rate that justifies "always attach a swing boost" was
+measured in a model where a speed boost does nothing by construction.** It shows
+swing-boost beats NOTHING; it has never compared swing against speed.
 - A match is 5 rounds and allows 2 discards.
 - **You cannot pause an active match.** Mid-match OPTIONS opens a "Give up?"
   dialog (NO = circle, YES = cross), never the pause menu — so Load Last Save
