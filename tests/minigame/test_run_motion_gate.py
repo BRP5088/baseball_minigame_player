@@ -54,6 +54,14 @@ os.environ["BASEBALL_TEST_RUN"] = "1"
 from _run_harness import (Harness, RESULT_WIN, _CONFIRM, _DIAGTMP, _PLAYED,
                           check, failures)
 import orchestrator
+
+# The deal gate is NOT under test here -- test_readable_hand_gate.py drives every one of
+# its branches. It is stubbed because it spends REAL WALL CLOCK: it polls the screen until
+# the hand reads clean, and a stubbed harness never produces a readable hand, so every turn
+# would burn the full POST_PLAY_DEAL_MAX_WAIT and the file would hit the suite's 300 s
+# ceiling -- the ceiling censoring the work it slowed down (CLAUDE.md 10.14).
+orchestrator.wait_for_hand_deal = lambda *a, **k: True
+
 import orchestrator as o
 
 # --- N3: a discard prompt that does not dismiss is bounded ---------------

@@ -2765,6 +2765,14 @@ DEAL_THRESHOLD_ENV = "BASEBALL_DEAL_THRESHOLD"
 # is ever mistaken for a hang and long enough that a 35 s wait costs 7 lines.
 DEAL_HEARTBEAT_SEC = 5.0
 
+# The gate releases on a HAND THAT READS, twice in a row, rather than on a delta edge --
+# see the rule inside wait_for_hand_deal for why quiet cannot do this job. Set False to
+# get the old edge-plus-floor behaviour back exactly.
+USE_READABLE_HAND_GATE = True
+# TWO, because one frame can be caught mid-animation and still parse; and only two,
+# because each costs a poll interval and the reader is the expensive half of the poll.
+READABLE_POLLS = 2
+
 
 def hand_deal_threshold(env=None):
     raw = (os.environ if env is None else env).get(DEAL_THRESHOLD_ENV)
@@ -2846,6 +2854,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     if baseline is None:
         baseline = _grab_settle_regions(("hand",))["hand"]
     seen = False
+    good = 0
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
@@ -2872,10 +2881,42 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
         # measurement above, so keep polling; return on the first poll at or past
         # the floor once an edge has been seen.
+        # THE RELEASE RULE: A COMPLETE HAND, TWICE RUNNING -- NOT A QUIET FRAME.
+        #
+        # This used to release on the EDGE plus a hand-picked 6 s floor: motion having
+        # BEGUN, not motion having ENDED. That is how a mid-deal screenshot gets taken,
+        # and it is why a quarter of all turns spend a paid API call to wait -- measured
+        # over 514 turns, the first read of a turn lands a median 11.96 s after the play
+        # while the read that finally WORKS on a retried turn lands at 17.59 s. Nothing
+        # differs between them except that the deal finished in between.
+        #
+        # A "wait for the deltas to go quiet" rule was measured and REFUSED: over the
+        # recorded plays a SETTLED HAND reads a frame-to-frame delta of ~4.6 while an
+        # EMPTY TABLE reads ~2.5, so quiet cannot tell "the cards have landed" from
+        # "there are no cards" -- the two populations are the wrong way round and no
+        # threshold on that quantity separates them (CLAUDE.md 10.4).
+        #
+        # So ask the question we actually care about. local_hand_cards() returns a hand
+        # only when every card is fully read, and it is ~21 ms, which is 14% of a poll.
+        # Requiring it TWICE means a frame caught mid-animation cannot release the gate.
+        # No new threshold is invented anywhere in this rule.
         if seen and time.time() - start >= POST_PLAY_MIN_WAIT:
-            print(f"  [deal] replacement card seen; released {time.time() - start:.1f}s "
-                  f"after the play (threshold {th:g}, biggest delta {biggest:.1f})")
-            return True
+            if not USE_READABLE_HAND_GATE:
+                print(f"  [deal] replacement card seen; released "
+                      f"{time.time() - start:.1f}s after the play "
+                      f"(threshold {th:g}, biggest delta {biggest:.1f})")
+                return True
+            try:
+                hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
+                readable = hand_img is not None and local_hand_cards(hand_img)[0] is not None
+            except Exception:
+                readable = False          # never let the gate raise into the turn loop
+            good = good + 1 if readable else 0
+            if good >= READABLE_POLLS:
+                print(f"  [deal] hand READ CLEAN {READABLE_POLLS}x; released "
+                      f"{time.time() - start:.1f}s after the play "
+                      f"(threshold {th:g}, biggest delta {biggest:.1f})")
+                return True
     print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
           f"reading anyway (the retry path will catch a bad read). "
           f"Threshold {th:g}, biggest delta {biggest:.1f}: a biggest well UNDER the "

@@ -52,7 +52,14 @@ check("if POST_PLAY_WAIT_FOR_DEAL:\n" not in src, "the loop no longer reads the 
 def run(deltas, max_wait=35.0):
     calls = {"grab": 0, "delta": 0}
     it = iter(deltas)
-    real = (_o._grab_settle_regions, _o._mean_abs_delta, _o.time)
+    # the gate now ALSO requires the hand to read clean twice; that half is owned by
+    # test_readable_hand_gate.py, which drives every branch of it. It is satisfied here
+    # so these checks still measure the EDGE timing they were written for.
+    real = (_o._grab_settle_regions, _o._mean_abs_delta, _o.time,
+            _o.local_hand_cards, _o.crop_gameplay_regions, _o._fast_grab)
+    _o.local_hand_cards = lambda img: ({"x": 1}, None)
+    _o.crop_gameplay_regions = lambda img: [("hand", object())]
+    _o._fast_grab = lambda: object()
     clock = [1000.0]
     _o._grab_settle_regions = lambda names: (calls.__setitem__("grab", calls["grab"] + 1), {n: None for n in names})[1]
     def delta(a, b):
@@ -66,7 +73,8 @@ def run(deltas, max_wait=35.0):
         res = _o.wait_for_hand_deal(max_wait=max_wait, poll_interval=0.15)
         return res, clock[0] - 1000.0, calls
     finally:
-        _o._grab_settle_regions, _o._mean_abs_delta, _o.time = real
+        (_o._grab_settle_regions, _o._mean_abs_delta, _o.time,
+         _o.local_hand_cards, _o.crop_gameplay_regions, _o._fast_grab) = real
 
 res, elapsed, calls = run([0.0, 32.0] + [0.0] * 400)   # the edge at 0.30 s
 check(res is True, "an early deal edge is still recognised")

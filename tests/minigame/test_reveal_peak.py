@@ -157,6 +157,11 @@ class _C:
     def sleep(s, d): s.t += d
 try:
     _c = _C(); o.time = _c
+    # Same note as test_post_play_timing: satisfy the readable-hand half so these checks
+    # keep measuring the EDGE rule. test_readable_hand_gate.py owns the other half.
+    o.local_hand_cards = lambda img: ({"x": 1}, None)
+    o.crop_gameplay_regions = lambda img: [("hand", object())]
+    o._fast_grab = lambda: object()
     calls = {"n": 0}
     o._grab_settle_regions = lambda names: (calls.__setitem__("n", calls["n"] + 1), {n: None for n in names})[1]
     # distance from the baseline grows 0.8 per poll; no single STEP is ever above 0.8
