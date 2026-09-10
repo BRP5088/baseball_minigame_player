@@ -582,38 +582,43 @@ def read_runners(third_img, second_img, first_img):
 #      averaging blurred two different words together. Every WINNER frame then matched the
 #      LOSER bank. Templates are kept at NATIVE size, one per example, never averaged.
 #
-# THE GATE SITS BETWEEN TWO MEASURED POPULATIONS, held out across sessions and geometries.
-# The census is deliberately large: at_table's brightness-normalised retry was measured
-# clean on 500 route frames and the frame that fired was the 701st.
+# THE GATE SITS BETWEEN TWO MEASURED POPULATIONS, held out by RUN -- templates come from one
+# run per class and are scored on every other, because a template matches its own source at
+# 1.000 and frames from one sighting are near-duplicates of each other (CLAUDE.md 10.22).
 #
-#     STILL FRAMES
-#       RESULT, none of which supplied a template
-#          7 winners, match_timeline_20260908 at 960x540       0.969 .. 0.979
-#         24 result screens from three run videos at 1920x1080 0.955 .. 0.987
-#            (both classes, adjudicated by eye -- losers.png)
-#       NON-RESULT
-#            422 bulk match frames at 768x432                  max 0.495
-#          1,522 timeline + world/quest-log frames             max 0.543
-#         14,437 match frames at 1920x1080 (screenshot_log)    max 0.467
+#     HELD-OUT RESULT FRAMES, 342 from runs that supplied no template
+#         winner  n=269   loser  n=22   draw  n=51        0 CLASS ERRORS
+#         p05 0.954, median 0.983; exactly ONE frame falls under the gate, at 0.782, and it
+#         was extracted and LOOKED AT: a half-transparent DRAW! ghosting in over the table
+#         with the medallion not yet arrived (lowest_result.png). That is the abstention
+#         this reader is supposed to make.
+#     EVERY OTHER FRAME -- 72,725 scored, 998 at or above the gate
+#         16,387 stills, four corpora at 768x432 / 960x540 / 1920x1080: 13 at or above the
+#                        gate and ALL THIRTEEN are genuine result screens (4 of them are the
+#                        template sources). Sub-gate max 0.735.
+#         56,338 video, every 20th frame of all 18 run recordings. Sub-gate max 0.782 --
+#                        and that frame is the DRAW fade described above, not a negative.
 #
-#     VIDEO -- every 20th frame of all 17 archived run recordings, 55,937 frames
-#         at or above the gate     759 frames, 25 distinct result screens, 0.759 .. 0.988
-#         below it              55,178 frames, max 0.733
+# THE HIGHEST NEGATIVES WERE EXTRACTED AND ADJUDICATED BY EYE (v2near.png, v2_nearmiss.png):
+# the seven that top the list are all the WORLD -- the bar, the dealer prompt, the office
+# door -- and the highest of them is 0.742. So the negative population genuinely reaches
+# 0.742, and everything between there and the gate is a result screen fading in.
 #
-# ZERO FALSE POSITIVES IN 72,318 FRAMES -- and the four highest sub-gate scores are not
-# negatives at all. They were pulled out of the videos and LOOKED AT
-# (agent_progress/result-reader/nearmiss.png): every one has WINNER visibly on screen,
-# HALF FADED, on its way in or out. So the reader's error is always an ABSTENTION during
-# the fade, never a wrong answer -- which is the direction that costs nothing, because the
-# banner then sits fully opaque for a MEASURED 4.0 s at its shortest (25 sightings, median
-# 7.0 s) and the caller polls many times inside that.
+# WHY 0.80 AND NOT THE MIDPOINT. The two errors are not symmetric. A FALSE POSITIVE reports
+# a finished match on a world frame and logs a win or a loss that never happened. A FALSE
+# NEGATIVE costs nothing: the banner sits fully opaque for a measured 4.0 s at its shortest
+# (25 sightings, median 7.0 s), so the next poll catches it. The gate is therefore biased
+# AWAY from the negatives -- 0.058 clear of the highest adjudicated negative, against the
+# 0.008 that 0.75 would have left, and still far below the result p05 of 0.954.
 #
-# An empty band 0.733 .. 0.759 on the video census, 0.543 .. 0.955 on the stills.
-# RESULT_MIN 0.75 sits inside both.
+# TWO FRAMES IN THE ORIGINAL TWO-CLASS CENSUS WERE MISLABELLED, and both were DRAWS. They
+# were filed as "the top non-result frames" precisely because the reader had no DRAW
+# template and so could not see the word. That is why every frame near the gate, on BOTH
+# sides, is opened and looked at before it is called anything.
 RESULT_TEMPLATES = os.path.join(_HERE, "result_templates.npz")
 RESULT_REF_W = 768.0
 RESULT_SEARCH = (0.28, 0.12, 0.72, 0.42)
-RESULT_MIN = 0.75
+RESULT_MIN = 0.80
 # THE THREE BANNERS. There is a DRAW! as well as WINNER and LOSER, and missing it is not a
 # fade that the next poll recovers from -- a draw NEVER settles into a word a two-class
 # reader knows, so it stalls the loop until the run gives up. 5 of the 52 matches on record

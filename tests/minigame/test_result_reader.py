@@ -59,8 +59,9 @@ def img(d, name):
 
 
 # --- 1. the constants are pinned as literals -------------------------------------------
-check(local_state.RESULT_MIN == 0.75,
-      "RESULT_MIN is the literal 0.75")
+check(local_state.RESULT_MIN == 0.80,
+      "RESULT_MIN is the literal 0.80 -- above every adjudicated negative (0.742) by 0.058, "
+      "and a missed fade frame costs only a poll")
 check(local_state.RESULT_MARGIN == 0.10,
       "RESULT_MARGIN is the literal 0.10 -- a tie-breaker floor, not a fitted value")
 check(local_state.RESULT_CLASSES == {"winner": "win", "loser": "loss", "draw": "draw"},
