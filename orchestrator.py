@@ -3323,21 +3323,52 @@ def local_game_state():
     except Exception as exc:
         return None, f"result reader failed ({exc})"
     if res.get("is_result"):
-        if res.get("won") is None:
-            return None, f"result screen, but WIN/LOSE unread: {res['why']}"
-        return {"screen": "result", "result_won": bool(res["won"]), "hand": [],
-                "batters_used": None, "collection": [], "runners": None,
+        if res.get("outcome") is None:
+            return None, f"result screen, but the outcome is unread: {res['why']}"
+        # NO SCORES ARE SUPPLIED HERE, DELIBERATELY. run() prefers a score comparison over
+        # result_won because result_won cannot express a draw -- but ocr_scoreboard misreads
+        # the RESULT screen (12 of 76 draw frames readable at all, and one of those 12 wrong;
+        # see local_state.read_result). `result_outcome` carries the answer instead, and
+        # run() prefers it over both.
+        won = {"win": True, "loss": False, "draw": None}[res["outcome"]]
+        return {"screen": "result", "result_outcome": res["outcome"], "result_won": won,
+                "hand": [], "batters_used": None, "collection": [], "runners": None,
                 "discards_left": None, "phase": None,
                 "your_score": None, "opp_score": None}, None
     if res.get("is_result") is None:
         return None, f"result reader could not run: {res.get('why')}"
+
+    # THE BAN SCREEN. It has no hand on it, so without this the hand reader is asked a
+    # question about a screen it cannot see and answers "0 rows, expected 5" -- naming the
+    # WRONG reader for the gap, which is how a stalled run sends the next session to fix
+    # something that was never broken. This is what stopped the 2026-09-10 01:11 run.
+    #
+    # read_ban_counter already ships and already NEVER guesses: it OCRs the "N/3" counter and
+    # returns None when it cannot read. The ban branch in run() consumes nothing from the
+    # state but the screen name, so that is all this returns.
+    try:
+        banned = read_ban_counter(full)
+    except Exception:
+        banned = None
+    if banned is not None:
+        return {"screen": "ban_screen", "hand": [], "batters_used": None,
+                "collection": [], "runners": None, "discards_left": None,
+                "phase": None, "result_won": None}, None
 
     hand_img = crops.get("hand")
     if hand_img is None:
         return None, "no hand crop"
     cards, why = local_hand_cards(hand_img)
     if cards is None:
-        return None, f"hand: {why}"
+        # NAME THE SCREEN, NOT THE HAND. Every screen that is not a result, a ban grid or a
+        # turn arrives here, and reporting it as a hand failure is the same shape as
+        # CLAUDE.md 10.1: a message that looks like a diagnosis and points at the wrong
+        # component. The hand reader's own reason is kept, because when this IS a turn it is
+        # the right answer.
+        best_word = max((res.get("scores") or {}).values(), default=-1.0)
+        return None, (f"UNRECOGNISED SCREEN -- not a result (best word {best_word:.3f} "
+                      f"against {local_state.RESULT_MIN}), not a ban grid (no N/3 counter), "
+                      f"and the hand reader says: {why}")
 
     st = {"screen": "turn", "hand": cards, "batters_used": None, "result_won": None,
           "collection": []}
@@ -5835,7 +5866,18 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     # Prefer the actual score comparison over result_won, since
                     # result_won is only true/false and can't distinguish a draw
                     # (scores tied) from a real loss — both read as false there.
-                    if your_score is not None and opp_score is not None:
+                    # PREFERENCE ORDER, and it is not the obvious one. `result_outcome` is
+                    # the LOCAL word reader (WINNER / LOSER / DRAW!), which scores 0 class
+                    # errors over 342 held-out result frames from runs that supplied no
+                    # template. It goes FIRST because the scoreboard -- which this block used
+                    # to prefer -- is measurably unreliable on a result screen: readable on
+                    # 12 of 76 draw frames, and wrong on one of those 12. Scores stay ahead
+                    # of result_won for the PAID path, which supplies them and never sets
+                    # result_outcome, so that path is untouched.
+                    local_outcome = state_json.get("result_outcome")
+                    if local_outcome in ("win", "loss", "draw"):
+                        outcome = local_outcome
+                    elif your_score is not None and opp_score is not None:
                         if your_score > opp_score:
                             outcome = "win"
                         elif your_score == opp_score:

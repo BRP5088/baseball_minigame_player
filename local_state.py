@@ -614,6 +614,13 @@ RESULT_TEMPLATES = os.path.join(_HERE, "result_templates.npz")
 RESULT_REF_W = 768.0
 RESULT_SEARCH = (0.28, 0.12, 0.72, 0.42)
 RESULT_MIN = 0.75
+# THE THREE BANNERS. There is a DRAW! as well as WINNER and LOSER, and missing it is not a
+# fade that the next poll recovers from -- a draw NEVER settles into a word a two-class
+# reader knows, so it stalls the loop until the run gives up. 5 of the 52 matches on record
+# are draws. It was found by looking at the frames a stalled run was staring at, not by any
+# number: the reader called them "not a result screen" at 0.42-0.49 and the gap was reported
+# against the hand.
+RESULT_CLASSES = {"winner": "win", "loser": "loss", "draw": "draw"}
 # `full_frame` means the WHOLE game frame. Handed a CROP instead, the scaled templates
 # collapse to a few pixels and matchTemplate happily returns a number -- the shape
 # CLAUDE.md 10.1 calls "a success path and a no-op path with identical output". Below half
@@ -621,18 +628,26 @@ RESULT_MIN = 0.75
 # sub-pixel, so there is nothing left to match. This is a validity floor on the INPUT
 # geometry, not a discriminator between two populations, and it is written down as such.
 RESULT_MIN_FRAME_W = RESULT_REF_W / 2
-# WINNER against LOSER is a different question from result-against-everything, and it has
-# its own measured margin: on every held-out result frame the winning class beats the other
-# by 0.53-0.58. RESULT_MARGIN is NOT fitted to a population -- it is a tie-breaker floor,
-# an order of magnitude below every real margin, so that two words scoring alike abstain
-# rather than pick. That is stated plainly rather than dressed up as a measurement.
+# ONE WORD AGAINST THE OTHER TWO is a different question from result-against-everything,
+# and it has its own measured margin: on every held-out result frame the winning class beats
+# the runner-up by a wide margin, and there are 0 class errors over 342 held-out frames.
+# RESULT_MARGIN is NOT fitted to a population -- it is a tie-breaker floor, well below every
+# real margin, so that two words scoring alike abstain rather than pick. That is stated
+# plainly rather than dressed up as a measurement.
 RESULT_MARGIN = 0.10
 
 _result_tpls = None
 
 
 def result_templates():
-    """[(class, native template), ...] -- one per example frame, never averaged."""
+    """[(class, native template), ...] -- one per example frame, never averaged.
+
+    The bank spans BOTH FORMS of each word. The first bank was cut entirely from the SETTLED
+    form -- a small ARCHED word on a thin bright arc -- and mid-animation, before the arch
+    sets, the same word is LARGER and FLAT and scores ~0.50, under the gate. Templates are
+    taken evenly across the word's area at reference scale so the bank spans the animation
+    rather than six frames of one moment.
+    """
     global _result_tpls
     if _result_tpls is None:
         z = np.load(RESULT_TEMPLATES)
@@ -666,7 +681,7 @@ def result_scores(img):
 
 
 def read_result(full_frame):
-    """Is this the end-of-match RESULT screen, and did we win.
+    """Is this the end-of-match RESULT screen, and what was the outcome.
 
     `full_frame` is the WHOLE game frame, not a crop -- the search window is a fraction of
     it. Returns {"is_result": True|False|None, "won": True|False|None,
@@ -680,26 +695,33 @@ def read_result(full_frame):
     HONEST LIMIT: the frame where the medallion is still animating in scores ~0.43 and comes
     back False. That is correct -- the banner is not up yet -- but it means a single frame
     grabbed at the wrong instant reads "not a result screen", so the caller polls.
+
+    THE OUTCOME COMES FROM THE WORD, NOT FROM THE SCOREBOARD, and that is measured. run()
+    prefers a score comparison because "won" cannot express a draw -- but on a RESULT screen
+    orchestrator.ocr_scoreboard is not reliable: over the 76 harvested DRAW frames it reads
+    both rows on only 12, and one of those 12 returns [0,1,5] against a scoreboard that
+    plainly shows 1 0 1 / 0 1 1 (agent_progress/result-reader/draw_conflict.png). A wrong
+    score is worse than no score, because run() would act on it. So this reader never
+    supplies scores; it names the outcome directly.
     """
     sc = result_scores(full_frame)
-    out = {"is_result": None, "won": None, "winner": sc.get("winner", -1.0),
-           "loser": sc.get("loser", -1.0), "why": ""}
-    if "winner" not in sc or "loser" not in sc:
+    out = {"is_result": None, "outcome": None, "scores": dict(sc), "why": ""}
+    if len(sc) < len(RESULT_CLASSES):
         out["why"] = (f"frame too small for the word templates "
                       f"({full_frame.width}px wide, floor {RESULT_MIN_FRAME_W:g})")
         return out
     best = max(sc, key=sc.get)
     top = sc[best]
-    other = min(sc.values())
+    other = max(v for k, v in sc.items() if k != best)
     if top < RESULT_MIN:
         out["is_result"] = False
         out["why"] = f"no result word found (best {top:.3f} < {RESULT_MIN})"
         return out
     out["is_result"] = True
     if top - other < RESULT_MARGIN:
-        out["why"] = (f"result screen, but WINNER {sc['winner']:.3f} and LOSER "
-                      f"{sc['loser']:.3f} are too close to call")
+        ranked = ", ".join(f"{k} {v:.3f}" for k, v in sorted(sc.items(), key=lambda kv: -kv[1]))
+        out["why"] = f"result screen, but the words are too close to call ({ranked})"
         return out
-    out["won"] = (best == "winner")
-    out["why"] = f"{best} ({top:.3f} against {other:.3f})"
+    out["outcome"] = RESULT_CLASSES[best]
+    out["why"] = f"{best} -> {out['outcome']} ({top:.3f} against the next word at {other:.3f})"
     return out
