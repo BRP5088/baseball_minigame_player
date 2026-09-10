@@ -250,8 +250,28 @@ Measured: `find_bar()` returns non-None on EVERY frame including ban and
 gameplay screens, and `read_bearing()` returned 177.4 on a gameplay turn. Use
 `table_prompt.at_table()` when the question is "is the dealer prompt up".
 
-**The PS5 dashboard overlay says `▢ Resume Game` — that is SQUARE, not Cross.**
-Cross navigates *into* the game card instead.
+**THERE ARE TWO PS5 OVERLAY SCREENS AND THEY TAKE DIFFERENT BUTTONS.** This entry read
+"the PS5 dashboard overlay says `▢ Resume Game` — that is SQUARE, not Cross. Cross navigates
+*into* the game card instead", and acting on it on 2026-09-10 got nowhere: Square did
+nothing at all, three times. The user, who could see the screen, said press X.
+
+    CONTROL CENTER (the icon bar along the bottom, game still visible behind)
+        X on the game tile  ->  opens that game's CARD
+    THE GAME CARD (a panel with "Total progress 65%" and a highlighted button)
+        the button IS "Resume Game", already focused, and X takes it
+
+So it is X, then X. The old note is not wrong about Square existing somewhere in the PS5 UI;
+it is wrong as an instruction, because it names one screen and the recovery needs two.
+
+**AND THE REASON THIS TOOK FOUR ATTEMPTS IS A MEASUREMENT MISTAKE WORTH THE SPACE.** Between
+presses I scored `_mean_abs_delta` over the whole frame, got 0.1-0.2, and concluded "nothing
+is reaching the console — this is not a button problem". Input was landing the whole time.
+Two different PS5 overlay screens are ~99% identical pixels (same dimmed game behind, same
+dark panel), so a whole-frame mean cannot see the navigation that actually happened, and I
+had also left the `before` frame stale across several presses. ONE SCREENSHOT settled it
+instantly and showed "Resume Game" sitting highlighted. §10.15 in a new place: on a screen
+that is mostly unchanged by design, a frame-difference number is not evidence of anything —
+look at the frame.
 
 **The pause book is bright AND has DARK MENU TEXT. A bright wall is not.**
 `is_pause_screen()` once tested only "is this mostly paper-bright", and a
