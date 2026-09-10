@@ -3352,6 +3352,45 @@ def _retry_local_hand(state):
 # 45% of the time -- measured, after the user pointed out the assumption was wrong: the
 # real spread is 2 to 5 with a mean of 2.77, because a turn can play a card, play a card
 # WITH a tactics card attached, or discard.
+# REMEMBER THE HAND, SLOT BY SLOT (the user's design).
+#
+# The whole hand is still read every turn -- it costs 21 ms and it works -- but what was
+# read is KEPT. When a slot cannot be read, the value already known for that slot is used
+# instead of dropping the card.
+#
+# WHY THAT IS SAFE, AND IT IS THE USER'S POINT: a card only changes when it is PLAYED or
+# DISCARDED, and we are the ones who play it. So the slots that changed are known exactly,
+# not inferred -- forget_hand_slot() is called at the two places that spend a card, and a
+# forgotten slot is never carried forward.
+#
+# AND EVERY READABLE CARD AUDITS THE MEMORY FOR FREE. Measured over the 445-hand corpus:
+# 910 checks where a slot was both remembered and readable, and the memory disagreed with
+# the reader ZERO times. Memory is only consulted for slots the reader cannot see, so a
+# drifted model is caught on the next turn that can see that slot.
+#
+# Coverage on that same corpus is 4 of 14 unreadable cards (29%), and the limit is the
+# CORPUS, not the design: it holds about one frame per turn, taken at whatever moment the
+# old timing happened to fire, so a card whose right-hand neighbour was dealt in the same
+# turn was never seen clean. Captures taken with the readable-hand gate should do better;
+# that is unmeasured and is not claimed here.
+# Same gate as the hail mary, and measured the same way: the four true art matches scored
+# 0.948-0.989 and nothing else in 445 hands reached 0.90.
+HAND_MEMORY_MIN_ART = 0.90
+_hand_memory = {}
+
+
+def forget_hand_slot(*slots):
+    """A slot we SPENT. Its card is gone, so nothing about it may be carried forward."""
+    for s in slots:
+        if s is not None:
+            _hand_memory.pop(int(s), None)
+
+
+def reset_hand_memory():
+    """A new match, or any point where the hand is not the hand we remember."""
+    _hand_memory.clear()
+
+
 MIN_LOCAL_HAND_CARDS = 3
 # The hail mary's gate. Art correlation, measured: the four true recoveries scored
 # 0.948-0.989 and nothing else in 445 hands reached 0.90.
@@ -3466,6 +3505,31 @@ def local_hand_cards(hand_img):
                     print(f"  [local] slot {i}: power unread, recovered as {digit} "
                           f"from a recent hand (hail mary)")
             if digit is None or sec is None:
+                # THE MEMORY. A slot we did not spend still holds the card it held last
+                # turn, so what was read then is what is there now. Only slots we have
+                # not spent are in here -- forget_hand_slot() removes the ones we play.
+                remembered = _hand_memory.get(i)
+                # SLOT IDENTITY IS THE RULE, and it is what the console says.
+                # VERIFIED LIVE, twice, with a clean starting state asserted first: play
+                # slot 2, and slot 2 is the ONLY slot that changes -- and the replacement
+                # is readable the moment it lands. (A third round was excluded: the user
+                # pointed out it was the last hand of the inning, so the whole hand was
+                # replaced.) So the slots that changed are the ones WE SPENT, and we know
+                # exactly which those are.
+                #
+                # An art check was tried first and is NOT used, because it is too strict
+                # in exactly the case that matters: the overlap that hides a card's disc
+                # also covers part of its art, so identity cannot be confirmed precisely
+                # when it is needed. Gated on art the memory fired 0 times in 445 hands.
+                #
+                # THE SAFETY IS forget_hand_slot(), NOT A SIMILARITY SCORE, and
+                # tests/minigame/test_hand_memory_forgets.py fails if any site that spends
+                # a card stops calling it.
+                if remembered is not None:
+                    digit, sec = remembered["power"], remembered["secondary"]
+                    print(f"  [local] slot {i}: unreadable, carried forward as "
+                          f"{digit}/{sec} (slot not spent since it was last read)")
+            if digit is None or sec is None:
                 # A CARD THAT CANNOT BE READ IS NOT A HAND THAT CANNOT BE READ.
                 # Rejecting the whole hand turned an unreadable CARD into an unreadable
                 # STATE, and every one of those cost a paid call: measured live, the loop
@@ -3475,9 +3539,23 @@ def local_hand_cards(hand_img):
                 # right card.
                 dropped.append(i)
                 continue
+            # EVERY READABLE CARD AUDITS THE MEMORY, free of charge. A disagreement means
+            # the hand moved in a way we did not cause, so the memory is wrong and the
+            # reader is right -- say so loudly and take the reader's answer.
+            was = _hand_memory.get(i)
+            if was is not None and r.get("digit") is not None and (
+                    str(was["power"]) != str(r.get("digit"))):
+                print(f"  [local] slot {i}: MEMORY WAS WRONG "
+                      f"({was['power']}/{was['secondary']} remembered, "
+                      f"{r.get('digit')}/{r.get('secondary')} read) -- taking the read")
+            if r.get("digit") is not None:
+                # `art` is kept for diagnostics only -- the carry-forward decision is
+                # forget_hand_slot(), not similarity.
+                _hand_memory[i] = {"power": r.get("digit"), "secondary": r.get("secondary"),
+                                   "art": r.get("_art")}
             cards.append({"kind": "player", "name": None, "power": int(digit),
                           "secondary": int(sec), "hand_index": i})
-            # remember it, so a LATER hand that cannot read this card can borrow the value
+            # and the art bag, for the hail mary when a slot has no memory at all
             _remember_card(r.get("_art"), digit, sec)
         elif kind == "tactics":
             if r.get("type") is None or r.get("bonus") is None:
@@ -5006,6 +5084,9 @@ def play_one_turn(state_json: dict, batters_used: int):
         print(f"Decision: best card is weak (power {decision.player_card.power}) and "
               f"{state.redraws_left} discard(s) left — discarding the weakest "
               f"(power {_weakest[1].power}) instead of playing")
+        # The card is SPENT. Forget it, so nothing carries its value forward into the
+        # replacement -- the only way the hand memory can be wrong is if we let it.
+        forget_hand_slot(player_idx)
         select_and_discard(player_idx)
         return False, None
     else:
@@ -5044,6 +5125,8 @@ def play_one_turn(state_json: dict, batters_used: int):
     # already post-deal. It crosses functions the way graph_walk carries a leg-end frame:
     # a module stash that the consumer POPS, so a turn can never inherit the last one.
     stash_hand_baseline(_grab_settle_regions(("hand",))["hand"])
+    # Both slots are SPENT (the tactics one too, when one was attached).
+    forget_hand_slot(player_idx, tactics_idx)
     select_and_play(player_idx, tactics_idx)
 
     matchup_info = {
@@ -5644,6 +5727,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("  [C5] ...but the dealer's \"Play ($50)\" prompt is "
                               "on screen, so no match is actually running — "
                               "retrying the press without re-debiting.")
+                    reset_hand_memory()  # a new match is a new hand; nothing carries over
                     press("start_match")
                     wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
                     continue
@@ -5713,6 +5797,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                       bans_done_this_match=bans_done_this_match)
                 print(f"Starting next match. ${balance} left"
                       + (f", ${spent}/${max_spend} of session cap spent." if max_spend is not None else "."))
+                reset_hand_memory()  # a new match is a new hand; nothing carries over
                 press("start_match")
                 wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
                 continue

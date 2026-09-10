@@ -118,6 +118,7 @@ CASES = [
 _real = local_hand.read_hand
 try:
     # the control first: the stub itself must build, or every case below passes vacuously
+    orchestrator.reset_hand_memory()
     local_hand.read_hand = lambda img: [dict(c) for c in FULL]
     cards, why = orchestrator.local_hand_cards(blank)
     check("CONTROL: the intact stub hand builds", cards is not None, str(why))
@@ -132,6 +133,11 @@ try:
     # drop is honest: the bad slot is gone, the good ones keep their hand_index so input
     # targeting still hits the right card, and `why` says which slots went.
     for name, slot, patch in CASES:
+        # THE MEMORY IS GLOBAL STATE AND THIS FILE MUST CONTROL IT. Without the reset the
+        # previous case has already banked a value for that slot, the carry-forward fills
+        # it in, and these checks measure the memory instead of the drop rule they are
+        # about. The suite caught exactly that.
+        orchestrator.reset_hand_memory()
         def stub(img, _s=slot, _p=patch):
             rows = [dict(c) for c in FULL]
             rows[_s].update(_p)
@@ -149,6 +155,8 @@ try:
     # AND THERE IS A FLOOR. Dropping is not free -- the decision engine then chooses from
     # fewer cards believing that is the hand -- so below MIN_LOCAL_HAND_CARDS the honest
     # answer is to refuse and let the paid path take it.
+    orchestrator.reset_hand_memory()
+
     def gut(img):
         rows = [dict(c) for c in FULL]
         for i in (1, 2, 3):
