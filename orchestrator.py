@@ -2856,6 +2856,16 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     seen = False
     good = 0
     last_sig = None
+    # THE FLOOR PROBE. POST_PLAY_MIN_WAIT is 6.0 and the release rule below only RUNS once
+    # the floor has passed, so every logged release sits at 6.30 or later -- exactly floor
+    # plus the two polls the rule needs. The logs therefore CANNOT say whether the floor is
+    # holding anything back: 24 of 54 archived releases are at that earliest permitted
+    # instant, and nothing on disk records when the hand first settled. This watches the
+    # same signal from the FIRST poll and only PRINTS, so the floor still decides the
+    # release and the run is unchanged. One run answers whether the floor is redundant.
+    probe_good = 0
+    probe_sig = None
+    probe_at = None
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
@@ -2878,6 +2888,16 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                   f"biggest delta {biggest:.1f} of the {th:g} needed")
         if d >= th:
             seen = True
+
+        if USE_READABLE_HAND_GATE and probe_at is None:
+            try:
+                psig = _hand_signature(dict(crop_gameplay_regions(_fast_grab())).get("hand"))
+                probe_good = probe_good + 1 if (psig is not None and psig == probe_sig) else 0
+                probe_sig = psig
+                if probe_good >= READABLE_POLLS:
+                    probe_at = time.time() - start
+            except Exception:
+                probe_good, probe_sig = 0, None
 
         # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
         # measurement above, so keep polling; return on the first poll at or past
@@ -2923,9 +2943,12 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 readable, last_sig = False, None   # never raise into the turn loop
             good = good + 1 if readable else 0
             if good >= READABLE_POLLS:
+                _held = ("" if probe_at is None
+                         else f", hand first settled at {probe_at:.1f}s "
+                              f"(floor held it {max(0.0, time.time() - start - probe_at):.1f}s)")
                 print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
                       f"{time.time() - start:.1f}s after the play "
-                      f"(threshold {th:g}, biggest delta {biggest:.1f})")
+                      f"(threshold {th:g}, biggest delta {biggest:.1f}{_held})")
                 return True
     print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
           f"reading anyway (the retry path will catch a bad read). "
