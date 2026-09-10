@@ -2788,7 +2788,22 @@ def hand_deal_threshold(env=None):
 # No post-play read before this, edge or no edge: between the fastest release the
 # old gate produced (2.16 s, n=85 live) and the earliest a hand was readable by eye
 # (8.43 s, n=9).
-POST_PLAY_MIN_WAIT = 6.0
+# MEASURED LIVE, 2026-09-10, and it was costing 5.6 s a turn for nothing. The floor predates
+# the stable-hand rule: back then the gate released on the deal's rising EDGE, so a floor was
+# the only thing stopping it firing on dead-window noise. The archived logs could not say
+# whether it still earned its place, because the settle rule only RUNS once the floor has
+# passed -- every release on disk sits at 6.30 s, exactly floor plus the two polls the rule
+# needs. patch912e3d0's probe watches the same signal from the FIRST poll and only prints:
+#
+#     hand first settled at   median 1.1 s   (min 0.7, max 2.3, n=15 turns)
+#     the 6.0 floor then held it   median 5.6 s   (4.5 .. 8.7)
+#     total dead time              90 s over 15 turns
+#
+# 3.0 sits above every settle time observed (max 2.3) and still refuses a sub-second edge,
+# which is what the floor was for. It is NOT zero: nothing has measured what the gate does
+# with no floor at all, and the probe cannot answer that because it only ever watched a run
+# that had one.
+POST_PLAY_MIN_WAIT = 3.0
 # ON BY DEFAULT since 2026-09-08. The diagnosis (88/88 plays read ~15 s early) was
 # never in doubt; the replay that closed only half the gap did so because the
 # threshold sat inside the noise -- see HAND_DEAL_THRESHOLD. Measured directly on
@@ -3352,6 +3367,27 @@ def local_game_state():
         banned = None
     if banned is not None:
         return {"screen": "ban_screen", "hand": [], "batters_used": None,
+                "collection": [], "runners": None, "discards_left": None,
+                "phase": None, "result_won": None}, None
+
+    # THE DEALER PROMPT. A finished match returns to the world at the table, and until this
+    # landed that screen was UNRECOGNISED: the 2026-09-10 10:24 run won its match, dismissed
+    # the result, came back here and then burned all 15 stuck attempts against a screen
+    # nothing could name. 28 of that run's 29 gaps were this.
+    #
+    # The test is at_table(), which is ALREADY the authority for the Square press that spends
+    # the $50 -- _dealer_prompt_on_screen() is a one-line wrapper around it, and its docstring
+    # records why the obvious alternatives are wrong (compass.find_bar returns non-None on
+    # EVERY frame including gameplay, and read_bearing answered 177.4 on a gameplay turn, so
+    # either would have fired start_match into a live match). Passing the frame already in
+    # hand rather than re-grabbing keeps this verdict on the same pixels as the two above.
+    try:
+        import table_prompt as _tp
+        at_dealer = bool(_tp.at_table(full))
+    except Exception:
+        at_dealer = False
+    if at_dealer:
+        return {"screen": "match_start_prompt", "hand": [], "batters_used": None,
                 "collection": [], "runners": None, "discards_left": None,
                 "phase": None, "result_won": None}, None
 

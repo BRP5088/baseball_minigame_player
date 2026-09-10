@@ -29,8 +29,15 @@ check(not _o.hand_deal_seen([10.0]), "a dead-window delta (10.0) is NOT a deal b
 check(_o.hand_deal_seen([20.0]), "20.0 clears the live threshold of 15.0")
 check(not _o.hand_deal_seen([11.5]), "11.5, the highest no-deal window measured, does not")
 check(_o.hand_deal_seen([32.0]), "a deal-burst delta (32.0) IS a deal")
-check(_o.POST_PLAY_MIN_WAIT == 6.0, "POST_PLAY_MIN_WAIT is 6.0")
-check(2.16 < _o.POST_PLAY_MIN_WAIT < 8.43, "the floor sits between the fastest old release (2.16) and the earliest readable hand (8.43)")
+check(_o.POST_PLAY_MIN_WAIT == 3.0,
+      "POST_PLAY_MIN_WAIT is the literal 3.0 -- measured live: the hand settles at a median "
+      "1.1s (max 2.3 over 15 turns) and the old 6.0 held it 5.6s longer for nothing")
+# The floor is now sized by the LIVE settle measurement, not by the old edge-release window:
+# the hand settles at a median 1.1s and a max of 2.3s over 15 turns, so 3.0 clears every one
+# of them and still refuses a sub-second edge. The old bound (2.16 .. 8.43) came from the
+# edge-release era and 8.43 was "the earliest readable hand" -- a number the stable-hand rule
+# made obsolete, and which the probe has now replaced with a direct reading.
+check(2.3 < _o.POST_PLAY_MIN_WAIT, "the floor clears the slowest settle actually measured (2.3s)")
 # The 21.95 s worst case came from replaying 9 turns offline against the rising-edge
 # statistic. Live, over 30 gate windows, every real deal crossed the shipped
 # threshold by 15.0 s, so a 20 s cap carries a third of margin and saves 15 s on
@@ -79,8 +86,10 @@ def run(deltas, max_wait=35.0):
 
 res, elapsed, calls = run([0.0, 32.0] + [0.0] * 400)   # the edge at 0.30 s
 check(res is True, "an early deal edge is still recognised")
-check(elapsed >= 6.0, f"...but not released before the 6.0 s floor (released at {elapsed:.2f}s)")
-check(elapsed < 7.0, f"...and released promptly once past the floor ({elapsed:.2f}s)")
+# LITERALS, not _o.POST_PLAY_MIN_WAIT -- a bound written in terms of the constant it guards
+# rises with it and passes forever (CLAUDE.md 10.11).
+check(elapsed >= 3.0, f"...but not released before the 3.0s floor (released at {elapsed:.2f}s)")
+check(elapsed < 4.0, f"...and released promptly once past the floor ({elapsed:.2f}s)")
 check(calls["delta"] >= 2 and calls["grab"] >= 3, "the stubs were really polled")
 
 res, elapsed, calls = run([0.0, 32.0] + [0.0] * 400)

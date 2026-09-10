@@ -166,6 +166,32 @@ check(st is not None and st.get("result_won") is None and st.get("result_outcome
 check(st is not None and st.get("your_score") is None and st.get("opp_score") is None,
       "a result state supplies NO scoreboard numbers -- ocr_scoreboard misreads that screen")
 
+# --- 7b. THE DEALER PROMPT is a screen, not a gap ----------------------------------------
+# The 10:24 run won its match, came back to the table, and burned all 15 stuck attempts
+# against this screen because nothing could name it. 28 of its 29 gaps were this frame.
+_grab2 = orchestrator._fast_grab
+try:
+    orchestrator._fast_grab = lambda: Image.open(
+        os.path.join(_ROOT, "diagnostics", "20260910_103221_5018", "screen_at_stall.png"))
+    st, gap = orchestrator.local_game_state()
+finally:
+    orchestrator._fast_grab = _grab2
+check(st is not None and st.get("screen") == "match_start_prompt" and gap is None,
+      f"the dealer prompt classifies as match_start_prompt, not a gap "
+      f"(got {st.get('screen') if st else gap!r})")
+
+# ...and the screens that are NOT the dealer prompt must not claim to be, because that
+# verdict leads to the Square press that spends $50.
+for name, d in (("heldout_winner_a.jpg", FIX), ("heldout_draw_768.jpg", FIX),
+                ("ban_0of3_1920x1080.jpg", BAN)):
+    try:
+        orchestrator._fast_grab = lambda _p=os.path.join(d, name): Image.open(_p)
+        st, _ = orchestrator.local_game_state()
+    finally:
+        orchestrator._fast_grab = _grab2
+    check(st is not None and st.get("screen") != "match_start_prompt",
+          f"{name} does NOT claim the dealer prompt (got {st and st.get('screen')!r})")
+
 # --- 8. an unrecognised screen names ITSELF, not the hand --------------------------------
 for name in ("animating_in_not_yet_a_result.jpg", "top_negative_questlog_0543.jpg"):
     try:
