@@ -1754,6 +1754,96 @@ anchor DIRECTLY, because the reader's own fallback tries both anchors and would
 have masked it.
 
 
+**24. THE PAID VISION MODEL DOES NOT READ CARDS -- IT ANSWERS WITH A DEFAULT, AND THAT
+DEFAULT WAS HIDING EVERY LOCAL NUMBER BEHIND IT.** 2026-09-09, at the user's call:
+*"comment out the API reads for all card reading... leaving them in is hiding the real
+values and your also wasting my IRL money."* Both halves measured:
+
+- **It never read a card NAME.** Over 2,171 recorded hand cards `name` came back as
+  'Batter' (493) or 'Pitcher' (394) -- the TYPE BANNER, the only text on the card --
+  plus '' (113), 'None' (274), 'Unknown' (23), and 57 invented names including SIX
+  spellings of the same one (M. J. / P.J. / J.J. / M.J. / P. J. / R.J. Gain). Section 3
+  has said "hand cards do not display a name" since day one.
+- **It answers on frames with nothing on them.** On 32 of 33 crops containing NO CARDS AT
+  ALL it returned a full five-card hand with powers and shields; on frames that did
+  contain cards, 325 of 327. "Five cards" is a DEFAULT, the same shape as `discards_left`
+  answering 2 on 286 of 360 turns.
+
+The second one is why this mattered beyond the bill: those are exactly the frames the
+LOCAL reader refuses, so the local reader's "failures" were being scored against
+fabrication. `PAID_READS_CARDS = False` in orchestrator; nothing is deleted and the flag
+restores it.
+
+**THE ONE FIELD WHERE THE PAID MODEL WAS RIGHT AND THE LOCAL READER WAS WRONG** is `kind`,
+and it is worth knowing because it is the exception: the fan decides kind BY POSITION, and
+a slot no candidate reached was emitted as `tactics` by default -- wrong on 10 of 17. I
+reported the opposite before opening the frames, and the contact sheet corrected me.
+
+---
+
+**25. THE CAPTURE MOMENT, NOT THE READER, IS WHAT IS LEFT -- AND THE RETRIES WERE AN
+ACCIDENTAL WAIT MECHANISM.** Measured over 514 recorded turns before changing anything
+(`agent_progress/convergence/`):
+
+    reads per turn                      1.44        (1.00 = no retries)
+    turns needing no retry              379 (74%)
+    FIRST read of a turn                median 11.96 s after the play
+    the read that WORKS on a retry      median 17.59 s after the play
+
+Nothing differs between those two except that the deal finished in between. **A quarter of
+all turns were spending a paid API call to wait**, which is why the retry rate sat at
+1.24-1.52 across every run of the day regardless of what was patched -- none of it touched
+the moment.
+
+**A FIXED SLEEP CANNOT FIX IT.** Filmed after the play, the deal STARTS at +1.5 s on one
+turn, +5.5 s on another, +6.5 s on a third. What is constant is the SHAPE: a frame-to-frame
+delta spike of 30-43 as the cards fly in, then quiet, then readable within half a second.
+
+**AND "WAIT FOR QUIET" IS THE WRONG INSTRUMENT, MEASURED.** A SETTLED HAND reads a delta of
+~4.6; an EMPTY TABLE reads ~2.5. The empty table is QUIETER than the hand, so quiet cannot
+tell "the cards have landed" from "there are no cards" -- which is the exact mistake being
+fixed -- and no threshold on that quantity separates them (10.4). The first version of that
+measurement came out with the two populations the wrong way round because "moving" was
+mostly the empty table BEFORE the deal, and a constant was nearly shipped off it.
+
+So the gate asks the question that is actually wanted: `local_hand_cards()` returns a hand
+only when every card reads, twice running. ~21 ms against a 150 ms poll, and NO constant is
+invented anywhere in the rule.
+
+---
+
+**26. A READER THAT LOOKS STABLE ON A STILL PICTURE MAY NOT BE. FILM IT.** The single
+cheapest diagnostic found this year. A hand that was NOT MOVING was filmed for 28
+consecutive frames: one card read 7 / unread / 7 / unread with the score swinging 0.57 to
+0.91. The picture was identical to the eye; the fitted circle alternated between r=19 and
+r=20, and `read_digit` resamples to a fixed 24x24, so one pixel of radius rescales the
+digit inside the tile. Searching the radius recovered 16 of 24 unread cards over 1,181
+real captures, all 16 agreeing with the paid model, and changed 0 of 1,157 answers that
+already read.
+
+**A SINGLE FRAME CANNOT SHOW YOU THIS.** Accuracy measured on one frame per hand reports a
+coin flip as a property of the frame.
+
+---
+
+**27. THE PAID MODEL'S REPLACEMENT MUST BE MEASURED ON THE MONEY FIELD, NOT ON ACCURACY.**
+2026-09-09, a local VLM on Snoopy (Ollama, RTX 3080). On 29 frames hand-labelled off a
+contact sheet -- ambiguous frames EXCLUDED rather than guessed, and the count excluded
+reported:
+
+    qwen2.5vl:7b, loose prompt    69%   6 frames falsely called match_start_prompt
+    qwen2.5vl:7b, strict prompt   79%   1 frame  falsely called match_start_prompt
+    qwen3-vl:8b,  strict prompt  100%   0        (5.6 s/frame against 0.2)
+
+`screen == "match_start_prompt"` is the branch that does `balance -= 50`. CLAUDE.md already
+records a ROUND 1 overlay read as match_start_prompt, one guard from a second $50
+(2026-08-25) -- and qwen2.5vl reproduced that exact failure six times in 29 frames. So the
+number that decides a screen reader is its FALSE POSITIVE RATE ON THE MONEY SCREEN, and it
+is measured the way `at_table()` is: over every frame on disk, where one false positive
+anywhere is a veto. A 29-frame result is enough to DISQUALIFY and never enough to CERTIFY;
+the 500-frame sample that said 0 and fired on the 701st is the precedent.
+
+
 
 ---
 
