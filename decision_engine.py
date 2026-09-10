@@ -59,6 +59,46 @@ class Decision:
     reasoning: str
 
 
+# THE POWER/SPEED RATIO, SWEPT (2026-09-10). Every whole percent from 100/0 to 0/100,
+# 101 ratios x 5 seeds x 2000 matches = 1,010,000 simulated matches against the naive
+# always-boost baseline, in a model that FINALLY implements speed, tie coin-flips and
+# runners advancing on outs (simulate.py; before that a speed boost was worth zero here by
+# construction, which is why the old "79%" only ever showed swing beats NOTHING):
+#
+#     pure POWER  100/0    37.95%  +/- 0.29
+#     BEST         99/1    38.12%  +/- 0.33   <- +0.17 points, 0.4 sigma: NOT significant
+#     plateau     100/0 .. 61/39   all statistically indistinguishable
+#     first REAL drop      60/40   36.05%     <- >2 sigma below pure power
+#     pure SPEED   0/100    6.69%
+#
+# 99/1 IS SHIPPED, AND IT IS NOT A TRADE. Powers are integers, so one point of power is
+# 0.99 while the widest possible speed gap is about 0.06 -- power decides every comparison
+# it can, and speed ONLY breaks an exact power tie. The sweep is what licenses that: inside
+# a plateau 39 points wide, a tie-break on speed is free rather than a gamble.
+#
+# It is NOT evidence that speed is worth something. It is evidence that preferring the
+# faster of two otherwise-equal cards costs nothing measurable, and the model is myopic
+# about speed anyway -- a batter's speed pays off LATER, as a runner, and 5-round matches
+# may be too short to show it. Do not read 99/1 as "speed weighting works".
+POWER_WEIGHT = 0.99
+SPEED_WEIGHT = 0.01
+
+
+def power_bonus(tactics_card) -> int:
+    """The power a tactics card actually adds. ONLY swing and pitch boosts do.
+
+    simulate.py has had this rule since 2026-08-23, when adding any tactics bonus regardless
+    of kind was found to overstate the speed-boost fallback. decision_engine never needed it
+    because best_batting_play did not score power+tactics jointly; now it does, and the rule
+    has to exist on this side too or a speed boost would silently inflate power here.
+    """
+    if tactics_card is None:
+        return 0
+    if tactics_card.kind in (TacticsType.SWING_BOOST, TacticsType.PITCH_BOOST):
+        return tactics_card.bonus
+    return 0
+
+
 def best_batting_play(hand_players: List[PlayerCard],
                        hand_tactics: List[TacticsCard],
                        state: GameState) -> Decision:
@@ -96,24 +136,31 @@ def best_batting_play(hand_players: List[PlayerCard],
     - No swing boost available: fall back to a speed boost if runners
       are on base, to help them advance.
     """
-    sorted_batters = sorted(hand_players, key=lambda c: c.power, reverse=True)
-    best_batter = sorted_batters[0]
+    best = None
+    best_score = None
+    for batter in hand_players:
+        for tac in [None] + list(hand_tactics):
+            power = batter.power + power_bonus(tac)
+            speed = batter.secondary or 0
+            if tac is not None and tac.kind == TacticsType.SPEED_BOOST:
+                speed += tac.bonus
+            score = POWER_WEIGHT * power + SPEED_WEIGHT * speed
+            if best_score is None or score > best_score:
+                best, best_score = (batter, tac), score
+    best_batter, tactics_choice = best
 
-    swing_boosts = [t for t in hand_tactics if t.kind == TacticsType.SWING_BOOST]
-    speed_boosts = [t for t in hand_tactics if t.kind == TacticsType.SPEED_BOOST]
-
-    tactics_choice = None
-    reasoning_bits = [f"Playing {best_batter.name} (power {best_batter.power})"]
-
-    if swing_boosts:
-        tactics_choice = max(swing_boosts, key=lambda t: t.bonus)
-        reasoning_bits.append(
-            f"attaching swing boost (+{tactics_choice.bonus}) — more power never hurts, "
-            "and it raises the odds of a 3+ margin home run"
-        )
-    elif speed_boosts and state.runners:
-        tactics_choice = max(speed_boosts, key=lambda t: t.bonus)
-        reasoning_bits.append("no swing boost available — attaching speed boost to help baserunners advance")
+    reasoning_bits = [f"Playing {best_batter.name} (power {best_batter.power}, "
+                      f"speed {best_batter.secondary})"]
+    if tactics_choice is not None:
+        if tactics_choice.kind == TacticsType.SWING_BOOST:
+            reasoning_bits.append(
+                f"attaching swing boost (+{tactics_choice.bonus}) — more power never hurts, "
+                "and it raises the odds of a 3+ margin home run")
+        elif tactics_choice.kind == TacticsType.SPEED_BOOST:
+            reasoning_bits.append(
+                f"no swing boost worth more — attaching speed boost (+{tactics_choice.bonus})")
+        else:
+            reasoning_bits.append(f"attaching {tactics_choice.name}")
 
     return Decision(best_batter, tactics_choice, "; ".join(reasoning_bits))
 
