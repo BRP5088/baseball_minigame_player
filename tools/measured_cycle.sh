@@ -48,6 +48,11 @@ json.dump({
         "PEAK_SETTLE_SEC": rw.PEAK_SETTLE_SEC,
         "CLOSE_GAP": rw.CLOSE_GAP,
         "WALK_ATTEMPTS": rc.walks_per_cycle(),
+        # The three flags that decide THIS measurement. Without them a run cannot be
+        # told apart from one taken before the paid card reads were cut.
+        "PAID_READS_CARDS": o.PAID_READS_CARDS,
+        "USE_READABLE_HAND_GATE": o.USE_READABLE_HAND_GATE,
+        "READABLE_POLLS": o.READABLE_POLLS,
     },
 }, open(os.path.join(run, "run.json"), "w"), indent=1)
 print(f"== build {sha}{' (DIRTY)' if dirty else ''}; constants recorded in {run}/run.json")
