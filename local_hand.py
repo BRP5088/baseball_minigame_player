@@ -1154,7 +1154,13 @@ def cursor_glow(hand_img, rows=None, _boxes=None):
     # card won the argmax and the turn refused. Scored over the 54 blind-labelled frames
     # plus that frame: raw x 54/55 with the true population reaching DOWN to 2.9;
     # canonical 55/55 with the true floor at 10.3 and every unselected false read <= 5.5.
-    xs = [None if r.get("x") is None else
+    # THE SLOT TABLES HOLD FIVE ENTRIES AND read_hand CAN RETURN MORE ROWS THAN THAT.
+    # _read_ungated appends one row per strong disc PLUS one per unmatched tactics blob and
+    # is unbounded, so a frame that fools it into six rows indexed SLOT_PLAYER[5] and raised
+    # IndexError -- a regression this comprehension introduced on 2026-09-11. selected_cards
+    # already had the bound (`if i >= len(SLOT_PLAYER): break`); this one did not. A row past
+    # the fan gets x None, which reads 0.0 and can never be named the cursor.
+    xs = [None if r.get("x") is None or i >= len(SLOT_PLAYER) else
           r["x"] + (SLOT_PLAYER[i][0] -
                     (SLOT_TACTICS if r.get("kind") == "tactics" else SLOT_PLAYER)[i][0]) * sc
           for i, r in enumerate(rows)]
@@ -1209,14 +1215,14 @@ def cursor_slot(glow, lifted):
     own white top rim, so "glow" tracked how HIGH a card sat and a selected card, raised
     ~44 px, out-read the card holding the cursor; this docstring used to cite 14.8 on a
     merely-selected card as the reason. With the window on the rim, a selected card that
-    is NOT hovered reads at most 1.9. There is nothing left for either rule to fix, and
+    is NOT hovered reads at most 5.7. There is nothing left for either rule to fix, and
     both cost real answers: the subtraction alone turned a live frame whose cursor sat on
     the one selected card into "the cursor is on slot 1", reading 4.5 off dark backdrop.
 
     Measured over 74 labelled frames (56 blind + 18 curated), window (80, 0, 55, 35):
 
         the card with the cursor          20.7 .. 36.1
-        every other card                   0.0 ..  8.4     (selected ones at most 1.9)
+        every other card                   0.0 ..  8.4     (selected ones at most 5.7)
         argmax + the gate                 74 / 74
 
     `lifted` is accepted because two call sites pass it and is deliberately UNUSED; the

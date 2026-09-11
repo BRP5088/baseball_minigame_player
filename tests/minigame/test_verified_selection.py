@@ -179,12 +179,12 @@ class FakeScreen:
         # A SELECTED CARD WAS BELIEVED TO KEEP GLOWING -- "14.8 while lifted" -- and that
         # was the WINDOW, not the screen: it sat in the backdrop above each card and caught
         # the card's own white top rim, so the reading tracked how HIGH a card sat. On the
-        # rim (local_hand GLOW_DY0/DY1) a selected-but-unhovered card reads at most 1.9
+        # rim (local_hand GLOW_DY0/DY1) a selected-but-unhovered card reads at most 5.7
         # over 74 labelled frames. The fake screen models the measured numbers, so it stays
         # at least as hard as the real one.
         glow = [0.0] * 5
         for i in self.selected():
-            glow[i] = 1.9          # a SELECTED card that is not hovered: measured max 1.9
+            glow[i] = 5.7          # a SELECTED card that is not hovered: measured max 5.7
         glow[self.cur] = 30.0      # the card holding the cursor: measured 20.7 - 36.1
         return glow, list(self.y), 5, self.selected()
 
@@ -506,8 +506,8 @@ check(lh.cursor_slot([0, 25, 0, 0, 0], [1]) == 1,
 check(lh.cursor_slot([0, 0, 27, 0, 0], [2]) == 2,
       "THE LIVE FALSE RESULT, 2026-09-11: the cursor sits on the ONE selected card. The old "
       "rule subtracted it and named slot 1 off a 4.5 backdrop reading; argmax names slot 2")
-check(lh.cursor_slot([0, 1.9, 30, 0, 0], [1]) == 2,
-      "a SELECTED but un-hovered card reads at most 1.9 and cannot outvote the real cursor")
+check(lh.cursor_slot([0, 5.7, 30, 0, 0], [1]) == 2,
+      "a SELECTED but un-hovered card reads at most 5.7 and cannot outvote the real cursor")
 check(lh.cursor_slot([0, 0, 0, 0, 0], []) is None, "nothing lit -> abstain")
 check(lh.cursor_slot([8.4, 0, 0, 0, 0], []) is None,
       "the LOUDEST false reading measured anywhere (8.4, cursor_on_1 slot 0) is refused")
@@ -518,6 +518,33 @@ check(lh.cursor_slot([0, 30, 28, 0, 0], []) == 1,
       "wins rather than the reader abstaining -- the old dominance rule refused this and "
       "stalled a live match at glow [5.2, 6.8, 0.0, 0.2, 8.1]")
 check(lh.cursor_slot([], []) is None, "an empty read is not a slot")
+# A HAND WITH MORE ROWS THAN THE FAN HAS SLOTS MUST NOT CRASH THE READER. read_hand's
+# ungated path appends one row per strong disc plus one per unmatched tactics blob, with no
+# cap, while SLOT_PLAYER/SLOT_TACTICS hold five -- so a six-row read indexed SLOT_PLAYER[5].
+# Found by the QA sweep on 2026-09-11, hours after the comprehension that caused it shipped.
+# It degrades to a retry rather than a wrong card (orchestrator catches and re-polls), but a
+# reader that raises cannot abstain, and abstaining is the whole contract here.
+_wide = [{"x": 100 + 90 * i, "y": 200, "kind": "player", "y_measured": True} for i in range(7)]
+_probe = Image.new("L", (1020, 307), 40)
+try:
+    _iw, _gw, _ = lh.cursor_glow(_probe, _wide)
+    check(len(_gw) == 7 and _iw is None,
+          f"seven rows read without raising, and nothing is named the cursor on a blank "
+          f"probe (got index {_iw}, {len(_gw)} readings)")
+    # CHECK THE BOX, NOT THE READING. A row past the fan that BORROWS slot 0's anchor still
+    # reads 0.0 on a blank probe, so a reading-only check cannot tell the two apart -- that
+    # mutant survived when this was written, which is exactly what makes a check decorative.
+    # A row with no slot must get NO WINDOW at all.
+    _bw = []
+    lh.cursor_glow(_probe, _wide, _boxes=_bw)
+    check(all(b is None for b in _bw[len(lh.SLOT_PLAYER):]),
+          f"and every row PAST the fan's five slots gets NO window rather than borrowing "
+          f"another slot's anchor (got {_bw[len(lh.SLOT_PLAYER):]})")
+    check(sum(b is not None for b in _bw) == len(lh.SLOT_PLAYER),
+          f"exactly five windows are sampled, one per real slot (got "
+          f"{sum(b is not None for b in _bw)})")
+except IndexError as _e:
+    check(False, f"cursor_glow raised IndexError on a {len(_wide)}-row hand: {_e}")
 check(lh.cursor_slot([0, G - 0.1, 0, 0, 0], []) is None,
       f"a reading under CURSOR_GLOW_MIN ({G}) is not lit at all")
 
