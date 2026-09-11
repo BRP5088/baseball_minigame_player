@@ -199,7 +199,7 @@ o.stash_hand_baseline("X")
 check(o.pop_hand_baseline() == "X", "the stash round-trips")
 check(o.pop_hand_baseline() is None, "...and a second pop yields None, so no turn inherits the last one's hand")
 _i_base = _src2.index("stash_hand_baseline(_grab_settle_regions")
-_i_play = _src2.index("select_and_play(player_idx, tactics_idx)")
+_i_play = _src2.index("select_and_play(player_idx, tactics_idx, look=")
 check(_i_base < _i_play, "the baseline is captured BEFORE the commit press, not after")
 
 # A GIVEN baseline must be used -- and no capture taken at entry.

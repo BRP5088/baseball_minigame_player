@@ -659,7 +659,8 @@ def _inject_press(action, hold_seconds):
     return True
 
 
-def select_and_play(card_index: int, tactics_index: int = None):
+def select_and_play(card_index: int, tactics_index: int = None,
+                    look=None):
     """
     Navigate from the leftmost hand position to the target player card,
     select it, optionally also select a tactics card, then confirm Play.
@@ -686,20 +687,190 @@ def select_and_play(card_index: int, tactics_index: int = None):
     Cost: four presses on a turn that would not otherwise have homed, about 0.32 s
     each, so roughly 7.6 s a match against six turns of wrong cards.
     """
-    reset_hand_cursor(force=True)
-    _move_cursor_to(card_index)
-    press("select_card")
-
-    if tactics_index is not None:
-        _move_cursor_to(tactics_index)
+    if look is None:
+        # THE BLIND PATH, unchanged. Kept because a caller that cannot capture the
+        # screen has nothing better available -- not because it is safe.
+        reset_hand_cursor(force=True)
+        _move_cursor_to(card_index)
         press("select_card")
 
+        if tactics_index is not None:
+            _move_cursor_to(tactics_index)
+            press("select_card")
+
+        press("confirm_play")
+        # The hand is re-dealt behind this press. Drop the belief rather than guess.
+        invalidate_cursor()
+        return True
+
+    return _verified_select_and_play(card_index, tactics_index, look)
+
+
+# How many corrective presses before giving up. The walk is at most 4 slots, so
+# anything past this is presses not landing at all, not a longer journey.
+CURSOR_MAX_STEPS = 8
+
+# LOOK AFTER THE ANIMATION, NOT DURING IT. The user, watching the stream
+# (2026-09-10): "it quickly selected slot 1, mid animation of moving up deselected
+# it." A card takes a moment to slide, and a frame grabbed mid-slide puts the disc
+# somewhere between its two positions -- so the glow box, which is anchored on the
+# disc, reads pixels that belong to neither. The walk then believed it was already
+# at the tactics slot, skipped its move, and pressed select_card onto the card it
+# had JUST selected, toggling it back off.
+#
+# These two values are not invented: they are the ones the standalone spike used
+# when the closed loop ran correctly end to end on the console, and dropping them
+# is what I broke when I moved that logic in here.
+MOVE_SETTLE_SEC = 0.40
+SELECT_SETTLE_SEC = 0.60
+
+SELECT_ATTEMPTS = 2            # 1 swallowed select in 5 measured; the selection confirms each
+
+# BEFORE PRESSING AGAIN, WAIT LONGER THAN THE ANIMATION -- because a press can be LATE
+# rather than lost, and the two look identical at 0.6 s. Measured 2026-09-10: the lift and
+# the drop both settle at ~550 ms when a press is handled promptly, but one deselect was
+# still unlanded at 1.2 s. A retry that fires on a press still in flight presses TWICE and
+# toggles the card back off. That is bounded, not silent: the selection check then fails
+# and the loop refuses, so the cost is a wasted turn, never a wrong card committed.
+SELECT_RETRY_CONFIRM_SEC = 1.6
+
+# A LOOK THAT LANDS MID-ANIMATION IS NOT A READING, AND read_hand SAYS SO ITSELF.
+# Reproduced at the user's insistence rather than retried past: sampling through a select
+# animation, 3 frames of 45 came back with SEVEN rows. While a card is in flight it sits
+# BETWEEN slot anchors, the five-slot fan correctly declines to fit, and the older UNGATED
+# disc search runs instead -- documented as returning "3 to 8" positions, with no slots.
+# Re-looking is right here and is NOT the "retry a stable misread" mistake (CLAUDE.md 4):
+# the two are told apart by whether the answer changes, and this one does.
+LOOK_RETRIES = 3
+LOOK_RETRY_SEC = 0.25
+
+
+def _look_settled(look):
+    """A usable fan read, or a row count of 0 meaning THERE ISN'T ONE.
+
+    It must not hand back the unusable read: the caller's guard tests the row count, and
+    an ungated read that happens to return five rows would sail past it. Found by a
+    mutant-driven test that then watched the walk press move_right EIGHT times against a
+    screen it could not read at all.
+    """
+    glow, ys, n, sel = [], [], 0, []
+    for attempt in range(LOOK_RETRIES):
+        glow, ys, n, sel = look()
+        if n == MAX_HAND_SIZE and any(y is not None for y in ys):
+            return glow, ys, n, sel
+        if attempt + 1 < LOOK_RETRIES:
+            time.sleep(LOOK_RETRY_SEC)
+    return glow, ys, 0, sel
+
+
+def _walk_cursor_to(target, look):
+    """Press toward `target`, LOOKING after every single press.
+
+    Returns (ok, selected_slots). Never presses twice on one reading: a press count is
+    exactly the thing that was wrong, so every step is re-measured. Which cards are
+    SELECTED comes from the fan's own anchors, so this works from any starting state --
+    including one with cards already selected.
+    """
+    import local_hand
+    glow, ys, n, sel = _look_settled(look)
+    cur = local_hand.cursor_slot(glow, sel)
+    if n != MAX_HAND_SIZE or cur is None:
+        print(f"  [cursor] cannot see the cursor (rows={n}, glow={glow}) — refusing")
+        return False, sel
+    steps = 0
+    while cur != target:
+        if steps >= CURSOR_MAX_STEPS:
+            print(f"  [cursor] still at {cur} after {steps} presses — refusing")
+            return False, sel
+        press("move_right" if cur < target else "move_left")
+        steps += 1
+        time.sleep(MOVE_SETTLE_SEC)
+        glow, ys, n, sel = _look_settled(look)
+        cur = local_hand.cursor_slot(glow, sel)
+        if cur is None:
+            print(f"  [cursor] lost the cursor after {steps} press(es) "
+                  f"(glow={glow}) — refusing")
+            return False, sel
+    if steps:
+        print(f"  [cursor] verified on {target} after {steps} press(es)")
+    return True, sel
+
+
+def _select_verified(target, look):
+    """Make sure `target` is SELECTED, and prove it before anything is committed.
+
+    ALREADY SELECTED IS A SUCCESS, NOT A PRESS. Pressing select_card on a card that is
+    already up toggles it back off -- which is how two attempts at p1+2 deselected the
+    card they had just selected. Selection is now read absolutely from the fan anchors,
+    so this can tell the two apart and is safe to run from any board state.
+
+    A SWALLOWED select_card IS EXPECTED, AND RETRYING IT IS ONLY SAFE BECAUSE WE LOOK.
+    Measured 2026-09-10 over a five-slot sweep: 1 of 5 select presses did not show up.
+    Pressing again blind would risk DESELECTING one that did land, so each attempt is
+    confirmed first, and a press that is merely LATE is waited out rather than repeated.
+    """
+    import local_hand
+    _g, _ys, n, before = _look_settled(look)
+    if target in before:
+        return True, before
+
+    # WHAT COUNTS AS "THE WRONG CARD WENT UP" IS A CHANGE, NOT A STATE. The first version
+    # refused whenever ANY other card was raised -- which defeats the whole point of
+    # reading selection absolutely, because a card selected before this call ever ran is
+    # not an error. It cost the first turn of a live match: slot 3 was already up from
+    # earlier testing, so selecting slot 4 was refused as "lifted [3], expected 4".
+    sel = before
+    for attempt in range(1, SELECT_ATTEMPTS + 1):
+        press("select_card")
+        time.sleep(SELECT_SETTLE_SEC)
+        _g, _ys, n, sel = _look_settled(look)
+        if target in sel:
+            if attempt > 1:
+                print(f"  [cursor] select_card landed on attempt {attempt}")
+            return True, sel
+        new = [i for i in sel if i not in before]
+        if new:
+            # something that was NOT up before has gone up, and it is not the target.
+            # Pressing again compounds it.
+            print(f"  [cursor] select_card raised {new}, expected {target} — refusing")
+            return False, sel
+        if attempt < SELECT_ATTEMPTS:
+            time.sleep(SELECT_RETRY_CONFIRM_SEC)
+            _g, _ys, n, sel = _look_settled(look)
+            if target in sel:
+                print(f"  [cursor] select_card landed late ({SELECT_RETRY_CONFIRM_SEC}s)")
+                return True, sel
+            print(f"  [cursor] select_card did not land (attempt {attempt}) — retrying")
+    print(f"  [cursor] select_card never landed after {SELECT_ATTEMPTS} attempts — refusing")
+    return False, sel
+
+
+def _verified_select_and_play(card_index, tactics_index, look):
+    """Read, step, verify, select, verify the selection, and only then commit.
+
+    Returns True only when confirm_play was actually sent. False means NOTHING was
+    committed and the caller should re-read and retry -- it must never be treated as a
+    play, and it must never fall through to the blind path, which would make a refusal
+    and a success indistinguishable (CLAUDE.md 10.1).
+    """
+    for target in (card_index, tactics_index):
+        if target is None:
+            continue
+        ok, _sel = _walk_cursor_to(target, look)
+        if not ok:
+            invalidate_cursor()
+            return False
+        ok, _sel = _select_verified(target, look)
+        if not ok:
+            invalidate_cursor()
+            return False
+
     press("confirm_play")
-    # The hand is re-dealt behind this press. Drop the belief rather than guess.
     invalidate_cursor()
+    return True
 
 
-def select_and_discard(card_index: int):
+def select_and_discard(card_index: int, look=None):
     """
     Navigate to a card and discard it for a replacement.
 
@@ -718,15 +889,38 @@ def select_and_discard(card_index: int):
     resolved it by trusting a measurement over the press count; homing is the
     cheap version of that for a five-slot hand.
     """
-    reset_hand_cursor(force=True)
-    _move_cursor_to(card_index)
-    press("select_card")
+    if look is None:
+        reset_hand_cursor(force=True)
+        _move_cursor_to(card_index)
+        press("select_card")
+        press("confirm_discard")
+        # The replacement card is dealt into this slot and auto-lifted, so the
+        # cursor is wherever the game put it — not necessarily where we left it.
+        # Drop the belief rather than guess; the next navigation re-homes.
+        invalidate_cursor()
+        press("confirm_play")
+        return True
+
+    # VERIFIED. This function's own docstring records a discard landing on the
+    # wrong card live (2026-08-28: the engine chose a power-4 player and a tactics
+    # card was thrown), and homing was the cheap mitigation available then. Reading
+    # the screen is the real one: the same walk-and-verify the play path uses, and
+    # the lift must name THIS card before anything irreversible is pressed.
+    ok, _sel = _walk_cursor_to(card_index, look)
+    if not ok:
+        invalidate_cursor()
+        return False
+    ok, _sel = _select_verified(card_index, look)
+    if not ok:
+        invalidate_cursor()
+        return False
     press("confirm_discard")
-    # The replacement card is dealt into this slot and auto-lifted, so the
-    # cursor is wherever the game put it — not necessarily where we left it.
-    # Drop the belief rather than guess; the next navigation re-homes.
+    # Past this point the game deals the replacement and auto-lifts it with its own
+    # PLAY prompt; confirm_play commits THAT card as this turn's play. There is
+    # nothing left to verify -- the choice was made at confirm_discard.
     invalidate_cursor()
     press("confirm_play")
+    return True
 
 
 def select_bans_and_start_full(grid: list, banned_positions: set,

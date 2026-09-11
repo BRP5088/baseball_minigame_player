@@ -1,0 +1,120 @@
+[
+ {
+  "slot": 0,
+  "kind": "tactics",
+  "hover": 11.8,
+  "selected": 9.3,
+  "lift": [],
+  "restored": true,
+  "glow_hover": [
+   11.8,
+   0.1,
+   0.0,
+   0.0,
+   0.4
+  ],
+  "glow_selected": [
+   9.3,
+   0.0,
+   0.0,
+   0.0,
+   0.4
+  ]
+ },
+ {
+  "slot": 1,
+  "kind": "player",
+  "hover": 11.9,
+  "selected": 13.0,
+  "lift": [
+   1
+  ],
+  "restored": true,
+  "glow_hover": [
+   0.0,
+   11.9,
+   0.0,
+   0.0,
+   0.5
+  ],
+  "glow_selected": [
+   0.0,
+   13.0,
+   0.0,
+   0.0,
+   0.5
+  ]
+ },
+ {
+  "slot": 2,
+  "kind": "tactics",
+  "hover": 9.2,
+  "selected": 11.9,
+  "lift": [
+   2
+  ],
+  "restored": true,
+  "glow_hover": [
+   0.0,
+   0.0,
+   9.2,
+   0.0,
+   0.5
+  ],
+  "glow_selected": [
+   0.0,
+   0.1,
+   11.9,
+   0.0,
+   0.6
+  ]
+ },
+ {
+  "slot": 3,
+  "kind": "player",
+  "hover": 10.4,
+  "selected": 16.2,
+  "lift": [
+   3
+  ],
+  "restored": true,
+  "glow_hover": [
+   0.0,
+   0.1,
+   0.0,
+   10.4,
+   0.4
+  ],
+  "glow_selected": [
+   0.0,
+   0.0,
+   0.0,
+   16.2,
+   0.5
+  ]
+ },
+ {
+  "slot": 4,
+  "kind": "player",
+  "hover": 11.2,
+  "selected": 25.3,
+  "lift": [
+   4
+  ],
+  "restored": true,
+  "glow_hover": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   11.2
+  ],
+  "glow_selected": [
+   0.0,
+   0.1,
+   0.0,
+   0.1,
+   25.3
+  ]
+ }
+]

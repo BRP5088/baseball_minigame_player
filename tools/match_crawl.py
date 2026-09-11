@@ -17,6 +17,7 @@ wrong, and the frame that proves it is on disk next to the numbers.
   r            re-read: grab a FRESH frame and run every reader again, acting on nothing.
                Two reads of a still screen that disagree is a reader bug, not a timing bug.
   p<slot>      override: play that slot   (p3)
+  p<slot>+<t>  play that slot WITH a tactics card  (p1+2)
   d<slot>      override: discard that slot (d1)
   k<key>       override: send one raw key (k confirm_play)
   n <text>     attach a note to this step -- it lands in the step's json
@@ -29,6 +30,7 @@ import os, sys, json, time, datetime
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.pop("BASEBALL_TEST_RUN", None)          # this drives the console, deliberately
 
 import orchestrator as o
@@ -78,10 +80,22 @@ def look(step):
 
     hand = crops.get("hand")
     rows, err = _try(lh.read_hand, hand) if hand is not None else (None, "no hand crop")
-    r["hand_rows"] = ([{k: row.get(k) for k in ("slot", "kind", "power", "secondary",
-                                                "adds_power", "x", "y")} for row in rows]
-                      if rows else [])
+    # read_hand's OWN key names. I printed "slot"/"power" here first and every row came back
+    # None -- a display bug that looked exactly like a dead reader, which is the whole class
+    # of mistake this tool exists to stop. The keys are digit/x/y; hand_index is assigned
+    # later, by local_hand_cards.
+    r["hand_rows"] = ([{k: row.get(k) for k in ("kind", "digit", "secondary", "type",
+                                                "adds_power", "score", "x", "y")}
+                       for row in rows] if rows else [])
     r["hand_err"] = err
+    # WHERE THE CURSOR STARTS, recorded on EVERY step (the user's call, 2026-09-10:
+    # "keep track of the starting position of the cursor from now on. I think it
+    # always starts from slot 1"). Written to the step json so the claim is settled
+    # by a tally rather than by recollection.
+    cg, r["cursor_err"] = (_try(lh.cursor_glow, hand, rows) if hand is not None
+                           else (None, "no hand crop"))
+    r["cursor_index"] = cg[0] if cg else None
+    r["cursor_glow"] = cg[1] if cg else None
     cards, why = (o.local_hand_cards(hand) if hand is not None else (None, "no hand crop"))
     r["hand_usable"] = None if cards is None else len(cards)
     r["hand_why"] = why
@@ -139,12 +153,17 @@ def show(r):
     if "count" in run:
         occ = {k: v["occupied"] for k, v in run["bases"].items()}
         print(f"  runners        : count={run['count']}  {occ}")
+    print(f"  CURSOR         : index {r.get('cursor_index')!r}   glow {r.get('cursor_glow')}")
     print(f"  HAND           : read_hand {len(r['hand_rows'])} row(s); "
           f"usable {r['hand_usable']}   why: {r['hand_why']}")
-    for row in r["hand_rows"]:
-        print(f"      slot {row['slot']}  {str(row['kind']):8s} power={str(row['power']):4s} "
-              f"secondary={str(row['secondary']):4s} adds_power={row.get('adds_power')} "
-              f"@({row['x']},{row['y']})")
+    for i, row in enumerate(r["hand_rows"]):
+        print(f"      pos {i}  {str(row['kind']):8s} digit={str(row.get('digit')):4s} "
+              f"secondary={str(row.get('secondary')):4s} type={str(row.get('type')):12s} "
+              f"score={row.get('score')} @({row['x']},{row['y']})")
+    for c in (r.get("hand_cards") or []):
+        print(f"      -> hand_index {c.get('hand_index')}  {c.get('kind'):8s} "
+              f"power={str(c.get('power')):4s} secondary={str(c.get('secondary')):4s} "
+              f"bonus={c.get('bonus')}")
     for k in ("hand_err", "ban_err", "dealer_err", "phase_err", "discards_err", "scoreboard_err"):
         if r.get(k):
             print(f"  ! {k}: {r[k]}")
@@ -160,9 +179,18 @@ def propose(r):
         players, tactics = [], []
         for c in r["hand_cards"]:
             if c.get("kind") == "tactics":
-                tactics.append(TacticsCard(name=c.get("name") or "?",
-                                           bonus=c.get("secondary") or 0,
-                                           kind=TacticsType.SWING_BOOST))
+                # THE REAL KIND. Hardcoding SWING_BOOST here made crawl propose a SPEED boost
+                # while calling it a swing boost -- and only SWING_BOOST and PITCH_BOOST add
+                # power (CLAUDE.md 4), so that is the difference between a boost that helps
+                # and one that does nothing. Production reads c["type"]; so does this now.
+                try:
+                    kind = TacticsType(c.get("type"))
+                except Exception:
+                    kind = None
+                if kind is None:
+                    continue          # an unread kind is not guessed
+                tactics.append(TacticsCard(name=c.get("name") or c.get("type") or "?",
+                                           bonus=c.get("bonus") or 0, kind=kind))
             else:
                 players.append(PlayerCard(name=c.get("name") or "?",
                                           power=c.get("power") or 0,
@@ -177,16 +205,20 @@ def propose(r):
         # MAP THE CHOSEN CARD BACK TO A SLOT. The engine returns a card, the cursor needs a
         # position, and that translation is exactly where a play can go to the wrong place --
         # so it is printed, every step, next to the card it came from.
+        # THE LOOP TARGETS INPUT BY hand_index (orchestrator: select_and_play(player_idx)),
+        # and production finds it by OBJECT IDENTITY against the list it built. Here the
+        # cards are rebuilt, so it is matched on power -- printed beside the card so a
+        # mismatch between "the card chosen" and "the position pressed" is visible.
         slot = None
         for c in r["hand_cards"]:
             if c.get("kind") != "tactics" and c.get("power") == d.player_card.power:
-                slot = c.get("slot"); break
+                slot = c.get("hand_index"); break
         if should_redraw(players, st) and (r.get("discards_left") or 0) > 0:
             weakest = min(players, key=lambda p: p.power)
             for c in r["hand_cards"]:
                 if c.get("kind") != "tactics" and c.get("power") == weakest.power:
-                    return ("discard", c.get("slot")), (
-                        f"DISCARD slot {c.get('slot')} (power {weakest.power}) -- "
+                    return ("discard", c.get("hand_index")), (
+                        f"DISCARD slot {c.get('hand_index')} (power {weakest.power}) -- "
                         f"hand is weak, {r.get('discards_left')} discard(s) left")
         return ("play", slot), (f"PLAY slot {slot} (power {d.player_card.power}, "
                                 f"tactics {d.tactics_card}) -- {d.reasoning}")
@@ -203,6 +235,16 @@ def main():
         r, img = look(step)
         img.save(os.path.join(OUT, f"{step:03d}.png"))
         show(r)
+        # A LABELLED SHEET FOR EVERY STEP, rendered from THIS step's frame. The numbers say
+        # what each reader decided; the sheet shows what it was looking at, which is the half
+        # that catches a reader cropping the wrong pixels.
+        try:
+            import crawl_sheet
+            sheet = crawl_sheet.build(img, os.path.join(OUT, f"{step:03d}_sheet.png"))
+            r["sheet"] = sheet
+            print(f"  sheet          : {sheet}")
+        except Exception as e:
+            print(f"  sheet          : could not render ({type(e).__name__}: {e})")
         dec, why = propose(r)
         print(f"\n  PROPOSED       : {why}")
         try:
@@ -211,6 +253,7 @@ def main():
             cmd = "q"
         r["command"] = cmd
         acted = None
+        pressed = False
         if cmd == "q":
             json.dump(r, open(os.path.join(OUT, f"{step:03d}.json"), "w"), indent=1, default=str)
             print("  bye"); return
@@ -220,23 +263,40 @@ def main():
             acted = "re-read only"
         elif cmd == "s":
             acted = "skipped"
+        elif cmd.startswith("p") and "+" in cmd and all(
+                x.strip().isdigit() for x in cmd[1:].split("+", 1)):
+            # p<slot>+<tactics> -- ONLY SWING_BOOST/PITCH_BOOST add power (CLAUDE.md 4),
+            # so attaching the right tactic is worth a whole point of power and there was
+            # no way to ask for it here.
+            _p, _t = (int(x) for x in cmd[1:].split("+", 1))
+            acted = f"select_and_play({_p}, tactics={_t})"; pressed = True
+            acted += (" -> COMMITTED"
+                      if o.select_and_play(_p, _t, look=o.hand_cursor_look)
+                      else " -> REFUSED (nothing committed)")
         elif cmd.startswith("p") and cmd[1:].strip().isdigit():
-            s = int(cmd[1:]); acted = f"select_and_play({s})"; o.select_and_play(s)
+            s = int(cmd[1:]); acted = f"select_and_play({s})"; pressed = True
+            acted += " -> COMMITTED" if o.select_and_play(s, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
         elif cmd.startswith("d") and cmd[1:].strip().isdigit():
-            s = int(cmd[1:]); acted = f"select_and_discard({s})"; o.select_and_discard(s)
+            s = int(cmd[1:]); acted = f"select_and_discard({s})"; pressed = True
+            acted += " -> COMMITTED" if o.select_and_discard(s, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
         elif cmd.startswith("k "):
-            key = cmd[2:].strip(); acted = f"press({key})"; o.press(key)
+            key = cmd[2:].strip(); acted = f"press({key})"; pressed = True; o.press(key)
         elif cmd == "" and dec is not None:
             kind, slot = dec
             if slot is None:
                 acted = "PROPOSAL HAS NO SLOT -- the chosen card was not found in the hand"
             elif kind == "discard":
-                acted = f"select_and_discard({slot})"; o.select_and_discard(slot)
+                acted = f"select_and_discard({slot})"; pressed = True
+                acted += " -> COMMITTED" if o.select_and_discard(slot, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
             else:
-                acted = f"select_and_play({slot})"; o.select_and_play(slot)
-            # DID IT LAND? The whole point. Compare the frame before against the frame after,
-            # on the SAME measure the deal gate uses, so a press that changed nothing is
-            # visible immediately rather than 35 s later.
+                acted = f"select_and_play({slot})"; pressed = True
+                acted += " -> COMMITTED" if o.select_and_play(slot, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
+        # DID IT LAND? The whole point. Compare the frame before against the frame after,
+        # on the SAME measure the deal gate uses, so a press that changed nothing is
+        # visible immediately rather than 35 s later. This sits OUTSIDE the branch chain:
+        # it used to run only for the PROPOSED action, so p<slot>/d<slot>/k<key> -- the
+        # commands a live diagnosis actually uses -- pressed a button and recorded nothing.
+        if pressed:
             time.sleep(1.5)
             after = o._fast_grab()
             after.save(os.path.join(OUT, f"{step:03d}_after.png"))

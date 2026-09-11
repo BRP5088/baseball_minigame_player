@@ -1,0 +1,53 @@
+{
+ "run": "20260910_102406_ban_reader",
+ "build": {
+  "label": "ban_reader",
+  "git_sha": "d1d7698",
+  "tree_dirty": true,
+  "api_budget": 200,
+  "constants": {
+   "HAND_DEAL_THRESHOLD": 15.0,
+   "POST_PLAY_DEAL_MAX_WAIT": 20.0,
+   "POST_PLAY_MIN_WAIT": 6.0,
+   "post_play_wait_for_deal": true,
+   "REVEAL_EDGE_THRESHOLD": 0.065,
+   "REVEAL_MAX_WAIT": 15.0,
+   "PEAK_SETTLE_SEC": 0.5,
+   "CLOSE_GAP": 1.0,
+   "WALK_ATTEMPTS": 2,
+   "PAID_READS_CARDS": false,
+   "USE_READABLE_HAND_GATE": true,
+   "READABLE_POLLS": 2
+  }
+ },
+ "minutes": 8.2,
+ "walk_arrived_on_attempt": "1",
+ "matches": {
+  "won": 1,
+  "lost": 0
+ },
+ "turns": {
+  "plays": 12,
+  "discard_decisions": 4,
+  "length_p50": 17.9,
+  "length_n": 16
+ },
+ "deal": {
+  "fired": 0,
+  "timed_out": 1,
+  "released_p50": null,
+  "released_max": null,
+  "seconds_lost_to_timeouts": 20.0
+ },
+ "reveal": {
+  "episodes_found": 10,
+  "none_found": 2,
+  "peak_read_p50": 0.122,
+  "misreads": 5
+ },
+ "reads": {
+  "api_calls": 10,
+  "mid_deal_retries": 0,
+  "local_hand_short": 0
+ }
+}

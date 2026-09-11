@@ -1,0 +1,445 @@
+[
+ {
+  "frame": 0,
+  "rows": 5,
+  "cursor": 2,
+  "glow": [
+   0.0,
+   0.0,
+   14.6,
+   0.0,
+   0.0
+  ],
+  "selected": [
+   0,
+   2
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   160,
+   163,
+   106,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 1,
+  "rows": 5,
+  "cursor": 3,
+  "glow": [
+   0.0,
+   0.0,
+   2.0,
+   12.4,
+   0.0
+  ],
+  "selected": [
+   0,
+   2
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   160,
+   163,
+   106,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 2,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   2.2,
+   0.0,
+   12.5
+  ],
+  "selected": [
+   0,
+   2
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   106,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 3,
+  "rows": 5,
+  "cursor": 3,
+  "glow": [
+   0.0,
+   0.0,
+   0.5,
+   18.3,
+   0.0
+  ],
+  "selected": [
+   0,
+   3
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   123,
+   215
+  ]
+ },
+ {
+  "frame": 4,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.2,
+   14.4
+  ],
+  "selected": [
+   0,
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 5,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.2,
+   16.5
+  ],
+  "selected": [
+   0,
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   168,
+   170
+  ]
+ },
+ {
+  "frame": 6,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   13.2
+  ],
+  "selected": [
+   0
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 7,
+  "rows": 5,
+  "cursor": 3,
+  "glow": [
+   0.0,
+   0.0,
+   0.6,
+   16.7,
+   0.0
+  ],
+  "selected": [
+   0,
+   3
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   160,
+   163,
+   150,
+   122,
+   214
+  ]
+ },
+ {
+  "frame": 8,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.1,
+   4.5,
+   12.9
+  ],
+  "selected": [
+   0,
+   3
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   124,
+   215
+  ]
+ },
+ {
+  "frame": 9,
+  "rows": 5,
+  "cursor": 3,
+  "glow": [
+   0.0,
+   0.0,
+   0.7,
+   14.3,
+   0.0
+  ],
+  "selected": [
+   0,
+   3
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   124,
+   214
+  ]
+ },
+ {
+  "frame": 10,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   16.2
+  ],
+  "selected": [
+   0,
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 11,
+  "rows": 5,
+  "cursor": 3,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   12.6,
+   2.2
+  ],
+  "selected": [
+   0,
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   161,
+   163,
+   151,
+   167,
+   170
+  ]
+ }
+]

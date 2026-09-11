@@ -1,0 +1,181 @@
+{
+ "step": 1,
+ "t": 1789062970.221632,
+ "clock": "13:56:10",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.503,
+   "loser": 0.396,
+   "draw": 0.44
+  },
+  "why": "no result word found (best 0.503 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [
+  {
+   "kind": "player",
+   "digit": "5",
+   "secondary": 2,
+   "type": null,
+   "adds_power": null,
+   "score": 0.989,
+   "x": 204,
+   "y": 203
+  },
+  {
+   "kind": "player",
+   "digit": "4",
+   "secondary": 3,
+   "type": null,
+   "adds_power": null,
+   "score": 0.985,
+   "x": 389,
+   "y": 162
+  },
+  {
+   "kind": "player",
+   "digit": "4",
+   "secondary": 3,
+   "type": null,
+   "adds_power": null,
+   "score": 0.987,
+   "x": 578,
+   "y": 155
+  },
+  {
+   "kind": "player",
+   "digit": "4",
+   "secondary": 3,
+   "type": null,
+   "adds_power": null,
+   "score": 0.986,
+   "x": 758,
+   "y": 175
+  },
+  {
+   "kind": "player",
+   "digit": "8",
+   "secondary": 1,
+   "type": null,
+   "adds_power": null,
+   "score": 0.974,
+   "x": 922,
+   "y": 213
+  }
+ ],
+ "hand_err": null,
+ "hand_usable": 5,
+ "hand_why": null,
+ "hand_cards": [
+  {
+   "kind": "player",
+   "name": null,
+   "power": 5,
+   "secondary": 2,
+   "hand_index": 0
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 4,
+   "secondary": 3,
+   "hand_index": 1
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 4,
+   "secondary": 3,
+   "hand_index": 2
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 4,
+   "secondary": 3,
+   "hand_index": 3
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 8,
+   "secondary": 1,
+   "hand_index": 4
+  }
+ ],
+ "phase": "batting",
+ "phase_err": null,
+ "discards_left": 2,
+ "discards_err": null,
+ "discards_detail": {
+  "why": null,
+  "round": [
+   true,
+   true,
+   true,
+   true,
+   false
+  ],
+  "discard": [
+   true,
+   true
+  ],
+  "panel_gap": [
+   42,
+   50,
+   54,
+   48,
+   47
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": [
+   0,
+   0,
+   0
+  ]
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": 1,
+  "bases": {
+   "third": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.917)"
+   },
+   "second": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.836)"
+   },
+   "first": {
+    "occupied": true,
+    "power": 7,
+    "why": "a power disc, and no coin (0.371)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": "turn",
+  "result_outcome": null
+ },
+ "sheet": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/crawl/20260910_135610/001_sheet.png",
+ "command": "q"
+}

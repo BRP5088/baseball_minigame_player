@@ -1,0 +1,82 @@
+[
+ {
+  "frame": 0,
+  "walked_to": 0,
+  "detector": 0,
+  "glow": [
+   10.6,
+   0.7,
+   0.0,
+   0.0,
+   0.2
+  ],
+  "lifted": [
+   1
+  ],
+  "walk_ok": true
+ },
+ {
+  "frame": 1,
+  "walked_to": 1,
+  "detector": 1,
+  "glow": [
+   0.0,
+   11.1,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "lifted": [
+   1
+  ],
+  "walk_ok": true
+ },
+ {
+  "frame": 2,
+  "walked_to": 2,
+  "detector": 2,
+  "glow": [
+   0.0,
+   0.3,
+   8.1,
+   0.0,
+   0.0
+  ],
+  "lifted": [
+   1
+  ],
+  "walk_ok": true
+ },
+ {
+  "frame": 3,
+  "walked_to": 3,
+  "detector": 3,
+  "glow": [
+   0.0,
+   0.9,
+   0.0,
+   12.0,
+   0.0
+  ],
+  "lifted": [
+   1
+  ],
+  "walk_ok": true
+ },
+ {
+  "frame": 4,
+  "walked_to": 4,
+  "detector": 4,
+  "glow": [
+   0.0,
+   0.3,
+   0.0,
+   0.0,
+   10.7
+  ],
+  "lifted": [
+   1
+  ],
+  "walk_ok": true
+ }
+]

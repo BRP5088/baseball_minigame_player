@@ -131,7 +131,28 @@ def read_digit(img, circle):
     return (best_d if best >= MIN_SCORE else None), best
 
 
-def find_tactics(img):
+# A SELECTED TACTICS CARD BRIGHTENS, AND find_tactics WENT BLIND TO IT BY ONE GREYLEVEL.
+# The wreath is located as a DARK blob, and 110 was measured on unselected cards. Selecting
+# a card lifts and brightens it; measured on the same card in the same hand
+# (test_fixtures/hand_cursor/tactics_{un,}selected_slot0.png):
+#
+#     unselected wreath   min   0   p05  55   median 106     found at 110
+#     SELECTED   wreath   min 111   p05 119   median 127     found at NOTHING under 111
+#
+# One greylevel. The card then dropped out of the fan entirely, its row fell through to a
+# branch that fills y from a SLOT CONSTANT -- which for slot 0 equals the card's own resting
+# position -- and a completely lost card reported a perfectly stable y. That is what hid a
+# selected card moving 44 px, and why the lift check could never fire on a tactics card.
+#
+# The existing threshold is NOT moved: it decides every frame this reader has ever handled.
+# SELECTED_DARK_MAX is a SECOND PASS, run only for a slot the first pass left empty, so it
+# can add a reading but never change one.
+SELECTED_DARK_MAX = 150        # between the selected p05 of 119 and the card face above it
+RAISED_DARK_MAX = 150          # a raised card's disc only fits at this threshold, see _read_fan
+TACTICS_PROMOTE_MIN = 0.80     # above the 0.695 max seen on any PLAYER slot; see _read_fan
+
+
+def find_tactics(img, dark_max=110):
     """Locate a TACTICS card's circle, which the player-card reader cannot see.
 
     A tactics card wraps its circle in an ornate dark wreath and the digit's ink FUSES with
@@ -152,7 +173,7 @@ def find_tactics(img):
     import scipy.ndimage as _ndi
     g = _np.asarray(img.convert("L"), dtype=_np.uint8)
     H, W = g.shape
-    lab, n = _ndi.label(g <= 110)
+    lab, n = _ndi.label(g <= dark_max)
     out = []
     for sl, i in zip(_ndi.find_objects(lab), range(1, n + 1)):
         if sl is None:
@@ -813,12 +834,52 @@ def _read_fan(img, strong):
             cands.append((1, (0, 0), t["x"], t["y"], None))
 
     best = [None] * 5
+    wreath = [None] * 5          # rank-1 candidates kept aside, for the promotion below
     for rank, key, x, y, circle in cands:
         cost, i, kind = _slot(x, y, s)
         if cost > SLOT_TOL * s:
             continue
+        if rank == 1 and (wreath[i] is None or -cost > wreath[i][0][2]):
+            wreath[i] = ((rank, key, -cost), x, kind, circle, y)
         if best[i] is None or (rank, key, -cost) > best[i][0]:
             best[i] = ((rank, key, -cost), x, kind, circle, y)
+
+    # THE CURSOR'S OWN HALO CAN COUNTERFEIT A POWER DISC, AND IT OUTRANKED THE REAL CARD.
+    # Measured 2026-09-11 on a blind labelled batch: with the cursor sitting on slot 0, a
+    # bright round blob appears at (220,168) that find_circles accepts as a disc, r=22. It
+    # is rank 3 (a strong disc) so it beat the tactics wreath at rank 1, and slot 0 -- a
+    # SPEED BOOST -- was read as a PLAYER card at y=168 instead of a tactics card at 205.
+    # Wrong kind chose the wrong anchor table, 168 then looked like a 35px rise, and the
+    # card was reported SELECTED when nothing was. That is the first time a reader claimed
+    # a selection that did not exist, which is the direction that costs a card.
+    #
+    # The banner knew: read_tactics_type scored 0.968 on that very slot, in that very
+    # frame. The code never asked, because it only ever demoted tactics -> player.
+    #
+    # So a STRONG banner promotes the slot back -- and takes the WREATH's position with it,
+    # because fixing the kind alone leaves y on the counterfeit disc and the card still
+    # reads as raised. Measured over 260 hands at the slot anchor: slots read as PLAYER
+    # score at most 0.695, slots read as TACTICS have a median of 0.938. The promotion bar
+    # sits above every observed player slot, and is deliberately stricter than
+    # TACTICS_PRESENT_MIN (0.58) because this overrides a disc that was actually found.
+    for i in range(5):
+        if best[i] is None or wreath[i] is None or best[i][2] == "tactics":
+            continue
+        _t, _ts = read_tactics_type(img, i)
+        if _ts >= TACTICS_PROMOTE_MIN:
+            best[i] = wreath[i]
+    # SECOND PASS for slots nothing reached: a SELECTED tactics card is too bright for the
+    # first pass. Only slots still empty are filled, so an existing reading cannot change.
+    if any(b is None for b in best):
+        for t in find_tactics(img, dark_max=SELECTED_DARK_MAX):
+            if not _free(t["x"], t["y"], taken):
+                continue
+            cost, i, kind = _slot(t["x"], t["y"], s)
+            if cost > SLOT_TOL * s or best[i] is not None:
+                continue
+            taken.append((t["x"], t["y"]))
+            best[i] = ((1, (0, 0), -cost), t["x"], kind, None, t["y"])
+
     out = []
     for i in range(5):
         if best[i] is None:
@@ -841,8 +902,16 @@ def _read_fan(img, strong):
                 # No candidate AND no banner. Something is in this slot -- the fan only
                 # emits five rows when it fits -- but nothing here can say what, so the
                 # caller must ask the paid model rather than be handed a guess.
+                # y HERE IS A SLOT CONSTANT, NOT A MEASUREMENT. Nothing reached this
+                # slot, so there is no measured position to report -- and on slot 0 the
+                # constant equals the card's own resting position, so a LOST card read as
+                # a perfectly stable one. That is what hid a selected tactics card moving:
+                # find_tactics stops matching a card once it is selected, the row fell
+                # through to here, and the lift check then compared a constant with itself
+                # and could never fire (CLAUDE.md 10.1). Flagged so a caller that needs a
+                # real position can refuse instead of being handed furniture.
                 out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "unknown",
-                            "digit": None, "score": 0.0,
+                            "digit": None, "score": 0.0, "y_measured": False,
                             "y": int(SLOT_PLAYER[i][1] * s)})
                 continue
             # AND THE BINARY, which this branch used to leave unset -- so a row whose
@@ -853,6 +922,7 @@ def _read_fan(img, strong):
             out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
                         "score": 0.0, "type": t, "type_score": round(ts, 3),
                         "adds_power": ap, "adds_power_score": round(aps, 3),
+                        "y_measured": False,          # see the note above: a slot constant
                         "y": int(SLOT_PLAYER[i][1] * s)})
             continue
         _, x, kind, circle, cy = best[i]
@@ -865,7 +935,7 @@ def _read_fan(img, strong):
                 kind = "player"
         digit, sc = read_digit(img, circle) if circle else (None, 0.0)
         row = {"x": x, "kind": kind, "digit": digit, "score": round(sc, 3),
-               "y": int(cy)}
+               "y": int(cy), "y_measured": True, "_slot_i": i}
         if kind == "player":
             # hand_to_cards() requires `secondary` on every player card, so this
             # is read here rather than left for the caller to ask the API for.
@@ -884,6 +954,44 @@ def _read_fan(img, strong):
             row["bonus"], bs = read_bonus(img, x, cy, slot=i)
             row["bonus_score"] = bs
         out.append(row)
+
+    # A RAISED CARD'S DISC SHRINKS OUT OF DISC_MIN_R, so a SELECTED card's power could
+    # not be read at all. Measured on one card in one hand, at rest and selected:
+    #
+    #     at rest    thr 110/90/130   disc r=20   reads '5' at 0.958
+    #     SELECTED   thr 110          NO circle
+    #                thr 130          r=13  -- under DISC_MIN_R 18, rejected
+    #                thr 150          r=19  reads '5' at 0.969
+    #
+    # The card BRIGHTENS when selected, so the dark-threshold fit shrinks. Adding 150 to
+    # DARK_THRESHOLDS globally is NOT the fix: over the 540 hands in overnight/local_hand
+    # it gained 3 digits, LOST 1, and pushed one hand off the fan fit entirely into the
+    # ungated path. So it runs per-slot, only where a digit is missing AND the card is
+    # raised -- it can add a reading and cannot change one.
+    _raise_gate = SELECTED_MIN_RISE * s
+    for r in out:
+        if r.get("kind") != "player" or r.get("digit") is not None:
+            continue
+        x, y = r.get("x"), r.get("y")
+        if x is None or y is None or r.get("y_measured") is False:
+            continue
+        i = r.get("_slot_i")
+        if i is None or not (0 <= i < len(SLOT_PLAYER)):
+            continue
+        if (SLOT_PLAYER[i][1] * s) - y < _raise_gate:
+            continue                      # not raised: nothing to explain the miss
+        from circle_finder import find_circles
+        for c in find_circles(img, RAISED_DARK_MAX):
+            if abs(c[0] - x) > 25 * s or abs(c[1] - y) > 25 * s:
+                continue
+            if c[2] < DISC_MIN_R or c[3] < DISC_MIN_REACH:
+                continue
+            d, sc2 = read_digit(img, (c[0], c[1], c[2]))
+            if d is not None:
+                r["digit"], r["score"] = d, round(sc2, 3)
+                r["digit_from_raised_pass"] = True
+            break
+
     return out
 
 
@@ -898,6 +1006,269 @@ def _read_ungated(img, strong):
     for t in find_tactics(img):
         if all(abs(t["x"] - o["x"]) > 20 for o in out):
             out.append({"x": t["x"], "kind": "tactics", "digit": None, "score": 0.0,
-                        "type": None})
+                        "type": None, "y_measured": False})
     out.sort(key=lambda r: r["x"])
+    return out
+
+
+# ==========================================================================
+# WHERE IS THE CURSOR, AND WHICH CARD IS ACTUALLY SELECTED
+# ==========================================================================
+# select_and_play() used to send eight BLIND presses -- home four left, walk
+# N right, select, confirm -- and never look at the screen. On 2026-09-10 a
+# swallowed move_right played a power-4 instead of a power-6, and the frame
+# captured at the instant of that press shows the cursor sitting at index 0
+# while the code believed 2. The same swallowed press one step later eats
+# `select_card` instead, confirm_play fires into nothing, and the loop stalls
+# ~35 s waiting for a deal that is never coming. One bug, two faces.
+#
+# THE GAME ANSWERS BOTH QUESTIONS ON SCREEN, and with two DIFFERENT signals
+# (the user, watching the stream, 2026-09-10):
+#
+#     the cursor HOVERING a card  ->  the card GLOWS   (a white halo on its rim)
+#     the card being SELECTED     ->  the card LIFTS   (it rises up the screen)
+#
+# so "where is the cursor" and "did the select land on the card I meant" are
+# separate measurements, and the second one is the one that guards the
+# irreversible press.
+#
+# THE FIRST VERSION OF THIS WAS SCORED AGAINST A CENSUS IT LABELLED ITSELF, and
+# that is the whole reason the numbers below are the user's and not mine. It read
+# 4 of 9 on a labelled sweep: 5/5 on player cards and 0/4 on TACTICS cards, whose
+# halo it could not see at all. Every frame it could not read went into the
+# "no cursor" pile -- so the negative population was built entirely out of the one
+# class the detector was blind to, and scoring against it reported healthy headroom.
+# CLAUDE.md 31, the same shape as the DRAW! screens topping the result reader's
+# negatives. A census cannot discover a class its own labeller does not have.
+#
+# WHAT FIXED IT WAS GROUND TRUTH: the user parked the cursor on each slot in turn
+# and named it, while a sweep captured a frame after every press (2026-09-10,
+# test_fixtures/hand_cursor/sweep_f*_slot*.png, truth in each filename).
+#
+# TWO GEOMETRY ERRORS, both found by the user looking at the box drawn on a frame:
+#   * IT WAS CENTRED ON THE DISC, and the disc sits on the card's RIGHT side, so
+#     the box reached across into the NEIGHBOUR. What was documented here as
+#     "the halo spills onto the left neighbour, 3.7-4.8%" was never a property of
+#     the halo -- it was this box reading the next card along. The box now sits
+#     LEFT of the disc (x-110 .. x-10) and that number is gone.
+#   * IT SAT TOO HIGH, in the background above the cards rather than on the rim.
+# A fixed offset cannot serve both card types: a tactics card's disc sits much
+# closer to its own top edge than a player card's does. The window below is the
+# one geometry, of 18 that pass, with the widest margin over all 12 labelled frames.
+#
+# MEASURED at this geometry over those 12 frames (9 the user labelled by slot,
+# plus 3 earlier ones):
+#
+#     the card the cursor is on      9.1 - 16.1 %      argmax correct 12 of 12
+#     every other card               0.0 -  6.2 %
+#     a frame with NO cursor lit      0.0 %            n = 1
+#
+# THE GATE SITS BETWEEN THOSE TWO, AND THE FIRST VERSION DID NOT. It was set to 3.0
+# and justified here as "a floor under the positives with 2x margin" -- true, and
+# irrelevant: what decides a gate is the CEILING OF THE FALSE READINGS, which is 6.2
+# and which I had not computed (CLAUDE.md 10.4, quoted in this same file hours
+# earlier). The cost was live: a tactics card whose own white artwork reads a
+# constant 6.1-6.5 in its box was named "the cursor" the moment the real cursor's
+# card was selected and lifted out of its own box, and the loop then pressed
+# select_card onto the card it had just selected, toggling it off.
+#
+# 7.5 sits between the 6.2 ceiling and the 9.1 floor. It is still not the
+# load-bearing check -- argmax is, and the LIFT is what guards the irreversible
+# press -- but it is now a separation rather than a floor.
+#
+# THE LIFT IS THE STRONGER SIGNAL BY A WIDE MARGIN: measured live, the selected card
+# rose 44 px while every other card moved 0-1 px. That is why the lift, not the glow,
+# gates confirm_play.
+# EVERY OFFSET BELOW IS IN ANCHOR_W UNITS AND IS SCALED BY THE CAPTURE, exactly as
+# SLOT_PLAYER / SLOT_TACTICS are. They were written as raw pixels first, which is a trap
+# this project has already paid for: CLAUDE.md section 3 records one session producing both
+# 1867x1050 and 1920x1080 captures, where every fixed region silently landed on the wrong
+# thing. The user, 2026-09-10: "don't use exact pixels because that will screw you over the
+# moment it's on a different screen."
+# THE GATE WAS REJECTING CORRECT ANSWERS, AND THE "NEGATIVE POPULATION" IT GUARDED
+# AGAINST WAS A FRAME I MISLABELLED. Settled 2026-09-11 against 54 frames the user
+# labelled blind, plus one more they adjudicated by eye:
+#
+#     argmax alone                        55 / 55   including slot 0 at 8/8
+#     argmax gated at 7.5                 47 / 55   every miss is slot 0
+#
+# Slot 0 reads 2.7-4.4 when the cursor is on it, where every other slot swings 0 -> 12-18.
+# It is the leftmost card, rotated hardest by the fan, and its rim barely enters the
+# window -- so on that slot argmax is right BY ELIMINATION (the others read ~0) rather
+# than by detecting anything. That is worth knowing, but it is still right.
+#
+# I reported an OVERLAP here and it was an artefact: the frame I used as "nothing lit" was
+# filed that way because THIS DETECTOR ABSTAINED ON IT, and the user looked and said the
+# cursor is plainly on slot 0. CLAUDE.md 31, committed by me while quoting it. Corrected,
+# there is no measured negative population at all: across 54 labelled turn frames, ZERO
+# have no cursor. During a turn the cursor is always somewhere.
+#
+# So this is a FLOOR under the positives, not a separation, and it is honest to say so:
+# 1.5 sits under the faintest true reading (2.70) with margin, and the real protection
+# against an unreadable screen is upstream -- the row count and y_measured checks in
+# input_controller._look_settled, which reject a frame the fan could not fit at all.
+# ARGMAX is the load-bearing check; this only stops a black frame naming a slot.
+# ALL OF WHICH WAS THE WINDOW, NOT THE CURSOR (2026-09-11, the user watching the stream:
+# "should you move slot 0's box down a little more? it's barely covering it").  The window
+# sat 70-30 anchor px ABOVE the disc, which is the BACKDROP; what it actually measured was
+# how much of a card's own white top rim happened to fall inside, and that tracks how HIGH
+# the card sits.  So a SELECTED card -- raised ~44 px -- out-read the card holding the
+# cursor, the backdrop behind slot 4 read 9.7 where the true cursor read 7.5, and the turn
+# refused.  Dropped onto the rim where the halo actually is (55-35), over 74 labelled
+# frames -- 56 the user labelled BLIND plus the 18 curated fixtures:
+#
+#     window            argmax    true cursor card    every other card      gap
+#     110,10,70,30       74/74        8.7 .. 36        0.0 ..  9.7        -1.0  OVERLAP
+#      80, 0,55,35       74/74       20.7 .. 36.1      0.0 ..  8.4       +12.3
+#
+# Chosen leave-one-fold-out over all seven folds; every fold scored 74/74 on its held-out
+# frames, and the by-slot true floors are s0 21.4 / s1 25.2 / s2 21.0 / s3 24.8 / s4 20.7.
+# AND THE CURATED FIXTURES ARE WHY THE FOLDS ARE HONEST: an earlier pick (80,20,55,40) won
+# all six folds of the 56 blind frames and then read 3.4 on sweep_f00, whose cursor is
+# plainly on slot 2 -- it was in no fold.  CLAUDE.md's at_table lesson exactly.
+CURSOR_GLOW_MIN = 15.0         # BETWEEN two measured populations: 8.4 and 20.7
+GLOW_WHITE = 190               # a grey level, so NOT scaled
+GLOW_XL, GLOW_XR = 80, 0       # the box sits on the card's own top-left RIM, where the
+GLOW_DY0, GLOW_DY1 = 55, 35    # halo shows -- NOT in the backdrop above it
+SELECT_LIFT_MIN_PX = 6         # measured 44 px of lift at reference scale, 0-1 px on the rest
+
+
+def cursor_glow(hand_img, rows=None, _boxes=None):
+    """(cursor_index or None, glow % per card, rows) for a hand crop.
+
+    None means NOT READ -- nothing is lit clearly enough to act on. The caller
+    must refuse to press rather than guess; a wrong guess here plays the wrong
+    card in a $50 match, which is the exact failure this exists to stop.
+    """
+    rows = read_hand(hand_img) if rows is None else rows
+    g = np.asarray(hand_img.convert("L"), dtype=float)
+    sc = hand_img.width / ANCHOR_W          # the same scale the slot anchors use
+    xl, xr = GLOW_XL * sc, GLOW_XR * sc
+    dy0, dy1 = GLOW_DY0 * sc, GLOW_DY1 * sc
+    # EVERY DISC IS MAPPED INTO ONE REFERENCE FRAME BEFORE ANY BOX IS PLACED OR BOUNDED.
+    # `x` is the DISC, and a TACTICS disc sits 60-83 px LEFT of a player disc in the same
+    # slot (SLOT_TACTICS, :215), so raw disc x means different things for the two kinds.
+    # Live on 2026-09-11 a tactics card at slot 1 sat 93 px from its player neighbour
+    # instead of ~180: the midpoint bound crushed its box 104 -> 36 px, left the halo
+    # entirely, and read 7.5 where the true cursor card reads 10.3-19.1. The selected
+    # card won the argmax and the turn refused. Scored over the 54 blind-labelled frames
+    # plus that frame: raw x 54/55 with the true population reaching DOWN to 2.9;
+    # canonical 55/55 with the true floor at 10.3 and every unselected false read <= 5.5.
+    xs = [None if r.get("x") is None else
+          r["x"] + (SLOT_PLAYER[i][0] -
+                    (SLOT_TACTICS if r.get("kind") == "tactics" else SLOT_PLAYER)[i][0]) * sc
+          for i, r in enumerate(rows)]
+    glow = []
+    for i, r in enumerate(rows):
+        x, y = xs[i], r.get("y")
+        # A ROW WHOSE y WAS NEVER MEASURED CANNOT ANCHOR THIS BOX. Its y is a slot
+        # constant, so the window would sit wherever the card USED to be.
+        if x is None or y is None or r.get("y_measured") is False:
+            glow.append(0.0)
+            if _boxes is not None:
+                _boxes.append(None)
+            continue
+        # EACH CARD OWNS THE BAND BETWEEN THE MIDPOINTS TO ITS NEIGHBOURS, so a box can
+        # never sample a neighbouring card. Without this bound a SELECTED card, which
+        # rises 44 px, puts its bright rim exactly where the next slot's box sits: live
+        # on 2026-09-10 slot 2 read 20.5% off slot 1's raised card and was named "the
+        # cursor", while the user watching the screen could see only slot 1 lit. The
+        # walk then believed it was already at the tactics slot and skipped its move.
+        # Measured over the nine labelled sweep frames, the bound leaves the true
+        # readings untouched and collapses the highest FALSE reading 6.2 -> 0.5.
+        left = (xs[i - 1] + x) / 2 if i > 0 and xs[i - 1] is not None else 0
+        right = (x + xs[i + 1]) / 2 if i + 1 < len(xs) and xs[i + 1] is not None else g.shape[1]
+        x0, x1 = int(max(left, x - xl)), int(min(right, x - xr))
+        if x1 <= x0:
+            glow.append(0.0)
+            if _boxes is not None:
+                _boxes.append(None)
+            continue
+        y0b, y1b = max(0, int(y - dy0)), max(0, int(y - dy1))
+        if _boxes is not None:
+            # the windows actually sampled -- a test asserts THESE scale, because the
+            # ANSWER does not change until the box has moved far enough to miss the
+            # halo entirely, so an outcome-only check cannot see the scaling break.
+            _boxes.append((x0, y0b, x1, y1b))
+        p = g[y0b:y1b, x0:x1]
+        glow.append(round(float((p > GLOW_WHITE).mean() * 100), 1) if p.size else 0.0)
+    if not glow:
+        return None, glow, rows
+    i = int(np.argmax(glow))
+    return (i if glow[i] >= CURSOR_GLOW_MIN else None), glow, rows
+
+
+def cursor_slot(glow, lifted):
+    """Which slot the cursor is on, from every card's glow. None means NOT READ.
+
+    ONE RULE: the brightest card, if it clears CURSOR_GLOW_MIN.
+
+    Two further rules lived here -- subtract the SELECTED cards, then require the winner to
+    beat its runner-up by 2.0x -- and BOTH were describing a badly placed window rather
+    than the screen. That window sampled the backdrop above each card and caught the card's
+    own white top rim, so "glow" tracked how HIGH a card sat and a selected card, raised
+    ~44 px, out-read the card holding the cursor; this docstring used to cite 14.8 on a
+    merely-selected card as the reason. With the window on the rim, a selected card that
+    is NOT hovered reads at most 1.9. There is nothing left for either rule to fix, and
+    both cost real answers: the subtraction alone turned a live frame whose cursor sat on
+    the one selected card into "the cursor is on slot 1", reading 4.5 off dark backdrop.
+
+    Measured over 74 labelled frames (56 blind + 18 curated), window (80, 0, 55, 35):
+
+        the card with the cursor          20.7 .. 36.1
+        every other card                   0.0 ..  8.4     (selected ones at most 1.9)
+        argmax + the gate                 74 / 74
+
+    `lifted` is accepted because two call sites pass it and is deliberately UNUSED; the
+    measurement above is why. Delete the argument only with those call sites.
+    """
+    if not glow:
+        return None
+    i = int(np.argmax(glow))
+    return i if glow[i] >= CURSOR_GLOW_MIN else None
+
+
+# WHICH CARDS ARE SELECTED, WITHOUT A BASELINE. lifted_cards needs a before/after pair,
+# so every caller had to reach a clean board first -- and a baseline taken while something
+# was already selected quietly made a lifted card the "resting" position, which cost two
+# sweeps tonight. The fan already knows where a card RESTS: its slot anchor. Measured over
+# the nine labelled sweep frames, anchor_y minus measured y is
+#
+#     at rest, every slot      -6.4 .. 9.1
+#     a SELECTED card          43.1 and 51.7
+#
+# 34 points of empty band, so the gate sits between two measured populations (10.4) and the
+# loop can start from ANY state -- including one with cards already selected, which is the
+# robustness the user asked for.
+SELECTED_MIN_RISE = 25         # in ANCHOR_W units; between the 9.1 rest ceiling and 43.1
+
+
+def selected_cards(rows, scale):
+    """Slots whose card is RAISED above its own fan anchor -- i.e. selected."""
+    out = []
+    for i, r in enumerate(rows):
+        if i >= len(SLOT_PLAYER):
+            break
+        y = r.get("y")
+        if y is None or r.get("y_measured") is False:
+            continue
+        table = SLOT_TACTICS if r.get("kind") == "tactics" else SLOT_PLAYER
+        if (table[i][1] * scale) - y >= SELECTED_MIN_RISE * scale:
+            out.append(i)
+    return out
+
+
+def lifted_cards(y_before, y_after, scale=1.0):
+    """Indices that ROSE by at least SELECT_LIFT_MIN_PX -- i.e. got selected.
+
+    `scale` is the capture scale (img.width / ANCHOR_W). The gate is an offset in
+    ANCHOR_W units, so a smaller capture needs a proportionally smaller gate or a real
+    lift stops counting as one.
+    """
+    gate = SELECT_LIFT_MIN_PX * scale
+    out = []
+    for i in range(min(len(y_before), len(y_after))):
+        a, b = y_before[i], y_after[i]
+        if a is not None and b is not None and (a - b) >= gate:
+            out.append(i)
     return out

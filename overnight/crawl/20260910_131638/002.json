@@ -1,0 +1,85 @@
+{
+ "step": 2,
+ "t": 1789060605.119076,
+ "clock": "13:16:45",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.615,
+   "loser": 0.412,
+   "draw": 0.501
+  },
+  "why": "no result word found (best 0.615 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [],
+ "hand_err": null,
+ "hand_usable": null,
+ "hand_why": "0 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": null,
+ "discards_err": null,
+ "discards_detail": {
+  "why": "no round dot is lit",
+  "round": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "discard": [
+   false,
+   false
+  ],
+  "panel_gap": [
+   28,
+   28,
+   28,
+   28,
+   28
+  ]
+ },
+ "scoreboard": {
+  "your": null,
+  "opponent": null
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.439)"
+   },
+   "second": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.114)"
+   },
+   "first": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.388)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": null,
+  "gap": "UNRECOGNISED SCREEN -- not a result (best word 0.615 against 0.8; OCR: no text found), not a ban grid (no N/3 counter), and the hand reader says: 0 rows, expected 5"
+ },
+ "command": "q"
+}

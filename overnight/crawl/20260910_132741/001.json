@@ -1,0 +1,77 @@
+{
+ "step": 1,
+ "t": 1789061261.325521,
+ "clock": "13:27:41",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.354,
+   "loser": 0.42,
+   "draw": 0.43
+  },
+  "why": "no result word found (best 0.430 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": 0,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [],
+ "hand_err": null,
+ "hand_usable": null,
+ "hand_why": "0 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": null,
+ "discards_err": null,
+ "discards_detail": {
+  "why": "no dark panel behind the counters (162)",
+  "round": null,
+  "discard": null,
+  "panel_gap": [
+   150,
+   150,
+   152,
+   125,
+   162
+  ]
+ },
+ "scoreboard": {
+  "your": null,
+  "opponent": null
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.432)"
+   },
+   "second": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.543)"
+   },
+   "first": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.492)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": "ban_screen",
+  "result_outcome": null
+ },
+ "command": "k confirm_play",
+ "acted": "press(confirm_play)"
+}

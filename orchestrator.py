@@ -5320,6 +5320,27 @@ def hand_to_cards(hand: list):
     return players, tactics
 
 
+def hand_cursor_look():
+    """(cursor_index or None, y per card, row count) from ONE fresh frame.
+
+    The seam select_and_play() presses against. It is injected rather than
+    imported so the offline suite can drive the loop with a fake screen -- and
+    so input_controller, which orchestrator imports, never has to import back.
+    """
+    import local_hand
+    hand = _grab_settle_regions(("hand",))["hand"]
+    _idx, glow, rows = local_hand.cursor_glow(hand)
+    selected = local_hand.selected_cards(rows, hand.width / local_hand.ANCHOR_W)
+    # THE WHOLE PROFILE, not one answer. A SELECTED card keeps glowing, so once anything
+    # is selected the brightest card is no longer necessarily the cursor -- the caller
+    # needs every reading plus which cards are lifted to tell them apart.
+    # None where the position was never measured, so the lift check ABSTAINS rather
+    # than comparing a slot constant against itself and reporting "nothing moved".
+    return (glow,
+            [None if r.get("y_measured") is False else r.get("y") for r in rows],
+            len(rows), selected)
+
+
 def play_one_turn(state_json: dict, batters_used: int):
     """
     Execute one turn. `batters_used` is the caller-tracked count of
@@ -5444,9 +5465,27 @@ def play_one_turn(state_json: dict, batters_used: int):
     # already post-deal. It crosses functions the way graph_walk carries a leg-end frame:
     # a module stash that the consumer POPS, so a turn can never inherit the last one.
     stash_hand_baseline(_grab_settle_regions(("hand",))["hand"])
+    # CLOSED LOOP, not a press count. `hand_cursor_look` reads the cursor off the screen
+    # after every single press; select_and_play refuses rather than commit a card it
+    # could not verify. A refusal is NOT a play -- the turn returns played=False and
+    # run() re-reads and tries again.
+    #
+    # THE GUARD IS `is False`, NOT FALSINESS. select_and_play returned None on success
+    # for its whole life, so treating any falsy value as a refusal turns every stub --
+    # and any caller that simply forgets to return -- into a phantom "nothing was
+    # committed". It broke three test files the moment it landed, which was the cheap
+    # version of the same mistake happening live.
+    #
+    # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND: test_hand_memory_forgets
+    # asserts they stay within a few lines of each other, so prose goes above them,
+    # never between them.
+    #
     # Both slots are SPENT (the tactics one too, when one was attached).
     forget_hand_slot(player_idx, tactics_idx)
-    select_and_play(player_idx, tactics_idx)
+    if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
+        print("  play REFUSED — the selection could not be verified; nothing committed")
+        pop_hand_baseline()
+        return False, None
 
     matchup_info = {
         # POPPED by run() before this dict can reach pending_matchup, so

@@ -182,6 +182,25 @@ stale — check the screen before clearing it.
   write-and-rescan I/O spike degrades `sleep()`, walks the character into a
   wall, and the log scores that as a routing failure (§10.13). No exception for
   "just one mutant" — that is exactly what §10a's eleven-minute mutant was.
+
+  **THE EXCEPTION IS WHEN THE MECHANISM DOES NOT APPLY, AND IT IS THE MECHANISM
+  THAT DECIDES — NOT THE WORDING.** The harm above is specific: degraded
+  `sleep()` while `slow_traverse` HOLDS THE STICK and sleeps out each push, so
+  the leg walks short. If nothing is holding a stick, nothing can walk short.
+  The user's call, 2026-09-11, with the console live but the match PAUSED on a
+  turn screen: *"IO spike is a big problem yes but we're just idling on a turn
+  screen so it doesn't matter."* That was correct, and the sweep ran here with
+  no ill effect.
+
+  So: **"the console is live" is not the test. "Is anything timing-sensitive in
+  flight" is.** Walking a leg, a stick hold, an A/B trial, a settle being
+  measured — wait. Parked on a turn, ban or result screen with no run in
+  flight — go, and say which it is.
+
+  The distinction generalises, and it is worth more than this one rule: a
+  deliberate override with the mechanism checked is engineering; an unnoticed
+  violation is a bug wearing a principle's clothes. Every rule here names its
+  mechanism for exactly this reason. Quote the mechanism when you override one.
 - `tests/harness/test_no_undefined_names.py` scans every non-vendored module for
   names nothing binds, with a positive control so it cannot pass by finding
   nothing. It earned its keep the day it landed: deleting `_something_moved` as
@@ -263,6 +282,22 @@ nothing at all, three times. The user, who could see the screen, said press X.
 So it is X, then X. The old note is not wrong about Square existing somewhere in the PS5 UI;
 it is wrong as an instruction, because it names one screen and the recovery needs two.
 
+**BUT X IS THE RIGHT BUTTON ONLY ONCE THE CURSOR IS ON THE GAME TILE, AND THE CHEAP EXIT IS
+THE PS BUTTON.** Read as a recipe for "the overlay is up, get back to the game", the two
+lines above are a trap: X is SUBMIT, so it takes whatever the cursor happens to be sitting
+on, and from a fresh Control Center that is not necessarily the game tile -- it can drop you
+to the PS5 HOME SCREEN, out of the match. The user, watching the screen on 2026-09-10:
+*"if you pressed X, it would take you to the PS5 home screen. you don't want to do that.
+press the PS5 symbol again to remove the Playstation overlay."*
+
+    overlay is up, you just want it GONE     ->  ic.press('ps_button')   (it is a TOGGLE, section 1)
+    you have NAVIGATED to the game card and
+    "Resume Game" is highlighted             ->  X
+
+Verified 2026-09-10: one `ps_button` press returned a paused match to `screen: 'turn'` with
+all five hand rows reading and the cursor located, in 2.5 s. Prefer it. X-then-X describes
+the path THROUGH the game card, not the way out of the overlay.
+
 **AND THE REASON THIS TOOK FOUR ATTEMPTS IS A MEASUREMENT MISTAKE WORTH THE SPACE.** Between
 presses I scored `_mean_abs_delta` over the whole frame, got 0.1-0.2, and concluded "nothing
 is reaching the console — this is not a button problem". Input was landing the whole time.
@@ -293,10 +328,51 @@ Fixed by `WHITE_LEVEL` 200 -> **225** (unselected text peaks at 210, selected is
 (`pause_menu.py:121`, `:235`, `:130`). Verified: it now returns "Load Last Save" on the
 frame that failed.
 
+### EVERY OFFSET IS IN ANCHOR UNITS AND IS SCALED. NEVER A RAW PIXEL.
+
+**This one keeps happening, and the user called it out on 2026-09-10:** *"don't use
+exact pixels because that will screw you over the moment it's on a different screen."*
+
 **Capture geometry changes under you.** One session produced both 1867x1050 and
 1920x1080 captures, and row calibration is not robust to that — at 1920x1080
 every row scored ~0.55 because the bands landed on the page instead of the text.
 Anything reading fixed regions must be checked against BOTH geometries.
+
+The project already has the mechanism and the readers that predate this use it:
+`s = img.width / ANCHOR_W`, and `SLOT_PLAYER` / `SLOT_TACTICS` are multiplied by it at
+every call. **A new window written in raw pixels works perfectly on the machine it was
+tuned on and silently lands on the wrong thing everywhere else** — there is no error, the
+number just becomes meaningless, which is section 10.1's whole family.
+
+It happened AGAIN the same day, in the cursor-glow reader: `GLOW_XL/XR/DY0/DY1` and
+`SELECT_LIFT_MIN_PX` were all written as raw pixels, tuned at one capture size, and every
+measurement in this file quoting them (the 9.1-16.1 true band, the 0.5 false ceiling, the
+44 px lift) is at THAT scale. They now multiply by `s` like everything else.
+
+**How to tell the two kinds of constant apart, because only one needs scaling:**
+
+    an OFFSET or a DISTANCE in pixels   ->  SCALE IT      GLOW_XL, SLOT_TOL, a box height
+    a FRACTION, PERCENTAGE or RATIO     ->  leave it      CURSOR_GLOW_MIN (a % of pixels)
+    a GREY LEVEL or a CORRELATION       ->  leave it      GLOW_WHITE 190, RESULT_MIN 0.80
+
+**And the guard is a test, not a promise.** `tests/minigame/test_verified_selection.py`
+re-reads fixtures at 0.9x, 1.1x and 1.25x and requires the same answer, with a floor on
+how many resized frames it actually exercised so it cannot pass by skipping them all.
+Pin any new window the same way — resizing a fixture costs nothing and is the only thing
+that actually catches this.
+
+**OPEN, and found BY that test: the hand reader itself is not scale-free, one layer below
+the windows above.** Writing the check immediately failed in two places that predate it:
+
+    at 0.73x   read_hand returns ONE row -- the discs fall under find_circles' size gates
+    at 1.25x   find_tactics misses the wreath: its blob is checked against 28-48 x 30-50
+               RAW pixels, so scaling the capture moves the card out of the gate
+
+So every measurement in this file is at ONE capture geometry, and a different rig would
+degrade silently rather than error. Not fixed: it is a change to the core reader's size
+gates and wants the 540-hand corpus check plus mutants behind it. The scale test is
+deliberately scoped to the cases where the reader still produces a full fan, and says so,
+rather than claiming a scale-invariance the system does not have.
 
 **Open the logged frame before theorising about a failure.** Nearly every wrong
 diagnosis here came from reasoning about what the game "must" have been doing

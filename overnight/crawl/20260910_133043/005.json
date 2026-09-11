@@ -1,0 +1,181 @@
+{
+ "step": 5,
+ "t": 1789061447.614452,
+ "clock": "13:30:47",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.483,
+   "loser": 0.395,
+   "draw": 0.402
+  },
+  "why": "no result word found (best 0.483 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [
+  {
+   "kind": "tactics",
+   "digit": null,
+   "secondary": null,
+   "type": "speed_boost",
+   "adds_power": false,
+   "score": 0.0,
+   "x": 129,
+   "y": 205
+  },
+  {
+   "kind": "player",
+   "digit": "4",
+   "secondary": 3,
+   "type": null,
+   "adds_power": null,
+   "score": 0.981,
+   "x": 389,
+   "y": 162
+  },
+  {
+   "kind": "tactics",
+   "digit": "1",
+   "secondary": null,
+   "type": "swing_boost",
+   "adds_power": true,
+   "score": 0.973,
+   "x": 508,
+   "y": 140
+  },
+  {
+   "kind": "player",
+   "digit": "8",
+   "secondary": 1,
+   "type": null,
+   "adds_power": null,
+   "score": 0.986,
+   "x": 751,
+   "y": 169
+  },
+  {
+   "kind": "player",
+   "digit": "7",
+   "secondary": 1,
+   "type": null,
+   "adds_power": null,
+   "score": 0.94,
+   "x": 924,
+   "y": 215
+  }
+ ],
+ "hand_err": null,
+ "hand_usable": 5,
+ "hand_why": null,
+ "hand_cards": [
+  {
+   "kind": "tactics",
+   "name": "speed_boost",
+   "type": "speed_boost",
+   "bonus": 1,
+   "hand_index": 0
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 4,
+   "secondary": 3,
+   "hand_index": 1
+  },
+  {
+   "kind": "tactics",
+   "name": "swing_boost",
+   "type": "swing_boost",
+   "bonus": 1,
+   "hand_index": 2
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 8,
+   "secondary": 1,
+   "hand_index": 3
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 7,
+   "secondary": 1,
+   "hand_index": 4
+  }
+ ],
+ "phase": "batting",
+ "phase_err": null,
+ "discards_left": 2,
+ "discards_err": null,
+ "discards_detail": {
+  "why": null,
+  "round": [
+   true,
+   true,
+   false,
+   false,
+   false
+  ],
+  "discard": [
+   true,
+   true
+  ],
+  "panel_gap": [
+   41,
+   51,
+   52,
+   51,
+   48
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   0,
+   0,
+   0
+  ],
+  "opponent": [
+   0,
+   0,
+   0
+  ]
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": 0,
+  "bases": {
+   "third": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.918)"
+   },
+   "second": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.830)"
+   },
+   "first": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.913)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": "turn",
+  "result_outcome": null
+ },
+ "command": "r",
+ "acted": "re-read only"
+}

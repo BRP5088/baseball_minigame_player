@@ -1,0 +1,94 @@
+{
+ "step": 1,
+ "t": 1789068374.2871838,
+ "clock": "15:26:14",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.501,
+   "loser": 0.395,
+   "draw": 0.413
+  },
+  "why": "no result word found (best 0.501 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [],
+ "hand_err": null,
+ "hand_usable": null,
+ "hand_why": "0 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": 2,
+ "discards_err": null,
+ "discards_detail": {
+  "why": null,
+  "round": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "discard": [
+   true,
+   true
+  ],
+  "panel_gap": [
+   38,
+   48,
+   48,
+   47,
+   45
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": [
+   0,
+   0,
+   0
+  ]
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.921)"
+   },
+   "second": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.454)"
+   },
+   "first": {
+    "occupied": true,
+    "power": null,
+    "why": "a power disc, and no coin (0.271)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": null,
+  "gap": "UNRECOGNISED SCREEN -- not a result (best word 0.502 against 0.8; OCR: no result word in ['G', 'AR', 'HNERS', 'CHES']), not a ban grid (no N/3 counter), and the hand reader says: 0 rows, expected 5"
+ },
+ "sheet": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/crawl/20260910_152614/001_sheet.png",
+ "command": "q"
+}

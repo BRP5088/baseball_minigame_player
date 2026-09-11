@@ -1,0 +1,111 @@
+{
+ "step": 2,
+ "t": 1789099555.5168908,
+ "clock": "00:05:55",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.503,
+   "loser": 0.397,
+   "draw": 0.522
+  },
+  "why": "no result word found (best 0.522 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [
+  {
+   "kind": "tactics",
+   "digit": null,
+   "secondary": null,
+   "type": null,
+   "adds_power": null,
+   "score": 0.0,
+   "x": 465,
+   "y": null
+  }
+ ],
+ "hand_err": null,
+ "cursor_err": null,
+ "cursor_index": null,
+ "cursor_glow": [
+  0.0
+ ],
+ "hand_usable": null,
+ "hand_why": "1 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": 1,
+ "discards_err": null,
+ "discards_detail": {
+  "why": null,
+  "round": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "discard": [
+   true,
+   false
+  ],
+  "panel_gap": [
+   38,
+   48,
+   51,
+   48,
+   45
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": [
+   0,
+   0,
+   0
+  ]
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": null,
+    "power": null,
+    "why": "a disc AND the coin"
+   },
+   "second": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.838)"
+   },
+   "first": {
+    "occupied": true,
+    "power": null,
+    "why": "a power disc, and no coin (0.477)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": null,
+  "gap": "UNRECOGNISED SCREEN -- not a result (best word 0.523 against 0.8; OCR: no result word in ['PITCHFOCUS', 'PITCHER', '']), not a ban grid (no N/3 counter), and the hand reader says: 1 rows, expected 5"
+ },
+ "sheet": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/crawl/20260911_000548/002_sheet.png",
+ "command": "r",
+ "acted": "re-read only"
+}

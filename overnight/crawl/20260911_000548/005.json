@@ -1,0 +1,94 @@
+{
+ "step": 5,
+ "t": 1789099573.005101,
+ "clock": "00:06:13",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": true,
+  "outcome": "win",
+  "words": {
+   "winner": 0.987,
+   "loser": 0.416,
+   "draw": 0.736
+  },
+  "why": "winner -> win (0.987 against the next word at 0.736)"
+ },
+ "ocr_outcome": "win",
+ "ocr_detail": "WINNER",
+ "ocr_err": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [],
+ "hand_err": null,
+ "cursor_err": null,
+ "cursor_index": null,
+ "cursor_glow": [],
+ "hand_usable": null,
+ "hand_why": "0 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": null,
+ "discards_err": null,
+ "discards_detail": {
+  "why": "a dot is neither lit nor spent",
+  "round": [
+   null,
+   null,
+   null,
+   true,
+   true
+  ],
+  "discard": [
+   null,
+   false
+  ],
+  "panel_gap": [
+   23,
+   27,
+   27,
+   29,
+   27
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": null
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.683)"
+   },
+   "second": {
+    "occupied": null,
+    "power": null,
+    "why": "a disc AND the coin"
+   },
+   "first": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.572)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": "result",
+  "result_outcome": "win"
+ },
+ "sheet": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/crawl/20260911_000548/005_sheet.png",
+ "command": "q"
+}

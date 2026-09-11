@@ -1,0 +1,88 @@
+{
+ "step": 1,
+ "t": 1789054168.111882,
+ "clock": "11:29:28",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.659,
+   "loser": 0.494,
+   "draw": 0.669
+  },
+  "why": "no result word found (best 0.669 < 0.8)"
+ },
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [],
+ "hand_err": null,
+ "hand_usable": null,
+ "hand_why": "0 rows, expected 5",
+ "hand_cards": null,
+ "phase": null,
+ "phase_err": null,
+ "discards_left": null,
+ "discards_err": null,
+ "discards_detail": {
+  "why": "a dot is neither lit nor spent",
+  "round": [
+   null,
+   null,
+   null,
+   true,
+   true
+  ],
+  "discard": [
+   false,
+   false
+  ],
+  "panel_gap": [
+   20,
+   24,
+   27,
+   28,
+   27
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": null
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": null,
+  "bases": {
+   "third": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.681)"
+   },
+   "second": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.801)"
+   },
+   "first": {
+    "occupied": null,
+    "power": null,
+    "why": "neither a disc nor the coin (coin 0.628)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": null,
+  "gap": "UNRECOGNISED SCREEN -- not a result (best word 0.672 against 0.8), not a ban grid (no N/3 counter), and the hand reader says: 0 rows, expected 5"
+ },
+ "command": "r",
+ "acted": "re-read only"
+}

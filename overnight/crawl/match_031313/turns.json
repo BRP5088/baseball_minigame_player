@@ -1,0 +1,52 @@
+[
+ {
+  "turn": 1,
+  "committed": true,
+  "why": "batting: power 8",
+  "read_s": 0.3,
+  "commit_s": 6.62,
+  "deal_s": 10.5,
+  "total_s": 17.43,
+  "dealt": true
+ },
+ {
+  "turn": 2,
+  "committed": true,
+  "why": "batting: power 5",
+  "read_s": 0.19,
+  "commit_s": 4.94,
+  "deal_s": 12.71,
+  "total_s": 17.84,
+  "dealt": true
+ },
+ {
+  "turn": 3,
+  "committed": true,
+  "why": "batting: power 5",
+  "read_s": 0.21,
+  "commit_s": 4.97,
+  "deal_s": 10.47,
+  "total_s": 15.65,
+  "dealt": true
+ },
+ {
+  "turn": 4,
+  "committed": false,
+  "why": "batting: power 5 + swing_boost",
+  "read_s": 0.21,
+  "commit_s": 9.18,
+  "deal_s": 0.06,
+  "total_s": 9.45,
+  "dealt": true
+ },
+ {
+  "turn": 5,
+  "committed": false,
+  "why": "batting: power 5 + swing_boost",
+  "read_s": 0.2,
+  "commit_s": 0.12,
+  "deal_s": 0.05,
+  "total_s": 0.38,
+  "dealt": true
+ }
+]

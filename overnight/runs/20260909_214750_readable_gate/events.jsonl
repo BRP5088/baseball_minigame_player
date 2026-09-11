@@ -1,0 +1,16 @@
+{"t": 1789004874.7452, "kind": "regions", "seq": 4672, "dump_mono_ns": 119949355190541, "gameplay": {"scoreboard": [0.018, 0.175, 0.205, 0.405], "hand": [0.25, 0.716, 0.76, 1.0], "third_base": [0.3225, 0.29, 0.4375, 0.5], "first_base": [0.55, 0.29, 0.665, 0.5], "second_base": [0.43, 0.08, 0.58, 0.32]}, "reveal_centre": [0.42, 0.28, 0.58, 0.58], "ban_cols": [[0.145, 0.275], [0.28, 0.41000000000000003], [0.41500000000000004, 0.545], [0.55, 0.68], [0.685, 0.8150000000000001]], "ban_rows": [[0.195, 0.385], [0.395, 0.585]], "prompt_text_box": [0.36, 0.535, 0.72, 0.725], "settle_width": 2000, "screenshot_max_width": 2000, "reveal_threshold": 0.065}
+{"t": 1789004876.0924, "kind": "press", "seq": 4753, "dump_mono_ns": 119950706184708, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004881.1417, "kind": "press", "seq": 5055, "dump_mono_ns": 119955745005666, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004886.117, "kind": "press", "seq": 5354, "dump_mono_ns": 119960733311958, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004901.0906, "kind": "press", "seq": 6251, "dump_mono_ns": 119975699263916, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1789004902.7883, "kind": "press", "seq": 6353, "dump_mono_ns": 119977400017416, "action": "look_left", "hold": 0.3, "post_delay": 0.4}
+{"t": 1789004906.8737, "kind": "press", "seq": 6598, "dump_mono_ns": 119981487792125, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004911.8564, "kind": "press", "seq": 6896, "dump_mono_ns": 119986460437125, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004916.8167, "kind": "press", "seq": 7194, "dump_mono_ns": 119991431331458, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004931.7534, "kind": "press", "seq": 8089, "dump_mono_ns": 120006362920833, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1789004933.4461, "kind": "press", "seq": 8190, "dump_mono_ns": 120008047795833, "action": "look_left", "hold": 0.3, "post_delay": 0.4}
+{"t": 1789004937.61, "kind": "press", "seq": 8440, "dump_mono_ns": 120012218328166, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004942.6031, "kind": "press", "seq": 8739, "dump_mono_ns": 120017206498291, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004947.5876, "kind": "press", "seq": 9038, "dump_mono_ns": 120022196796541, "action": "toggle_pause", "hold": 0.05, "post_delay": 0.4}
+{"t": 1789004962.5829, "kind": "press", "seq": 9937, "dump_mono_ns": 120037195572208, "action": "look_right", "hold": 0.3, "post_delay": 0.4}
+{"t": 1789004964.2679, "kind": "press", "seq": 10038, "dump_mono_ns": 120038879591791, "action": "look_left", "hold": 0.3, "post_delay": 0.4}

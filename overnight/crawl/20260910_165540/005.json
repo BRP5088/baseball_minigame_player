@@ -1,0 +1,190 @@
+{
+ "step": 5,
+ "t": 1789073751.7815318,
+ "clock": "16:55:51",
+ "size": [
+  2000,
+  1125
+ ],
+ "result": {
+  "is_result": false,
+  "outcome": null,
+  "words": {
+   "winner": 0.504,
+   "loser": 0.41,
+   "draw": 0.437
+  },
+  "why": "no result word found (best 0.504 < 0.8)"
+ },
+ "ocr_outcome": null,
+ "ocr_detail": null,
+ "ban_counter": null,
+ "ban_err": null,
+ "dealer_prompt": false,
+ "dealer_err": null,
+ "hand_rows": [
+  {
+   "kind": "tactics",
+   "digit": null,
+   "secondary": null,
+   "type": "fielding_boost",
+   "adds_power": false,
+   "score": 0.0,
+   "x": 141,
+   "y": 203
+  },
+  {
+   "kind": "player",
+   "digit": "6",
+   "secondary": 0,
+   "type": null,
+   "adds_power": null,
+   "score": 0.93,
+   "x": 383,
+   "y": 159
+  },
+  {
+   "kind": "tactics",
+   "digit": "1",
+   "secondary": null,
+   "type": "pitch_boost",
+   "adds_power": true,
+   "score": 0.851,
+   "x": 505,
+   "y": 140
+  },
+  {
+   "kind": "player",
+   "digit": "5",
+   "secondary": 0,
+   "type": null,
+   "adds_power": null,
+   "score": 0.92,
+   "x": 749,
+   "y": 168
+  },
+  {
+   "kind": "player",
+   "digit": "5",
+   "secondary": 0,
+   "type": null,
+   "adds_power": null,
+   "score": 0.925,
+   "x": 932,
+   "y": 220
+  }
+ ],
+ "hand_err": null,
+ "cursor_err": null,
+ "cursor_index": 1,
+ "cursor_glow": [
+  0.0,
+  11.4,
+  6.4,
+  0.0,
+  0.9
+ ],
+ "hand_usable": 5,
+ "hand_why": null,
+ "hand_cards": [
+  {
+   "kind": "tactics",
+   "name": "fielding_boost",
+   "type": "fielding_boost",
+   "bonus": 1,
+   "hand_index": 0
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 6,
+   "secondary": 0,
+   "hand_index": 1
+  },
+  {
+   "kind": "tactics",
+   "name": "pitch_boost",
+   "type": "pitch_boost",
+   "bonus": 1,
+   "hand_index": 2
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 5,
+   "secondary": 0,
+   "hand_index": 3
+  },
+  {
+   "kind": "player",
+   "name": null,
+   "power": 5,
+   "secondary": 0,
+   "hand_index": 4
+  }
+ ],
+ "phase": "pitching",
+ "phase_err": null,
+ "discards_left": 1,
+ "discards_err": null,
+ "discards_detail": {
+  "why": null,
+  "round": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "discard": [
+   true,
+   false
+  ],
+  "panel_gap": [
+   44,
+   53,
+   54,
+   53,
+   49
+  ]
+ },
+ "scoreboard": {
+  "your": [
+   1,
+   0,
+   1
+  ],
+  "opponent": [
+   0,
+   0,
+   0
+  ]
+ },
+ "scoreboard_err": null,
+ "runners": {
+  "count": 0,
+  "bases": {
+   "third": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.918)"
+   },
+   "second": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.835)"
+   },
+   "first": {
+    "occupied": false,
+    "power": null,
+    "why": "the bare coin (0.912)"
+   }
+  }
+ },
+ "local_game_state": {
+  "screen": "turn",
+  "result_outcome": null
+ },
+ "sheet": "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/crawl/20260910_165540/005_sheet.png",
+ "command": "q"
+}

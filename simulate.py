@@ -520,3 +520,71 @@ def expected_runs_play(hand_players, hand_tactics, state) -> Decision:
 
 
 EXPECTED_RUNS = {"batting": expected_runs_play, "pitching": best_pitching_play}
+
+
+# ---------------------------------------------------------------------------------------
+# THE POWER/SPEED RATIO. The user's point, and it is the right experiment: the first attempt
+# here compared TWO CORNERS -- pure power-first against a speed-aware expected-runs rule --
+# and read the loss as "speed loses". The game is a blend of both, so the question is not
+# which corner wins but WHERE ON THE SPECTRUM the optimum sits.
+#
+# One knob. A (batter, tactics) pair scores:
+#
+#       effective_power + w * effective_speed
+#
+# which handles both boost kinds uniformly: a swing boost raises power, a speed boost raises
+# speed, and w decides which is worth more. w = 0 IS the incumbent's rule (power only, and it
+# still takes the best swing boost because that is what raises power). Large w is speed-first.
+def blend_play(w: float):
+    """A batting heuristic that values one point of speed as `w` points of power."""
+    def play(hand_players, hand_tactics, state) -> Decision:
+        best, best_score = None, None
+        for batter in hand_players:
+            for tac in [None] + list(hand_tactics):
+                power = batter.power + power_bonus(tac)
+                speed = (batter.secondary or 0)
+                if tac is not None and tac.kind == TacticsType.SPEED_BOOST:
+                    speed += tac.bonus
+                sc = power + w * speed
+                if best_score is None or sc > best_score:
+                    best, best_score = (batter, tac), sc
+        batter, tac = best
+        return Decision(batter, tac, f"blend w={w}: power {batter.power} speed {batter.secondary}")
+    return play
+
+
+def blend_team(w):
+    return {"batting": blend_play(w), "pitching": best_pitching_play}
+
+
+def sweep_ratio(weights=(0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0),
+                opponent=None, n_matches=400, seeds=(1, 2, 3, 4, 5), label="always-boost"):
+    """Win rate against a FIXED reference opponent, as a function of w."""
+    import statistics
+    opponent = opponent or ALWAYS_BOOST
+    print(f"blend(w) vs {label}: {len(seeds)} seeds x {n_matches} matches each")
+    print(f"{'w':>6}  {'win%':>7}  {'draw%':>7}  {'avg score':>9}   per-seed")
+    print("-" * 74)
+    out = []
+    for w in weights:
+        team = blend_team(w)
+        wins, draws, scores = [], [], []
+        for sd in seeds:
+            random.seed(sd)
+            a = d = 0; tot = 0
+            for _ in range(n_matches):
+                x, y = simulate_match(team, opponent)
+                tot += x
+                if x > y: a += 1
+                elif x == y: d += 1
+            wins.append(100 * a / n_matches); draws.append(100 * d / n_matches)
+            scores.append(tot / n_matches)
+        m = statistics.mean(wins)
+        out.append((w, m, statistics.mean(draws), statistics.mean(scores), wins))
+        print(f"{w:6.2f}  {m:6.1f}%  {statistics.mean(draws):6.1f}%  {statistics.mean(scores):9.2f}   "
+              f"{[round(v,1) for v in wins]}")
+    best = max(out, key=lambda r: r[1])
+    print("-" * 74)
+    print(f"  best w = {best[0]} at {best[1]:.1f}%   (w=0, pure power, is {out[0][1]:.1f}%)")
+    print(f"  spread across w: {min(r[1] for r in out):.1f}% .. {max(r[1] for r in out):.1f}%")
+    return out

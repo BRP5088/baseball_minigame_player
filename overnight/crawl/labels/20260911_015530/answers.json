@@ -1,0 +1,504 @@
+[
+ {
+  "frame": 0,
+  "rows": 5,
+  "cursor": null,
+  "glow": [
+   2.7,
+   0.8,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "selected": [
+   1
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   120,
+   151,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 1,
+  "rows": 5,
+  "cursor": null,
+  "glow": [
+   3.0,
+   0.5,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "selected": [
+   1
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   119,
+   151,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 2,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   13.0
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 3,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.2,
+   14.8
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 4,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.1,
+   0.1,
+   17.9
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 5,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   12.7
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   173
+  ]
+ },
+ {
+  "frame": 6,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   11.1
+  ],
+  "selected": [],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   215
+  ]
+ },
+ {
+  "frame": 7,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   15.3
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 8,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   12.5
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 9,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   13.2
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   168,
+   170
+  ]
+ },
+ {
+  "frame": 10,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   13.2
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 11,
+  "rows": 5,
+  "cursor": 2,
+  "glow": [
+   0.0,
+   0.0,
+   14.5,
+   0.0,
+   0.0
+  ],
+  "selected": [
+   2
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   106,
+   167,
+   214
+  ]
+ },
+ {
+  "frame": 12,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   13.3
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ },
+ {
+  "frame": 13,
+  "rows": 5,
+  "cursor": 4,
+  "glow": [
+   0.0,
+   0.0,
+   0.0,
+   0.1,
+   16.9
+  ],
+  "selected": [
+   4
+  ],
+  "digits": [
+   null,
+   "5",
+   "4",
+   "5",
+   "7"
+  ],
+  "kinds": [
+   "tactics",
+   "player",
+   "player",
+   "player",
+   "player"
+  ],
+  "y": [
+   205,
+   163,
+   151,
+   167,
+   170
+  ]
+ }
+]

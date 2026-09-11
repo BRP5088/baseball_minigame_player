@@ -1,0 +1,21 @@
+1789004874.746 [cycles] 1 cycles, API budget 200 calls (~$2.40)
+1789004874.746 [cycles] === cycle 1 ===
+1789004874.788 [cycles]   [stream] up via find_bar (compass strip located; may be under an overlay)
+1789004874.788 [cycles] walking to the table in a child process: up to 2 walk(s), killed from outside after 720s
+1789004875.807 [cycles]       | [cycles] walking to the table with the closed loop (route_user_1853), up to 2 attempt(s)
+1789004903.979 [cycles]       | [cycles] reset attempt 1/3 failed: the pause menu will not open and NEITHER transport moved the picture (null 0.1, keyboard 0.1, FIFO 0.1; a transport counts as alive above 8.0) — the stream or the console is the problem, not the keys.
+1789004903.979 [cycles]       |   [input] press delivery: 2 FIFO inject, 3 background Quartz, 0 focus+pyautogui (of 5)
+1789004903.979 [cycles]       |   frames: /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/resetfail/1789004896758
+1789004934.188 [cycles]       | [cycles] reset attempt 2/3 failed: the pause menu will not open and NEITHER transport moved the picture (null 0.1, keyboard 0.7, FIFO 0.1; a transport counts as alive above 8.0) — the stream or the console is the problem, not the keys.
+1789004934.188 [cycles]       |   [input] press delivery: 4 FIFO inject, 6 background Quartz, 0 focus+pyautogui (of 10)
+1789004934.188 [cycles]       |   frames: /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/resetfail/1789004927484
+1789004965.389 [cycles]       | [cycles] reset attempt 3/3 failed: the pause menu will not open and NEITHER transport moved the picture (null 0.1, keyboard 0.1, FIFO 0.1; a transport counts as alive above 8.0) — the stream or the console is the problem, not the keys.
+1789004965.389 [cycles]       |   [input] press delivery: 6 FIFO inject, 9 background Quartz, 0 focus+pyautogui (of 15)
+1789004965.389 [cycles]       |   frames: /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/resetfail/1789004958261
+1789004965.389 [cycles]       | [cycles] the reload failed 3 times: the pause menu will not open and NEITHER transport moved the picture (null 0.1, keyboard 0.1, FIFO 0.1; a transport counts as alive above 8.0) — the stream or the console is the problem, not the keys.
+1789004965.389 [cycles]       |   [input] press delivery: 6 FIFO inject, 9 background Quartz, 0 focus+pyautogui (of 15)
+1789004965.389 [cycles]       |   frames: /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/resetfail/1789004958261
+1789004966.427 [cycles] the reload failed and will not be retried further (reset: the pause menu will not open and NEITHER transport moved the picture (null 0.1, keyboard 0.1, FIFO 0.1; a transport counts as alive above 8.0) — the stream or the console is the problem, not the keys.
+1789004966.427   [input] press delivery: 6 FIFO inject, 9 background Quartz, 0 focus+pyautogui (of 15)
+1789004966.427   frames: /Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball/overnight/resetfail/1789004958261) -- stopping
+1789004966.429 [cycles] DONE: 35W/8L/5D, $46 on hand, 0 API calls (~$0.00)

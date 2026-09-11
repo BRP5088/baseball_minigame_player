@@ -1,0 +1,102 @@
+[
+ {
+  "player": 1,
+  "tactics": 0,
+  "lifted": [
+   0,
+   1
+  ],
+  "ok": true,
+  "glow": [
+   11.8,
+   1.6,
+   0.0,
+   0.0,
+   0.4
+  ],
+  "why": [
+   "landed (attempt 1)",
+   "landed (attempt 1)"
+  ]
+ },
+ {
+  "player": 1,
+  "tactics": 2,
+  "lifted": [
+   1,
+   2
+  ],
+  "ok": true,
+  "glow": [
+   0.0,
+   0.7,
+   8.5,
+   0.0,
+   0.4
+  ],
+  "why": [
+   "landed (attempt 1)",
+   "landed (attempt 1)"
+  ]
+ },
+ {
+  "player": 3,
+  "tactics": 0,
+  "lifted": [
+   0,
+   3
+  ],
+  "ok": true,
+  "glow": [
+   9.8,
+   0.0,
+   0.0,
+   3.8,
+   0.4
+  ],
+  "why": [
+   "landed (attempt 1)",
+   "landed (attempt 1)"
+  ]
+ },
+ {
+  "player": 3,
+  "tactics": 2,
+  "lifted": [
+   2,
+   3
+  ],
+  "ok": true,
+  "glow": [
+   0.0,
+   0.0,
+   8.7,
+   3.7,
+   0.5
+  ],
+  "why": [
+   "landed (attempt 1)",
+   "landed (attempt 1)"
+  ]
+ },
+ {
+  "player": 4,
+  "tactics": 0,
+  "lifted": [
+   0,
+   4
+  ],
+  "ok": true,
+  "glow": [
+   9.9,
+   0.1,
+   0.0,
+   0.0,
+   7.5
+  ],
+  "why": [
+   "landed (attempt 1)",
+   "landed (attempt 1)"
+  ]
+ }
+]
