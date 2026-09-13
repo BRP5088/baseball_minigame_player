@@ -2841,9 +2841,17 @@ def bases_to_travel(bases, batter_speed=None, margin=None):
     reveal's margin (orchestrator.reveal_margin); at AUTO_HOME_RUN_MARGIN or above every
     runner scores from wherever they stand, which is the maximum animation the game has.
 
-    Returns None rather than a guess when a base abstained or a speed did not read: a
-    number built on a hole is worse than no number, and the caller's fallback is the
-    fixed budget it already uses.
+    Returns None rather than a guess when a base abstained, a speed did not read, or the
+    MARGIN is unknown: a number built on a hole is worse than no number, and the caller's
+    fallback is the fixed budget it already uses. The margin is required because it decides
+    whether the batter runs at all -- an out is an out.
+
+    IT IS AN UPPER BOUND, NOT A PREDICTION, in two places that are honest to name. A LOSING
+    at-bat can still advance runners (CLAUDE.md section 4) by an amount nobody has measured,
+    so this counts them at their full speed; and a TIE is a coin flip, so the batter's 1
+    base is counted whether or not they win it. Both err LONG, which is the safe direction
+    for a wait: predicting too much animation costs a little time, predicting too little
+    reads a half-dealt hand.
     """
     if not bases:
         return None
@@ -2863,11 +2871,26 @@ def bases_to_travel(bases, batter_speed=None, margin=None):
         if sp is None:
             return None
         total += min(sp, 4 - start)     # a runner cannot pass home
-    # the batter runs too, on anything that is not an out -- and on a home run, all the way
-    if margin is not None and margin >= AUTO_HOME_RUN_MARGIN:
+    # THE BATTER ONLY RUNS IF THEY REACHED BASE. The first version of this added the
+    # batter's speed on every at-bat, so a routine OUT with nobody on predicted 1 base of
+    # animation instead of 0 -- the user spotted it by reading the numbers back
+    # (2026-09-12). An out is an out: the batter does not take a base.
+    #
+    #     margin >= AUTO_HOME_RUN_MARGIN   all four, whatever their speed
+    #     margin >  0                      a hit: their own speed
+    #     margin == 0                      a TIE is a coin flip and winning one is CAPPED
+    #                                      AT FIRST regardless of speed, so at most 1 --
+    #                                      and which way the flip went is not knowable
+    #                                      here, so this is the upper bound, not a claim
+    #     margin <  0                      an out: the batter runs nowhere
+    if margin is None:
+        return None
+    if margin >= AUTO_HOME_RUN_MARGIN:
         total += 4
-    elif batter_speed is not None:
+    elif margin > 0 and batter_speed is not None:
         total += max(0, batter_speed)
+    elif margin == 0:
+        total += 1
     return total
 
 

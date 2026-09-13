@@ -48,15 +48,31 @@ def bases(**kw):
     return {n: {"occupied": n in kw, "speed": kw.get(n)} for n in ("third", "second", "first")}
 
 
-print("1. an empty diamond is just the batter")
-check(o.bases_to_travel(bases(), 1, -2) == 1, "a batter with speed 1 moves 1 base")
-check(o.bases_to_travel(bases(), 3, 1) == 3, "a batter with speed 3 moves 3")
+print("1. THE BATTER ONLY RUNS IF THEY REACHED BASE")
+# The first version of this file asserted `bases(), 1, -2 == 1` and called it "a batter
+# with speed 1 moves 1 base" -- at margin -2, which is an OUT. The user caught it by
+# reading the numbers back: an out is an out, the batter takes no base. A test that
+# asserts the bug is worse than no test, which is why this row is now the first one.
+check(o.bases_to_travel(bases(), 1, -2) == 0,
+      "an OUT with nobody on animates NOTHING — the batter does not take a base")
+check(o.bases_to_travel(bases(), 9, -1) == 0,
+      "and no amount of speed changes that, because they are out")
+check(o.bases_to_travel(bases(), 3, 1) == 3, "a HIT moves the batter by their speed")
+check(o.bases_to_travel(bases(), 3, 0) == 1,
+      "a TIE is capped at first regardless of speed (and counted whether or not the flip "
+      "is won — this is an upper bound, not a prediction)")
+check(o.bases_to_travel(bases(), 1, None) is None,
+      "and with no margin there is no answer: whether the batter runs at all depends on it")
 
 print("2. runners move by their OWN speed, and cannot run past home")
 check(o.bases_to_travel(bases(third=1), 1, 1) == 2, "one on third (1 base) plus the batter (1)")
-check(o.bases_to_travel(bases(third=3), 0, 0) == 1,
+check(o.bases_to_travel(bases(third=3), 0, 1) == 1 + 0,
       "a speed-3 runner on THIRD still travels only 1 — home is the end of the line")
-check(o.bases_to_travel(bases(first=3), 0, 0) == 3, "a speed-3 runner on first travels 3")
+check(o.bases_to_travel(bases(first=3), 0, 1) == 3, "a speed-3 runner on first travels 3")
+# A LOSING at-bat can still advance runners (CLAUDE.md section 4), by an amount nobody has
+# measured. They are counted at full speed, which errs LONG — the safe direction for a wait.
+check(o.bases_to_travel(bases(third=1), 1, -2) == 1,
+      "on an OUT the runners are still counted, because a losing at-bat can advance them")
 check(o.bases_to_travel(bases(third=1, second=1, first=1), 1, 1) == 4,
       "bases loaded at speed 1, plus the batter")
 
