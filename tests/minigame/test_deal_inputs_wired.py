@@ -72,7 +72,62 @@ for bad in (None, {}, {"bases": "nonsense"}, {"bases": {"third": None}},
     except Exception as e:
         check(False, f"raised on {str(bad)[:38]}: {type(e).__name__}")
 
-print("4. the gate really POPS it, and the play really STASHES it")
+print("4. THE CAPTURE ACTUALLY RUNS — the check this file did not have")
+# THIS FILE WAS GREEN AGAINST A CALL SITE THAT COULD NOT EXECUTE. The capture referenced an
+# unimported local_state, raised NameError into its own except on every single turn, and
+# stashed nothing — while these checks passed, because they only AST-verified that
+# stash_deal_inputs was WRITTEN at the call site. Found by the QA round this wiring was
+# built for. So the capture is now a function, and this drives it.
+import types
+from PIL import Image
+from decision_engine import PlayerCard, TacticsCard, TacticsType, Decision
+
+_grabs = {"n": 0}
+
+
+def _fake_grab(regions):
+    _grabs["n"] += 1
+    return {r: Image.new("RGB", (220, 227), (30, 30, 30)) for r in regions}
+
+
+_real_grab = o._grab_settle_regions
+o._grab_settle_regions = _fake_grab
+try:
+    o.pop_deal_inputs()                      # start clean
+    _d = Decision(PlayerCard("b", 7, 2), None, "t")
+    _ok = o.capture_diamond_at_play(_d, {"phase": "batting"})
+    check(_ok is True,
+          "capture_diamond_at_play RUNS and reports success — if it raises anything at all "
+          "it returns False, which is what a NameError looked like for a whole afternoon")
+    check(_grabs["n"] == 1, f"and it really grabbed the base regions ({_grabs['n']}x)")
+    _s = o.deal_inputs_summary(o.pop_deal_inputs())
+    check(_s is not None and "batter_speed 2" in _s,
+          f"the stash is POPULATED, with the batter's speed from the decision — {_s}")
+
+    # WHILE PITCHING the card in hand is our PITCHER: its secondary is FIELDING, not speed.
+    o.pop_deal_inputs()
+    _dp = Decision(PlayerCard("p", 9, 2),
+                   TacticsCard("Fielding Play", TacticsType.FIELDING_BOOST, 1), "t")
+    o.capture_diamond_at_play(_dp, {"phase": "pitching"})
+    _sp = o.deal_inputs_summary(o.pop_deal_inputs())
+    check("fielding 3" in _sp,
+          f"pitching: fielding is the pitcher's secondary PLUS a Fielding Play (2+1=3) — {_sp}")
+    check("batter_speed None" in _sp,
+          f"and the BATTER's speed is None, because the batter is theirs and unknown — one "
+          f"number must not play two roles — {_sp}")
+
+    # a failing grab must not propagate
+    o._grab_settle_regions = lambda regions: (_ for _ in ()).throw(RuntimeError("boom"))
+    _lines = []
+    check(o.capture_diamond_at_play(_d, {"phase": "batting"}, log=_lines.append) is False,
+          "a failing grab returns False instead of killing the turn")
+    check(any("could not record" in x for x in _lines),
+          f"and it SAYS so rather than failing silently — {_lines}")
+finally:
+    o._grab_settle_regions = _real_grab
+    o.pop_deal_inputs()
+
+print("5. the gate really POPS it, and the play really STASHES it")
 _gate = inspect.getsource(o.wait_for_hand_deal)
 check("pop_deal_inputs" in _gate,
       "wait_for_hand_deal pops the stash — if it only READ it, a turn whose gate never ran "
@@ -82,15 +137,21 @@ _play = next(n for n in ast.walk(_tree)
              if isinstance(n, ast.FunctionDef) and n.name == "play_one_turn")
 _calls = [c.func.id for c in ast.walk(_play)
           if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)]
-check("stash_deal_inputs" in _calls, "play_one_turn stashes the diamond")
+check("capture_diamond_at_play" in _calls,
+      "play_one_turn captures the diamond (it calls the extracted function, which section 4 "
+      "above actually EXERCISES — the AST check alone is what let a dead call site pass)")
 check("stash_hand_baseline" in _calls, "beside the hand baseline it mirrors (control)")
-# the capture must be WRAPPED: an unguarded local read on the money path is the failure
-_stash_line = next(c.lineno for c in ast.walk(_play) if isinstance(c, ast.Call)
-                   and isinstance(c.func, ast.Name) and c.func.id == "stash_deal_inputs")
-_tries = [t for t in ast.walk(_play) if isinstance(t, ast.Try)
-          and t.lineno <= _stash_line <= max(getattr(x, "lineno", 0) for x in ast.walk(t))]
-check(bool(_tries),
-      "and the capture is inside a try — a diagnostic must never cost a turn")
+# THE WRAPPING MOVED WITH THE CODE. It is now the whole of capture_diamond_at_play, which
+# section 4 proves by making the grab raise and asserting the turn survives — a stronger
+# check than "there is a try statement near this line", which is what this used to be.
+_cap = next(n for n in ast.walk(_tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "capture_diamond_at_play")
+check(any(isinstance(n, ast.Try) for n in ast.walk(_cap)),
+      "and the capture body is wrapped — a diagnostic must never cost a turn")
+check(any(isinstance(n, ast.Return) and isinstance(n.value, ast.Constant)
+          and n.value.value is False for n in ast.walk(_cap)),
+      "with a False return on failure, so a caller can tell 'recorded nothing' from "
+      "'recorded an empty diamond'")
 
 print()
 if _fails:

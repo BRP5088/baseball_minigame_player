@@ -82,7 +82,24 @@ def bound_names(node):
             out.add(a.vararg.arg)
         if a.kwarg:
             out.add(a.kwarg.arg)
-    for sub in ast.walk(node):
+    # DO NOT DESCEND INTO NESTED SCOPES. ast.walk does, and that made this guard blind to
+    # the one shape it exists for: a module that imports something INSIDE one function and
+    # then uses it in ANOTHER. The function-local `import local_state` was credited to
+    # orchestrator's module scope, so `local_state.read_runners(...)` in a different
+    # function looked bound -- and raised NameError the first time it ran, swallowed by its
+    # own try/except, leaving a feature that did nothing and a test that was green
+    # (2026-09-13). loads_and_scopes below already stops at scope boundaries and says why;
+    # this did not, which is the asymmetry that hid it.
+    def _walk_this_scope(n, top=True):
+        yield n
+        for child in ast.iter_child_nodes(n):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                  ast.ClassDef, ast.Lambda)):
+                yield child          # its NAME binds here; its BODY does not
+                continue
+            yield from _walk_this_scope(child, top=False)
+
+    for sub in _walk_this_scope(node):
         if isinstance(sub, ast.Name) and isinstance(sub.ctx, (ast.Store, ast.Del)):
             out.add(sub.id)
         elif isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):

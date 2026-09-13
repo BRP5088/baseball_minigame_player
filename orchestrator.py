@@ -2996,6 +2996,43 @@ _HAND_BASELINE = None
 _DEAL_INPUTS = None
 
 
+def capture_diamond_at_play(decision, state_json, log=print):
+    """Stash the diamond as it stands at the play. Returns True if it recorded something.
+
+    Wrapped whole: this is a diagnostic on the $50 path, and a log line that can kill a
+    turn is worse than no log line. On any failure it records nothing and the deal gate
+    behaves exactly as before.
+
+    FIELDING IS THE PITCHER'S, so it is ours only while WE pitch. While batting the
+    opponent's pitcher holds it and we cannot see it until the reveal, so 0 is passed --
+    which makes the stashed bound an over-estimate of runner movement, the safe direction.
+    """
+    try:
+        # imported here, not at module scope, the way this file's other two local_state
+        # sites do it -- orchestrator must still import when local_state cannot.
+        import local_state as _ls
+        c = _grab_settle_regions(("third_base", "second_base", "first_base"))
+        rr = _ls.read_runners(c["third_base"], c["second_base"], c["first_base"])
+        pitching = state_json.get("phase") == "pitching"
+        fielding = 0
+        if pitching:
+            fielding = getattr(decision.player_card, "secondary", 0) or 0
+            tac = decision.tactics_card
+            if tac is not None and getattr(getattr(tac, "kind", None), "value", "") == "fielding_boost":
+                fielding += tac.bonus or 0
+        # THE BATTER'S SPEED IS ONLY A BATTER'S. While pitching, decision.player_card is our
+        # PITCHER and its secondary is FIELDING, not speed -- passing it as batter_speed put
+        # one number in two roles (QA, 2026-09-13). The batter is then the opponent's and we
+        # do not know them, so it is None and bases_to_travel abstains on the batter's leg.
+        batter_speed = None if pitching else (getattr(decision.player_card, "secondary", None))
+        stash_deal_inputs(rr.get("bases"), batter_speed, fielding)
+        return True
+    except Exception as exc:
+        log(f"  [deal] could not record the diamond at the play "
+            f"({type(exc).__name__}: {exc}) — the gate is unaffected")
+        return False
+
+
 def stash_deal_inputs(bases, batter_speed, fielding=0):
     global _DEAL_INPUTS
     _DEAL_INPUTS = {"bases": bases, "batter_speed": batter_speed, "fielding": fielding}
@@ -5750,24 +5787,12 @@ def play_one_turn(state_json: dict, batters_used: int):
     # already post-deal. It crosses functions the way graph_walk carries a leg-end frame:
     # a module stash that the consumer POPS, so a turn can never inherit the last one.
     stash_hand_baseline(_grab_settle_regions(("hand",))["hand"])
-    # THE DIAMOND AS IT IS AT THE PLAY -- who is on, and how fast. Local, ~40 ms, and
-    # wrapped because a diagnostic must never cost a $50 turn: on any failure the deal gate
-    # simply logs nothing and behaves exactly as before.
-    try:
-        _c = _grab_settle_regions(("third_base", "second_base", "first_base"))
-        _rr = local_state.read_runners(_c["third_base"], _c["second_base"], _c["first_base"])
-        stash_deal_inputs(_rr.get("bases"),
-                          getattr(decision.player_card, "secondary", None),
-                          0 if state_json.get("phase") == "batting"
-                          else (getattr(decision.player_card, "secondary", 0) or 0)
-                          + (decision.tactics_card.bonus
-                             if decision.tactics_card is not None
-                             and getattr(decision.tactics_card, "kind", None) is not None
-                             and getattr(decision.tactics_card.kind, "value", "") == "fielding_boost"
-                             else 0))
-    except Exception as _e:
-        print(f"  [deal] could not record the diamond at the play ({type(_e).__name__}) "
-              f"— the gate is unaffected")
+    # THE DIAMOND AS IT IS AT THE PLAY -- who is on, and how fast. Extracted so it can
+    # actually be EXERCISED: the first version was inline, referenced an unimported
+    # local_state, raised NameError into its own except on every turn, and was covered by a
+    # test that only AST-checked the call was WRITTEN. A diagnostic nothing can run is
+    # worse than none, because it looks like data collection (2026-09-13, found by QA).
+    capture_diamond_at_play(decision, state_json)
     # CLOSED LOOP, not a press count. `hand_cursor_look` reads the cursor off the screen
     # after every single press; select_and_play refuses rather than commit a card it
     # could not verify. A refusal is NOT a play -- the turn returns played=False and
