@@ -38,13 +38,42 @@ for f in frames[:6]:
             f"(dotness {ic.reticle_dotness(im):.1f}) — the check is not "
             "resolution-independent")
 
-# and the screens that must be rejected
-for p in ("/tmp/reconnect_state.png", "/tmp/wake_state.png"):
-    if _os.path.exists(p):
-        im = Image.open(p)
-        assert not ic.in_gameplay(im), (
-            f"{p} accepted as gameplay (dotness {ic.reticle_dotness(im):.1f}) — "
-            "input would be sent to a menu or the PS5 overlay")
+# AND THE SCREENS THAT MUST BE REJECTED — COMMITTED, NAMED, AND MANDATORY.
+#
+# This half used to loop over "/tmp/reconnect_state.png" and "/tmp/wake_state.png", guarded
+# by `if os.path.exists(p)`. NOTHING IN THE REPOSITORY CREATES THOSE FILES, so the body
+# never ran, and the line below still printed "pause and overlay screens rejected" every
+# time. The test asserted, in its own output, a thing it had never checked -- and CLAUDE.md
+# forbids /tmp for anything that matters precisely because it is emptied.
+#
+# These are real frames in the repo. Every one must be rejected: in_gameplay() gates where
+# INPUT is sent, so accepting a menu means keystrokes land on a menu.
+NEGATIVES = [
+    _os.path.join("test_fixtures", "screens", "ban_screen__0.jpg"),
+    _os.path.join("test_fixtures", "ban_screen", "ban_0of3_1920x1080.jpg"),
+    _os.path.join("test_fixtures", "give_up", "negative_ban_screen.jpg"),
+    _os.path.join("test_fixtures", "give_up", "negative_gameplay_turn.jpg"),
+    # chiaki's OWN window, not the game at all: if this reads as gameplay the rig would
+    # send input to the client while the console shows nothing (CLAUDE.md section 3 records
+    # streaming() answering True on exactly this frame with the console asleep).
+    _os.path.join("test_fixtures", "not_streaming", "hostlist_standby.png"),
+]
+missing = [p for p in NEGATIVES if not _os.path.exists(p)]
+assert not missing, (
+    f"negative fixtures are missing: {missing}. This half is MANDATORY — a skipped "
+    "negative is how this file spent months claiming to reject overlays it never saw.")
+
+for p in NEGATIVES:
+    im = Image.open(p).convert("RGB")
+    assert not ic.in_gameplay(im), (
+        f"{p} accepted as gameplay (dotness {ic.reticle_dotness(im):.1f}) — in_gameplay() "
+        "gates where INPUT is sent, so this would put keystrokes into a menu")
+    # and at the other capture widths, for the same reason the positives are resized
+    for w in (1400, 2000):
+        small = im.resize((w, int(im.height * w / im.width)))
+        assert not ic.in_gameplay(small), (
+            f"{p} accepted as gameplay at {w}px (dotness "
+            f"{ic.reticle_dotness(small):.1f}) — the rejection is not scale-free")
 
 print(f"OK: gameplay detected at 1400/1920/2000px across {len(frames[:6])} frames; "
-      "pause and overlay screens rejected")
+      f"{len(NEGATIVES)} non-gameplay screens rejected at three widths each")
