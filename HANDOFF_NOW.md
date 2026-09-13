@@ -1,4 +1,37 @@
-# HANDOFF — 2026-09-13, end of session
+# HANDOFF — 2026-09-13
+
+## GOOD MORNING. Everything is green and nothing needs untangling.
+
+    preflight            READY
+    suite                186 files green, and green at JOBS=1 too (830s) --
+                         so no result depends on parallelism. Never checked before.
+    working tree         clean, 26 commits overnight
+    console              PS5 home screen; the game is closed (see below)
+    money                $96, match_in_progress FALSE
+
+**THE THREE THINGS WORTH KNOWING BEFORE YOU START:**
+
+1. **preflight's $50 guard could not fire the way preflight is run.** It checked one
+   progress file and defaulted to the wrong one -- bare `preflight.py` said READY while
+   `progress_testing.json` held an open match. Fixed; it now checks every progress file.
+2. **Every tactics number in CLAUDE.md was measured on the scrambled pool.** Re-measured on
+   the role-split pools: a SPEED boost is worth **+0.131** runs/half, not +0.034 -- wrong by
+   4x. Swing still wins (+0.614), so no decision changes, but "21x less" was an artefact.
+3. **The open speed-boost question is now priced**: +0.046 runs/half, 4.2 sigma. Real, and
+   it cannot flip the engine's preference. One at-bat settles it; do not plan around it.
+
+## First two things to do, in order
+
+1. **Arm the window-drift guard.** It is the oldest open item and it protects a MONEY path
+   (a 110px window shift silently flipped a ban-grid cell and banned a different card).
+   Needs the game up and a ban screen that is reading correctly, then one command --
+   see "THE ONE WARNING WORTH ACTING ON" below.
+2. **Label the roster sheets** (`agent_progress/ban-labels/roster_*.jpg`, seven of them).
+   No console needed. That is the only independent check the roster's NUMBERS have ever had.
+
+---
+
+
 
 ## UPDATE, ~04:30: THE PS5 LEFT THE GAME. Nothing is mid-match any more.
 
