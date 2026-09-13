@@ -78,9 +78,19 @@ live queue. Delete it when the queue is empty.
    median 1.1 s); the workflow's timing axis mined the STALE 6.0 archive and was mostly
    REFUTED anyway (16 of 25 timeouts tautological, 9 from a deleted rule, 0 from shipped
    code). Do not reuse its numbers.
-2. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
+2. **best_batting_play runner-awareness: TESTED, NOT SHIPPED.** An expected-runs rule that
+   sees each runner's real base is INDISTINGUISHABLE from power-first (+0.015, 1.5 sigma;
+   0.2-0.3 sigma at other settings of OUT_RUNNER_ADVANCE). It is not power-first in
+   disguise — it disagrees on 8.2% of hands and the rate triples once runners are on — it
+   just does not win. Full write-up and the mechanism:
+   `agent_progress/batting-runners/FINDING.md`. The graveyard entry's VERDICT survives; its
+   stated REASON ("it loses") does not, having been measured with every runner assumed on
+   first. To go further, GameState would need to carry runner BASES; today it carries
+   `runners` as a list of cards only.
+
+3. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
    numbers reproduce, write-up overstated the sample). Not wired in.
-3. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.
+4. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.
 
 ## (historical) the reader fix, from the workflow's own skeptics
 
