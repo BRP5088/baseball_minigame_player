@@ -1050,6 +1050,18 @@ def detect_ban_grid_locked(img) -> list:
     populated before we even ask it to read anything, and just zip its
     ordered "what I can read" list onto our own known positions.
     """
+
+    if USE_FITTED_BAN_GRID:
+        import ban_grid as _bg
+        rows = _fitted_ban_rows(img)
+        if rows and len(rows) >= 2:
+            # ban_grid's is_locked was re-censused over 20,360 cells on the fitted box;
+            # this detector reads WIDTH fractions and its own note forbids unifying the
+            # two. They disagree on 3 of 600 cells and the fitted one is right on all
+            # three -- see the flag's comment.
+            out = [[bool(_bg.is_locked(img, _bg.card_box(img, rows, r, c)))
+                    for c in range(5)] for r in range(2)]
+            return out
     w, h = img.size
     col_x = [(int(w * x0), int(w * x1)) for x0, x1 in BAN_GRID_COL_X_FRAC]
     row_y = [(int(w * y0), int(w * y1)) for y0, y1 in BAN_GRID_ROW_Y_FRAC]
@@ -1117,10 +1129,65 @@ BAN_CARD_ROW_TOP_FRAC = [0.195, 0.195 + 0.283]  # widened 2026-08-24: tightly-tu
 # picks up, so widening costs nothing and buys real margin.
 
 
+# THE FITTED BAN GRID, BEHIND A FLAG AND OFF BY DEFAULT.
+#
+# Everything below this point identifies a card by WHERE IT SITS --
+# KNOWN_BAN_ROSTER[(row, col)] with TRUST_ROSTER_ONLY on -- so a geometry that disagrees
+# about which cell is which bans a DIFFERENT PHYSICAL CARD with no error raised. That is
+# the $50 failure this file already records from a 110px window nudge, which is why this
+# arrives as a flag and a measurement rather than a replacement.
+#
+# WHAT THE MEASUREMENT SAYS (agent_progress/ban-wiring/phase0_equivalence.py, 60 frames,
+# 600 cells): the two geometries name DIFFERENT cards on ZERO cells. They agree on 141
+# names and on 323 locked cells; the new path resolves one name the old one missed, and
+# the old path calls three plainly OWNED cards LOCKED -- Johnny Drawers twice and Mama
+# Jody Gain -- which quietly kept them out of choose_bans' candidate list.
+#
+# The rows are FITTED per frame rather than fixed, which is the whole point: CLAUDE.md
+# records that BAN_CARD_ROW_TOP_FRAC is wrong because the rows MOVE with scroll, and that
+# the shipped constant only ever worked by being loose enough to contain the card wherever
+# it drifted.
+USE_FITTED_BAN_GRID = False
+
+_FIT_MEMO = {"key": None, "rows": None}
+
+
+def _fitted_ban_rows(img):
+    """ban_grid's fitted rows for this frame, or None when it cannot fit one.
+
+    Memoised on the image OBJECT, because the scan asks for the locked grid and then a crop
+    per cell off the same capture, and fitting costs ~8 ms. One entry: a second frame
+    evicts the first, so a stale fit cannot be served for a picture it did not come from.
+    """
+    try:
+        import ban_grid as _bg
+    except Exception:
+        return None
+    key = (id(img), img.size)
+    if _FIT_MEMO["key"] == key:
+        return _FIT_MEMO["rows"]
+    try:
+        rows = _bg.find_card_rows(img)
+    except Exception:
+        rows = None
+    _FIT_MEMO.update({"key": key, "rows": rows})
+    return rows
+
+
 def get_ban_grid_card_crop(img, rel_row: int, col: int):
     """Full single-card crop (through the name banner) for grid position
     (rel_row, col) within img — rel_row is 0/1 within the two visible
     rows, same convention as detect_ban_grid_locked()'s return grid."""
+    if USE_FITTED_BAN_GRID:
+        import ban_grid as _bg
+        rows = _fitted_ban_rows(img)
+        # FALL BACK RATHER THAN GUESS. A frame mid-scroll fits one row or none, and the
+        # caller's whole contract is two rows indexed 0 and 1; answering with the old box
+        # is a worse crop, answering with the wrong ROW is a wrong card.
+        if rows and rel_row < len(rows):
+            box = _bg.card_box(img, rows, rel_row, col)
+            if box is not None:
+                return img.crop(box)
     w, h = img.size
     x0, x1 = BAN_GRID_COL_X_FRAC[col]
     y0 = BAN_CARD_ROW_TOP_FRAC[rel_row]
