@@ -660,6 +660,19 @@ noted; the rest is the user's reading, not this project's measurement.
 
   It is worth **+0.131 runs/half**, still less than a SWING boost's **+0.614**, which is
   power over speed.
+  **AND THE OPEN QUESTION IS PRICED (2026-09-13).** Two runners have been read at +1 over
+  their card -- Rube Sharp 1->2, Noah Kelly 2->3, both batters, both exactly a speed
+  boost's +1 -- which would mean the boost PERSISTS on base, against the source above.
+  Modelled by putting the boosted batter on base as a card whose secondary already includes
+  the boost (same harness, same seeds, role-split pools, n=20,000 an arm):
+
+      boost REVERTS (shipped)   1.0901 runs/half
+      boost PERSISTS            1.1361   delta +0.046  (+4.2 sigma)
+
+  So it is REAL AND LOW-STAKES. It moves a speed boost's worth by about a third, and even
+  if it persists the total (0.177) is nowhere near a swing boost's 0.614 -- **it cannot flip
+  the engine's preference.** Worth one live at-bat to settle; not worth planning around.
+
   **A RUNNER'S CURRENT SPEED IS READABLE OFF THEIR BASE**, from the shield badge:
   `local_state.read_runners()["speeds"]`. 171 of 172 occupied bases read it, zero of
   1,106 bare bases read anything. **It is NOT the card's roster `secondary`** — the same

@@ -45,5 +45,8 @@ own accord around 04:30 (see HANDOFF_NOW.md), so nothing is in flight at all.
 - **Brian Coker (8/1), Zachary Lee (6/2)** — the last 2 of 33 untyped.
 - **Five broken draft files** (blank lines stripped, statements joined). Recorded and
   guarded; not repaired at a guess, because one is a pending patch.
-- **`FIELDING_SUBTRACT_PER_POINT`** and **"does a speed boost persist on base"** both need
-  the console.
+- **`FIELDING_SUBTRACT_PER_POINT`** needs the console.
+- **"Does a speed boost persist on base"** needs the console, and is now PRICED: +0.046
+  runs/half, 4.2 sigma. Real, but it cannot flip the engine's preference (a speed boost
+  totals 0.177 either way against a swing boost's 0.614). One at-bat settles it; do not
+  plan around it.
