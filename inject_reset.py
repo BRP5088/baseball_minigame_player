@@ -12,19 +12,49 @@ import time
 
 CROSS, DPAD_DOWN, OPTIONS = 1, 1 << 7, 1 << 12
 BOX = 1 << 2                       # never send this
+# The DEFAULT only. Read through _fifo() at CALL time, never captured here:
+# CHIAKI_INJECT_INPUT is the one lever every test in the suite uses to point the
+# pipe somewhere harmless (test_injected_input, test_buttons_use_keyboard,
+# test_chain_record all set it), and this module ignored it -- so a test that
+# isolated the FIFO correctly still had THIS writer aimed at the live one.
 FIFO = "/tmp/chiaki_input"
+
+
+def _fifo():
+    return os.environ.get("CHIAKI_INJECT_INPUT") or FIFO
+
+
+def _locked_out(what):
+    """HARD OFF under BASEBALL_TEST_RUN. This is the fourth path to the console.
+
+    input_controller guards the keyboard, analog_replay guards the sticks,
+    ensure_stream guards the recovery keys -- and this module wrote raw button
+    masks to the pipe with no check of any kind. reset() is OPTIONS x5 ->
+    DPAD_DOWN x4 -> CROSS x6; on a match parked mid-play OPTIONS opens "Give up?"
+    and CROSS answers YES (CLAUDE.md section 4), so an offline run of anything
+    importing this could forfeit a paid match.
+    """
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        print(f"  [inject] BASEBALL_TEST_RUN is set — refusing to {what}. "
+              "If this is a live run, nothing will move until you unset it.")
+        return True
+    return False
 
 
 def tap(mask, hold=0.12, after=0.5):
     assert not (mask & BOX), "refusing to send BOX — that spends $50"
-    with open(FIFO, "w", buffering=1) as f:
+    if _locked_out(f"tap buttons {mask}"):
+        return
+    with open(_fifo(), "w", buffering=1) as f:
         f.write(f"buttons {mask}\n"); f.flush(); time.sleep(hold)
         f.write("buttons 0\n"); f.flush()
     time.sleep(after)
 
 
 def clear():
-    with open(FIFO, "w", buffering=1) as f:
+    if _locked_out("clear the sticks"):
+        return
+    with open(_fifo(), "w", buffering=1) as f:
         f.write("clear\n"); f.flush()
 
 

@@ -96,7 +96,26 @@ ACTION_TO_BUTTON = {
     "look_left": "ANALOG_STICK_RIGHT_X_DOWN", "look_right": "ANALOG_STICK_RIGHT_X_UP",
 }
 
-src = open(SETTINGS, encoding="utf-8").read()
+raw = open(SETTINGS, encoding="utf-8").read()
+
+# SCOPE IT, AND STRIP COMMENTS. Two failures a mutant proved:
+#
+#   1. settings.cpp holds TWO 26-entry tables -- GetControllerMapping (the
+#      defaults, authoritative) and ClearKeyMapping (removal only). They are
+#      byte-identical today, so the right one won purely by file order. A change
+#      to one and not the other would be read from whichever came first.
+#   2. A commented-out `// {CHIAKI_CONTROLLER_BUTTON_CROSS, Qt::Key_Return},` left
+#      above a CHANGED live row was parsed as the live binding and the test PASSED.
+#      setdefault takes the first regex hit and the regex has no idea what a
+#      comment is.
+_start = raw.index("QMap<int, Qt::Key> Settings::GetControllerMapping()")
+_end = raw.index("\n}", _start)
+src = raw[_start:_end]
+check("ClearKeyMapping" not in src,
+      "the parsed region reaches into ClearKeyMapping — that table REMOVES bindings "
+      "and must never be read as the defaults")
+src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)      # block comments
+src = re.sub(r"//[^\n]*", "", src)                    # line comments
 chiaki = {}
 for token, qt in re.findall(
         r"(?:CHIAKI_CONTROLLER_(?:BUTTON_|)|ControllerButtonExt::)([A-Z0-9_]+)\)?\s*,"
@@ -131,6 +150,20 @@ check(_bad == KNOWN_MISMATCH,
       f"{sorted((a, o, t) for a, o, t in disagree)}; pinned: {sorted(KNOWN_MISMATCH)}. "
       "If a walk_* key was corrected, drop it from KNOWN_MISMATCH. If a NEW action "
       "drifted, every press of it is landing on a different control or on nothing.")
+
+# EVERY KEYMAP ENTRY MUST BE COMPARED. A mutant added `"scroll_ban": "p"` to
+# KEYMAP and this file passed: ACTION_TO_BUTTON happened to cover all 36 entries,
+# but nothing asserted that it does, so a new action would be silently unchecked --
+# and an unchecked action is one whose presses land wherever chiaki decides.
+_uncovered = set(ic.KEYMAP) - set(ACTION_TO_BUTTON)
+check(not _uncovered,
+      f"KEYMAP actions {sorted(_uncovered)} are not in ACTION_TO_BUTTON, so nothing "
+      "compares them against chiaki. Add them (with the chiaki button they mean) or "
+      "they are unverified.")
+_stale = set(ACTION_TO_BUTTON) - set(ic.KEYMAP)
+check(not _stale,
+      f"ACTION_TO_BUTTON names {sorted(_stale)}, which KEYMAP no longer has — the "
+      "table is checking actions that do not exist, which inflates the agree count")
 
 check(len(agree) >= 25,
       f"{len(agree)} actions compared and agree (need >= 25) — fewer means this file is "

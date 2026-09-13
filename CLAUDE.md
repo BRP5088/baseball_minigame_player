@@ -816,6 +816,59 @@ AST-scans for emission sites so a NEW one fails the test instead of reaching
 someone's keyboard. Four mutants, all caught -- including a planted
 `pyautogui.keyDown` in an unrelated module.
 
+### ...AND THE TARGETED PATH WAS NEVER LOCKED OUT EITHER. THERE ARE FOUR PATHS.
+
+A QA sweep the same night, pointed at the fix above, found the fix incomplete --
+and the file written to guard it declaring success while the hole was open.
+
+`can_use_background_input()` returns False under `BASEBALL_TEST_RUN`, and `press()`
+honours it. `press_background()` and `_bg_hold_keys()` never ask. THE GATE WAS ONLY
+EVER AT THE CALL SITES. Reproduced with a PS5 connected and a match on screen:
+
+    BASEBALL_TEST_RUN = 1
+    can_use_background_input() = False
+    press_background('look_right') -> True   posted to pid 83980, twice
+    _bg_hold_keys(['w'], 0.01)     -> True   posted to pid 83980, twice
+    press('look_right')            -> refused, 0 posts        [control]
+
+`_bg_hold_keys`'s own docstring calls it "the single low-level route every public
+input function funnels through, so there is exactly one place where 'did this go to
+the game or to the user's work' is decided". It named the responsibility and did not
+discharge it. Direct callers include `reset_env._probe_transports` and
+`_diagnose_no_pause`, which turn the camera.
+
+**And `inject_reset.py` is a FOURTH path**: raw button masks written to a HARDCODED
+`/tmp/chiaki_input`, ignoring `CHIAKI_INJECT_INPUT` -- the one lever every test uses
+to point the pipe somewhere harmless -- with no lockout of any kind. `reset()` is
+OPTIONS x5 -> DPAD_DOWN x4 -> CROSS x6; on a match parked mid-play OPTIONS opens
+"Give up?" and CROSS answers YES. It is imported by `go.py`, `run_to_table.py` and
+`run_anchored.py`. Both now gated; its FIFO is read at call time.
+
+So the count is: keyboard (`press`/`hold_combo`/`walk_at`), targeted Quartz
+(`press_background`/`_bg_hold_keys`), sticks (`analog_replay.send`), recovery keys
+(`ensure_stream._key`), and raw masks (`inject_reset.tap`/`clear`). **Every one of
+them needed its own lockout, and four of the five were found by looking rather than
+by a failure.**
+
+**THE CENSUS THAT WAS SUPPOSED TO CATCH THE NEXT ONE MISSED SEVEN OF EIGHT FORMS.**
+Each was planted as a working emitter and `test_no_real_input_under_test_run.py`
+still exited 0: `pyautogui.press` (not in its EMITTERS list -- the most idiomatic
+call in the library), system-wide `Quartz.CGEventPost`, a module-level call (it
+walked only FunctionDef bodies), a bare-name call after `from pyautogui import
+keyDown`, a `getattr(...)` call, and emitters in two modules absent from its
+hand-kept 9-name scan list -- against 120+ root modules, 44 in `tools/`, 33 in
+`overnight/`. That is `keep_awake`'s BUSY_PATTERNS lesson exactly: **a guard whose
+trigger is a hand-kept list of NAMES rots silently, because nothing fails when a new
+name is missing.** It now derives the list (197 modules), resolves the emitting
+module from each file's own imports, and walks the whole tree. A first attempt at
+that matched the bare attribute name `write` and reported 900 sites across PIL --
+the receiver is what makes the match meaningful.
+
+**The shape, one line:** the guard answers a narrower question than the name it is
+filed under. `can_use_background_input` gates a CALL SITE, not the function; the
+census asserted a site EXISTS, not that it is GUARDED; `CHIAKI_INJECT_INPUT`
+redirects ONE writer, not the pipe.
+
 ### CHIAKI IS RUNNING ON COMPILED-IN DEFAULTS, AND FOUR KEYMAP ENTRIES DO NOTHING
 
 `KEYMAP` is what we believe chiaki binds; `chiaki-ng-src/gui/src/settings.cpp` is

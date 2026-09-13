@@ -2140,6 +2140,38 @@ def can_use_background_input(action=None):
     return chiaki_pid() is not None
 
 
+def targeted_input_allowed(what):
+    """May this process post key events straight to chiaki's pid?
+
+    THE GATE WAS ONLY EVER AT THE CALL SITES. can_use_background_input() returns
+    False under BASEBALL_TEST_RUN, and press() honours it -- but press_background()
+    and _bg_hold_keys() never ask, so anything calling THEM directly posted to the
+    live console during the offline suite. Reproduced 2026-09-13 with a PS5
+    connected and a match on screen:
+
+        BASEBALL_TEST_RUN = 1
+        can_use_background_input() = False
+        press_background('look_right') -> True   posted to pid 83980, twice
+        _bg_hold_keys(['w'], 0.01)     -> True   posted to pid 83980, twice
+        press('look_right')            -> refused, 0 posts        [control]
+
+    _bg_hold_keys's own docstring calls itself "the single low-level route every
+    public input function funnels through, so there is exactly one place where
+    'did this go to the game or to the user's work' is decided" -- it named the
+    responsibility and did not discharge it. Direct callers include
+    reset_env._probe_transports and _diagnose_no_pause, which turn the camera.
+
+    Same family as the keyboard hole fixed hours earlier: a guard one layer up
+    from the damage, answering a narrower question than its name implies.
+    """
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        print(f"  [input] BASEBALL_TEST_RUN: refusing to post {what} straight to "
+              "chiaki's process. If this is a live run, nothing will reach the "
+              "console until you unset it.")
+        return False
+    return True
+
+
 def press_background(action, hold_seconds=0.05, post_delay=None):
     """Send one action straight to chiaki's process. Returns True if sent.
 
@@ -2147,6 +2179,8 @@ def press_background(action, hold_seconds=0.05, post_delay=None):
     back to the focus-stealing path instead of silently doing nothing, which
     would look exactly like a dropped input.
     """
+    if not targeted_input_allowed(f"{action!r}"):
+        return False
     import Quartz
     code = _KEYCODES.get(KEYMAP.get(action))
     pid = chiaki_pid()
@@ -2170,6 +2204,8 @@ def _bg_hold_keys(keys, seconds):
     public input function funnels through, so there is exactly one place where
     "did this go to the game or to the user's work" is decided.
     """
+    if not targeted_input_allowed("+".join(keys)):
+        return False
     import Quartz
     pid = chiaki_pid()
     if pid is None:
