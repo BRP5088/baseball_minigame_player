@@ -77,134 +77,98 @@ BANNER_DARKER_BY = 18.0
 EDGE_SIGMA = 2.2                  # gradient peak threshold, in sigma above the mean
 
 
-def _edges(g, a, b, h):
-    prof = g[:, a:b].mean(axis=1)
-    d = np.abs(np.diff(prof))
-    d = np.convolve(d, np.ones(5) / 5.0, mode="same")
-    thr = d.mean() + EDGE_SIGMA * d.std()
-    out, y = [], 1
-    while y < len(d):
-        if d[y] > thr:
-            s = y
-            while y < len(d) and d[y] > thr:
-                y += 1
-            out.append(((s + y) // 2) / h)
-        else:
-            y += 1
-    return out
+BANNER_EDGES = (0.79, 0.93)       # the name banner's top and bottom, in card heights
+PHASE_STEP = 0.001                # how finely the phase is searched, in frame heights
+MIN_EDGE_SAMPLES = 4              # edge samples that must land on screen before we answer
 
 
-def _cluster(vals, tol):
-    vals = sorted(vals)
-    groups, cur = [], [vals[0]]
-    for v in vals[1:]:
-        if v - cur[-1] <= tol:
-            cur.append(v)
-        else:
-            groups.append(cur); cur = [v]
-    groups.append(cur)
-    return [(float(np.median(c)), len(c)) for c in groups]
+def _edge_profile(img, cols):
+    """Horizontal-edge energy per row of pixels, averaged across the card COLUMNS only.
 
-
-def find_card_rows(img, cols):
-    """[(top, bottom), ...] per visible row as fractions of height, or None.
-
-    None means NOT FOUND and the caller must fall back -- never a guessed box, because a
-    box in the wrong place reads the wrong card's numbers rather than failing (10.23).
+    The page between columns carries the notebook's own rules and shadows; averaging it in
+    adds a constant that varies with scroll. Restricting to the columns is what makes the
+    profile a statement about CARDS.
     """
     g = np.asarray(img.convert("L"), dtype=np.float32)
     h, w = g.shape
-    votes = []
-    for x0, x1 in cols:
-        a, b = int(w * (x0 + 0.012)), int(w * (x1 - 0.012))
-        if b - a >= 20:
-            votes.extend(_edges(g, a, b, h))
-    if not votes:
-        return None
-    lines = [v for v, n in _cluster(votes, 0.008) if n >= MIN_COLS_AGREEING]
-    if len(lines) < 2:
-        return None
-    # a NAME BANNER is a pair of grid lines a banner-height apart
-    banners = [(t, b) for i, t in enumerate(lines) for b in lines[i + 1:]
-               if BANNER_H_RANGE[0] <= b - t <= BANNER_H_RANGE[1]]
-    if not banners:
-        return None
-    # keep the pair-set whose spacing matches a single consistent row pitch
-    col_w = cols[0][1] - cols[0][0]
-    want = CARD_ASPECT * col_w * (w / float(h))
-    want_bh = want * BANNER_H_IN_CARD
-    cands = []
-    for i, p in enumerate(banners):
-        for q in banners[i + 1:]:
-            if not ROW_PITCH_RANGE[0] <= q[0] - p[0] <= ROW_PITCH_RANGE[1]:
-                continue
-            bh = ((p[1] - p[0]) + (q[1] - q[0])) / 2.0
-            cands.append((abs((p[1] - p[0]) - (q[1] - q[0])) + abs(bh - want_bh), p, q))
-    cands.sort(key=lambda c: c[0])
+    idx = np.concatenate([np.arange(int(w * a), int(w * b)) for a, b in cols])
+    prof = np.abs(np.diff(g, axis=0))[:, idx].mean(axis=1)
+    m = float(prof.max())
+    return (prof / m) if m > 0 else prof
 
-    def _box(t, _b):
-        """Card box from a banner TOP. One canonical height, so every box is identical."""
-        top = t - BANNER_TOP_IN_CARD * want
-        return (top, top + want)
 
-    # TRY EVERY CANDIDATE IN SCORE ORDER, do not reject on the best one alone. Scoring
-    # picks a favourite; the card's height is what DECIDES. Returning None because the
-    # top-scoring pair failed threw away frames where the second pair was the right one
-    # (2 of 16 scroll positions, including the frame the offsets were measured on).
-    for _score, p, q in cands:
-        rows = [_box(*p), _box(*q)]
-        if True:                         # height is canonical now, nothing to check
-            # IT IS A 2D ARRAY, SO ONE ROW AND THE PITCH PLACE ALL OF THEM (the user's
-            # observation, 2026-09-13). The columns are already fixed; the rows are evenly
-            # spaced; so a single located row is the whole geometry. That matters because a
-            # row of LOCKED cards offers no edges to detect -- measured sd 16-19 against an
-            # owned card's 62-66 -- and a tactics row can be placed entirely by the player
-            # row above it. Detecting every row independently was never necessary and, on a
-            # faded row, is not possible.
-            pitch = q[0] - p[0]
-            bh = ((p[1] - p[0]) + (q[1] - q[0])) / 2.0
-            out = []
-            for k in range(-MAX_EXTRAPOLATE, MAX_EXTRAPOLATE + 1):
-                bt, bb = p[0] + k * pitch, p[1] + k * pitch
-                t, b = _box(bt, bb)
-                if b <= 0.0 or t >= 1.0:
-                    continue                 # entirely off screen
-                out.append({"top": t, "bottom": b, "banner_top": bt, "banner_bottom": bb,
-                            # a row the fit LOCATED, or one placed by the pitch alone
-                            "measured": k in (0, 1),
-                            # partly off the top or bottom edge of the frame
-                            "clipped": t < 0.0 or b > 1.0})
-            return out
-    # ONE ROW IS ENOUGH. With no second banner to measure the pitch against, take the best
-    # single banner whose derived card height matches and step by the measured default.
-    def _is_dark_ribbon(t, b, top, bot):
-        y0, y1 = int(h * max(0.0, t)), int(h * min(1.0, b))
-        c0, c1 = int(h * max(0.0, top)), int(h * min(1.0, bot))
-        if y1 - y0 < 3 or c1 - c0 < 10:
-            return False
-        for x0f, x1f in cols:
-            a, bb = int(w * x0f), int(w * x1f)
-            ribbon = g[y0:y1, a:bb]
-            card = g[c0:c1, a:bb]
-            if ribbon.size and card.size and ribbon.mean() <= card.mean() - BANNER_DARKER_BY:
-                return True
-        return False
+def find_card_rows(img, cols):
+    """Every visible card row, as fractions of frame height, or None.
 
-    for t, b in sorted(banners, key=lambda pr: abs((pr[1] - pr[0]) - want_bh)):
-        top, bot = _box(t, b)
-        if not _is_dark_ribbon(t, b, top, bot):
+    THE GRID IS A UNIFORM 2D ARRAY, so it has exactly one unknown: the vertical PHASE.
+    Column positions are fixed (pitch 0.135, width 0.130, measured identical across all
+    four gaps), the card size is fixed, and the row pitch is fixed at ROW_PITCH_DEFAULT.
+    Solve the phase and every row follows -- including rows too faded to detect on their
+    own, which is the whole point (a locked card measures sd 16-19 against an owned card's
+    62-66, so it has almost no edges to offer).
+
+    THE PHASE IS SOLVED BY POOLING THE NAME BANNER ACROSS EVERY ROW AT ONCE. Measured
+    inside a card whose position was known from a ruler, the only dominant horizontal edges
+    are the name banner's top and bottom -- 0.98 and 1.00 normalised at 0.79 and 0.93 of
+    card height, with everything else under 0.25. Earlier attempts scored the card's OUTER
+    top and bottom, which are thin light lines, and the solver slid until its lower sample
+    hit the banner instead: a systematic error of 0.187 card-heights, exactly what was
+    observed. Scoring the banner directly, and summing it over all rows, lets faint rows
+    contribute evidence they could never carry alone.
+
+    Exact where truth is known: phase error +0.000, +0.000, +0.001, +0.002, +0.003 on the
+    five frames measured against a hand-read ruler.
+
+    TWO THINGS THIS DELIBERATELY DOES NOT DO. It does not decide whether the frame IS a ban
+    screen -- read_ban_counter does that, and it must, because the phase score cannot: over
+    a non-ban control the score runs 0.535-0.858 against a ban screen's 0.46-0.91, one
+    population with no gate between them (CLAUDE.md 10.4). And it does not measure the
+    pitch per frame; autocorrelation was tried and is wrong one frame in five.
+    """
+    prof = _edge_profile(img, cols)
+    n_px = len(prof)
+
+    def at(frac):
+        y = int(n_px * frac)
+        if y < 0 or y >= n_px:
+            return None
+        return float(prof[max(0, y - 2):y + 3].max())
+
+    want = CARD_ASPECT * (cols[0][1] - cols[0][0]) * (img.size[0] / float(img.size[1]))
+    best = (-1.0, None)
+    ph = -ROW_PITCH_DEFAULT
+    while ph < 1.0:
+        total = seen = 0.0
+        for k in range(-1, MAX_EXTRAPOLATE + 2):
+            top = ph + k * ROW_PITCH_DEFAULT
+            for e in BANNER_EDGES:
+                v = at(top + e * want)
+                if v is not None:
+                    total += v
+                    seen += 1
+        if seen >= MIN_EDGE_SAMPLES and total / seen > best[0]:
+            best = (total / seen, ph)
+        ph += PHASE_STEP
+    if best[1] is None:
+        return None
+    phase = best[1] % ROW_PITCH_DEFAULT
+
+    rows = []
+    for k in range(-1, MAX_EXTRAPOLATE + 2):
+        top = phase + k * ROW_PITCH_DEFAULT - ROW_PITCH_DEFAULT
+        bot = top + want
+        if bot <= 0.02 or top >= 0.98:
             continue
-        out = []
-        for k in range(-MAX_EXTRAPOLATE, MAX_EXTRAPOLATE + 1):
-            bt, bb = t + k * ROW_PITCH_DEFAULT, b + k * ROW_PITCH_DEFAULT
-            rt, rb = _box(bt, bb)
-            if rb <= 0.0 or rt >= 1.0:
-                continue
-            out.append({"top": rt, "bottom": rb, "banner_top": bt, "banner_bottom": bb,
-                        "measured": k == 0, "clipped": rt < 0.0 or rb > 1.0})
-        if out:
-            return out
-    return None                              # NOT FOUND -- the caller falls back, never guesses
+        bt = top + BANNER_EDGES[0] * want
+        bb = top + BANNER_EDGES[1] * want
+        # `measured` means THIS row's own banner is visible, not that the phase came from
+        # it: the phase is a whole-frame answer, but a caller still wants to know which
+        # rows carried evidence and which were placed by the pitch.
+        own = [at(bt), at(bb)]
+        rows.append({"top": top, "bottom": bot, "banner_top": bt, "banner_bottom": bb,
+                     "measured": all(v is not None and v >= 0.35 for v in own),
+                     "clipped": top < 0.0 or bot > 1.0})
+    return rows or None
 
 
 def card_box(img, rows, rel_row, col, cols):

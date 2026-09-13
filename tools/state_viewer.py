@@ -150,7 +150,8 @@ def slow_read(frame, crops):
         out["fitted"] = rows is not None
         out["rows"] = rows
         names, types = [], []
-        for row in range(2):
+        n_rows = len(rows) if rows else 2
+        for row in range(n_rows):
             for col in range(5):
                 key = f"r{row}c{col}"
                 fitted_cell = bool(rows) and row < len(rows)
@@ -229,7 +230,7 @@ def tick():
             # ladder uses to name that screen.
             if S["slow"].get("on_ban"):
                 fitted = S["slow"].get("rows")
-                for row in range(2):
+                for row in range(len(fitted) if fitted else 2):
                     for col in range(5):
                         if fitted and row < len(fitted):
                             x0, y0, x1, y1 = bg.card_box(frame, fitted, row, col,
