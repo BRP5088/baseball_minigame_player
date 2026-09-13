@@ -76,6 +76,32 @@ def latch(state, key, value, scrollkey):
     return held
 
 
+# HOW OFTEN A SETTLED CELL IS RE-READ ANYWAY. Not never: a first read that happened to
+# land on a degraded frame would otherwise be held forever with nothing able to correct it,
+# which is a stale answer wearing a confident one's clothes. Every twelfth pass is about
+# once every six seconds at the shipped 2 Hz -- cheap, and fast enough that a wrong value
+# cannot sit there unnoticed while someone is looking at it.
+REFRESH_EVERY = 12
+
+
+def held(state, key):
+    """The value being held for this cell, or None. Read-only."""
+    return (state.get("held") or {}).get(key)
+
+
+def needs_read(state, keys, tick, refresh_every=REFRESH_EVERY):
+    """Is there anything left to learn about this cell on this pass?
+
+    THE READERS ARE THE WHOLE COST. Profiled at steady state, reading the name and the type
+    of every unlocked cell is over two thirds of a slow pass -- and once the latch is
+    holding both, every one of those calls returns an answer that is thrown away. A cell
+    that has already answered is re-read only on the refresh beat.
+    """
+    if tick % refresh_every == 0:
+        return True
+    return not all(held(state, k) for k in keys)
+
+
 def kind_of(type_result):
     """'player' | 'tactics' | None, from what read_card_type returned.
 

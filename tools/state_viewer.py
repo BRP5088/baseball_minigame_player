@@ -439,6 +439,7 @@ def slow_read(frame, crops):
         out["rows"] = rows
         names, types, locks, nums, cellrecs = [], [], [], [], []
         _scrollkey = _rowkey(rows)
+        S["_pass"] = S.get("_pass", 0) + 1
         n_rows = len(rows) if rows else 2
         for row in range(n_rows):
             for col in range(5):
@@ -460,8 +461,16 @@ def slow_read(frame, crops):
                 # genuinely cannot say which side of the gate that card is on, so the
                 # answer should not change unless two frames running agree it has.
                 locked = _latch(key + ":locked", locked, _scrollkey)
+                # SKIP A CELL THAT HAS ALREADY ANSWERED. The name and type readers are over
+                # two thirds of a slow pass, and on a settled cell every one of those calls
+                # returns something the latch then discards. ban_read.needs_read says when
+                # there is still something to learn, and forces a re-read on a refresh beat
+                # so a value that settled on a bad frame cannot sit there uncorrected.
+                _fresh = br.needs_read(_STABLE, (key + ":name", key + ":type",
+                                                 key + ":kind", key + ":vals"),
+                                       S.get("_pass", 0))
                 c = None
-                if not locked:
+                if not locked and _fresh:
                     try:
                         if fitted_cell and box is not None:
                             cell = frame.crop(box)
@@ -500,7 +509,7 @@ def slow_read(frame, crops):
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
                 t = None
-                if fitted_cell and not locked:
+                if fitted_cell and not locked and _fresh:
                     t = bg.read_card_type(frame, rows, row, col, ocr=_type_ocr)
                 # A READ DOES NOT BEAT `locked`, AND I TRIED IT. Letting a successful
                 # banner read clear the locked flag put a THIRD "Power Swing" on a screen
@@ -537,6 +546,9 @@ def slow_read(frame, crops):
                        "power": "-", "second": "-", "src": ""}
                 if locked or not fitted_cell:
                     rec["kind"] = "locked" if locked else None
+                elif kind == "tactics" and not _fresh and br.held(_STABLE, key + ":vals"):
+                    rec["type"] = "tactics"
+                    rec["src"] = "badge"
                 elif kind == "tactics":
                     # THE LABEL IS THE NAME. Printing "Speed Boost" under both card and
                     # type says nothing twice; the useful second column is the KIND.
@@ -612,7 +624,15 @@ def tick():
                 S["slow"] = slow_read(frame, crops)
             S["t"] = time.time()
         rows, glow, boxes, sel, cur, phase = [], [], [], [], None, None
-        if hand is not None:
+        # THE HAND READERS DO NOT RUN ON A BAN SCREEN. There is no hand there -- this file
+        # already says so about the DRAWING ("the gameplay regions are meaningless on a ban
+        # grid") and then read them anyway, every tick, on a crop of the ban grid.
+        #
+        # Worth doing for CORRECTNESS whatever it costs: none of that work could produce
+        # an answer, because the thing it reads is not on screen. Measured on a ban screen
+        # it is 605 ms to 563 ms a tick -- a real saving and a small one, and I had written
+        # a much larger number into this comment before measuring it. The cost is elsewhere.
+        if hand is not None and not S["slow"].get("on_ban"):
             rows = lh.read_hand(hand)
             boxes = []
             _, glow, _ = lh.cursor_glow(hand, rows, _boxes=boxes)
