@@ -1,5 +1,31 @@
 # HANDOFF — 2026-09-13, end of session
 
+## UPDATE, ~04:30: THE PS5 LEFT THE GAME. Nothing is mid-match any more.
+
+The console is on the **PS5 HOME SCREEN** ("Continue where you left off - MOUSE: P.I. For
+Hire | 65%"). The game is closed, so the match described below is GONE and its
+`match_in_progress` flag was stale -- checked against the screen, then cleared with
+`clear_match_state.py`. Evidence: `agent_progress/ban-labels/EVIDENCE_ps5_home_match_gone.png`.
+
+    money        progress_testing.json balance $96, match_in_progress FALSE
+    preflight    READY (it said NOT READY while the flag was set -- correctly)
+    to resume    press Play Game on the PS5, then reload the save
+
+**THE ONE WARNING WORTH ACTING ON**, and it is the oldest open item on the project:
+
+    no calibrated window position recorded for this machine yet
+
+`window_drift()` can only ever report "ok" until a reference exists, and what it guards is
+a MONEY path -- a 110px window shift silently flipped a ban-grid cell and banned a different
+card, with no error raised. Arming it takes one command, on a ban screen that is reading
+correctly:
+
+    python3 -c 'import input_controller as i; i.save_window_reference()'
+
+That needs the game up and a good ban screen, so it is the first thing to do on waking.
+
+## THE ORIGINAL NOTE, kept for the money trail
+
 ## THE CONSOLE IS LEFT MID-MATCH. READ THIS FIRST.
 
 A **paid match is open** and parked on the **ban screen, 0/3 banned**. Nothing was pressed

@@ -75,13 +75,14 @@ A = ap.parse_args()
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
 BAN, NAME = "#ff5ecb", "#8affff"          # ban-grid card box, and its name strip
 FALLBACK = "#ff9d00"                      # the FIXED box, drawn when the fit failed
+POWER, SHIELD = "#7CFC00", "#ffa8ff"      # the power disc and the shield badge
 root = tk.Tk()
 root.title("state — what the crawl reads")
 root.attributes("-topmost", True)
 lbl = tk.Label(root, bg="black"); lbl.pack()
 txt = tk.Label(root, font=("Menlo", 12), anchor="w", justify="left")
 txt.pack(fill="x")
-S = {"img": None, "slow": {}, "t": 0.0}
+S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 
 
 def _type_ocr(img):
@@ -240,6 +241,8 @@ def tick():
             except Exception:
                 phase = None
 
+        S["frame"] = frame                      # the EXACT pixels the panel is showing,
+        S["rows"] = S["slow"].get("rows")        # so a save cannot capture a later frame
         canvas = (hand if (A.hand and hand is not None) else frame).convert("RGB")
         d = ImageDraw.Draw(canvas)
         ox = oy = 0
@@ -278,6 +281,13 @@ def tick():
                                              o.BAN_GRID_COL_X_FRAC)
                             if nb is not None:
                                 d.rectangle(nb, outline=NAME, width=2)
+                            # the two number boxes, so what the readers LOOK at is visible
+                            for _b, _c in ((bg.power_box(frame, fitted, row, col,
+                                                         o.BAN_GRID_COL_X_FRAC), POWER),
+                                           (bg.shield_box(frame, fitted, row, col,
+                                                          o.BAN_GRID_COL_X_FRAC), SHIELD)):
+                                if _b is not None:
+                                    d.rectangle(_b, outline=_c, width=2)
                         # the strip ocr_ban_card_name reads the NAME from -- drawn because
                         # it is the thing that goes wrong: at some scroll positions a row-1
                         # crop starts on row 0's name banner, so the name and the stats in
@@ -328,7 +338,8 @@ def tick():
             txt.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
                 f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
-                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}"))
+                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}"
+                + (f"\n[s] {S['note']}" if S.get("note") else "\n[s] save a labelling sheet")))
         else:
             txt.config(text=(
                 f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
@@ -350,6 +361,59 @@ def tick():
     _reexec_if_changed()
     root.after(int(1000 / A.hz), tick)
 
+
+def save_sheet(_event=None):
+    """`s` — dump the ban grid on screen as a NUMBERED contact sheet to label by hand.
+
+    THE BLOCKED TASK IS A LABELLING TASK. The hand's digit bank does not read ban cards
+    (argmax right on 3 of 7; under 0.5 is wrong), so auditing the roster's NUMBERS needs a
+    ban-specific bank -- and its labels must be independent of the roster, or the audit is
+    circular. That means a human reading cards. This makes that one keypress instead of a
+    scripting session, and it saves the FRAME TOO, so the labels can always be re-derived
+    from the same pixels.
+    """
+    frame, rows = S.get("frame"), S.get("rows")
+    if frame is None:
+        S["note"] = "nothing captured yet"
+        return
+    out = os.path.join(_ROOT_DIR, "agent_progress", "ban-labels")
+    os.makedirs(out, exist_ok=True)
+    stamp = str(S["slow"].get("scroll", "x"))
+    n = 0
+    while os.path.exists(os.path.join(out, f"sheet_scroll{stamp}_{n}.jpg")):
+        n += 1
+    base = os.path.join(out, f"sheet_scroll{stamp}_{n}")
+    frame.save(base + "_frame.png")
+    if not rows:
+        S["note"] = f"saved {os.path.basename(base)}_frame.png (no fit — frame only)"
+        return
+    tiles = []
+    for r in range(len(rows)):
+        if rows[r].get("clipped"):
+            continue
+        for c in range(5):
+            b = bg.card_box(frame, rows, r, c, o.BAN_GRID_COL_X_FRAC)
+            if b is not None:
+                tiles.append((f"r{r}c{c}", frame.crop(b)))
+    if not tiles:
+        S["note"] = "no unclipped cards to sheet"
+        return
+    tw = max(t.size[0] for _, t in tiles)
+    th = max(t.size[1] for _, t in tiles)
+    k = 2
+    sheet = Image.new("RGB", (tw * k * len(tiles), th * k + 34), (18, 18, 20))
+    dd = ImageDraw.Draw(sheet)
+    for i, (name, t) in enumerate(tiles):
+        t = t.resize((tw * k, th * k), Image.LANCZOS)
+        sheet.paste(t, (i * tw * k, 34))
+        dd.text((i * tw * k + 6, 8), name, fill=(255, 220, 60))
+    sheet.save(base + "_sheet.jpg", quality=94)
+    S["note"] = f"saved {os.path.basename(base)}_sheet.jpg ({len(tiles)} cards)"
+
+
+root.bind("<KeyPress-s>", save_sheet)
+root.bind("<KeyPress-S>", save_sheet)
+root.focus_force()
 
 root.after(50, tick)
 root.mainloop()
