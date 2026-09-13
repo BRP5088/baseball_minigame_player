@@ -366,7 +366,15 @@ TACTICS_NAMES = ("POWER SWING", "SPEED BOOST", "PITCH FOCUS", "FIELDING PLAY")
 # -- the collection holds only 10 tactics cards and most are locked -- so these are honest
 # to a few hundredths and worth re-measuring if a tactics read starts failing.
 TACTICS_TYPE_BOX = (0.02, 0.14, 0.98, 0.26)   # POWER SWING / SPEED BOOST / ... , centred
-TACTICS_BONUS_BOX = (0.40, 0.00, 0.66, 0.17)  # the +1 badge, top centre
+# SWEPT 2026-09-13 after the user called it: "the tactics number box is pretty wide when
+# it doesn't need to be. maybe a very small increase in height would help with extracting
+# the value." Both halves were right. Over 27 boxes on the three owned tactics cards of a
+# live screen, scored on how many return a badge digit (1 or 2, the only values that exist):
+#     x 0.40-0.66 y 0-0.17  (the old box)   1 of 3
+#     x 0.47-0.64 y 0-0.19  (this one)      3 of 3   -- narrower AND taller
+# n is 3, which is every owned tactics card on screen and still only 3; re-measure if a
+# badge starts reading "-".
+TACTICS_BONUS_BOX = (0.47, 0.00, 0.64, 0.19)  # the +1 / +2 badge, top centre
 # MEASURED, not tuned: with the columns re-fitted the disc lands in the SAME place on
 # every column. Found as the bright blob in the card's upper right over 28 owned cards on
 # four frames: x 0.740-0.919, y 0.062-0.199, and the per-column spread of its centre is

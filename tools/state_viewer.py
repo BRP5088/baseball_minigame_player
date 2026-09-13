@@ -28,7 +28,7 @@ Colour, on the hand: GREEN the card the reader calls the cursor, RED a selected 
 YELLOW neither. A box is the window cursor_glow actually sampled, not a guess at one --
 that distinction is what found both of 2026-09-11's defects.
 """
-import os, sys, re, argparse, time, tkinter as tk
+import os, sys, re, argparse, time, tempfile, contextlib, tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw, ImageTk
 import orchestrator as o, local_hand as lh, local_state as ls, ban_grid as bg
@@ -320,6 +320,36 @@ def _tactics_bonus(frame, rows, row, col):
 _STABLE = {"scroll": None, "held": {}, "cand": {}}
 
 
+# LEPTONICA AND TK TALK TO fd 2 DIRECTLY, and python cannot see it to filter it. The user,
+# 2026-09-13, pasting a live log: "Error in boxClipToRectangle: box outside rectangle" four
+# times a tick, plus Tk's own "Task policy set failed: 4" on every reload. Neither is ours
+# and neither means anything -- leptonica prints and then answers anyway.
+#
+# NOT a blanket redirect to /dev/null: that would swallow a real traceback, and a viewer
+# that cannot report its own crash is how the last one died silently for an afternoon.
+# fd 2 is captured for the duration of the OCR, then everything that is NOT on the mute
+# list is written straight back out.
+_MUTE = (b"boxClipToRectangle", b"pixScanForForeground", b"Task policy set failed",
+         b"pixGetInvBackgroundMap", b"pixaGetPix")
+
+
+@contextlib.contextmanager
+def _quiet_ocr():
+    tmp = tempfile.TemporaryFile(mode="w+b")
+    saved = os.dup(2)
+    os.dup2(tmp.fileno(), 2)
+    try:
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        tmp.seek(0)
+        for line in tmp.read().splitlines(True):
+            if not any(m in line for m in _MUTE):
+                os.write(2, line)
+        tmp.close()
+
+
 def _rowkey(rows):
     """A stable id for WHERE the grid is, used to clear the latch when it scrolls.
 
@@ -511,8 +541,15 @@ def slow_read(frame, crops):
                 # DIFFERENT KIND with different boxes and different fields -- no name, no
                 # shield, a bonus instead of a power -- so it gets its own branch rather
                 # than empty columns under player headings.
+                # UNKNOWN IS ITS OWN ANSWER, NOT "PLAYER". The user, 2026-09-13: "I see
+                # a speed boost that switches from having a player name box to a tactics
+                # name box... It seems like when it abstains, it defaults to the player.
+                # maybe it should be a different state." Exactly right -- `None` was
+                # falling through the draw's else branch and painting four player windows
+                # over a tactics card. Latched too, so a single bad frame cannot flip it.
                 kind = ("tactics" if isinstance(t, tuple)
                         else ("player" if isinstance(t, str) else None))
+                kind = _latch(key + ":kind", kind, _scrollkey)
                 rec = {"key": key, "kind": kind, "locked": bool(locked),
                        "name": names[-1][1], "type": label,
                        "power": "-", "second": "-", "src": ""}
@@ -521,13 +558,24 @@ def slow_read(frame, crops):
                 elif kind == "tactics":
                     # THE LABEL IS THE NAME. Printing "Speed Boost" under both card and
                     # type says nothing twice; the useful second column is the KIND.
-                    rec["name"] = t[1].title()
+                    rec["name"] = t[1].title() if isinstance(t, tuple) else rec["name"]
                     rec["type"] = "tactics"
                     rec["power"] = _tactics_bonus(frame, rows, row, col)
                     rec["src"] = "badge"
                 else:
                     rec["power"], rec["second"], rec["src"] = _digits(
                         frame, rows, row, col, c)
+                # THE NUMBERS ARE LATCHED TOO, and leaving them out was an oversight that
+                # the user saw immediately: the badge box was swept to read 3 of 3 and then
+                # showed "-" on the very next grab. The abstention is the PICTURE -- proved
+                # by running the OCR 20 times on ONE crop and getting the identical answer
+                # every time -- so a value that read once is better evidence than a blank
+                # that arrived after it. "-" is converted to None first, or a failed read
+                # would overwrite a good one.
+                for _f in ("power", "second"):
+                    _v = _latch(f"{key}:{_f}", None if rec[_f] == "-" else rec[_f],
+                                _scrollkey)
+                    rec[_f] = _v if _v is not None else "-"
                 cellrecs.append(rec)
                 nums.append((key, f"{rec['power']}/{rec['second']}"
                              if not locked else "locked"))
@@ -549,7 +597,9 @@ def tick():
         crops = dict(o.crop_gameplay_regions(frame))
         hand = crops.get("hand")
         if not S["slow"] or time.time() - S["t"] > 1.0:
-            S["slow"] = slow_read(frame, crops); S["t"] = time.time()
+            with _quiet_ocr():
+                S["slow"] = slow_read(frame, crops)
+            S["t"] = time.time()
         rows, glow, boxes, sel, cur, phase = [], [], [], [], None, None
         if hand is not None:
             rows = lh.read_hand(hand)
@@ -621,10 +671,15 @@ def tick():
                             # is top CENTRE where the power disc is top right.
                             _kind = dict(S["slow"].get("ban_kinds") or []).get(
                                 f"r{row}c{col}")
-                            _set = (("tac_label", TYPE), ("tac_bonus", POWER)) \
-                                if _kind == "tactics" else \
-                                (("name", NAME), ("type", TYPE),
-                                 ("power", POWER), ("shield", SHIELD))
+                            if _kind == "tactics":
+                                _set = (("tac_label", TYPE), ("tac_bonus", POWER))
+                            elif _kind == "player":
+                                _set = (("name", NAME), ("type", TYPE),
+                                        ("power", POWER), ("shield", SHIELD))
+                            else:
+                                _set = ()      # KIND UNKNOWN: draw no reader windows at
+                                               # all. Drawing the player set was a guess
+                                               # wearing the same clothes as an answer.
                             for _k, _c in _set:
                                 _b = _ebox(frame, fitted, row, col, _k)
                                 if _b is not None:
