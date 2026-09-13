@@ -5426,8 +5426,24 @@ def play_one_turn(state_json: dict, batters_used: int):
               f"(power {_weakest[1].power}) instead of playing")
         # The card is SPENT. Forget it, so nothing carries its value forward into the
         # replacement -- the only way the hand memory can be wrong is if we let it.
+        # CLOSED LOOP, exactly like the play site below -- and this one was missed. For
+        # the whole life of the verified loop this call passed no `look=` and dropped its
+        # return value, so the DISCARD ran the blind counted-press path that the play path
+        # was rebuilt to replace. A discard is the IRREVERSIBLE one: select_and_discard's
+        # own docstring records it landing on the wrong card live (2026-08-28, the engine
+        # chose a power-4 player and a tactics card was thrown), and confirm_discard is
+        # followed by the game auto-lifting the replacement, which confirm_play commits as
+        # this turn's play -- so an unverified discard spends the turn on a card nobody
+        # chose. Found by the QA sweep 2026-09-11, months after the play path was fixed.
+        #
+        # `is False` and not falsiness, for the play site's reason: a stub, or a caller
+        # that simply forgets to return, must never read as "nothing was committed".
+        #
+        # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND -- test_hand_memory_forgets
+        # requires a forget within six lines above it, so prose goes here, never between.
         forget_hand_slot(player_idx)
-        select_and_discard(player_idx)
+        if select_and_discard(player_idx, look=hand_cursor_look) is False:
+            print("  discard REFUSED — the card could not be verified; nothing thrown")
         return False, None
     else:
         # THE FALSE BRANCH, LOGGED. The true branch has always announced

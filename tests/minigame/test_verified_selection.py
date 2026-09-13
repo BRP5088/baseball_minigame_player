@@ -335,6 +335,45 @@ check(sent == ["move_left"] * 4 + ["move_right"] * 3 + ["select_card", "confirm_
 
 
 # =========================================================================
+# =========================================================================
+print("7b. and the PRODUCTION call sites actually ASK for that verification")
+# =========================================================================
+# THE FUNCTION WAS VERIFIED AND THE CALLER NEVER ASKED. Section 7 above has passed
+# since the verified discard path was written, because it calls select_and_discard
+# with look= itself. orchestrator did not: `select_and_discard(player_idx)`, no look,
+# return value dropped on the floor -- so the live $50 ladder took the blind
+# counted-press branch for every discard while the play path beside it was fully
+# closed-loop. A QA sweep found it on 2026-09-11; no test could have, because none of
+# them looked at the CALLER. This one does, by AST, which is the only thing that
+# distinguishes "the machinery exists" from "the machinery is used".
+import ast as _ast
+
+_osrc = open(os.path.join(_ROOT, "orchestrator.py")).read()
+_otree = _ast.parse(_osrc)
+_SPENDS = {"select_and_play", "select_and_discard"}
+
+_calls, _discarded = [], []
+for _n in _ast.walk(_otree):
+    if isinstance(_n, _ast.Call) and isinstance(_n.func, _ast.Name) and _n.func.id in _SPENDS:
+        _calls.append((_n.func.id, _n.lineno, {k.arg for k in _n.keywords}))
+    # a Call sitting alone as a statement throws its answer away
+    if isinstance(_n, _ast.Expr) and isinstance(_n.value, _ast.Call) \
+            and isinstance(_n.value.func, _ast.Name) and _n.value.func.id in _SPENDS:
+        _discarded.append((_n.value.func.id, _n.lineno))
+
+check(len(_calls) >= 2,
+      f"orchestrator really calls the spend functions (found {len(_calls)}: "
+      f"{[(n, l) for n, l, _ in _calls]}) — an empty scan must not pass")
+for _name, _line, _kw in _calls:
+    check("look" in _kw,
+          f"{_name} at orchestrator.py:{_line} passes look= so it reads the screen "
+          f"instead of counting presses (keywords: {sorted(_kw) or 'none'})")
+check(not _discarded,
+      f"no spend call throws its verdict away — a refusal that nobody reads is a blind "
+      f"press with extra steps (bare-statement calls: {_discarded})")
+
+
+# =========================================================================
 print("7. a DISCARD is verified the same way -- it is the irreversible one")
 # =========================================================================
 # This function's docstring records a discard landing on the wrong card live, and
