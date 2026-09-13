@@ -2577,6 +2577,34 @@ Numbering: **OPEN-15 is the compass reader**, **OPEN-16 was the injector release
 window** (closed, §5), **OPEN-17 is the arrival heading**. Older worktree copies
 of this file used those numbers differently; this file is the authority.
 
+**OPEN-23 — THE LIVE BAN SCAN RETURNS A PARTIAL COLLECTION WITHOUT FAILING, and
+choose_bans then picks the best 3 of 8 instead of the best 3 of ~33 (2026-09-13).**
+
+Found while A/B-ing the fitted ban geometry, by running the REAL
+`read_full_ban_collection()` end to end. It printed SCROLL DESYNC on every batch --
+*"press count says row 39, the scrollbar says 4"* -- and returned 8 cards anyway.
+
+The desync guard did exactly what it was built for: trust the scrollbar, never the press
+count, because a wrong row bans a card the player does not own. What is missing is the
+other half. The loop absorbs the desync, keeps pressing, reads the same rows again, dedupes
+them by absolute (row, col), and hands back whatever it has WITH NO ERROR. `choose_bans`
+cannot tell a complete collection from a quarter of one.
+
+**IT IS NOT THE FRONTMOST TRAP and it is not the fitted geometry.** Probed straight
+afterwards with chiaki confirmed frontmost: from level 5 one `move_down` moved it to 4 and
+three more moved nothing at all, cursor parked at (1, 2) throughout. Both geometry arms hit
+it identically, which is why they agreed so comfortably -- a partial collection is easy to
+agree about.
+
+**WHAT TO DO WITH IT.** The cheap guard is a floor: a scan whose scrollbar never reaches
+the bottom level has not seen the collection, and should say so rather than return. The
+scrollbar already knows -- `read_ban_scroll_level` reports 0..7 and the bottom clamp is 7,
+so "did this scan ever observe level 7" is free and is exactly the question. What is NOT
+understood is why the scroll stops; that wants one session with the console and no match in
+flight.
+
+Until then a match played on this bans the best of what it happened to see.
+
 **OPEN-1 — the leg-end frame path is BUILT AND PINNED; there are still ZERO
 admissible frames.** `follow()` publishes at the right moment: it sets
 `_LAST_LEG_END[node]` immediately after `img = capture()` and BEFORE the
