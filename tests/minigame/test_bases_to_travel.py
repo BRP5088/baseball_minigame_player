@@ -80,7 +80,37 @@ check(o.bases_to_travel(bases(third=1), 1, -2) == 1,
 check(o.bases_to_travel(bases(third=1, second=1, first=1), 1, 1) == 4,
       "bases loaded at speed 1, plus the batter")
 
-print("3. a HOME RUN empties the diamond — the maximum the game can animate")
+print("3. FIELDING holds runners back — the black pitcher debuff")
+# CLAUDE.md section 4: black pitcher buffs SUBTRACT runner movement, which is why they only
+# matter with runners on. The user, on what happens during an out: "The players debuff could
+# be applied too. Which would prevent some runners from moving." A held runner animates
+# less, so ignoring this over-predicted every turn against a fielding pitcher.
+_loaded2 = bases(third=2, second=2, first=2)
+check(o.bases_to_travel(_loaded2, 1, 1, 0) == 6,
+      "bases loaded at speed 2 against no fielding: 1 + 2 + 2 from runners, 1 from the batter")
+check(o.bases_to_travel(_loaded2, 1, 1, 1) == 4, "fielding 1 takes a base off each runner")
+check(o.bases_to_travel(_loaded2, 1, 1, 2) == 1, "fielding 2 pins them all; only the batter moves")
+check(o.bases_to_travel(bases(first=3), 1, -2, 3) == 0,
+      "and on an OUT a big enough debuff stops the runner entirely — nothing moves")
+check(o.bases_to_travel(bases(first=3), 1, -2, 0) == 3,
+      "with no fielding that same runner takes three")
+# FIELDING GREATER THAN SPEED CLAMPS AT ZERO — it does not push a runner BACKWARDS. That
+# mutant survived the first version of this file: every case had fielding <= speed, so the
+# clamp was never exercised and deleting it changed no assertion.
+check(o.bases_to_travel(bases(first=1), 1, -2, 3) == 0,
+      "a speed-1 runner against fielding 3 contributes 0, not -2 — a debuff holds a runner "
+      "still, it does not un-run them")
+check(o.bases_to_travel(bases(third=1, second=1, first=1), 1, -2, 5) == 0,
+      "and a whole diamond of them still sums to 0, never negative")
+# NEGATIVE FIELDING IS NOT A SPEED BONUS. Fielding is a card's secondary plus a Fielding
+# Play, both non-negative by construction, so this clamp guards impossible input -- and a
+# guard nothing can fire is one CLAUDE.md warns about, so it is pinned rather than trusted.
+check(o.bases_to_travel(bases(first=1), 0, 1, -3) == o.bases_to_travel(bases(first=1), 0, 1, 0),
+      "a negative fielding value is treated as none, never as extra speed for the runner")
+check(o.bases_to_travel(bases(third=1, second=1, first=1), 1, o.AUTO_HOME_RUN_MARGIN, 3) == 10,
+      "fielding does NOT hold anyone back on a home run — everyone scores regardless")
+
+print("4. a HOME RUN empties the diamond — the maximum the game can animate")
 check(o.bases_to_travel(bases(), 1, o.AUTO_HOME_RUN_MARGIN) == 4,
       "a solo home run is the batter's four bases")
 check(o.bases_to_travel(bases(third=1, second=1, first=1), 1, o.AUTO_HOME_RUN_MARGIN) == 10,
@@ -90,7 +120,7 @@ check(o.bases_to_travel(bases(third=1), 1, 9) == 5, "and any bigger margin is th
 check(o.bases_to_travel(bases(), 1, 3) == o.bases_to_travel(bases(), 3, 3),
       "on a home run the batter's speed does not change the distance")
 
-print("4. a hole in the read gives None, never a number")
+print("5. a hole in the read gives None, never a number")
 check(o.bases_to_travel({"third": {"occupied": None}, "second": {"occupied": False},
                          "first": {"occupied": False}}, 1, 1) is None,
       "a base that could not be read -> None")
@@ -106,7 +136,7 @@ check(o.bases_to_travel({"third": {"occupied": True, "speed": None},
                         1, o.AUTO_HOME_RUN_MARGIN) == 5,
       "except on a home run, where no speed is needed to know everyone scores")
 
-print("5. the gate accepts it and logs it, and it is OPTIONAL")
+print("6. the gate accepts it and logs it, and it is OPTIONAL")
 _sig = inspect.signature(o.wait_for_hand_deal).parameters
 check("predicted_bases" in _sig, "wait_for_hand_deal takes predicted_bases")
 check(_sig["predicted_bases"].default is None,

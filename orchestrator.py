@@ -2828,7 +2828,7 @@ def hand_deal_threshold(env=None):
 BASE_NUMBER = {"third": 3, "second": 2, "first": 1}
 
 
-def bases_to_travel(bases, batter_speed=None, margin=None):
+def bases_to_travel(bases, batter_speed=None, margin=None, fielding=0):
     """How many BASE-MOVEMENTS this play sets off -- one runner moving one base is one.
     None when it cannot be known. NOT a duration: see "zero bases is not zero time" below.
 
@@ -2846,6 +2846,23 @@ def bases_to_travel(bases, batter_speed=None, margin=None):
     MARGIN is unknown: a number built on a hole is worse than no number, and the caller's
     fallback is the fixed budget it already uses. The margin is required because it decides
     whether the batter runs at all -- an out is an out.
+
+    `fielding` is the PITCHER's fielding for this at-bat -- their card's secondary plus a
+    Fielding Play if one was attached. It is knowable while WE pitch, and only from the
+    reveal while we bat. It does not apply on a home run: everyone scores regardless.
+
+    WHAT ELSE ANIMATES, from the user's sources (2026-09-12) -- not counted here because
+    none of it is a base-movement, and worth writing down because it means the fixed term
+    is not one constant but a sum of conditional ones:
+
+        the pitcher's score flash      every at-bat
+        a COIN FLIP                    only on a TIE (equal power)
+        Field Play effects             only when a defence card is used
+        the base tracker resetting     on an out, tokens are removed rather than advanced
+        the played card being discarded on an out
+
+    So two turns with the same base count can animate for different lengths, and the model
+    that eventually fits this will want those as terms rather than noise.
 
     ZERO BASES IS NOT ZERO TIME, and the number must never be read that way. An OUT moves
     nobody, but it still animates -- the pitch, the swing, the out -- and CLAUDE.md section
@@ -2883,7 +2900,14 @@ def bases_to_travel(bases, batter_speed=None, margin=None):
         sp = b.get("speed")
         if sp is None:
             return None
-        total += min(sp, 4 - start)     # a runner cannot pass home
+        # FIELDING SUBTRACTS RUNNER MOVEMENT -- that is what the black pitcher buffs do, and
+        # it is why they only matter with runners on (CLAUDE.md section 4). The user, on
+        # what happens during an out, 2026-09-12: "The players debuff could be applied too.
+        # Which would prevent some runners from moving." A runner held still animates less,
+        # so a count that ignored it over-predicted every turn against a fielding pitcher.
+        # Same shape as simulate._step, including that FIELDING_SUBTRACT_PER_POINT is 1 and
+        # UNMEASURED; subtract first, then cap, because a held runner cannot pass home either.
+        total += max(0, min(sp - max(0, fielding), 4 - start))
     # THE BATTER ONLY RUNS IF THEY REACHED BASE. The first version of this added the
     # batter's speed on every at-bat, so a routine OUT with nobody on predicted 1 base of
     # animation instead of 0 -- the user spotted it by reading the numbers back
