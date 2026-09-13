@@ -209,9 +209,44 @@ try:
     resets["n"] = 0
     shots = tempfile.mkdtemp()
     lines = []
-    r = gw.consecutive_arrivals(Map(), ROUTE, 1, capture=Rig(live_calls=2),
-                                read_heading=lambda: 90.0,
-                                log=lines.append, shots=shots)
+    # COUNT THE SEAM'S USE, don't just pass it. This whole file reached the LIVE COMPASS
+    # for months: graph_walk's relocalise sweep and walk_steps.turn_to both ignored the
+    # read_heading threaded in here and called compass.fast_capture() directly, so the
+    # "offline" suite raised NoGameWindow the moment the console was asleep -- and passed
+    # whenever chiaki happened to be up, which is the worse half. Asserting the stub was
+    # CALLED makes this bite with the rig up OR down; asserting only that the run
+    # completes puts the guard at the mercy of whether someone left chiaki running.
+    _heads = {"n": 0}
+
+    def _head():
+        _heads["n"] += 1
+        return 90.0
+
+    # AND POISON THE MODULE FUNCTION for the duration. Counting the seam's calls only
+    # proves SOMETHING used it; with chiaki running, a link that reverted to the real
+    # compass would still let the count pass and the suite stay green. Making
+    # walk_steps.read_heading itself raise means any path that ignores the caller's seam
+    # fails loudly whether the rig is up or down -- which is the difference between a
+    # guard and a guard that happens to be standing where the damage was.
+    import walk_steps as _ws
+    _real_rh = _ws.read_heading
+
+    def _boom(*a, **k):
+        raise AssertionError(
+            "walk_steps.read_heading was called directly: the caller's read_heading "
+            "seam was ignored somewhere downstream, so this 'offline' test is reading "
+            "the live compass")
+
+    _ws.read_heading = _boom
+    try:
+        r = gw.consecutive_arrivals(Map(), ROUTE, 1, capture=Rig(live_calls=2),
+                                    read_heading=_head,
+                                    log=lines.append, shots=shots)
+    finally:
+        _ws.read_heading = _real_rh
+    check(f"the caller's read_heading is the one that gets used, everywhere "
+          f"(called {_heads['n']}x; zero means something downstream reads the real "
+          f"compass instead)", _heads["n"] > 0)
     check("a stream that dies mid-trial is INVALID too", r["outcomes"] == [None])
     check("...and still is not a route failure", False not in r["outcomes"])
     check("...and reports zero valid trials", r["valid"] == 0 and r["invalid"] == 1)

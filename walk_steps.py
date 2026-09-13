@@ -63,7 +63,18 @@ def read_heading(tries=4):
     return None
 
 
-def turn_to(target, log=print, tolerance=TURN_TOLERANCE, max_steps=None):
+def _heading_now(fn=None):
+    """The caller's heading seam if it passed one, else this module's own.
+
+    RESOLVED AT CALL TIME on purpose. An import-time alias would silently defeat a
+    test that monkeypatches walk_steps.read_heading -- CLAUDE.md 10.18's trap in the
+    other direction, a redirect that changes nothing and says nothing.
+    """
+    return (fn or globals()["read_heading"])()
+
+
+def turn_to(target, log=print, tolerance=TURN_TOLERANCE, max_steps=None,
+            read_heading=None):
     """Turn to an absolute bearing.
 
     `tolerance` is a parameter because the right value depends on the job. For
@@ -79,7 +90,7 @@ def turn_to(target, log=print, tolerance=TURN_TOLERANCE, max_steps=None):
     """
     steps = max_steps or TURN_MAX_STEPS
     for i in range(steps):
-        now = read_heading()
+        now = _heading_now(read_heading)
         if now is None:
             # A single unreadable frame used to abandon the turn SILENTLY, so
             # the caller saw "turned +0.0 deg" and no explanation. read_heading
@@ -109,7 +120,7 @@ def turn_to(target, log=print, tolerance=TURN_TOLERANCE, max_steps=None):
     log(f"      turn to {target:.1f}: {steps} pushes and still outside "
         f"{tolerance:.1f} deg — this turn RAN and did NOT converge, so the "
         f"heading returned is where it gave up, not where it was aimed")
-    return read_heading()
+    return _heading_now(read_heading)
 
 
 def _grey():

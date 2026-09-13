@@ -227,7 +227,7 @@ RELOCALISE_BY_TURNING = True
 RELOCALISE_BEARINGS = (60.0, 120.0, 180.0, 240.0, 300.0)   # relative, in order
 
 
-def _look_around_for_a_node(m, capture, log=print):
+def _look_around_for_a_node(m, capture, read_heading=None, log=print):
     """Turn in place, re-running locate() at each bearing. (node, detail)|None.
 
     Returns None if nothing was recognised anywhere, which is a genuinely lost
@@ -235,7 +235,9 @@ def _look_around_for_a_node(m, capture, log=print):
     """
     import walk_steps as ws
 
-    start = ws.read_heading()
+    # TAKE THE CALLER'S SEAM -- this read the module function directly while every
+    # function around it accepts read_heading, so a redirect was SILENTLY PARTIAL.
+    start = (read_heading or _default_heading)()
     if start is None:
         # The caller resets after this — ~40-60s, discarding every node already
         # verified — so it matters enormously that "the sweep ran and
@@ -245,7 +247,7 @@ def _look_around_for_a_node(m, capture, log=print):
             "(this is not 'nothing was recognised')")
         return None
     for rel in RELOCALISE_BEARINGS:
-        ws.turn_to((start + rel) % 360.0, log=lambda *a: None)
+        ws.turn_to((start + rel) % 360.0, read_heading=read_heading, log=lambda *a: None)
         time.sleep(0.35)
         node, detail = locate(m, capture=capture, log=lambda *a: None)
         if node is not None:
@@ -253,7 +255,7 @@ def _look_around_for_a_node(m, capture, log=print):
             return node, detail
     # Put the camera back so the caller's next leg starts from the heading it
     # would have had. Turning does not move the character, so this is free.
-    ws.turn_to(start, log=lambda *a: None)
+    ws.turn_to(start, read_heading=read_heading, log=lambda *a: None)
     return None
 
 
@@ -593,7 +595,7 @@ def _slip_past(bearing, speed, dur, capture, read_heading, log=print):
     # is genuinely filling a gap that is one character wide, there is nowhere to
     # go around it and nothing to jump over; the only thing that changes is the
     # NPC. It is also the cheapest and cannot wedge anything.
-    ws.turn_to(bearing, log=lambda *a: None)
+    ws.turn_to(bearing, read_heading=read_heading, log=lambda *a: None)
     before = capture()
     time.sleep(MOVER_WAIT_SEC)
     ws.walk_forward(abs(speed), dur)
@@ -606,7 +608,7 @@ def _slip_past(bearing, speed, dur, capture, read_heading, log=print):
 
     # 2. Jump — no lateral movement, so nothing to undo.
     for k in range(SLIP_JUMPS):
-        ws.turn_to(bearing, log=lambda *a: None)
+        ws.turn_to(bearing, read_heading=read_heading, log=lambda *a: None)
         before = capture()
         import input_controller as ic
         ic.press("cross", hold_seconds=0.08)
@@ -622,7 +624,7 @@ def _slip_past(bearing, speed, dur, capture, read_heading, log=print):
     # narrow passage punishes lateral movement — an earlier version crabbed
     # 0.55s and walked into the wall.
     for side, label in ((+1.0, "right"), (-1.0, "left")):
-        ws.turn_to(bearing, log=lambda *a: None)
+        ws.turn_to(bearing, read_heading=read_heading, log=lambda *a: None)
         before = capture()
         ws.walk_forward(0.0, SLIP_STRAFE_SEC, strafe=side * SLIP_STRAFE)
         time.sleep(0.25)
@@ -844,7 +846,7 @@ def face_the_table(capture=None, read_heading=None, log=print):
     best = (0.0, None)
     for off in FACE_SWEEP:
         target = (base + off) % 360.0
-        ws.turn_to(target, log=lambda *a: None)
+        ws.turn_to(target, read_heading=read_heading, log=lambda *a: None)
         time.sleep(0.45)
         img = capture()
         ink = tp.ink(img)
@@ -858,7 +860,7 @@ def face_the_table(capture=None, read_heading=None, log=print):
     # than wherever the sweep happened to stop, so a caller that retries starts
     # from the best-known aim.
     if best[1] is not None:
-        ws.turn_to(best[1], log=lambda *a: None)
+        ws.turn_to(best[1], read_heading=read_heading, log=lambda *a: None)
     log(f"      swept {len(FACE_SWEEP)} headings around {base:.0f}; best ink "
         f"{best[0]:.4f} at {best[1]}, prompt never appeared")
     return False, best[1]
@@ -937,7 +939,7 @@ def home_to_table(capture=None, read_heading=None, log=print):
         n = int(360 / HOME_SWEEP_STEP)
         for k in range(n):
             target = (base + k * HOME_SWEEP_STEP) % 360.0
-            ws.turn_to(target, log=lambda *a: None)
+            ws.turn_to(target, read_heading=read_heading, log=lambda *a: None)
             time.sleep(0.35)
             img = capture()
             if tp.at_table(img):
@@ -952,7 +954,7 @@ def home_to_table(capture=None, read_heading=None, log=print):
             return False
         log(f"      round {rnd + 1}: table strongest at {best[1]:.0f} "
             f"({best[0]} keypoint matches, prompt ink {best_ink:.4f}) — advancing")
-        ws.turn_to(best[1], log=lambda *a: None)
+        ws.turn_to(best[1], read_heading=read_heading, log=lambda *a: None)
         time.sleep(0.3)
         ws.walk_forward(0.22, HOME_ADVANCE_SEC)
         time.sleep(0.4)
@@ -1013,11 +1015,11 @@ def _leg_net_bearing(steps):
     return math.degrees(math.atan2(fx, fy)) % 360.0
 
 
-def _extend_goal_leg(steps, units, log=print):
+def _extend_goal_leg(steps, units, read_heading=None, log=print):
     """Turn to the leg's net bearing and walk `units` more. Turn-then-walk."""
     import walk_steps as ws
     bearing = _leg_net_bearing(steps)
-    got = ws.turn_to(bearing, log=lambda *a: None)
+    got = ws.turn_to(bearing, read_heading=read_heading, log=lambda *a: None)
     time.sleep(0.2)
     change = ws.walk_forward(GOAL_LEG_EXTRA_SPEED, units / GOAL_LEG_EXTRA_SPEED)
     time.sleep(0.5)
@@ -1045,7 +1047,7 @@ def approach_goal(steps, capture=None, read_heading=None, log=print):
         return True
     spent, since_aim = 0.0, 0
     while spent < budget:
-        ws.turn_to(bearing, log=lambda *a: None)
+        ws.turn_to(bearing, read_heading=read_heading, log=lambda *a: None)
         ws.walk_forward(abs(speed), APPROACH_STEP_SEC)
         time.sleep(0.3)
         spent += APPROACH_STEP_SEC
@@ -1300,7 +1302,8 @@ def go_to_node_verified(m, node, capture=None, read_heading=None, log=print,
             # the character, so this risks nothing but a few seconds, and a
             # frame full of blank wall is a known cause of a false "lost".
             if RELOCALISE_BY_TURNING:
-                found = _look_around_for_a_node(m, capture, log=log)
+                found = _look_around_for_a_node(m, capture,
+                                                read_heading=read_heading, log=log)
                 if found is not None and found[0] == node:
                     log(f"  re-localised at {node} by turning — no reset needed")
                     return True
@@ -1662,7 +1665,7 @@ def recover_to_node(m, node, capture=None, read_heading=None, log=print):
         b = (base + off) % 360.0
         taken = 0
         for _ in range(RECOVER_STEPS):
-            ws.turn_to(b, log=lambda *a: None)
+            ws.turn_to(b, read_heading=read_heading, log=lambda *a: None)
             ws.walk_forward(0.22, RECOVER_STEP_SEC)
             time.sleep(0.35)
             taken += 1
@@ -1671,7 +1674,7 @@ def recover_to_node(m, node, capture=None, read_heading=None, log=print):
                 log(f"      recovered {node} at {b:.0f} after {taken} step(s)")
                 return True
         for _ in range(taken):          # walk back; do not accumulate drift
-            ws.turn_to((b + 180.0) % 360.0, log=lambda *a: None)
+            ws.turn_to((b + 180.0) % 360.0, read_heading=read_heading, log=lambda *a: None)
             ws.walk_forward(0.22, RECOVER_STEP_SEC)
             time.sleep(0.3)
     log(f"      recovery fan did not find {node}")

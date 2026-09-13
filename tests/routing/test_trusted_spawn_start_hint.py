@@ -98,7 +98,11 @@ def _run(node, hint, attempts=1, reason="ok", arrives=False, located=None):
 
         gw.locate = _locate
 
-        def sweep(m, capture, log=print):
+        # MIRROR THE REAL SIGNATURE, including read_heading. graph_walk threads the
+        # caller's heading seam into the sweep so the offline suite never reaches the
+        # live compass; a stub that does not accept it turns a correct production change
+        # into a TypeError here, which is this check earning its keep rather than a bug.
+        def sweep(m, capture, read_heading=None, log=print):
             seen["sweep"] += 1
             return None
 

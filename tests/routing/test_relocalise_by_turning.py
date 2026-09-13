@@ -55,7 +55,9 @@ def run(look_results, turning=True):
     try:
         gw.locate = lambda m, capture=None, log=None: (None, "unrecognised")
 
-        def look(m, capture, log=None):
+        # mirrors the real signature: graph_walk threads the caller's heading seam
+        # into the sweep, the way `fol` below already takes it
+        def look(m, capture, read_heading=None, log=None):
             calls["look"] += 1
             return seq.pop(0) if seq else None
         gw._look_around_for_a_node = look
