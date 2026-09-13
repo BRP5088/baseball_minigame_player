@@ -99,6 +99,7 @@ A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
 TYPE = "#ffffff"                          # the BATTER / PITCHER ribbon box
+LOCKED_WASH = (200, 40, 40)               # a locked card: nothing reads it, so it is washed
 BAN, NAME = "#ff5ecb", "#8affff"          # ban-grid card box, and its name strip
 FALLBACK = "#ff9d00"                      # the FIXED box, drawn when the fit failed
 POWER, SHIELD = "#7CFC00", "#ffa8ff"      # the power disc and the shield badge
@@ -186,7 +187,7 @@ def slow_read(frame, crops):
         rows = bg.find_card_rows(frame)
         out["fitted"] = rows is not None
         out["rows"] = rows
-        names, types = [], []
+        names, types, locks = [], [], []
         n_rows = len(rows) if rows else 2
         for row in range(n_rows):
             for col in range(5):
@@ -249,10 +250,15 @@ def slow_read(frame, crops):
                 label = (t if isinstance(t, str)
                          else (t[1].title() if t else ("locked" if locked else None)))
                 types.append((key, label))
+                locks.append((key, bool(locked)))
                 if isinstance(t, tuple) and names[-1][1] is None:
                     names[-1] = (key, t[1].title())    # a tactics card names itself
         out["ban_names"] = names
         out["ban_types"] = types
+        # PUBLISHED SO THE DRAW CAN SEE IT. is_locked is already computed up there, once a
+        # second; the draw runs at tick rate and must not recompute it, or the picture and
+        # the panel can disagree about the same cell.
+        out["ban_locked"] = locks
     return out
 
 
@@ -305,9 +311,25 @@ def tick():
                             x1 = int(frame.width * fx1)
                             y1 = int(frame.height * (fy0 + o.BAN_GRID_CARD_HEIGHT_FRAC))
                             colr = FALLBACK      # a different colour, because it is a
-                        d.rectangle((x0, y0, x1, y1), outline=colr, width=3)
                         nm = dict(S["slow"].get("ban_names") or []).get(f"r{row}c{col}")
                         ty = dict(S["slow"].get("ban_types") or []).get(f"r{row}c{col}")
+                        lk = dict(S["slow"].get("ban_locked") or []).get(f"r{row}c{col}")
+                        if lk:
+                            # A LOCKED CARD IS WASHED RED AND GETS NO READER BOXES. Nothing
+                            # reads it -- the name and type OCR are both skipped upstream --
+                            # so drawing their windows showed the user the aim of readers
+                            # that never fire (their words, 2026-09-13: "I'm still seeing
+                            # locked cards with OCR boxes ... the engine doesn't look at
+                            # them but the live view does"). Blended, not filled: the card
+                            # has to stay readable underneath, because the point of looking
+                            # at the picture is to check the box is on the right card.
+                            patch = frame.crop((x0, y0, x1, y1))
+                            wash = Image.new("RGB", patch.size, LOCKED_WASH)
+                            frame.paste(Image.blend(patch, wash, 0.38), (x0, y0))
+                            d.rectangle((x0, y0, x1, y1), outline=LOCKED_WASH, width=3)
+                            d.text((x0 + 4, y0 + 3), "locked", fill=LOCKED_WASH)
+                            continue
+                        d.rectangle((x0, y0, x1, y1), outline=colr, width=3)
                         d.text((x0 + 4, y0 + 3),
                                f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
                         if fitted and row < len(fitted):
