@@ -121,6 +121,31 @@ def replace_weakest(hand_players, player_pool):
     return out
 
 
+def speed_bonus(tactics_card) -> int:
+    """The bases a SPEED BOOST adds to the batter's own advance on a hit, and nothing else.
+
+    The user's sources, 2026-09-12: "the speed boost immediately adds to your Speed stat
+    for that hit, determining how many bases you advance right then and there", and then
+    "once your player finishes their turn and stops on a base, the Speed Boost card is
+    discarded -- if that same runner needs to advance again on a subsequent turn they
+    revert back to moving at their standard baseline speed."
+
+    So the bonus applies ONCE, to the batter who played it. That is why this is added at
+    the batter's own step and nowhere else: a runner is stored as its CARD, and
+    advance_runners re-derives speed from card.secondary, so reverting to baseline is
+    what the existing structure already does.
+
+    IT WAS WORTH ZERO BEFORE THIS. `batter_speed` was computed at the top of the at-bat
+    and never read -- an AST scan found it the only dead local in the file, which is
+    CLAUDE.md 10.1's "a measurement taken and discarded" exactly. power_bonus was applied
+    to the swing boost all along, so the model priced one arm of the swing-vs-speed trade
+    at its real value and the other at nothing.
+    """
+    if tactics_card is None:
+        return 0
+    return tactics_card.bonus if tactics_card.kind is TacticsType.SPEED_BOOST else 0
+
+
 def power_bonus(tactics_card) -> int:
     """
     Only a swing/pitch boost's bonus affects resolve()'s power comparison
@@ -176,11 +201,16 @@ def fielding_of(pitcher_card, tactics_card) -> int:
     return f
 
 
-def _step(card, fielding) -> int:
-    """How many bases this runner takes, after the defence subtracts movement."""
+def _step(card, fielding, bonus=0) -> int:
+    """How many bases this runner takes, after the defence subtracts movement.
+
+    `bonus` is a SPEED BOOST attached this turn and is passed ONLY for the batter's own
+    advance; a runner already on base gets none, because the card was discarded when they
+    stopped (see speed_bonus).
+    """
     if not MODEL_SPEED:
         return 1
-    speed = getattr(card, "secondary", 0) or 0
+    speed = (getattr(card, "secondary", 0) or 0) + bonus
     return max(0, speed - FIELDING_SUBTRACT_PER_POINT * fielding)
 
 
@@ -276,7 +306,8 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
 
         outcome = resolve(batter_power, pitcher_power)
         fielding = fielding_of(pitcher_card, p_decision.tactics_card)
-        batter_speed = getattr(batter_card, "secondary", 0) or 0
+        # the speed boost this batter played, worth bases on THIS hit only
+        batter_speed_bonus = speed_bonus(decision.tactics_card)
 
         if outcome == "tie":
             # A coin flip. Losing it is an out; winning it is a hit whose batter is CAPPED
@@ -296,7 +327,8 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
             runners, gained = advance_runners(runners, fielding, "speed")
             score += gained
             # the batter runs their OWN speed; at least one base, or it was not a hit
-            steps = max(1, _step(batter_card, fielding)) if MODEL_SPEED else 1
+            steps = (max(1, _step(batter_card, fielding, batter_speed_bonus))
+                     if MODEL_SPEED else 1)
             if steps >= 4:
                 score += 1
             else:

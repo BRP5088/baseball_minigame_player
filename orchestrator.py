@@ -4397,6 +4397,73 @@ ROSTER_CONFIDENT_MARGIN = 0.10
 # is self-extending and a hardcoded 4 would rot silently.
 MIN_PLAYER_POWER = min(c.power for c in KNOWN_BAN_ROSTER.values())
 
+# ---------------------------------------------------------------------------
+# WHAT HAPPENED IN THE AT-BAT, FROM THE REVEAL RATHER THAN FROM THE SCOREBOARD
+# ---------------------------------------------------------------------------
+# The old rule was one line -- `if new_score > score_before: outcome = "home_run"` -- and
+# it is wrong for a reason the user supplied on 2026-09-12 with sources: SPEED decides how
+# many bases a runner takes, so a fast batter scores on an ordinary hit, a runner on third
+# scores on a single, and CLAUDE.md section 4 already records that a LOSING at-bat can
+# still advance runners. Every one of those raised the score and was logged "home_run".
+#
+# Measured over the 345 scorable rows in match_log.jsonl: 20 are labelled home_run at a
+# margin that cannot produce one, and 10 of those at a LOSING margin -- our pitcher beat
+# the batter by up to 4 and it still wrote home_run. Those rows feed the tactics analysis.
+#
+# The margin is known AT THE REVEAL, which is the moment the user pointed at: both cards
+# are face up, so the result follows from the game's own rule rather than from watching
+# the scoreboard afterwards. Runs are recorded SEPARATELY, because "how the at-bat went"
+# and "how many runs it produced" are different questions and the old label conflated them.
+POWER_TACTICS_KINDS = ("swing_boost", "pitch_boost")   # only these add power (section 4)
+AUTO_HOME_RUN_MARGIN = 3     # "beating it by 3+ is an automatic home run" -- CLAUDE.md 4
+
+
+def effective_power(power, bonus, kind):
+    """Power after a tactics card, counting ONLY the kinds that add power."""
+    if power is None:
+        return None
+    return power + ((bonus or 0) if kind in POWER_TACTICS_KINDS else 0)
+
+
+def reveal_margin(row):
+    """OUR margin over theirs at the reveal, or None if either card is unknown.
+
+    Sign is from the BATTER'S side in both phases: while pitching, the at-bat belongs to
+    the opponent, so their power leads. An unreadable card gives None rather than a guess
+    -- a fabricated margin would mislabel the row it was invented to describe.
+    """
+    ours = effective_power(row.get("our_power"), row.get("our_tactics_bonus"),
+                           row.get("our_tactics_kind"))
+    theirs = effective_power(row.get("opp_power"), row.get("opp_tactics_bonus"),
+                             row.get("opp_tactics_kind"))
+    if ours is None or theirs is None:
+        return None
+    return ours - theirs if row.get("phase") == "batting" else theirs - ours
+
+
+def classify_outcome(margin, runs, runners_before, runners_after):
+    """(outcome, basis) for one at-bat. `basis` says WHICH evidence decided it.
+
+    With a margin the game's own rule decides, and runs are just runs. Without one there
+    is no honest verdict available, so the fallback says "scored" for a turn that produced
+    runs and refuses to name it a home run -- the whole defect being fixed.
+    """
+    rose = (runs or 0) > 0 or (runners_after is not None and runners_before is not None
+                               and runners_after > runners_before)
+    if margin is None:
+        return ("scored" if rose else "out"), "delta"
+    if margin >= AUTO_HOME_RUN_MARGIN:
+        return "home_run", "margin"
+    if margin > 0:
+        return "hit", "margin"
+    if margin == 0:
+        # A tie is a coin flip capped at first base, so the screen is the only witness.
+        return ("tie_win" if rose else "out"), "tie"
+    # A loss is an out -- and an out can still drive runners in, which is exactly the
+    # case the old rule recorded as a home run.
+    return "out", "margin"
+
+
 
 def exclude_runners(cards, runners, floor=2):
     """Drop revealed cards that are actually BASE RUNNERS, not the faceoff.
@@ -5793,13 +5860,14 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     new_score = state_json.get(score_field)
                     new_runners = state_json.get("runners") or []
                     if new_score is not None:
-                        if new_score > pending_matchup["score_before"]:
-                            outcome = "home_run"
-                        elif len(new_runners) > pending_matchup["runners_before"]:
-                            outcome = "hit"
-                        else:
-                            outcome = "out"
-                        log_matchup({**pending_matchup, "outcome": outcome})
+                        runs = new_score - pending_matchup["score_before"]
+                        margin = reveal_margin(pending_matchup)
+                        outcome, basis = classify_outcome(
+                            margin, runs, pending_matchup["runners_before"],
+                            len(new_runners))
+                        log_matchup({**pending_matchup, "outcome": outcome,
+                                     "runs_scored": runs, "margin": margin,
+                                     "outcome_basis": basis})
                     else:
                         # No `else` here until 2026-09-01. A follow-up read that
                         # comes back without a score cannot have its outcome
