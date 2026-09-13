@@ -487,12 +487,64 @@ def base_discs(g, s):
     return out
 
 
+# THE SHIELD BADGE ON A BASE CARD IS THE RUNNER'S SPEED, and it reads cleanly (2026-09-12).
+# This is the field read_runners' docstring used to say was out of reach. Searched, not
+# cropped (CLAUDE.md 10.23) -- it is a sprite, so matchTemplate over a scale sweep answers
+# "is it there" and "which digit" at once. The bank is local_hand's, cut from HAND cards in
+# a different archive, and the winning scale on a base crop is ~0.70, so no base crop can
+# match itself (10.22's self-match trap).
+#
+# Measured over 1,278 saved base crops, with occupancy taken from the COIN and DISC
+# detectors so the labels are not this reader's own answers (10.31):
+#
+#     EMPTY bases      n=1106   badge score max 0.592
+#     OCCUPIED bases   n= 172   p05 0.857, median 0.892
+#     the shipped SHIELD_MIN (0.69) sits between them -- no new constant is invented
+#
+# 171 of 172 occupied bases read a digit; the one abstention scores 0.492 and is the only
+# occupied crop under the gate. ZERO of the 1,106 bare bases read a badge at all.
+# Digits seen: 1 x129, 2 x22, 3 x20 -- never 0, and never above 3.
+#
+# AND IT IS NOT THE CARD'S ROSTER SECONDARY. The same named card shows different badge
+# values at different moments (Bunz 1x31 and 2x8, Fisto 3x3 and 1x2, Sharp 1x22 and 2x1),
+# and among roster cards sharing each one's POWER none carries the observed value, so a
+# name mix-up cannot explain it. It is a LIVE number -- what this runner will advance now,
+# which is what a speed boost changes for one turn. That is the whole reason to read it.
+BADGE_SCALES = tuple(round(v, 3) for v in np.arange(0.40, 1.25, 0.05))
+
+
+def base_badge(img):
+    """(score, digit) for the best shield badge in a base crop, or (0.0, None).
+
+    NO GATE HERE: the caller compares against local_hand.SHIELD_MIN. Returning the raw
+    score means "cannot look" and "looked and saw nothing" stay distinguishable, which is
+    the distinction this project keeps losing (10.1).
+    """
+    tpl = local_hand._shield_templates()
+    if not tpl:
+        return 0.0, None
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    H, W = g.shape
+    best = (0.0, None)
+    for sc in BADGE_SCALES:
+        tw = int(round(local_hand.SHIELD_SIZE[0] * sc))
+        th = int(round(local_hand.SHIELD_SIZE[1] * sc))
+        if tw < 6 or th < 6 or th > H or tw > W:
+            continue
+        for d, t in tpl.items():
+            tt = cv2.resize(t, (tw, th), interpolation=cv2.INTER_LANCZOS4)
+            _, mx, _, _ = cv2.minMaxLoc(cv2.matchTemplate(g, tt, cv2.TM_CCOEFF_NORMED))
+            if mx > best[0]:
+                best = (float(mx), int(d))
+    return best
+
+
 def read_base(img, base):
     """Is a player card standing on this base, and what is its power.
 
     `base` is "third", "second" or "first" -- the coin template and its box are per base.
-    Returns {"occupied": True | False | None, "power": int | None, "score": float,
-             "coin": float | None, "clipped": bool, "why": str}. `occupied` None and
+    Returns {"occupied": True | False | None, "power": int | None, "speed": int | None,
+             "score": float, "coin": float | None, "clipped": bool, "why": str}. `occupied` None and
     `power` None both mean NOT READ: ask the paid model. None is never "no runner".
 
     THE ANSWER NEEDS BOTH DETECTORS TO AGREE. A disc and no coin is a card on the base.
@@ -511,8 +563,8 @@ def read_base(img, base):
     g = np.asarray(img.convert("L"), dtype=np.uint8)
     s = img.width / BASE_ANCHOR_W[base]
     coin = base_coin_score(img, base)
-    out = {"occupied": None, "power": None, "score": 0.0, "coin": coin,
-           "clipped": False, "why": ""}
+    out = {"occupied": None, "power": None, "speed": None, "speed_score": 0.0,
+           "score": 0.0, "coin": coin, "clipped": False, "why": ""}
     if coin is None:
         out["why"] = "no coin box fits this crop"
         return out
@@ -529,6 +581,12 @@ def read_base(img, base):
         return out
     out["occupied"] = True
     out["why"] = f"a power disc, and no coin ({coin:.3f})"
+    # SPEED is read only on an OCCUPIED base: on a bare base there is no card to carry a
+    # badge, and scoring one anyway would invite exactly the false read the empty-base
+    # population (max 0.592) exists to rule out.
+    _bs, _bd = base_badge(img)
+    out["speed_score"] = round(float(_bs), 3)
+    out["speed"] = _bd if _bs >= local_hand.SHIELD_MIN else None
     disc = max(discs, key=lambda d: d["ink"])
     out["clipped"] = disc["clipped"]
     if disc["clipped"]:
@@ -550,15 +608,26 @@ def read_runners(third_img, second_img, first_img):
     not a partial one. decision_engine reads state.runners only through
     `len(state.runners) > 0` and its truthiness, and best_pitching_play only asks whether
     runners are on, so the count is the whole of what those consume.
-    orchestrator.exclude_runners is the one caller that needs more: it matches the reveal
-    by roster NAME, and a disc reader cannot supply a name. THIS READER CANNOT FEED IT.
+    Each base also carries `speed` -- the runner's shield badge, a LIVE value and not the
+    card's roster secondary (see base_badge). That is what a delay or a baserunning model
+    needs: how far THIS runner moves on the next hit.
+
+    orchestrator.exclude_runners is the one caller that needs a NAME, and a disc reader
+    cannot supply one. (The claim that once stood here -- that this reader could never feed
+    it -- was written before the badge and banner were read; the name is legible on the
+    card and orchestrator.ocr_runner_card already reads banners. Unwiring that is open
+    work, not a limit of the crop.)
     """
     bases = {"third": read_base(third_img, "third"),
              "second": read_base(second_img, "second"),
              "first": read_base(first_img, "first")}
     vals = [b["occupied"] for b in bases.values()]
     count = None if any(v is None for v in vals) else sum(1 for v in vals if v)
-    return {"bases": bases, "count": count}
+    # SPEEDS, in base order, for the runners actually on. None for a runner whose badge did
+    # not read -- never 0, because 0 would be a distance and this is an absence.
+    speeds = [b["speed"] for b in (bases["third"], bases["second"], bases["first"])
+              if b.get("occupied")]
+    return {"bases": bases, "count": count, "speeds": speeds}
 
 
 

@@ -98,6 +98,16 @@ TACTICS_POOL_PITCHING = (
 
 TACTICS_FRACTION = 0.5  # rough match to observed real hands (roughly half tactics cards)
 
+# TWO INNINGS, each side batting once per inning, a fresh hand every half (user, 2026-09-12).
+INNINGS = 2
+# ROUNDS PER HALF IS NOT VERIFIED. CLAUDE.md section 4 says "a match is 5 rounds", which was
+# written when this model had one inning per side; at two innings that same 5 could mean 5
+# rounds per half (10 at-bats a side) or 5 across the match. simulate_batting_half has
+# always looped 5 and every number ever measured here assumes it, so it is left at 5 and
+# named rather than quietly changed -- an unverified constant that moves invalidates every
+# comparison it touches, and this one already invalidated a match length.
+ROUNDS_PER_HALF = 5
+
 
 def refill_hand(players, tactics, phase, player_pool=CARD_POOL, size=5):
     """Top the hand back up to `size`, one fresh card per empty slot.
@@ -319,7 +329,7 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
     hand_players, hand_tactics = draw_hand("batting", player_pool)
     p_hand_players, p_hand_tactics = draw_hand("pitching", defender_player_pool)
 
-    for round_idx in range(5):
+    for round_idx in range(ROUNDS_PER_HALF):
         hand_players, hand_tactics = refill_hand(hand_players, hand_tactics,
                                                  "batting", player_pool)
         state = GameState(half="batting", batters_used=round_idx, your_score=score,
@@ -411,12 +421,27 @@ def simulate_match(team_a: dict, team_b: dict):
     b_redraw = team_b.get("redraw", should_redraw)
     a_pool = team_a.get("pool", CARD_POOL)
     b_pool = team_b.get("pool", CARD_POOL)
-    a_score = simulate_batting_half(team_a["batting"], team_b["pitching"], defender_target_score=None,
-                                     redraw_fn=a_redraw, player_pool=a_pool, defender_player_pool=b_pool,
-                                     defender_redraw_fn=b_redraw)
-    b_score = simulate_batting_half(team_b["batting"], team_a["pitching"], defender_target_score=a_score,
-                                     redraw_fn=b_redraw, player_pool=b_pool, defender_player_pool=a_pool,
-                                     defender_redraw_fn=a_redraw)
+    # A MATCH IS TWO INNINGS, AND THIS PLAYED ONE. The scoreboard carries two columns and a
+    # total for a reason -- orchestrator.ocr_scoreboard has documented it as
+    # [round1, round2, total] all along -- and the user confirmed the shape on 2026-09-12:
+    # "Fresh hand, first inning. Fresh hand second inning. End game", with a fresh hand at
+    # every half boundary. This ran a single inning per side, so every win rate ever
+    # measured through simulate_match describes a shorter game than the one being played.
+    #
+    # Each half already deals its own hand, so "fresh hand each half" needs nothing extra;
+    # what was missing is the second inning. The defender's target_score is the batter's
+    # score SO FAR ACROSS THE MATCH, since that is what a pitcher is actually defending.
+    a_score = b_score = 0
+    for inning in range(INNINGS):
+        a_score += simulate_batting_half(
+            team_a["batting"], team_b["pitching"],
+            defender_target_score=(b_score if inning else None),
+            redraw_fn=a_redraw, player_pool=a_pool, defender_player_pool=b_pool,
+            defender_redraw_fn=b_redraw)
+        b_score += simulate_batting_half(
+            team_b["batting"], team_a["pitching"], defender_target_score=a_score,
+            redraw_fn=b_redraw, player_pool=b_pool, defender_player_pool=a_pool,
+            defender_redraw_fn=a_redraw)
     return a_score, b_score
 
 

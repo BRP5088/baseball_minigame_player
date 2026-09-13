@@ -24,7 +24,41 @@ live queue. Delete it when the queue is empty.
     689de6d  paid vision model locked OFF at the choke point
     e3dfed8  simulator reshuffled both hands every round; tactics pools drew a +3
 
-## QUEUE — the reader fix, from the workflow's own skeptics
+## QUEUE — updated 2026-09-12 late
+
+### CLOSED
+
+- **The `max(discs, key=ink)` "reader fix" is a NO-OP. Do not ship it.** Measured over all
+  172 saved base crops with a disc: max-ink and topmost give IDENTICAL power reads on every
+  one, and neither produces an impossible power. The caption-letter blob the skeptic found
+  existed only inside their own WIDENED crop, which was itself refuted. Their proposed rule
+  ("topmost UNCLIPPED") is actively WRONG: on 23 of 172 crops the topmost disc is genuinely
+  clipped by the crop edge and the unclipped alternative is card ART lower down, so the
+  rule would swap a correct abstention for a confident wrong digit.
+- **The proposed crop fractions: refuted, do not ship.** Overlap is 1-2 px not 7; the card
+  model was a rigid translate wrong in opposite directions at first vs third; and the new
+  box makes one EMPTY base read occupied=True power=1, impossible (powers run 4-9).
+- **Runner SPEED: SHIPPED.** local_state.base_badge + read_base["speed"] +
+  read_runners["speeds"]. 171/172 occupied bases read, 0 false reads on 1,106 bare bases,
+  shipped SHIELD_MIN 0.69 already sits between the populations (empty max 0.592, occupied
+  p05 0.857). Five mutants; the first two SURVIVED and the test was fixed, not the mutant.
+- **Simulator: two innings.** simulate_match played ONE. 99/1 re-validated and survives.
+
+### OPEN, in priority order
+
+1. **ROUNDS_PER_HALF = 5 is UNVERIFIED.** CLAUDE.md's "a match is 5 rounds" was written
+   when the model had one inning per side. At two innings that could mean 5 per half (10
+   at-bats a side) or 5 across the match. Named and left at 5; ask the user or count it
+   off a real match.
+2. **Deal timing** -- still the user's open ask. Runner speeds now exist, so a
+   bases-to-travel predictor is finally buildable. The workflow's timing axis was mostly
+   REFUTED (16 of 25 timeouts tautological, 9 from a deleted rule, 0 from shipped code) --
+   re-read those verdicts before reusing any of its numbers.
+3. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
+   numbers reproduce, write-up overstated the sample). Not wired in.
+4. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.
+
+## (historical) the reader fix, from the workflow's own skeptics
 
 Workflow `wf_fb45937c-afa` (21 agents) proposed re-cutting the base crops. The skeptics
 REFUTED that and found the real defect. Full results:
