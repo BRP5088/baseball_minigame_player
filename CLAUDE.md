@@ -224,6 +224,29 @@ stale — check the screen before clearing it.
 
 ## §3 Reading the screen
 
+### THE PAID VISION MODEL IS OFF, AND EVERY FIELD HAS A LOCAL READER
+
+**The user, 2026-09-12: "stop using the paid model. you are no longer allowed to use
+it unless I say so."** `orchestrator.PAID_MODEL_ENABLED = False`, enforced at the ONE
+choke point every `client.messages.create` passes through, so a call site added later
+is covered the day it is written. It RAISES `PaidModelDisabled` rather than returning
+None — all four callers branch on the answer, and a paid read that silently answers
+nothing is 10.1's no-op-indistinguishable-from-success. Re-enabling is deliberate:
+that flag, or `BASEBALL_ALLOW_PAID=1` for one process, and only if the user says so.
+
+Nothing is lost by it. The local ladder covers every field:
+
+    the hand (power, kind, tactics type/bonus)   local_hand.read_hand
+    which card the cursor is on / is selected    local_hand.cursor_slot / selected_cards
+    batting or pitching                          local_state.read_phase
+    runners: occupancy, power, and SPEED         local_state.read_runners
+    the result screen (WINNER/LOSER/DRAW)        local_state.read_result
+    the score                                    orchestrator.ocr_scoreboard
+
+**And the paid model was wrong about cards in seven documented ways** — see §10.24 for
+six of them; the seventh is tactics bonuses, where it recorded eleven "+3" values that
+do not exist in the game and one "+11".
+
 ### THE 100 IS HEALTH. IT IS NOT MONEY.
 
 The user has corrected this **three times**. The big round coin in the
@@ -444,14 +467,72 @@ ever reports UP on one, add it to `test_fixtures/not_streaming/` and re-score.
 - A **stable misread cannot be fixed by retrying** — same frame, same prompt,
   same wrong answer. Repair or clamp it instead of looping.
 
+### THE SHAPE OF A MATCH (from the user, 2026-09-12 — the model had this wrong)
+
+    new hand  ->  play as the BATTER   ->  inning 1 ends
+    new hand  ->  play as the PITCHER  ->  inning 2 ends  ->  match over
+
+**The two innings ARE the two halves.** You bat in inning ONE and pitch in inning
+TWO; you never bat twice. Each half deals a FRESH hand of 5, and within a half the
+hand persists and is topped up ONE card per play — `wait_for_hand_deal` blocks
+"until the replacement card has visibly landed", singular, and a discard keeps the
+rest of the hand. **5 rounds PER HALF**, so five at-bats batting and five pitching.
+
+**The scoreboard is `[inning1, inning2, TOTAL]` — the third box is the total, NOT a
+third inning. Never sum it; take `[-1]`.** `ocr_scoreboard` has documented this all
+along and the live consumer takes `[-1]` correctly. A live board reading
+`your [2, 0, 2]` against `opponent [0, 0, 0]` is the whole structure in one glance:
+we scored 2 batting in inning 1, we do not bat in inning 2, and the opponent has yet
+to score in the inning they are batting now.
+
+`simulate.py` got this wrong twice in one day and both mistakes are worth knowing:
+it redrew BOTH hands every ROUND (so card economy could not exist — nothing survived
+to a later turn), and a "fix" then looped the match over two innings, playing four
+halves and doubling every score. The A-bats-then-B-bats shape was right all along.
+
+### WHAT THE CARDS ARE WORTH, MEASURED
+
+Counted over **299 tactics cards labelled BY HAND** in `hand_labels*.json` — human
+labels, so this is not one of this project's readers marking its own homework:
+
+    POWER SWING     n= 95    +1 60%   +2 40%     <- the ONLY card ever above +1
+    SPEED BOOST     n=132    +1 100%
+    PITCH FOCUS     n= 35    +1 100%
+    FIELDING PLAY   n= 37    +1 100%
+                             zero 3s, zero unlabelled
+
+**A +3 DOES NOT EXIST.** The user said so and was right; the paid vision model's
+eleven "bonus 3" rows are misreads, from the same source that once recorded a bonus
+of **ELEVEN**. That is the seventh documented way that model was wrong about cards.
+
+**`KNOWN_BAN_ROSTER` CANNOT ANSWER A TACTICS QUESTION** — it is 33 `PlayerCard`s and
+no tactics cards at all. Player powers run **4–9**; a power outside that is a misread.
+
+**So the maximum effective batter power is 9 + 2 = 11**, and that decides a pitching
+choice the engine cannot see: a pitcher playing a **9 CANNOT concede a home run**
+(margin 2), while one playing an **8 can** (margin 3).
+
 Game rules:
 
 - A hit needs the batter's power to beat the pitcher's; beating it by **3+** is
-  an automatic home run. Margin does not otherwise matter.
+  an automatic home run. Margin does not otherwise matter. **The rule is ABSOLUTE**
+  — confirmed by the user against the live scoreboard, 2026-09-12. Any record that
+  shows a 3+ margin without a run is a bad LABEL, not a counterexample: 26 such rows
+  in `match_log.jsonl` all came from the old "the score went up" classifier, which is
+  why the outcome is now taken from the REVEAL's margin instead
+  (`orchestrator.classify_outcome`).
 - Only SWING_BOOST and PITCH_BOOST add power. Speed and fielding boosts have a
   nonzero bonus that adds NO power — analysis needs the tactics KIND.
 - **Runners can be lapped**: this game lets base runners pass each other, so
   real-baseball intuitions about ordering are unsafe.
+- **THE SCORE DOES NOT CHANGE WHICH CARD TO PLAY, and that is correct.** Neither
+  `best_batting_play` nor `best_pitching_play` reads `your_score`/`opp_score`, and the
+  match's shape is why: you bat once and then defend a fixed total, so you can never
+  want fewer runs while batting and can only want outs while pitching. Max power both
+  ways. The ONE place the score matters is RISK TOLERANCE when defending a lead —
+  conceding a solo home run at +2 still leaves you ahead — which is a variance question,
+  not a card-choice one. `target_score` is the one live score field, and only while
+  pitching.
 
 ### The baserunning rules (from the user, 2026-09-10, with two sources)
 
@@ -466,6 +547,19 @@ noted; the rest is the user's reading, not this project's measurement.
   (pitcher)`) and nothing downstream used it.
   *Observed live:* a speed-1 batter advanced exactly 1 base, and a speed-1 runner
   advanced exactly 1 base on the next hit. Speed >= 2 is UNTESTED.
+  **A SPEED BOOST APPLIES TO THE BATTER WHO PLAYED IT, FOR THAT HIT ONLY, AND IS THEN
+  DISCARDED** — the runner reverts to baseline speed for any later advance (user's
+  sources, 2026-09-12). That is why `simulate.speed_bonus` is added at the batter's own
+  step and nowhere else: a runner is stored as its CARD and `advance_runners` re-derives
+  speed from `card.secondary`, so reverting is free. It was worth ZERO until then
+  (`batter_speed` was computed and never read), and is worth **+0.034 runs/half** now —
+  small, and 21x less than a SWING boost's **+0.726**, which is its own argument for
+  power over speed.
+  **A RUNNER'S CURRENT SPEED IS READABLE OFF THEIR BASE**, from the shield badge:
+  `local_state.read_runners()["speeds"]`. 171 of 172 occupied bases read it, zero of
+  1,106 bare bases read anything. **It is NOT the card's roster `secondary`** — the same
+  named card shows different values at different moments, so it is a LIVE number: what
+  this runner advances NOW.
 - **A TIE IS A COIN FLIP, AND WINNING ONE IS CAPPED AT FIRST BASE** regardless of
   the batter's speed. So landing exactly on the pitcher's power is the worst
   place to be: half the time nothing, half the time a minimum-value hit.
@@ -493,7 +587,7 @@ flags speed effects as "not confirmed rules — modeled as the simplest reasonab
 guess". **So the 79% win rate that justifies "always attach a swing boost" was
 measured in a model where a speed boost does nothing by construction.** It shows
 swing-boost beats NOTHING; it has never compared swing against speed.
-- A match is 5 rounds and allows 2 discards.
+- A match is 5 rounds PER HALF (see the match shape above) and allows 2 discards.
 - **You cannot pause an active match.** Mid-match OPTIONS opens a "Give up?"
   dialog (NO = circle, YES = cross), never the pause menu — so Load Last Save
   and the money readout are unreachable until the match ends.
