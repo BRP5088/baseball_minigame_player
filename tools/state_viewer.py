@@ -596,6 +596,26 @@ def slow_read(frame, crops):
         out["ban_nums"] = nums
         out["ban_cells_full"] = cellrecs
         out["ban_kinds"] = [(r["key"], r.get("kind")) for r in cellrecs]
+        # THE CURSOR AND THE BANNED CARDS. Both readers have worked since they were built
+        # and NOTHING SHOWED THEM, which is its own kind of bug -- the viewer exists so the
+        # machine's state is visible, and the two fields that decide what gets banned were
+        # the two it did not draw. Live, six grabs on a static screen: the cursor reads the
+        # same cell every time at glow 0.1225 against a runner-up 0.0238, a 5.1x margin on
+        # a gate of 2.0; no card is banned and the counter agrees at 0/3, with every ban-X
+        # score at or under 0.578 against a gate of 0.82.
+        try:
+            cur_cell, cur_detail = bg.cursor_cell(frame, rows) if rows else (None, {})
+        except Exception:
+            cur_cell, cur_detail = None, {}
+        # Latched like everything else: a degraded frame drops the glow, and the cursor
+        # blinking out and back is exactly the flicker the latch exists for.
+        out["ban_cursor"] = _latch("cursor", cur_cell, _scrollkey)
+        out["ban_cursor_why"] = cur_detail.get("why")
+        try:
+            hits, _sc = bg.banned_cells(frame, rows) if rows else ([], {})
+        except Exception:
+            hits = []
+        out["ban_banned"] = sorted(hits)
     return out
 
 
@@ -643,6 +663,12 @@ def tick():
                                 continue              # this row is entirely off screen
                             x0, y0, x1, y1 = cb
                             colr = BAN
+                            _rc = (row, col)
+                            if _rc in set(tuple(x) for x in
+                                          (S["slow"].get("ban_banned") or [])):
+                                colr = SEL          # a card with the big X on it
+                            elif tuple(S["slow"].get("ban_cursor") or ()) == _rc:
+                                colr = CUR          # where the stick is pointing
                         else:
                             fx0, fx1 = o.BAN_GRID_COL_X_FRAC[col]
                             fy0 = o.BAN_CARD_ROW_TOP_FRAC[row]
@@ -668,9 +694,12 @@ def tick():
                             d.rectangle((x0, y0, x1, y1), outline=LOCKED_WASH, width=3)
                             d.text((x0 + 4, y0 + 3), "locked", fill=LOCKED_WASH)
                             continue
-                        d.rectangle((x0, y0, x1, y1), outline=colr, width=3)
+                        d.rectangle((x0, y0, x1, y1), outline=colr,
+                                    width=6 if colr in (CUR, SEL) else 3)
                         d.text((x0 + 4, y0 + 3),
-                               f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
+                               ("CURSOR " if colr == CUR else
+                                "BANNED " if colr == SEL else "")
+                               + f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
                         if fitted and row < len(fitted):
                             # THE BOXES FOLLOW THE KIND OF CARD. Drawing a player card's
                             # four windows over a tactics card shows the aim of readers
@@ -742,8 +771,10 @@ def tick():
             # viewer easier to read?"). Three stacked grids meant reading down three
             # separate blocks to assemble one card; this reads across.
             recs = sl.get("ban_cells_full") or []
-            lines = [f"   cell   {'card':24s}  {'type':8s}  {'pwr':>4s} {'2nd':>4s}   from",
-                     "   " + "-" * 60]
+            _cur = sl.get("ban_cursor")
+            _bans = set(tuple(x) for x in (sl.get("ban_banned") or []))
+            lines = [f"    cell   {'card':24s}  {'type':8s}  {'pwr':>4s} {'2nd':>4s}   from",
+                     "   " + "-" * 62]
             last_row = None
             for r in recs:
                 # A BLANK LINE BETWEEN THE TWO ROWS OF THE GRID (the user, 2026-09-13:
@@ -754,19 +785,29 @@ def tick():
                 if last_row is not None and this_row != last_row:
                     lines.append("")
                 last_row = this_row
+                # THE CURSOR GETS AN ARROW AND A BANNED CARD GETS A MARK, on the LINE,
+                # so the two things that decide the next button press are the two things
+                # the eye lands on first.
+                _rc = (int(r["key"][1]), int(r["key"][3]))
+                _mark = ">" if _cur is not None and tuple(_cur) == _rc else " "
+                _ban = "  BANNED" if _rc in _bans else ""
                 if r.get("kind") == "locked":
-                    lines.append(f"   {r['key']}   {'— locked —':24s}")
+                    lines.append(f"  {_mark} {r['key']}   {'— locked —':24s}{_ban}")
                     continue
                 lines.append(
-                    f"   {r['key']}   {(r.get('name') or 'unknown')[:24]:24s}  "
+                    f"  {_mark} {r['key']}   {(r.get('name') or 'unknown')[:24]:24s}  "
                     f"{(r.get('type') or 'unknown')[:8]:8s}  "
                     f"{r.get('power', '-'):>4s} {r.get('second', '-'):>4s}   "
-                    f"{r.get('src', '')}")
+                    f"{r.get('src', '')}{_ban}")
             n_res = sum(1 for r in recs if r.get("src") == "roster")
             n_open = sum(1 for r in recs if r.get("kind") not in (None, "locked"))
             _Panel.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}"
                 f"   {fit}\n"
+                f"CURSOR {sl.get('ban_cursor') or 'not found'}"
+                f"  ({sl.get('ban_cursor_why') or '-'})   "
+                f"BANNED ON SCREEN {sorted(_bans) if _bans else 'none'}"
+                f"  — the counter is the authority on HOW MANY\n"
                 f"from: roster=exact (name->roster card)  bank=ban_digits templates, "
                 f"219/219 on held-out cells  badge=tactics bonus  ocr=guessed, 84%\n"
                 f"{n_res}/{n_open} open cards exact\n"
