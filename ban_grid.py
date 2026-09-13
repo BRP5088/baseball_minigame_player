@@ -329,7 +329,19 @@ def name_box(img, rows, rel_row, col, cols=None):
 # the column error rather than framing the ribbon. Re-swept over 33 owned cells on five
 # frames, 96 boxes: the top ten all read 25-27 of 33 and the best is below. That flatness
 # is the finding -- with the lattice right, this box barely matters.
-TYPE_BANNER_BOX = (0.14, 0.04, 0.66, 0.13)    # BATTER / PITCHER ribbon, upper left
+# RE-SWEPT ON 244 CELLS, 2026-09-13, after a contact sheet of the cards this reader called
+# unknown showed every one of them PLAINLY LEGIBLE -- CLAUDE.md 10.23's cheapest diagnostic,
+# and its verdict every time: a recogniser that cannot read legible text is being handed the
+# wrong crop. The reads were TAILS -- 'ER', 'HER', 'TTE', 'PIER' -- so x0 was too far RIGHT
+# and the front of the word was outside the box.
+#
+# The 0.14 it replaces was swept over 33 cells on ONE screen and overfit to them. On 244:
+#
+#     x0   0.14   0.10   0.06   0.02        reads 193  217  170  202  of 244
+#
+# 0.06 is WORSE than 0.10, so this is a real optimum rather than "wider is better" -- past
+# the ribbon the crop takes in the card border and PSM 11 does worse.
+TYPE_BANNER_BOX = (0.10, 0.04, 0.66, 0.13)    # BATTER / PITCHER ribbon, upper left
 # READ IT AT PSM 11 (sparse text), not 7. Measured against a hand-labelled row: PSM 7 and 6
 # score 3 of 7 on this banner and PSM 11 scores 6 of 7, and the single miss is the card the
 # CURSOR is highlighting -- its white glow floods the ribbon. Same crop, same whitelist; the
@@ -496,6 +508,28 @@ def read_card_type(img, rows, rel_row, col, cols=None, ocr=None, max_edits=2):
         for want in TACTICS_NAMES:
             if _lev(cand, want.replace(" ", "")) <= max_edits:
                 return ("tactics", want)
+    # A READ THAT CONTAINS A NAME IS THAT NAME. The tactics box is wider than the label and
+    # takes in the card's border decoration, so real reads arrive as 'FFPITCHFOCUSYY' and
+    # 'ZFPITCHFOCUSY' -- which hold PITCHFOCUS exactly and score 3 and 4 on a whole-string
+    # edit distance, over a gate of 2. Trimming the box was tried and costs more than it
+    # gains (0.02 and 0.06 both read worse than 0.10); reading the name out of the noise
+    # costs nothing.
+    #
+    # ONLY WHEN EXACTLY ONE NAME IS CONTAINED. That is what keeps it safe: a fragment like
+    # 'ER' sits inside both BATTER and PITCHER, so it stays an abstention instead of
+    # becoming a coin flip on a card that decides a $50 ban.
+    for cand, names in ((player, ("BATTER", "PITCHER")),
+                        (tac, tuple(w.replace(" ", "") for w in TACTICS_NAMES)),
+                        (player, tuple(w.replace(" ", "") for w in TACTICS_NAMES))):
+        if not cand:
+            continue
+        hit = [w for w in names if w in cand]
+        if len(hit) == 1:
+            if hit[0] in ("BATTER", "PITCHER"):
+                return hit[0].lower()
+            for want in TACTICS_NAMES:
+                if want.replace(" ", "") == hit[0]:
+                    return ("tactics", want)
     return None
 
 
