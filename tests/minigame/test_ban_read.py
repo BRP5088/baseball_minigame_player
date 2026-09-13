@@ -140,7 +140,38 @@ check(br.bonus_ok("2"), "and with NO label the loose rule stands — refusing a 
 check(not br.power_ok(None) and not br.power_ok("x") and not br.bonus_ok(None),
       "and a non-digit is refused rather than raising")
 
-print("11. CONTROL: the viewer really does use these, not private copies")
+print("11. THE NAME A CELL SHOWS, assembled from every source BEFORE it is latched")
+# THE BUG THIS PINS. A player card is named by the roster and that answer was held; a
+# tactics card was named from THIS FRAME's type read, outside the latch. The moment that
+# read abstained the name fell back to the player path — None for a tactics card — and the
+# cell printed "unknown". The user watched "Fielding Play" / "unknown" flip with the cursor
+# sitting on it, while a harness of mine reported "nothing moves" because it re-implemented
+# the pipeline WITHOUT the tactics path. A value assembled after the latch cannot be held.
+check(br.display_name(roster_name="Rube Sharp") == "Rube Sharp",
+      "the roster names a player card")
+check(br.display_name(type_result=("tactics", "FIELDING PLAY")) == "Fielding Play",
+      "the LABEL names a tactics card — this is the half that was outside the latch")
+check(br.display_name(roster_name="Rube Sharp",
+                      type_result=("tactics", "SPEED BOOST")) == "Rube Sharp",
+      "a roster name wins: the roster holds no tactics cards, so a card with both is a "
+      "player card whose banner misread")
+check(br.display_name(raw_name="jenny jody gain") == "Jenny Jody Gain",
+      "a raw banner read names a card the roster has never seen")
+check(br.display_name(locked=True) == "locked", "and a locked card says so")
+check(br.display_name() is None,
+      "with nothing at all it is None — which the panel prints as unknown, rather than "
+      "inventing a name")
+check(br.display_name(type_result=None) is None and br.display_name(type_result="batter") is None,
+      "a PLAYER type is not a name — 'batter' in the card column would be nonsense")
+# and it must survive the latch the same way every other field does
+S = {}
+n1 = br.latch(S, "n", br.display_name(type_result=("tactics", "FIELDING PLAY")), "g")
+n2 = br.latch(S, "n", br.display_name(type_result=None), "g")
+check(n1 == "Fielding Play" and n2 == "Fielding Play",
+      f"a tactics name survives a frame where the type read abstained ({n1!r} then {n2!r}) "
+      f"— this is the exact flip the user saw")
+
+print("12. CONTROL: the viewer really does use these, not private copies")
 src = open(_os.path.join(_ROOT, "tools", "state_viewer.py"), encoding="utf-8").read()
 check("import ban_read" in src or "from ban_read" in src,
       "tools/state_viewer.py imports ban_read — without this the module could be perfect "
@@ -148,7 +179,7 @@ check("import ban_read" in src or "from ban_read" in src,
 # The viewer keeps two-line wrappers so its own call sites stay readable; what matters is
 # that they DELEGATE rather than reimplement, because a private copy is exactly how the
 # tested code and the running code drift apart with the suite green (CLAUDE.md 10.25).
-for call in ("br.latch(", "br.rowkey(", "br.kind_of(", "br.boxes_for(", "br.values_for(",
+for call in ("br.latch(", "br.rowkey(", "br.kind_of(", "br.display_name(", "br.boxes_for(", "br.values_for(",
              "br.power_ok(", "br.bonus_ok("):
     check(call in src, f"...and calls {call}) rather than keeping its own copy")
 check("_STABLE[\"held\"]" not in src and "_STABLE.get(" not in src,

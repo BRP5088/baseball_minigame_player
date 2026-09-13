@@ -142,6 +142,30 @@ def values_for(card=None, bank=(None, None), ocr_power=None):
     return "-", "-", "ocr"
 
 
+def display_name(roster_name=None, raw_name=None, type_result=None, locked=False):
+    """The ONE name a cell shows, whatever kind of card it is. None means "unknown".
+
+    THIS EXISTS BECAUSE A TACTICS CARD'S NAME WAS NOT GOING THROUGH THE LATCH. A player
+    card is named by the roster and that answer was held; a tactics card was named from
+    THIS FRAME's type read, so the moment that read abstained the name fell back to the
+    player path -- which is None for a tactics card -- and the cell printed "unknown". The
+    user watched it flip "Fielding Play" / "unknown" with the cursor sitting on it.
+
+    The fix is not a second latch, it is computing the name ONCE, from every source, and
+    latching THAT. A value assembled after the latch cannot be held by it.
+
+    Order: the roster names a player card; the tactics label names a tactics card; a raw
+    banner read names a card the roster has never seen; a locked card says so.
+    """
+    if roster_name:
+        return roster_name
+    if isinstance(type_result, tuple) and len(type_result) == 2:
+        return str(type_result[1]).title()
+    if raw_name:
+        return str(raw_name).title()
+    return "locked" if locked else None
+
+
 def boxes_for(kind):
     """Which sub-boxes belong on a card of this kind. () when the kind is unknown.
 

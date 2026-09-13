@@ -96,6 +96,15 @@ ap.add_argument("--no-reload", action="store_true",
                 help="do not re-exec when the source changes")
 ap.add_argument("--once", action="store_true",
                 help="run one tick, print what the panel would say, and exit")
+# FILM ITSELF. Every stability claim I made about this panel came from a SCRIPT that
+# re-implemented its pipeline, and the re-implementation quietly lacked the tactics-name
+# path -- which is exactly where the bug was. It reported "nothing moves" while the user
+# watched a cell flip. A re-implementation of project code proves nothing until it is
+# checked against the original (CLAUDE.md, the localiser mirror), so the honest instrument
+# is the panel running N ticks in ONE process with its own latch.
+ap.add_argument("--ticks", type=int, default=0,
+                help="run N ticks in one process, print the panel each time, and exit — "
+                     "the only way to see whether a value really holds")
 A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
@@ -484,10 +493,9 @@ def slow_read(frame, crops):
                     # answer for one.
                     if raw and sum(ch.isalpha() for ch in raw) < 5:
                         raw = None
-                names.append((key, _latch(key + ":name",
-                                          nm or (raw and raw.title()) or
-                                          ("locked" if locked else None),
-                                          _scrollkey)))
+                # THE NAME IS LATCHED AFTER THE TYPE IS READ, not before -- a tactics
+                # card is named by its LABEL, and naming it here would put that half
+                # outside the latch. See ban_read.display_name.
                 # THE TYPE IS ITS OWN FIELD, not crammed into the name (the user,
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
@@ -508,8 +516,11 @@ def slow_read(frame, crops):
                 label = _latch(key + ":type", label, _scrollkey)
                 types.append((key, label))
                 locks.append((key, bool(locked)))
-                if isinstance(t, tuple) and names[-1][1] is None:
-                    names[-1] = (key, t[1].title())    # a tactics card names itself
+                names.append((key, _latch(
+                    key + ":name",
+                    br.display_name(roster_name=nm, raw_name=raw, type_result=t,
+                                    locked=bool(locked)),
+                    _scrollkey)))
                 # ONE RECORD PER CELL, which is what the panel prints. A tactics card is a
                 # DIFFERENT KIND with different boxes and different fields -- no name, no
                 # shield, a bonus instead of a power -- so it gets its own branch rather
@@ -529,7 +540,6 @@ def slow_read(frame, crops):
                 elif kind == "tactics":
                     # THE LABEL IS THE NAME. Printing "Speed Boost" under both card and
                     # type says nothing twice; the useful second column is the KIND.
-                    rec["name"] = t[1].title() if isinstance(t, tuple) else rec["name"]
                     rec["type"] = "tactics"
                     rec["power"] = _tactics_bonus(frame, rows, row, col,
                                                   t[1] if isinstance(t, tuple) else None)
@@ -800,6 +810,13 @@ def tick():
         print(_Panel.cget("text"))
         root.quit()
         return
+    if A.ticks:
+        S["_n"] = S.get("_n", 0) + 1
+        print(f"=== tick {S['_n']} " + "=" * 40)
+        print(_Panel.cget("text"))
+        if S["_n"] >= A.ticks:
+            root.quit()
+            return
     _reexec_if_changed()
     root.after(int(1000 / A.hz), tick)
 
