@@ -112,6 +112,70 @@ txt.pack(fill="x")
 S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 
 
+# ---------------------------------------------------------------- THE TWO DIGITS
+# The user, 2026-09-13: "can you make the live viewer show the values so I can see if they
+# are read correctly?" Showing them IS the instrument -- and it immediately corrected a
+# figure I had reported. "1 of 7, confidently wrong" was measured on the OLD columns, where
+# the power box sat a fifth of a card off on column 0, and at the worst PSM. Re-measured on
+# the corrected geometry over 172 labelled owned cells (the label is the roster card that
+# ocr_ban_card_name resolves from the NAME BANNER -- a different box, a different reader, at
+# the other end of the card, so it is not this reader marking its own homework):
+#
+#     PSM 13   right 54   WRONG 19   out-of-range 23   abstained 76
+#     PSM 10   right 61   WRONG  6   out-of-range 24   abstained 81
+#     PSM  7   right 56   WRONG  4   out-of-range 20   abstained 92     <- shipped here
+#
+# "out-of-range" is the 4-9 rule doing work: power runs 4 to 9 and there is no 1, 2 or 3
+# power card in the game (CLAUDE.md section 4), so a digit outside it is a known misread and
+# is thrown away rather than printed.
+#
+# STILL NOT DECISION-GRADE. 4 wrong in the 60 it commits to is fine for a human reading a
+# panel and nowhere near good enough to choose a ban in a $50 match, which is why this lives
+# in the VIEWER and nothing imports it.
+#
+# THE SHIELD HAS NO READER AT ALL. local_hand.read_shield scores 0.31-0.42 against its own
+# 0.69 gate here, so it answers 0 for every card; the reason is CLAUDE.md 10.30 -- it sizes
+# its template from the FRAME width, which is right for a hand card and meaningless for a
+# ban card, where the same sprite is drawn far smaller. A scale sweep lifts argmax to 2 of 7
+# and it picks "1" every time: the bank holds 1, 2 and 3, has no 0 at all, and cannot
+# separate them at this size.
+#
+# So these numbers carry a "?" prefix and MUST NOT be wired into a ban decision. A ban-scale
+# template bank is being built as ban_digits.py; the moment it exists this picks it up.
+def _digits(frame, rows, row, col):
+    """(power, shield) as display strings. '?' prefixes an unverified reader."""
+    try:
+        import ban_digits as bd                     # the real bank, when it lands
+    except Exception:
+        bd = None
+    if bd is not None:
+        p, _ = bd.read_power(frame, rows, row, col)
+        sh, _ = bd.read_shield(frame, rows, row, col)
+        return ("-" if p is None else str(p)), ("-" if sh is None else str(sh))
+    pb = bg.power_box(frame, rows, row, col)
+    p = "-"
+    if pb is not None:
+        crop = frame.crop(pb)
+        up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
+        txt = o._ocr_text(up, psm=7, whitelist="0123456789") or ""
+        dig = "".join(ch for ch in txt if ch.isdigit())
+        # POWER IS 4 TO 9 (CLAUDE.md section 4). There is no 1, 2 or 3 power card, so a
+        # digit outside that range is a misread and saying so beats printing it.
+        if dig and 4 <= int(dig[0]) <= 9:
+            p = "?" + dig[0]
+        elif dig:
+            p = "?!" + dig[0]
+    sh = "-"
+    if pb is not None:
+        cx, cy = (pb[0] + pb[2]) // 2, (pb[1] + pb[3]) // 2
+        try:
+            d, sc = lh.read_shield(frame, cx, cy)
+            sh = "-" if d is None else f"?{d}"
+        except Exception:
+            sh = "-"
+    return p, sh
+
+
 def _type_ocr(img):
     """OCR for the TYPE banner. PSM comes from ban_grid, which measured it."""
     try:
@@ -187,7 +251,7 @@ def slow_read(frame, crops):
         rows = bg.find_card_rows(frame)
         out["fitted"] = rows is not None
         out["rows"] = rows
-        names, types, locks = [], [], []
+        names, types, locks, nums = [], [], [], []
         n_rows = len(rows) if rows else 2
         for row in range(n_rows):
             for col in range(5):
@@ -251,6 +315,13 @@ def slow_read(frame, crops):
                          else (t[1].title() if t else ("locked" if locked else None)))
                 types.append((key, label))
                 locks.append((key, bool(locked)))
+                # The digits, on the slow pass with every other OCR. Skipped on a locked
+                # card like everything else -- nothing can read a faded badge.
+                if fitted_cell and not locked:
+                    pw, sd = _digits(frame, rows, row, col)
+                    nums.append((key, f"{pw}/{sd}"))
+                else:
+                    nums.append((key, "locked" if locked else None))
                 if isinstance(t, tuple) and names[-1][1] is None:
                     names[-1] = (key, t[1].title())    # a tactics card names itself
         out["ban_names"] = names
@@ -259,6 +330,7 @@ def slow_read(frame, crops):
         # second; the draw runs at tick rate and must not recompute it, or the picture and
         # the panel can disagree about the same cell.
         out["ban_locked"] = locks
+        out["ban_nums"] = nums
     return out
 
 
@@ -393,6 +465,9 @@ def tick():
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
                 f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
                 f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}\n"
+                f"PWR/SHD  ? = UNVERIFIED (power 56 right / 4 wrong / 92 abstain of 172; "
+                f"shield has no reader and always says 0)"
+                f"\n{_grid(sl.get('ban_nums') or [])}\n"
                 + _edit_panel()
                 + (f"\n[s] {S['note']}" if S.get("note") else "\n[s] save a labelling sheet")))
         else:
