@@ -20,15 +20,28 @@ Simplifications, clearly flagged rather than hidden:
   - Runner-capacity and exact discard-redraw odds beyond "draw one random
     replacement card" aren't confirmed rules — modeled as the simplest
     reasonable guess.
-  - SPEED IS NOT MODELLED AT ALL, and that is load-bearing. A hit is
-    `runners.append(batter_card)`; the batter's speed stat is never read, so
-    a SPEED_BOOST is worth exactly zero in here. Any tournament run in this
-    model can show that a swing boost beats NOTHING; none of them can compare
-    a swing boost against a speed boost. The rules the user supplied on
-    2026-09-10 (CLAUDE.md §4) say speed decides how many bases a runner takes,
-    that a tie is a coin flip capped at first base, and that a losing at-bat
-    can still advance runners. None of those exist here. Do not quote this
-    model's win rates on any question that touches baserunning.
+  - SPEED IS MODELLED NOW (MODEL_SPEED, 2026-09-12), and this bullet used to say
+    the opposite long after it stopped being true -- it read "SPEED IS NOT
+    MODELLED AT ALL, and that is load-bearing", which tells a reader to discard
+    results that are now valid. _step reads the card's secondary, speed_bonus
+    reaches the batter's own advance, a tie is a coin flip capped at first, and
+    a losing at-bat still advances runners. What is still NOT settled:
+      * FIELDING_SUBTRACT_PER_POINT is 1 and UNMEASURED.
+      * The batter's own floor here is `max(1, _step(...))` while
+        orchestrator.bases_to_travel gives a speed-0 batter ZERO bases. THE CASE
+        DOES NOT ARISE: a batter's speed is never 0 (66 hand-labelled batter
+        cards run 1-3). An earlier note here claimed 30.5% of player cards were
+        speed 0 and built a finding on it -- those were PITCHERS, whose secondary
+        is FIELDING, pooled together because PlayerCard had no role. The floor is
+        still reachable through fielding subtraction (speed - fielding <= 0),
+        which is a different and still-open question.
+      * ROLES ARE MODELLED (2026-09-13). 31 of 33 cards are typed and the two
+        pools are disjoint; see for_phase and test_card_roles. Splitting them
+        moved the model 1.7223 -> 1.7862 runs/half (+3.7%, 4.6 sigma at n=20,000
+        per arm), which is the size of the error the unsplit pool was carrying.
+      * The pool is one of each card drawn uniformly, while real hands are 71%
+        power 4-5 (745 of 1050 labels). Fine for A-vs-B where both sides draw the
+        same pool; NOT a source of absolute run rates.
   - Both simulated teams draw from the identical CARD_POOL/TACTICS pools,
     so the comparison is apples-to-apples even where these guesses are
     imperfect.
@@ -49,23 +62,39 @@ from decision_engine import (
 # Papa Jody Gain remains disputed (roster 5/0, here 5/2) with no evidence
 # either way — see the _DISPUTED set in test_known_ban_roster.py.
 CARD_POOL = [
-    PlayerCard("Johnny Drawers", 7, 1), PlayerCard("Mama Jody Gain", 5, 1),
-    PlayerCard("Harold \"Fisto\" Blunt", 9, 3), PlayerCard("Jenny Jody Gain", 6, 0),
-    PlayerCard("Donny Mekesz", 5, 3), PlayerCard("Claude Ewer", 7, 0),
-    PlayerCard("William Lee-Gains", 4, 0), PlayerCard("Brandon \"Binger\" Ortiz", 5, 2),
-    PlayerCard("Joshua Diaz", 4, 0), PlayerCard("Justin Young", 6, 0),
-    PlayerCard("Zachary Lee", 6, 2), PlayerCard("Johnny \"Blaze\" Sweets", 4, 3),
-    PlayerCard("Johnny C-Train Goudenberg", 7, 0), PlayerCard("Charlie Pepper", 8, 0),
-    PlayerCard("Josef Bunz-Konicky", 9, 2), PlayerCard("Rube Sharp", 8, 1),
-    PlayerCard("Austin \"Cur\" Bunz", 8, 1), PlayerCard("Jacob \"Cheesehead\" McQueen", 9, 1),
-    PlayerCard("William Brown", 4, 3), PlayerCard("Jeremiah Curd", 7, 0),
-    PlayerCard("Marian Bunz-Twarog", 4, 1), PlayerCard("Jedediah Wetters", 4, 2),
-    PlayerCard("Brian Coker", 8, 1), PlayerCard("Timmeh Rattycum", 4, 3),
-    PlayerCard("Joe Jody Gain", 6, 0), PlayerCard("Papa Jody Gain", 5, 2),
-    PlayerCard("Daniel \"The Rat-Ta-Train\" Cruz", 4, 3), PlayerCard("Noah \"The Rat Baron\" Kelly", 6, 2),
-    PlayerCard("Joel Blunt", 9, 0), PlayerCard("Bartholomew Creasley", 5, 1),
-    PlayerCard("Jake Saucepan Black", 5, 3), PlayerCard("Mickey Brown", 5, 0),
-    PlayerCard("Thomas Thomas", 5, 3),
+    PlayerCard("Johnny Drawers", 7, 1, "batter"),
+    PlayerCard("Mama Jody Gain", 5, 1, "pitcher"),
+    PlayerCard("Harold \"Fisto\" Blunt", 9, 3, "batter"),
+    PlayerCard("Jenny Jody Gain", 6, 0, "pitcher"),
+    PlayerCard("Donny Mekesz", 5, 3, "batter"),
+    PlayerCard("Claude Ewer", 7, 0, "pitcher"),
+    PlayerCard("William Lee-Gains", 4, 0, "pitcher"),
+    PlayerCard("Brandon \"Binger\" Ortiz", 5, 2, "batter"),
+    PlayerCard("Joshua Diaz", 4, 0, "pitcher"),
+    PlayerCard("Justin Young", 6, 0, "pitcher"),
+    PlayerCard("Zachary Lee", 6, 2, ""),
+    PlayerCard("Johnny \"Blaze\" Sweets", 4, 3, "batter"),
+    PlayerCard("Johnny C-Train Goudenberg", 7, 0, "pitcher"),
+    PlayerCard("Charlie Pepper", 8, 0, "pitcher"),
+    PlayerCard("Josef Bunz-Konicky", 9, 2, "pitcher"),
+    PlayerCard("Rube Sharp", 8, 1, "batter"),
+    PlayerCard("Austin \"Cur\" Bunz", 8, 1, "batter"),
+    PlayerCard("Jacob \"Cheesehead\" McQueen", 9, 1, "batter"),
+    PlayerCard("William Brown", 4, 3, "batter"),
+    PlayerCard("Jeremiah Curd", 7, 0, "pitcher"),
+    PlayerCard("Marian Bunz-Twarog", 4, 1, "pitcher"),
+    PlayerCard("Jedediah Wetters", 4, 2, "batter"),
+    PlayerCard("Brian Coker", 8, 1, ""),
+    PlayerCard("Timmeh Rattycum", 4, 3, "batter"),
+    PlayerCard("Joe Jody Gain", 6, 0, "pitcher"),
+    PlayerCard("Papa Jody Gain", 5, 2, "pitcher"),
+    PlayerCard("Daniel \"The Rat-Ta-Train\" Cruz", 4, 3, "batter"),
+    PlayerCard("Noah \"The Rat Baron\" Kelly", 6, 2, "batter"),
+    PlayerCard("Joel Blunt", 9, 0, "pitcher"),
+    PlayerCard("Bartholomew Creasley", 5, 1, "pitcher"),
+    PlayerCard("Jake Saucepan Black", 5, 3, "batter"),
+    PlayerCard("Mickey Brown", 5, 0, "pitcher"),
+    PlayerCard("Thomas Thomas", 5, 3, "batter"),
 ]
 
 # THE BONUSES ARE MEASURED, NOT ASSUMED (2026-09-12). These pools drew 1/2/3 uniformly;
@@ -123,6 +152,7 @@ def refill_hand(players, tactics, phase, player_pool=CARD_POOL, size=5):
     initial deal uses.
     """
     pool = TACTICS_POOL_BATTING if phase == "batting" else TACTICS_POOL_PITCHING
+    player_pool = for_phase(player_pool, phase)      # a refill must respect the role too
     while len(players) + len(tactics) < size:
         if random.random() < TACTICS_FRACTION:
             tactics.append(random.choice(pool))
@@ -135,12 +165,36 @@ def refill_hand(players, tactics, phase, player_pool=CARD_POOL, size=5):
     return players, tactics
 
 
+def for_phase(player_pool, phase):
+    """The cards that can actually be PLAYED in this phase.
+
+    You bat with batters and pitch with pitchers, and until 2026-09-13 this model dealt
+    from all 33 cards in both roles -- so a pitcher could be dealt as a batter and _step
+    would read its FIELDING as SPEED, and a batter dealt as a pitcher brought a fielding
+    of 3, which no real pitcher has. Every speed and fielding number this model produced
+    before that was computed on a scrambled pool.
+
+    UNTYPED CARDS STAY IN BOTH POOLS rather than being dropped. Two of 33 are untyped
+    (they have never appeared on a ban grid we hold), and dropping them would bias the
+    draw as surely as mistyping them. Both have secondary 1 or 2, which is legal for
+    either role, so their worst case is the old behaviour on 2 cards instead of 33 --
+    and UNTYPED names them so the residual is countable rather than invisible.
+    """
+    want = "batter" if phase == "batting" else "pitcher"
+    out = [c for c in player_pool if getattr(c, "role", "") in (want, "")]
+    return out or list(player_pool)
+
+
+UNTYPED = tuple(sorted(c.name for c in CARD_POOL if not getattr(c, "role", "")))
+
+
 def draw_hand(phase: str, player_pool=CARD_POOL):
     """Draw a simplified 5-card hand: each slot is independently a
     player or tactics card: reroll if a hand ends up with zero player
     cards, since every real hand has at least one. player_pool lets ban
     experiments draw from a collection with some cards removed."""
     pool = TACTICS_POOL_BATTING if phase == "batting" else TACTICS_POOL_PITCHING
+    player_pool = for_phase(player_pool, phase)
     while True:
         players, tactics = [], []
         for _ in range(5):
@@ -152,7 +206,7 @@ def draw_hand(phase: str, player_pool=CARD_POOL):
             return players, tactics
 
 
-def replace_weakest(hand_players, player_pool):
+def replace_weakest(hand_players, player_pool, phase=None):
     """A discard: swap the weakest player card for a fresh draw, keep the rest.
 
     CORRECTED 2026-08-26. This simulator previously modelled a discard as
@@ -168,6 +222,22 @@ def replace_weakest(hand_players, player_pool):
     """
     if not hand_players:
         return hand_players
+    # THE REPLACEMENT KEEPS THE ROLE, or a discard while batting draws a PITCHER into the
+    # batting hand -- draw_hand's bug arriving one card at a time.
+    #
+    # `phase` IS PASSED, not inferred, and the test is why. Inferring the role from the
+    # hand looks equivalent and is not: a hand whose player cards are all UNTYPED names
+    # nothing, the filter is skipped, and the discard draws from all 33. That leaked 64
+    # wrong-role cards in 15,439 on the first run of test_card_roles -- rare enough to
+    # have shipped, which is exactly the shape this project keeps paying for.
+    if phase is not None:
+        player_pool = for_phase(player_pool, phase)
+    else:
+        role = next((getattr(c, "role", "") for c in hand_players
+                     if getattr(c, "role", "")), "")
+        if role:
+            player_pool = [c for c in player_pool
+                           if getattr(c, "role", "") in (role, "")] or list(player_pool)
     worst = min(range(len(hand_players)), key=lambda i: hand_players[i].power)
     out = list(hand_players)
     out[worst] = random.choice(player_pool)
@@ -334,7 +404,7 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
 
         if redraw_fn(hand_players, state):
             redraws_left -= 1
-            hand_players = replace_weakest(hand_players, player_pool)
+            hand_players = replace_weakest(hand_players, player_pool, "batting")
             state = GameState(half="batting", batters_used=round_idx, your_score=score,
                               opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
         decision = batting_heuristic(hand_players, hand_tactics, state)
@@ -355,7 +425,8 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
         # pitcher never discards; now both sides get a real redraw check.
         if defender_redraw_fn(p_hand_players, p_state):
             defender_redraws_left -= 1
-            p_hand_players = replace_weakest(p_hand_players, defender_player_pool)
+            p_hand_players = replace_weakest(p_hand_players, defender_player_pool,
+                                                "pitching")
             p_state = GameState(half="pitching", batters_used=round_idx, your_score=0,
                                 opp_score=score, target_score=defender_target_score,
                                 runners=[c for c, _ in runners], redraws_left=defender_redraws_left)

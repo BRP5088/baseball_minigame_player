@@ -32,6 +32,19 @@ class PlayerCard:
     name: str
     power: int          # swing power (batter) or pitch focus (pitcher)
     secondary: int = 0  # speed (batter) or fielding (pitcher); 0 if absent
+    role: str = ""      # "batter" | "pitcher" | "" when not yet read off the card
+    # ROLE IS NOT COSMETIC, AND ITS ABSENCE WAS A BUG. `secondary` means two different
+    # stats and only `role` says which, so code that treats a pool of cards as
+    # interchangeable reads a pitcher's FIELDING as a batter's SPEED. The user, 2026-09-13:
+    # "it might be useful to also read the players type, so you don't mark a pitcher with
+    # speed since that doesn't make sense."
+    #
+    # The two ranges are DISJOINT where it matters, measured over 131 hand-labelled cards
+    # split by whether their hand was a batting or a pitching hand:
+    #     batters   speed    1 x14   2 x14   3 x38     n=66   never 0
+    #     pitchers  fielding 0 x39   1 x23   2 x3      n=65   never 3
+    # so secondary 0 implies pitcher and 3 implies batter; 1 and 2 need the card's banner.
+    # Default "" is deliberate: an unknown role must not silently read as either one.
 
 
 @dataclass
