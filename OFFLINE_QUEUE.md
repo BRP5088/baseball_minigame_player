@@ -1,37 +1,49 @@
 # Offline queue — overnight 2026-09-13
 
-Rules in force: paid vision model OFF. No console action. Nothing timing-sensitive is in
-flight (the console is parked on a ban screen), so per CLAUDE.md section 2's mechanism test
-offline CPU work and mutation testing are permitted.
+Rules in force: paid vision model OFF. No console action taken. The PS5 left the game of its
+own accord around 04:30 (see HANDOFF_NOW.md), so nothing is in flight at all.
 
-## Done tonight
+## Done
 
-- [x] `ban_grid` had no tests. Three named fixtures, truth hand-read off a ruler. The
-      control ("must not answer on a frame with no grid") FAILED first run and exposed a
-      real hole. 7 mutants, 7 caught. `2b2bc1f` / `053d5c4` / this file's commit.
-- [x] Simulator rules pinned: two halves, five rounds, hand persistence, a lost tie is an
-      out. 6 mutants, 6 caught — one SURVIVED first time because a speed-1 phantom runner
-      cannot score in five rounds; fixed with a speed-3 batter and a matching control.
-- [x] Verified affected-test selection is correct on all four cases that matter
-      (module -> 1 test, orchestrator -> 130, a FIXTURE -> all 183, a new test -> selected).
+- [x] **`ban_grid` had no tests.** Three named fixtures, truth hand-read off a ruler. The
+      control ("must not answer on a frame with no grid") FAILED on first run and exposed a
+      real hole — a flat frame got a confident fit. 7 mutants, 7 caught.
+- [x] **Simulator rules pinned** — two halves, five rounds, hand persistence, a lost tie is
+      an out. 6 mutants, 6 caught. One SURVIVED first time: at speed 1 a phantom runner
+      cannot score in five rounds, so the check passed while the bug was live. Fixed with a
+      speed-3 batter and a matching control.
+- [x] **preflight's $50 guard could not fire the way preflight is run.** It read one
+      progress file and defaulted to the wrong one, so bare `preflight.py` said READY while
+      `progress_testing.json` held `match_in_progress`. Now checks every progress file via
+      `orchestrator.open_match_files`. 4 mutants, 4 caught.
+- [x] **A test that printed "overlay screens rejected" without ever looking at one** — its
+      negative half looped over two `/tmp` paths nothing creates. Five committed frames now,
+      mandatory, at three widths each. 2 mutants, 2 caught.
+- [x] **The undefined-name scanner deferred to a test that did not exist** (`except
+      SyntaxError: return []  # a syntax error is a different test`). Five broken TRACKED
+      files were invisible. Test written; the exemption list can only shrink. 2 mutants.
+- [x] **`opp_score` was hardcoded to 0** in the batting state with the real number two
+      arguments away. Inert today, which is why it survived. 2 mutants, 2 caught.
+- [x] **Docstring rot** in `best_batting_play` — it described power-only sorting and an
+      "UNEVALUATED" speed alternative, both superseded.
+- [x] **`verify_button_bits.py`** hardcoded the author's home directory, and it drives the
+      console.
+- [x] **CLAUDE.md**: card roles, the ban-grid geometry, locked-vs-owned, the tactics roster,
+      the preflight finding, and three approaches that DO NOT work so they are not retried.
+- [x] **Viewer**: ban-grid boxes, per-cell name + type + locked, self-reload on source
+      change, `--once` for debugging, power/shield boxes, and `s` to dump a labelling sheet.
+- [x] Verified affected-test selection is correct on all four cases that matter.
 
-## Doing
-
-- [ ] Preflight: everything green and ready to test on waking.
-- [ ] Fix any test issues found on the way.
-- [ ] Docstring rot: `decision_engine` + `test_power_speed_blend` describe a superseded
-      power/speed model; `best_batting_play` describes the pre-99/1 rule.
-- [ ] `GameState.opp_score` is hardcoded to 0 on the batting side.
-- [ ] Live viewer upgrades.
-- [ ] CLAUDE.md: roles, ban-grid geometry, locked-vs-owned, the tactics roster.
-
-## Parked, with the reason (not forgotten, blocked)
+## Parked, with the reason
 
 - **Reading POWER off ban cards.** The hand digit bank does not transfer: argmax correct on
-  only 3 of 7, and everything scoring under 0.5 is wrong. Lowering the gate manufactures
-  wrong digits. A ban-specific bank needs labels INDEPENDENT of the roster (else it is
-  circular for auditing the roster) — i.e. a human reading a sheet. Prepared for morning.
+  3 of 7, everything under 0.5 wrong. A ban-specific bank needs labels INDEPENDENT of the
+  roster, or the audit is circular — i.e. a human. The viewer's `s` key now makes that one
+  keypress.
 - **Two git worktrees** hold pre-lockout `orchestrator.py` with 5 unguarded paid call sites
-  reading the real key. Removal is destructive; needs the user's yes.
-- **Brian Coker (8/1), Zachary Lee (6/2)** — the last 2 of 33 untyped. Neither appears on
-  any ban grid held. Needs a ban screen scrolled to where they live.
+  reading the real key. Removal is destructive; needs a yes.
+- **Brian Coker (8/1), Zachary Lee (6/2)** — the last 2 of 33 untyped.
+- **Five broken draft files** (blank lines stripped, statements joined). Recorded and
+  guarded; not repaired at a guess, because one is a pending patch.
+- **`FIELDING_SUBTRACT_PER_POINT`** and **"does a speed boost persist on base"** both need
+  the console.
