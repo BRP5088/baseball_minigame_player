@@ -80,6 +80,15 @@ EDGE_SIGMA = 2.2                  # gradient peak threshold, in sigma above the 
 BANNER_EDGES = (0.79, 0.93)       # the name banner's top and bottom, in card heights
 PHASE_STEP = 0.001                # how finely the phase is searched, in frame heights
 MIN_EDGE_SAMPLES = 4              # edge samples that must land on screen before we answer
+# A FLOOR ON "IS THERE ANY STRUCTURE HERE", and nothing more. On a flat frame the edge
+# profile is all zeros, normalising leaves zeros, and every phase ties at 0.0 -- so the
+# first one tried won and the function answered about a frame with no grid in it.
+# Measured: a flat frame scores 0.000, every real ban frame 0.46-0.91.
+#
+# IT IS NOT A BAN-SCREEN TEST AND MUST NOT BE USED AS ONE. Over a non-ban control the same
+# score runs 0.535-0.858, right through the ban range -- one population, no gate (10.4).
+# read_ban_counter answers that question; this only refuses to answer about nothing.
+MIN_PHASE_SCORE = 0.15
 
 
 def _edge_profile(img, cols):
@@ -149,7 +158,7 @@ def find_card_rows(img, cols):
         if seen >= MIN_EDGE_SAMPLES and total / seen > best[0]:
             best = (total / seen, ph)
         ph += PHASE_STEP
-    if best[1] is None:
+    if best[1] is None or best[0] < MIN_PHASE_SCORE:
         return None
     phase = best[1] % ROW_PITCH_DEFAULT
 
