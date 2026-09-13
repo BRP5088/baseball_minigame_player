@@ -72,6 +72,9 @@ os.environ["BASEBALL_DIAGNOSTICS_DIR"] = _DIAGTMP
 # BEFORE orchestrator is imported, like the two redirects above.
 os.environ["BASEBALL_TEST_RUN"] = "1"
 os.environ["BASEBALL_MATCH_LOG"] = os.path.join(_DIAGTMP, "match_log.jsonl")
+# Same reason, same failure: an unredirected sink appends test rows to a real dataset
+# in the project root, where test_no_side_effects would catch it only after the fact.
+os.environ["BASEBALL_DEAL_LOG"] = os.path.join(_DIAGTMP, "deal_timing.jsonl")
 import orchestrator
 import orchestrator as o
 from decision_engine import PlayerCard
@@ -127,7 +130,7 @@ class Harness:
     def __init__(self, screens, play_results=None, balance=500,
                  wins=0, losses=0, draws=0, logger_stop=None, motion=None,
                  revealed=None, frozen=False, ban_counter=3,
-                 ban_collection=None):
+                 ban_collection=None, ban_cursor=None):
         self.screens = list(screens)
         self.idx = 0
         # Each entry is play_one_turn()'s (played, matchup_info) return.
@@ -172,6 +175,13 @@ class Harness:
         # ban-set integrity guards can ever fire, which is why all three were
         # deletable with the suite green (QA, 2026-08-26).
         self.ban_collection = ban_collection
+        # What ban_cursor_absolute() reports -- the SENSOR the verified ban
+        # navigator steers by. None means "the cursor cannot be read", which is
+        # the truth in an offline harness: there is no screen. run() probes it
+        # and falls back to the dead-reckoned submitter, which is the seam these
+        # files have always patched. Left unstubbed, the real reader grabs the
+        # user's DESKTOP 14 times per target and then places no bans at all.
+        self.ban_cursor = ban_cursor
 
     def _next_state(self):
         self.checks_per_read.append(self.motion_checks - self._checks_at_last_read)
@@ -274,6 +284,7 @@ class Harness:
             "_dealer_prompt_on_screen": lambda *a, **k: self.dealer_prompt,
             "capture_screenshot_image": lambda *a, **k: None,
             "select_bans_and_start_full": self._submit_bans,
+            "ban_cursor_absolute": lambda *a, **k: self.ban_cursor,
             "read_balance_from_pause_menu": lambda *a, **k: 500,
             "start_screenshot_logger": lambda *a, **k: self.logger_stop,
             "save_progress": fake_save,

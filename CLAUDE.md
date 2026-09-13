@@ -750,6 +750,22 @@ measured while buttons were dead was measuring a broken reset, not routing.
 - Stick injection is HARD OFF under `BASEBALL_TEST_RUN` — it sits ABOVE
   `can_use_background_input()`, so it needs its own lockout or the offline suite
   drives the live console. It did, briefly.
+
+### A BLIND BAN CURSOR MUST NOT MEAN ZERO BANS (2026-09-13)
+
+`select_bans_verified` refuses to toggle a cell it cannot SEE. That is right when
+the cursor READS and one target is unreachable — one missing ban beats banning a
+card the engine never chose. It is the wrong answer when the cursor never reads
+at all: it places NOTHING, and a $50 match starts completely unbanned, which is
+strictly worse than the dead-reckoned path it replaced.
+
+Nothing live caught it. `tests/minigame/test_run_resume_and_persist.py` did, on
+the run that flipped `VERIFY_BAN_NAVIGATION` on: six ban assertions went from 3
+bans to none, because an offline harness has no screen. `run()` now probes
+`ban_cursor_absolute` `BAN_CURSOR_PROBE_TRIES` (3) times and falls back to
+`select_bans_and_start_full` with a loud line and a `ban_nav_sensor_blind`
+observation. **A closed loop is only better than an open one while its sensor is
+alive; a dead sensor is not a failed navigation.**
 - **And the lockout reads the environment at CALL time, so an IMPORT can switch
   it off mid-run.** `tools/prompt_ocr_ab.py` set the flag at module level for its
   own offline run; `overnight/prompt_zone.py` imported it for one function AFTER

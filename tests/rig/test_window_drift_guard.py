@@ -69,10 +69,32 @@ ok, _d, _r, _ref = drift_with(small, HERE)
 check("a 5pt displacement is tolerated", ok is True)
 
 # --- no reference is 'ok' but must be DISTINGUISHABLE from a good check ---
-ok, drift, _rect, ref = drift_with(HERE, None)
-_saved = ic._load_window_reference()
+# STUBBED, not left to the disk. This block used to call window_drift(reference=None)
+# and assert drift is None, which only held while window_reference.json did not exist --
+# i.e. while the guard was UNARMED, which is the very bug this file was written for.
+# Arming it turned the check red. What it means to test is the no-reference BRANCH, so
+# the absence is arranged rather than inherited from whatever the rig happens to hold.
+def drift_with_saved(rect, saved):
+    """window_drift() with no explicit reference, against a faked SAVED reference."""
+    old = ic._load_window_reference
+    ic._load_window_reference = lambda: saved
+    try:
+        return drift_with(rect, None)
+    finally:
+        ic._load_window_reference = old
+
+
+ok, drift, _rect, ref = drift_with_saved(HERE, None)
 check("with no reference the drift is None, not 0.0",
-      drift is None and (ok is True or _saved is not None))
+      drift is None and ok is True and ref is None)
+
+# ...and a reference that IS on disk must be USED. Nothing else pins that line: every
+# other case here passes its reference in explicitly, so deleting the _load_window_
+# reference() call would leave an armed machine permanently unguarded and fully green.
+_far = (HERE[0] + 110, HERE[1], HERE[2], HERE[3])
+ok, drift, _rect, ref = drift_with_saved(HERE, _far)
+check("a reference on disk is loaded and compared, not ignored",
+      ok is False and drift == 110 and ref == _far)
 
 # --- a missing window must be REJECTED, not treated as fine ---------------
 ok, _d, rect, _ref = drift_with(None, HERE)

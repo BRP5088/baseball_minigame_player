@@ -22,6 +22,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 sys.path.insert(0, _ROOT)
 os.environ["BASEBALL_TEST_RUN"] = "1"
 
+import tempfile as _tf
 import orchestrator                                                     # noqa: E402
 
 fails = []
@@ -39,7 +40,7 @@ check("it needs TWO clean reads, not one", orchestrator.READABLE_POLLS == 2,
       str(orchestrator.READABLE_POLLS))
 
 
-def drive(readable_from, floor=0.0, max_wait=6.0):
+def drive(readable_from, floor=0.0, max_wait=6.0, predicted_bases=None):
     """Run the real gate with everything around it stubbed. `readable_from` is the poll
     index at which local_hand_cards starts returning a hand. Returns (released, polls)."""
     calls = {"n": 0}
@@ -69,7 +70,8 @@ def drive(readable_from, floor=0.0, max_wait=6.0):
         orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
         orchestrator.POST_PLAY_MIN_WAIT = floor
         out = orchestrator.wait_for_hand_deal(max_wait=max_wait, poll_interval=0.01,
-                                              baseline=object())
+                                              baseline=object(),
+                                              predicted_bases=predicted_bases)
         return out, calls["n"]
     finally:
         (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
@@ -186,6 +188,89 @@ try:
           released is True, f"{polls} polls")
 finally:
     orchestrator.USE_READABLE_HAND_GATE = True
+
+
+# ---- 6. EVERY deal records one machine-readable row ----------------------------------
+# THE PREDICTION HAS ONLY EVER BEEN PRINTED. bases_to_travel hands wait_for_hand_deal a
+# number of base-movements to animate, the gate printed it, and NOTHING changed a delay --
+# the user called this out and was right. No run has ever produced that line, so the
+# dataset behind "more animation means a longer wait" is EMPTY, not thin.
+#
+# The coefficient still cannot be invented (CLAUDE.md 10.4: the archived releases are
+# floor-censored, and no [deal] line on disk carries runner state to join against). What
+# CAN be done offline is make the pair collectable, and that is what these pin.
+def _deal_rows():
+    return [o for o in orchestrator._OBSERVATIONS if o.get("event") == "deal_timing"]
+
+
+orchestrator._OBSERVATIONS.clear()
+released, _polls = drive(readable_from=3, max_wait=5.0, predicted_bases=7)
+_r = _deal_rows()
+check("a released deal records exactly one deal_timing row", len(_r) == 1, str(_r))
+if _r:
+    check("the row carries the PREDICTION, or there is nothing to regress on",
+          _r[0].get("predicted_bases") == 7, str(_r[0]))
+    check("...and the FLOOR-FREE settle time, which is the number to fit",
+          _r[0].get("settled_at") is not None, str(_r[0]))
+    check("...and the floor it was measured against, since the whole distribution "
+          "moves when that constant changes",
+          _r[0].get("floor") is not None, str(_r[0]))
+    check("settled_at is not AFTER the release it precedes",
+          _r[0]["settled_at"] <= _r[0]["waited"] + 1e-6, str(_r[0]))
+
+# A TIMEOUT MUST RECORD TOO, and this is the check that matters most. The slow turns are
+# exactly the ones a bases-loaded home run produces -- the high end of the predictor. A
+# dataset that silently drops them is biased precisely where the effect is supposed to
+# live, and would read as "no effect" however strong the effect actually was.
+orchestrator._OBSERVATIONS.clear()
+released, _polls = drive(readable_from=10 ** 9, max_wait=0.3, predicted_bases=10)
+_r = _deal_rows()
+check("a TIMED-OUT deal records a row too (the slow turns are the informative ones)",
+      len(_r) == 1 and _r[0].get("outcome") == "timeout", str(_r))
+if _r:
+    check("and the timeout row still carries its prediction",
+          _r[0].get("predicted_bases") == 10, str(_r[0]))
+orchestrator._OBSERVATIONS.clear()
+
+# ---- 7. the dataset sink cannot contaminate the project root -------------------------
+# It DID, the hour it was written: test_reveal_peak.py drives this same gate and does not
+# redirect BASEBALL_DEAL_LOG, so deal_timing.jsonl appeared beside match_log.jsonl. The
+# stamp made those rows removable; the file should not have existed at all. Two rules now,
+# and each is checked, because "tests remember to redirect" is the assumption that failed.
+_root_default = os.path.join(_ROOT, orchestrator.DEAL_LOG_FILE)
+_had = os.path.exists(_root_default)
+
+_saved_env = os.environ.pop("BASEBALL_DEAL_LOG", None)
+try:
+    check("under test with NO redirect, the sink refuses to name a path",
+          orchestrator._deal_log_path() is None,
+          repr(orchestrator._deal_log_path()))
+    orchestrator.log_deal_timing({"outcome": "probe"})
+    check("...and writing produced no file in the project root",
+          os.path.exists(_root_default) == _had)
+
+    # ...while an EXPLICIT redirect still writes, or this rule would silently disable the
+    # dataset everywhere and read exactly like a working sink (10.1).
+    _tmp = _tf.mkstemp(suffix=".jsonl")[1]
+    os.environ["BASEBALL_DEAL_LOG"] = _tmp
+    check("an explicit redirect is honoured at CALL time, not import time",
+          orchestrator._deal_log_path() == _tmp)
+    orchestrator.log_deal_timing({"outcome": "probe", "predicted_bases": 4})
+    _lines = [l for l in open(_tmp).read().splitlines() if l.strip()]
+    check("a redirected row is actually written", len(_lines) == 1, str(_lines))
+    if _lines:
+        import json as _json
+        _row = _json.loads(_lines[0])
+        check("and is stamped _synthetic so it can never be mistaken for real data",
+              _row.get("_synthetic") is True, str(_row))
+        check("and carries the prediction through the sink",
+              _row.get("predicted_bases") == 4, str(_row))
+    os.unlink(_tmp)
+finally:
+    if _saved_env is None:
+        os.environ.pop("BASEBALL_DEAL_LOG", None)
+    else:
+        os.environ["BASEBALL_DEAL_LOG"] = _saved_env
 
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)

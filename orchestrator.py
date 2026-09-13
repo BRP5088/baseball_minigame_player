@@ -504,6 +504,68 @@ def _running_under_test() -> bool:
 _SYNTHETIC_LOG = _running_under_test()
 
 
+# THE DEAL-TIMING DATASET, and it is a SEPARATE FILE on purpose.
+#
+# The rows go through record_observation as well, but that is a deque(maxlen=40) which
+# run() clears per run and which only reaches disk when dump_diagnostics fires on a STALL.
+# On a healthy run -- the only kind that produces a clean timing row -- every row was
+# written and then thrown away. That is 10.1's "a measurement taken and discarded", and it
+# shipped here once already.
+#
+# Not folded into match_log.jsonl: that file is the dataset this project exists to
+# collect, its own comment above records 30 synthetic rows contaminating it, and a second
+# schema sharing the stream makes both harder to read. One row per deal, its own file.
+DEAL_LOG_FILE = "deal_timing.jsonl"
+
+
+def _deal_log_path():
+    """Where a deal-timing row goes, or None for 'do not write'. Resolved at CALL time.
+
+    TWO LESSONS, BOTH ALREADY PAID FOR HERE.
+
+    Call time, not import time (10.18): a module-level `os.environ.get(...) or DEFAULT` is
+    bound when the module loads, so a test can only redirect it by setting the variable
+    BEFORE importing orchestrator -- a footgun that reads as working and silently does not.
+
+    And a test that forgets the redirect writes NOTHING, rather than writing stamped rows
+    into the real dataset. log_matchup takes the other approach and stamps instead, because
+    it predates this and its tests genuinely drive real plays; the comment above it records
+    30 synthetic rows reaching match_log.jsonl anyway. This sink is new, so it gets the
+    stronger rule: prevention, with the stamp still there for a redirect that IS set.
+    Demonstrated the hour it was written -- test_reveal_peak.py drives the deal gate and
+    does not redirect, and deal_timing.jsonl appeared in the project root.
+    """
+    explicit = os.environ.get("BASEBALL_DEAL_LOG")
+    if explicit:
+        return explicit
+    return None if _SYNTHETIC_LOG else DEAL_LOG_FILE
+
+
+def log_deal_timing(record: dict):
+    """Append one deal-timing row. Never raises into the turn loop.
+
+    A disk error here must not end a paid match: the row is diagnostic, the match is $50.
+    Stamped `_synthetic` under test by the same rule as log_matchup, so a test that forgets
+    to redirect BASEBALL_DEAL_LOG leaves rows that are trivially removable rather than
+    invisible -- that failure has happened on the match log and is why the stamp exists.
+    """
+    # THE WHOLE BODY, not just the write. The first version left the timestamp outside the
+    # try while this docstring promised "never raises" -- a guard that does not reach the
+    # thing it claims to cover, written into the fix for exactly that shape.
+    try:
+        path = _deal_log_path()
+        if path is None:
+            return                     # under test with no redirect: write nothing
+        record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **record}
+        if _SYNTHETIC_LOG:
+            record = dict(record, _synthetic=True, _source="test-suite")
+        with open(path, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        print(f"  [deal] could not append the timing row ({type(e).__name__}: {e}) — "
+              "the turn continues; the row is lost")
+
+
 def log_matchup(record: dict):
     # Every row is stamped. Without this the log is one undifferentiated
     # stream: after the 2026-08-26 run there was no way to tell which rows it
@@ -3263,6 +3325,44 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
+
+    def _record_row(outcome):
+        """One machine-readable row per deal. THIS IS THE WHOLE EXPERIMENT.
+
+        The prediction from bases_to_travel has only ever been PRINTED, and the user was
+        right to call that out: nothing changes a delay, and no run has ever produced the
+        line, so the dataset is EMPTY rather than thin. The coefficient that would turn
+        base-movements into seconds still cannot be invented -- but it becomes fittable
+        the moment the pair is on disk beside a wait that is not censored by the floor.
+
+        `settled_at` is the FLOOR-FREE number and is the one to regress on. `waited` is
+        what the gate actually spent, and it cannot fall below POST_PLAY_MIN_WAIT by
+        construction -- 24 of 54 archived releases sit at the earliest permitted instant,
+        which is why the archive could never answer this (10.4's censoring, one level up).
+        Both are recorded so the difference between them is visible per turn.
+        """
+        row = dict(
+            outcome=outcome,
+            predicted_bases=predicted_bases,
+            waited=round(time.time() - start, 2),
+            settled_at=None if probe_at is None else round(probe_at, 2),
+            floor=POST_PLAY_MIN_WAIT,
+            threshold=th,
+            biggest=round(biggest, 1),
+            edge_seen=seen,
+            at_the_play=_di or None)
+        # BOTH sinks, deliberately. The deque is what a stall bundle carries; the file is
+        # what survives a HEALTHY run, and a healthy run is the only kind that produces a
+        # clean timing row. Either alone loses exactly the case the other covers.
+        # BOTH CALLS, one guard. record_observation stamps kw["t"] with time.strftime and
+        # runs FIRST, so a guard on the sink alone protects nothing -- which is what the
+        # first version shipped. The row is diagnostic; the turn is $50.
+        try:
+            record_observation(event="deal_timing", **row)
+            log_deal_timing(row)
+        except Exception as e:
+            print(f"  [deal] timing row not recorded ({type(e).__name__}: {e}) — "
+                  "the turn continues")
     while time.time() - start < max_wait:
         time.sleep(poll_interval)
         cur = _grab_settle_regions(("hand",))["hand"]
@@ -3320,6 +3420,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 print(f"  [deal] replacement card seen; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f})")
+                _record_row("edge")
                 return True
             try:
                 hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
@@ -3343,11 +3444,13 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f}{_held})")
+                _record_row("stable")
                 return True
     print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
           f"reading anyway (the retry path will catch a bad read). "
           f"Threshold {th:g}, biggest delta {biggest:.1f}: a biggest well UNDER the "
           f"threshold means the gate is too high for this turn.")
+    _record_row("timeout")
     return False
 
 
@@ -5396,6 +5499,13 @@ def _max_roster_row() -> int:
 TRUST_ROSTER_ONLY = True
 
 
+# How many times to ask for the ban cursor before deciding the sensor is BLIND rather
+# than momentarily unsure. One None is routine -- mid-scroll and mid-animation both return
+# it by design -- so a single probe would fall back constantly; a run of them at
+# BAN_NAV_SETTLE apart is the screen not answering at all.
+BAN_CURSOR_PROBE_TRIES = 3
+
+
 def ban_cursor_absolute(img=None):
     """(absolute_row, col) of the ban-screen cursor, read from the SCREEN. None if unsure.
 
@@ -6870,7 +6980,27 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                 return
                         _ban_count["placed"] = None
 
+                    # CLOSED-LOOP NEEDS A LIVE SENSOR, AND A DEAD ONE IS NOT A FAILED
+                    # NAVIGATION. select_bans_verified refuses to toggle a cell it cannot
+                    # see, which is right when the cursor READS and the target is merely
+                    # unreachable -- one missing ban beats banning a card nobody chose.
+                    # It is the wrong answer when the cursor never reads at ALL: it then
+                    # places ZERO bans and a $50 match starts completely unbanned, which is
+                    # strictly worse than the dead-reckoned path it replaced. Caught by
+                    # tests/minigame/test_run_resume_and_persist.py, where no screen exists
+                    # and six ban assertions went from 3 bans to none.
+                    #
+                    # So ask the sensor BEFORE trusting it. A few tries, because a single
+                    # None is routine (mid-scroll, mid-animation) and says nothing.
+                    _cursor = None
                     if input_controller.VERIFY_BAN_NAVIGATION:
+                        for _try in range(BAN_CURSOR_PROBE_TRIES):
+                            _cursor = ban_cursor_absolute()
+                            if _cursor is not None:
+                                break
+                            time.sleep(input_controller.BAN_NAV_SETTLE)
+
+                    if input_controller.VERIFY_BAN_NAVIGATION and _cursor is not None:
                         # NAVIGATE BY LOOKING. The dead-reckoned path presses N times and
                         # toggles, and on one dropped press it bans a card the engine never
                         # chose -- measured head to head on a simulated grid, and seen live
@@ -6885,6 +7015,13 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             record_observation(event="ban_nav_incomplete",
                                                placed=sorted(_placed), missed=missed)
                     else:
+                        if input_controller.VERIFY_BAN_NAVIGATION:
+                            print(f"  [ban] the ban cursor could not be read in "
+                                  f"{BAN_CURSOR_PROBE_TRIES} tries — falling back to the "
+                                  "DEAD-RECKONED path. Its bans are unverified, and that "
+                                  "is still better than starting a paid match with none.")
+                            record_observation(event="ban_nav_sensor_blind",
+                                               tries=BAN_CURSOR_PROBE_TRIES)
                         select_bans_and_start_full(grid, banned_positions,
                                                    before_confirm=_verify_bans)
 

@@ -61,6 +61,7 @@ import orchestrator
 orchestrator.wait_for_hand_deal = lambda *a, **k: True
 
 import orchestrator as o
+import input_controller
 from decision_engine import PlayerCard
 
 # --- C3: a ban screen that does not dismiss must not re-toggle ----------
@@ -73,6 +74,41 @@ check(len(h.bans_submitted) == 1,
       "expected 1 — the toggle guard is not holding")
 check(len(h.bans_submitted[0]) == 3 if h.bans_submitted else False,
       f"C3: expected 3 distinct ban positions, got {h.bans_submitted}")
+
+
+# --- A BLIND CURSOR MUST NOT MEAN ZERO BANS ------------------------------
+# select_bans_verified refuses to toggle a cell it cannot SEE, and that is the right
+# refusal when the cursor reads and one target is unreachable: one missing ban beats
+# banning a card the engine never chose. It is the wrong answer when the cursor never
+# reads at all — it then places NOTHING, and a $50 match starts completely unbanned,
+# strictly worse than the dead-reckoned path it replaced.
+#
+# Found BY this file, not by reasoning: flipping VERIFY_BAN_NAVIGATION on took the six
+# ban assertions here from 3 bans to none, because an offline harness has no screen. The
+# checks above already go red if the fallback is removed, but they go red saying "the
+# toggle guard is not holding", which names the wrong thing. This says what it is.
+check([o for o in orchestrator._OBSERVATIONS if o.get("event") == "ban_nav_sensor_blind"],
+      "a ban screen whose cursor cannot be read recorded no 'ban_nav_sensor_blind' — "
+      "either the fallback did not fire or it fired silently, and a run that bans "
+      "nothing has to be visible in the record")
+
+# ...and the probe must not simply ALWAYS fall back, or the verified navigation that
+# took a live ban screen from 2 of 3 to 3 of 3 is dead code wearing a flag.
+_nav = []
+_saved_nav = input_controller.select_bans_verified
+input_controller.select_bans_verified = (
+    lambda grid, positions, **k: _nav.append(sorted(positions)) or sorted(positions))
+try:
+    _hseen = Harness(["ban_screen"] * 4, ban_cursor=(0, 0))
+    _hseen.run(target_wins=99)
+finally:
+    input_controller.select_bans_verified = _saved_nav
+check(len(_nav) == 1 and not _hseen.bans_submitted,
+      f"a READABLE ban cursor took the dead-reckoned path anyway: verified "
+      f"navigation ran {len(_nav)}x, dead reckoning {len(_hseen.bans_submitted)}x")
+check(not [o for o in orchestrator._OBSERVATIONS
+           if o.get("event") == "ban_nav_sensor_blind"],
+      "a readable ban cursor was recorded as a blind sensor")
 
 
 # --- the loop exits when the win target is reached ----------------------
