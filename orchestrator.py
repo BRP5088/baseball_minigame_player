@@ -1147,9 +1147,40 @@ BAN_CARD_ROW_TOP_FRAC = [0.195, 0.195 + 0.283]  # widened 2026-08-24: tightly-tu
 # records that BAN_CARD_ROW_TOP_FRAC is wrong because the rows MOVE with scroll, and that
 # the shipped constant only ever worked by being loose enough to contain the card wherever
 # it drifted.
-USE_FITTED_BAN_GRID = False
+# ON since 2026-09-13, and every phase of the comparison is above. The short version:
+#   phase 0   600 cells, 60 frames   0 named differently; the SHIPPED locked-detector
+#                                    calls three plainly owned cards locked and the fitted
+#                                    one is right on all three
+#   phase 2   offline A/B            273 identical, 4 gained, 0 regressions
+#   phase 3   live, read only        46 identical, 6 gained, counter untouched
+#   phase 4a  the REAL scan, live    23 cards old, 25 new, THE SAME THREE BANS -- and the
+#                                    two extra are the pair phase 0 caught, found again by
+#                                    a completely different route
+# Nothing was ever named differently, at any stage, on any cell.
+USE_FITTED_BAN_GRID = True
 
 _FIT_MEMO = {"key": None, "rows": None}
+
+
+# EVERY NUMBER IN ban_grid WAS MEASURED AT 16:9, AND ONLY AT 16:9. Its card height is
+# derived as CARD_ASPECT * column_width * (w / h), so the frame's ASPECT is an input to the
+# row fit -- and on a 2000x1292 frame (aspect 1.548) it fits rows at 0.382 / 0.710 where the
+# true ones are at 0.195 / 0.478. It is not a little off; it is on different cards.
+#
+# The archived fixtures at that geometry caught this the moment the flag was flipped:
+# test_ocr_ban_card went from 2 abstentions to 18. The live rig captures 2000x1125 and
+# 1920x1080, both 16:9, so nothing in production was exposed -- but CLAUDE.md section 3 is
+# explicit that a reader must be checked at BOTH geometries, and "it happens not to occur
+# today" is how a rig change becomes a silent wrong answer later.
+#
+# So the fitted path applies where it was MEASURED and the shipped boxes handle the rest.
+BAN_FIT_ASPECT = 16.0 / 9.0
+BAN_FIT_ASPECT_TOL = 0.02        # 1.760-1.796; 1.548 is nowhere near it
+
+
+def _ban_frame_is_16x9(img):
+    w, h = img.size
+    return abs(w / float(h) - BAN_FIT_ASPECT) <= BAN_FIT_ASPECT_TOL
 
 
 def _fitted_ban_rows(img):
@@ -1163,6 +1194,8 @@ def _fitted_ban_rows(img):
         import ban_grid as _bg
     except Exception:
         return None
+    if not _ban_frame_is_16x9(img):
+        return None                  # measured at 16:9 only -- see BAN_FIT_ASPECT
     key = (id(img), img.size)
     if _FIT_MEMO["key"] == key:
         return _FIT_MEMO["rows"]
@@ -5363,6 +5396,51 @@ def _max_roster_row() -> int:
 TRUST_ROSTER_ONLY = True
 
 
+def ban_cursor_absolute(img=None):
+    """(absolute_row, col) of the ban-screen cursor, read from the SCREEN. None if unsure.
+
+    This is the `look` that input_controller.select_bans_verified navigates by. Absolute row
+    is the scrollbar's level plus the cursor's SCREEN row -- the same arithmetic
+    read_full_ban_collection already uses to turn a visible cell into a roster position.
+
+    EVERY PART OF IT REFUSES RATHER THAN GUESSES. No fit, no cursor, or a scrollbar
+    mid-travel all return None, and the navigator waits and looks again. A cursor position
+    that is wrong is worse than one that is late: it bans a card the engine did not choose.
+    """
+    import ban_grid as _bg
+    img = img if img is not None else _fast_grab()
+    rows = _bg.find_card_rows(img)
+    if not rows:
+        return None
+    cell, _detail = _bg.cursor_cell(img, rows)
+    if cell is None:
+        return None
+    lvl, _thumb = read_ban_scroll_level(img)
+    if lvl is None:
+        return None                      # mid-animation: the rows on screen are not level N
+    return (lvl + cell[0], cell[1])
+
+
+def ban_x_on(pos):
+    """Is the ban X actually on the card at this ABSOLUTE position?
+
+    The counter says HOW MANY are banned in the whole collection; this says WHETHER THIS
+    CARD is one of them, which is the question a caller that just pressed select_card has.
+    Nothing could answer it before ban_grid.banned_cells existed, which is why the shipped
+    path verifies with a count and cannot tell three right bans from two right and one wrong.
+    """
+    import ban_grid as _bg
+    img = _fast_grab()
+    rows = _bg.find_card_rows(img)
+    if not rows:
+        return False
+    lvl, _thumb = read_ban_scroll_level(img)
+    if lvl is None:
+        return False
+    hits, _scores = _bg.banned_cells(img, rows)
+    return (pos[0] - lvl, pos[1]) in hits
+
+
 def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                              trust_roster: bool = None):
     """
@@ -6792,8 +6870,23 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                 return
                         _ban_count["placed"] = None
 
-                    select_bans_and_start_full(grid, banned_positions,
-                                               before_confirm=_verify_bans)
+                    if input_controller.VERIFY_BAN_NAVIGATION:
+                        # NAVIGATE BY LOOKING. The dead-reckoned path presses N times and
+                        # toggles, and on one dropped press it bans a card the engine never
+                        # chose -- measured head to head on a simulated grid, and seen live
+                        # at 2 of 3 with the scrollbar three rows short of its target.
+                        _placed = input_controller.select_bans_verified(
+                            grid, banned_positions, look=ban_cursor_absolute,
+                            confirm_ban=ban_x_on, before_confirm=_verify_bans)
+                        if sorted(_placed) != sorted(banned_positions):
+                            missed = sorted(set(banned_positions) - set(_placed))
+                            print(f"  [ban] VERIFIED NAVIGATION placed {sorted(_placed)}; "
+                                  f"could not place {missed}. Nothing was toggled blind.")
+                            record_observation(event="ban_nav_incomplete",
+                                               placed=sorted(_placed), missed=missed)
+                    else:
+                        select_bans_and_start_full(grid, banned_positions,
+                                                   before_confirm=_verify_bans)
 
                     # VERIFY, don't assume. Measured on the cached frames:
                     # three of five real ban sequences finished at 2/3 and the

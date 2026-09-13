@@ -944,7 +944,18 @@ def select_and_discard(card_index: int, look=None):
 # `look()` is supplied by the caller and returns (absolute_row, col) or None -- input_
 # controller must not import ban_grid, and the caller already owns both the fitted rows and
 # the scroll level. `confirm_ban()` returns True once the X is actually on the card.
-VERIFY_BAN_NAVIGATION = False      # measured against the dead-reckoned path before shipping
+# ON since 2026-09-13, measured against the dead-reckoned path twice.
+#
+#   simulated grid, two presses dropped   old bans (2,0) and (3,2) -- two cards the engine
+#                                         never chose, and only two of three
+#                                         new bans (1,3) (2,1) (3,3), exactly as asked
+#   live, same collection, same 3 cards   old: counter 2 of 3, scrollbar three rows short
+#                                         new: counter 3 of 3, each X confirmed at the
+#                                              press, in 16 s
+#
+# With nothing dropped both are correct, so this is not the happy path -- it is the failure
+# path, which is the one that bans a card nobody chose in a match that costs $50.
+VERIFY_BAN_NAVIGATION = True
 BAN_NAV_MAX_STEPS = 14             # per target; a grid is 5 wide and ~8 deep
 BAN_NAV_SETTLE = 0.55              # a scrolling press needs about twice ACTION_DELAY
 

@@ -2577,6 +2577,30 @@ Numbering: **OPEN-15 is the compass reader**, **OPEN-16 was the injector release
 window** (closed, §5), **OPEN-17 is the arrival heading**. Older worktree copies
 of this file used those numbers differently; this file is the authority.
 
+**THE BAN GRID IS FITTED PER FRAME NOW, AND THE INPUT TARGET IS CHECKED (2026-09-13).**
+Two flags shipped ON after a phased comparison; both are in §11's closed record rather than
+here, but the three facts worth carrying are:
+
+**`ban_grid` IS 16:9 ONLY, and that is enforced, not assumed.** Its card height is derived as
+`CARD_ASPECT * column_width * (w / h)`, so the frame's ASPECT is an input to the row fit. On
+an archived 2000x1292 frame (aspect 1.548) it fits rows at 0.382 / 0.710 where the true ones
+are 0.195 / 0.478 -- different cards, not a small error. Flipping the flag took
+`test_ocr_ban_card` from 2 abstentions to 18 in one run. `orchestrator._ban_frame_is_16x9`
+now routes anything else to the shipped boxes. The live rig captures 2000x1125 and
+1920x1080, both 16:9, so production was never exposed -- but §3 says a reader is checked at
+BOTH geometries, and "it does not happen today" is how a rig change becomes a wrong answer
+later.
+
+**GIVING UP MID-MATCH LEAVES YOU AT THE TABLE, prompt up.** Measured: OPTIONS -> "Give up?"
+-> cross, and one second later `screen match_start_prompt`, `at_table True`, no walking. That
+is a free ride back to a ban screen and it skips the entire 76 s route whenever another one
+is needed.
+
+**THE DEALER PROMPT RENDERS WHATEVER THE WALLET HOLDS.** A Square press with too little money
+does NOTHING and looks exactly like a press that did not land -- it cost a wrong diagnosis
+and a wrong $50 in the record here. `Load Last Save` restores the wallet to $246; the tracked
+balance must be set to match, because it is not read from the game.
+
 **OPEN-23 — CLOSED THE SAME DAY, AND THE DIAGNOSIS IN IT WAS WRONG. The scan was fine;
 every PRESS was going to a /bin/zsh.** `pgrep -f chiaki` matched this session's own shell --
 its command line contained the word because the commands being run mentioned chiaki paths --
