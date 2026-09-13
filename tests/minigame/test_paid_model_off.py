@@ -46,7 +46,7 @@ try:
     o.client.messages.create(model="x", max_tokens=1, messages=[])
     check(False, "a paid call went through — the lockout is not working")
 except o.PaidModelDisabled:
-    check(True, "client.messages.create raises PaidModelDisabled")
+    check(True, "the expression client.messages.create(...) raises PaidModelDisabled")
 except Exception as e:
     check(False, f"it failed, but not with the lockout: {type(e).__name__}: {e}")
 
@@ -81,6 +81,55 @@ _body = ast.dump(_create[0])
 check(_body.index("PaidModelDisabled") < _body.index("note_call"),
       "the refusal happens BEFORE api_budget.note_call(), so a blocked call is never "
       "billed against the budget")
+
+print("5. the lockout is not one attribute name wide")
+# _BudgetedClient wraps `.messages` and nothing else, so before the lazy-client gate
+# `client.beta.messages.create(...)` reached the real SDK with the real key and spent
+# money -- a guard that covers the path someone already wrote and not the one they
+# write next. These pin both halves.
+try:
+    o.client.beta
+    check(False, "client.beta reached the real SDK — the lockout has a hole")
+except o.PaidModelDisabled:
+    check(True, "client.beta refuses too, not just client.messages")
+except Exception as e:
+    check(False, f"client.beta failed, but not with the lockout: {type(e).__name__}: {e}")
+check(o._LazyAnthropic._real is None,
+      "and NO real Anthropic client was ever constructed, so the API key never left "
+      "the environment variable")
+
+# create()'s own gate, exercised directly. With the lazy gate in front of it the
+# production path never reaches create() while the model is off, so without this the
+# create() guard would be untested code that merely LOOKS guarded.
+try:
+    o._BudgetedMessages(object()).create(model="x", max_tokens=1, messages=[])
+    check(False, "_BudgetedMessages.create spent a call with the model off")
+except o.PaidModelDisabled:
+    check(True, "_BudgetedMessages.create refuses on its own, without the outer gate")
+
+# THE CONTROL: the gate must PASS THROUGH when the model is allowed, or it is not a
+# gate, it is a wall, and every check above passes for the wrong reason. A sentinel
+# stands in for the real client so nothing is constructed and nothing can be spent.
+class _Sentinel:
+    beta = "the-real-beta-namespace"
+
+
+_saved = o._LazyAnthropic._real
+o._LazyAnthropic._real = _Sentinel()
+os.environ["BASEBALL_ALLOW_PAID"] = "1"
+try:
+    # reported as a named FAIL, never as a traceback: a gate mutated into a wall
+    # raises here, and a traceback would abort the file instead of printing beside
+    # the other checks (the shape test_frozen_stream_is_invalid already fixed once).
+    try:
+        _through = o.client.beta
+    except Exception as e:
+        _through = f"refused: {type(e).__name__}"
+    check(_through == "the-real-beta-namespace",
+          f"...and with the model ALLOWED it passes straight through (got {_through!r})")
+finally:
+    os.environ.pop("BASEBALL_ALLOW_PAID", None)
+    o._LazyAnthropic._real = _saved
 
 print()
 if _fails:

@@ -56,6 +56,10 @@ def build(img=None, out=None):
     # labelled "speed" (CLAUDE.md 10.1).  Caught by the user reading the sheet.
     phase = ls.read_phase(hand)[0] if hand is not None else None
     cards, why = o.local_hand_cards(hand) if hand is not None else (None, "no crop")
+    # IS THE DIAMOND A DIAMOND? On a ban screen the base crops are grid cards and read as
+    # occupied bases with real shield badges (orchestrator.on_turn_screen, with the census).
+    # The tiles below say so rather than being hidden -- a sheet exists to be looked at.
+    turn_screen = o.on_turn_screen(hand)
     st, gap = None, None
     try:
         st, gap = o.local_game_state()
@@ -143,6 +147,8 @@ def build(img=None, out=None):
         try:
             rd = ls.read_base(c, b.replace("_base", ""))
             v = f"{rd['occupied']!r}  power {rd['power']!r}"
+            if not turn_screen:
+                v = "NOT A TURN SCREEN — " + v
         except Exception as e:
             v = f"ERR {e}"
         small.append((b, c, v))

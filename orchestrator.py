@@ -174,6 +174,21 @@ class _LazyAnthropic:
     _real = None
 
     def __getattr__(self, name):
+        # THE OUTER HALF OF THE LOCKOUT, AND THE HALF THAT IS NOT OPTIONAL.
+        # _BudgetedClient wraps `.messages` and NOTHING ELSE: `.beta`, `.with_raw_response`
+        # and whatever namespace the SDK adds next version fall straight through to the
+        # real client, so the create() gate below was one attribute name wide. Gating here
+        # means the real Anthropic object is never CONSTRUCTED while the model is off --
+        # PERSONAL_ANTHROPIC_API_KEY never leaves the environment variable it lives in.
+        #
+        # Both gates stay. This one is the catch-all; the one in create() is what covers a
+        # hand-built _BudgetedMessages and is what the budget ordering is pinned against.
+        if not paid_model_allowed():
+            raise PaidModelDisabled(
+                f"the paid vision model is OFF by the user's instruction (2026-09-12), so "
+                f"no real client is built -- refusing `client.{name}`. Set "
+                f"orchestrator.PAID_MODEL_ENABLED = True or BASEBALL_ALLOW_PAID=1 to "
+                f"re-enable, and only if the user has said so.")
         if _LazyAnthropic._real is None:
             from anthropic import Anthropic
             _LazyAnthropic._real = Anthropic(api_key=_API_KEY)
@@ -4116,6 +4131,46 @@ def local_hand_cards(hand_img):
     if dropped:
         return cards, f"played without slots {dropped} (unreadable)"
     return cards, None
+
+
+def on_turn_screen(hand_img):
+    """Is this frame a TURN screen -- i.e. are the three base crops actually the DIAMOND?
+
+    THE DIAMOND READER CANNOT ANSWER THIS FOR ITSELF, AND ON A BAN SCREEN IT LIES.
+    The base crops land on BAN-GRID CARDS there, and a grid card is a power disc with no
+    diamond coin -- which is exactly read_base's `occupied` rule -- so it reports a runner
+    and then reads a REAL shield badge off the wrong card. Measured over the frames
+    read_ban_counter labels as ban screens (labelled by a DIFFERENT detector from the one
+    under test, so this is not 10.31):
+
+        368 ban frames   base crops called OCCUPIED   144 of 1104
+                         ...a CONFIDENT speed came back   60   worst score 0.782
+
+    NO THRESHOLD FIXES IT, so do not raise SHIELD_MIN (0.69) for this. The worst false
+    read is 0.782 and the true-runner population's p05 is 0.857 -- a 0.075 band with a
+    real 5% tail already under it, so moving the gate buys this at the price of real
+    runners. It is not a badge problem; it is a WRONG CROP problem (CLAUDE.md 10.23), and
+    the fix is context, not a constant.
+
+    THE HAND READER IS THE GATE. Over those 368 ban frames it returned a hand ZERO times,
+    against 116 of the 255 non-ban frames beside them. `read_phase` measures identically
+    (0 of 368 ban, 112 of 255 non-ban) and either would work -- an earlier draft of this
+    docstring claimed read_phase leaked on ban screens and that was WRONG, an artefact of
+    scoring an unlabelled population. The hand reader is chosen because it is the SAME
+    reader local_game_state's ladder uses to reach screen="turn", so a tool and the live
+    path cannot disagree about what a turn screen is.
+
+    That ladder is also why the live path was never exposed: it only reaches screen="turn"
+    through this reader. The exposure was the three diagnostic tools, which called
+    read_base/read_runners with no gate at all and would print runners onto a sheet of a
+    ban screen -- corrupting a measurement rather than a play.
+    """
+    if hand_img is None:
+        return False
+    try:
+        return local_hand_cards(hand_img)[0] is not None
+    except Exception:
+        return False
 
 
 def read_state_for_turn():

@@ -115,6 +115,11 @@ def look(step):
         r["scoreboard_err"] = err
 
     bases = ("third_base", "second_base", "first_base")
+    # RECORDED BESIDE THE READING, because a crawl row is read later by someone who cannot
+    # see the frame. On a ban screen the base crops are grid CARDS and read as runners with
+    # real badges (orchestrator.on_turn_screen carries the census); a row with
+    # on_turn_screen False must not be counted as diamond evidence.
+    r["on_turn_screen"] = o.on_turn_screen(crops.get("hand"))
     if all(crops.get(b) is not None for b in bases):
         run, err = _try(ls.read_runners, *[crops[b] for b in bases])
         r["runners"] = ({"count": run["count"],

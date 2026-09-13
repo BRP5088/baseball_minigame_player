@@ -41,11 +41,18 @@ def slow_read(frame, crops):
         out["score"] = o.ocr_scoreboard(crops["scoreboard"])
     except Exception as e:
         out["score"] = f"err {type(e).__name__}"
-    try:
-        r = ls.read_runners(crops["third_base"], crops["second_base"], crops["first_base"])
-        out["runners"] = (r["count"], [b for b, v in r["bases"].items() if v["occupied"]])
-    except Exception as e:
-        out["runners"] = f"err {type(e).__name__}"
+    # THE DIAMOND IS ONLY A DIAMOND ON A TURN SCREEN. On a ban grid these crops land on
+    # CARDS, which read as occupied bases carrying real shield badges -- see
+    # orchestrator.on_turn_screen for the census. Labelled, not suppressed: this is a
+    # diagnostic, so hiding the reading would remove the evidence it exists to show.
+    if not o.on_turn_screen(crops.get("hand")):
+        out["runners"] = "n/a — NOT A TURN SCREEN (the base crops are not the diamond)"
+    else:
+        try:
+            r = ls.read_runners(crops["third_base"], crops["second_base"], crops["first_base"])
+            out["runners"] = (r["count"], [b for b, v in r["bases"].items() if v["occupied"]])
+        except Exception as e:
+            out["runners"] = f"err {type(e).__name__}"
     try:
         res = ls.read_result(frame)
         out["result"] = res.get("outcome") if res.get("is_result") else None
