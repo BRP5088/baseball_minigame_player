@@ -46,7 +46,7 @@ def F(name):
 # and CLAUDE.md section 2 records a profile that went 15 -> 9 because a test globbed a
 # directory a run was writing to.
 FRAMES = ["players_1920.jpg", "scale_2000.png", "whole_sprite_trap_1920.jpg",
-          "tactics_1920.jpg", "midscroll_1920.jpg"]
+          "tactics_1920.jpg", "midscroll_1920.jpg", "midscroll_video_1920.jpg"]
 
 # (power, secondary) per cell, read BY EYE off the fixture. None = the card is LOCKED
 # (faded), which nothing can read and which both readers must refuse.
@@ -94,6 +94,11 @@ SHIELD_LOCKED_MAX = 0.576          # n=500
 SHIELD_BADGE_MIN = 0.822           # n=486 cards that really carry a badge
 SHIELD_GLYPH_MISSING_MAX = 0.914   # n=153, same trick on the shield
 SHIELD_GLYPH_TRUE_MIN = 0.982      # n=153
+# the ON-CARD detector, from oncard_final.py
+ONCARD_DISPLACED_MAX = 0.708       # n=8,400: 1,200 cells x 7 shifts of >= 0.08 card heights
+ONCARD_TACTICS_MAX = 0.728         # n=200 owned tactics cells
+ONCARD_PLAYER_MIN = 0.859          # n=1,199 player cells with their own card dropped
+ONCARD_MIDSCROLL = -0.173          # the one genuinely displaced cell in the whole corpus
 
 print("0. fixtures")
 missing = [f for f in FRAMES if not _os.path.exists(F(f))]
@@ -260,6 +265,99 @@ for (r, c) in ((0, 3), (1, 0), (1, 1)):
           f"and its score {pv:.3f} sits in the measured missing-class population "
           f"(max {POWER_GLYPH_MISSING_MAX}), below every correct read ever seen "
           f"({POWER_GLYPH_TRUE_MIN})")
+
+print("10. ON A CARD, OR NOT -- A POSITIVE TEST, NOT AN ABSENCE")
+# read_shield used to answer 0 whenever no badge cleared the gate, and a window that is not
+# on a card scores the same ~0.40 as a card that has no badge: one population, no gate. The
+# fix is a landmark -- the card's own top-left corner, where the box says it should be.
+for f, truth in TRUTH.items():
+    img, rows = IMG[f], ROWS[f]
+    for (r, c), want in sorted(truth.items()):
+        ok, sc = bd.on_card(img, rows, r, c)
+        if want is None:
+            check(ok is None, f"{f} r{r}c{c} is locked: on_card has nothing to measure ({ok})")
+        else:
+            check(ok is True, f"{f} r{r}c{c} ({want[2]}) is on a card ({ok} at {sc:.3f})")
+img, rows = IMG["midscroll_1920.jpg"], ROWS["midscroll_1920.jpg"]
+ok, sc = bd.on_card(img, rows, 0, 1)
+check(ok is False, f"the mid-scroll cell is NOT on a card ({ok} at {sc:.3f})")
+check(sc <= ONCARD_MIDSCROLL + 0.05,
+      f"and it scores {sc:.3f} -- the lowest of all 1,200 player cells measured "
+      f"({ONCARD_MIDSCROLL}), found by the detector on its own")
+sd, _ = bd.read_shield(img, rows, 0, 1)
+check(sd is None,
+      f"so read_shield refuses it ({sd}) instead of calling it secondary 0 -- which is what "
+      f"it used to do, and what it did for 134 of 250 shifted cards that HAVE a badge")
+img, rows = IMG["tactics_1920.jpg"], ROWS["tactics_1920.jpg"]
+tac = [(r, c, bd.on_card(img, rows, r, c)) for r in range(len(rows)) for c in range(5)]
+live = [(r, c, v) for r, c, v in tac if v[0] is not None]
+check(live and all(v[0] is False for _, _, v in live),
+      f"an owned TACTICS card is refused too -- it is on a card but has no secondary stat at "
+      f"all, so None beats 0: {[(r, c, round(v[1], 3)) for r, c, v in live]}")
+
+print("11. A DISPLACED ROW MUST NOT PRODUCE A SHIELD ANSWER")
+# The failure this closes, reproduced on a real frame: shift the row box and re-read. Before
+# the landmark, every shifted cell answered 0 -- confidently, for cards that carry a badge.
+img, rows = IMG["players_1920.jpg"], ROWS["players_1920.jpg"]
+truth = TRUTH["players_1920.jpg"]
+for d in (0.15, -0.15, 0.30):
+    moved = [{**row, "top": row["top"] + d * (row["bottom"] - row["top"]),
+              "bottom": row["bottom"] + d * (row["bottom"] - row["top"])} for row in rows]
+    ans = [(r, c, bd.read_shield(img, moved, r, c)[0]) for (r, c), w in sorted(truth.items())
+           if w is not None]
+    check(all(a is None for _, _, a in ans),
+          f"shifted {d:+.2f} rows: every cell refuses ({[a for _, _, a in ans]})")
+    pw = [bd.read_power(img, moved, r, c)[0] for (r, c), w in sorted(truth.items()) if w is not None]
+    check(all(p is None for p in pw),
+          f"and read_power refuses too, as it always did ({pw})")
+
+print("12. the on-card gate sits in an empty band between three measured populations")
+check(max(ONCARD_DISPLACED_MAX, ONCARD_TACTICS_MAX) < bd.ON_CARD_MIN < ONCARD_PLAYER_MIN,
+      f"ON_CARD_MIN {bd.ON_CARD_MIN} is above a displaced window "
+      f"({ONCARD_DISPLACED_MAX}) and an owned tactics card ({ONCARD_TACTICS_MAX}), and below "
+      f"a player card ({ONCARD_PLAYER_MIN})")
+check(bd.CORNER_SEARCH <= 0.03,
+      f"the corner is matched with only {bd.CORNER_SEARCH} card heights of slack: at 0.080 "
+      f"the displaced population climbs back to 0.989, because a generous search finds the "
+      f"DISPLACED card and answers yes, which is the bug")
+
+print("13. shield 0 is now a POSITIVE statement")
+img, rows = IMG["players_1920.jpg"], ROWS["players_1920.jpg"]
+sd, sv = bd.read_shield(img, rows, 0, 3)            # Jenny Jody Gain, 6/0
+ok, oc = bd.on_card(img, rows, 0, 3)
+check(sd == 0 and ok is True,
+      f"r0c3 reads 0 AND the box is on a card (on_card {oc:.3f}) -- both halves, not one "
+      f"score that failed")
+
+print("14. A REAL MID-SCROLL FRAME, FROM A SESSION THAT SUPPLIED NO TEMPLATES")
+# midscroll_video_1920.jpg comes out of overnight/runs/20260908_235423_.../stream.mp4 -- a
+# different day from every still the bank was cut from, and a different image path (H.264
+# then JPEG, not a direct grab). ban_grid reports THREE rows on it: the top one's boxes sit
+# over the "BANNED CARDS 0/3" header with the cards drawn below them, and the other two are
+# framed correctly. The same frame therefore carries both answers at once.
+#
+# Row 0's labels resolved from the NAME BANNER, which does land inside the box while the
+# power disc does not -- exactly the silent mislabel this detector closes.
+img, rows = IMG["midscroll_video_1920.jpg"], ROWS["midscroll_video_1920.jpg"]
+check(len(rows) == 3, f"ban_grid reports 3 rows on it ({len(rows)})")
+for c in (1, 2, 4):            # 0 and 3 are locked/unsure on that row
+    ok, sc = bd.on_card(img, rows, 0, c)
+    check(ok is False, f"row 0 col {c} box is over the header, not on a card ({ok} at {sc:.3f})")
+    check(bd.read_power(img, rows, 0, c)[0] is None and
+          bd.read_shield(img, rows, 0, c)[0] is None,
+          f"row 0 col {c}: both readers refuse it")
+# rows 1 and 2 ARE on cards and read correctly -- row 2 is CLIPPED by the frame's bottom
+# edge (visible 0.66), which is what caught a real bug: card_box clamps its box to the
+# frame, so every fraction measured against a card HEIGHT was a third short there.
+VIDEO_TRUTH = {(1, 0): (8, 1), (1, 1): (8, 1), (1, 3): (4, 3), (1, 4): (7, 0),
+               (2, 0): (4, 1), (2, 1): (4, 2), (2, 3): (4, 3), (2, 4): (6, 0)}
+for (r, c), want in sorted(VIDEO_TRUTH.items()):
+    pd, sd = bd.read_power(img, rows, r, c)[0], bd.read_shield(img, rows, r, c)[0]
+    check((pd, sd) == want, f"r{r}c{c} reads {pd}/{sd}, truth {want[0]}/{want[1]}")
+check(rows[2]["visible"] < 0.75 and bd.on_card(img, rows, 2, 0)[0] is True,
+      f"and the clipped bottom row (visible {rows[2]['visible']}) is still recognised as "
+      f"being on a card -- the window takes the card's HEIGHT from the row, not from the "
+      f"clamped card_box")
 
 print()
 if _fails:

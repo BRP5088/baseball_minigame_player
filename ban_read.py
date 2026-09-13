@@ -150,11 +150,19 @@ def values_for(card=None, bank=(None, None), ocr_power=None):
 
     THE BANK IS SECOND. 219 of 219 on held-out cells for both fields.
 
-    A SHIELD IS ONLY REPORTED WHEN THE POWER ANSWERED. The bank's own honest limit: its
-    shield cannot tell "this card has no badge" from "this window is not on a card" -- a
-    displaced window scores ~0.40 and a real no-badge card up to 0.564, one population with
-    no gate between them. read_power DOES catch the displaced window, so it is what says a
-    card is there at all.
+    THE SHIELD USED TO NEED THE POWER BESIDE IT, AND NO LONGER DOES. The bank's original
+    limit was that its shield could not tell "this card has no badge" from "this window is
+    not on a card" -- a displaced window scored ~0.40 and a real no-badge card up to 0.564,
+    one population with no gate. Leaning on read_power to prove a card was there was a
+    workaround, and it cost the shield on any card whose disc was occluded.
+    ban_digits.on_card now answers it directly, by matching the card's TOP-LEFT CORNER: a
+    2D landmark, because the top strip and the top-RIGHT corner are each dominated by a
+    straight border RUN and a line looks the same at every y -- both score up to 0.997 on a
+    window shifted UP. Measured: displaced windows max 0.708, owned tactics cards max
+    0.728, real player cards min 0.859 with the card's own templates held out. Re-read with
+    the row box shifted a tenth of a card, the shield went from 134 WRONG to zero.
+    So a shield is trusted on its own now. It still needs SOMETHING to have answered --
+    both None means nothing read this cell at all.
     """
     if card is not None and getattr(card, "power", None) is not None:
         return str(card.power), str(card.secondary), "roster"
@@ -162,7 +170,7 @@ def values_for(card=None, bank=(None, None), ocr_power=None):
     if bp is not None:
         return str(bp), ("-" if bs is None else str(bs)), "bank"
     if bs is not None:
-        return "-", "-", "bank"
+        return "-", str(bs), "bank"
     if ocr_power is not None and power_ok(ocr_power):
         return "?" + str(ocr_power), "-", "ocr"
     return "-", "-", "ocr"

@@ -5459,6 +5459,26 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                       f"the scrollbar says {_lvl}. Trusting the scrollbar — the "
                       "press count cannot see a dropped keystroke, and a wrong "
                       "row bans a card the player does not own.")
+                # A DESYNC IS THE CHEAPEST "THE PRESSES ARE NOT LANDING" DETECTOR THIS
+                # PROJECT HAS, and until 2026-09-13 it only ever narrated. That day every
+                # press in a scan went to a /bin/zsh whose command line happened to contain
+                # "chiaki" -- pgrep -f matched it, it sorted first, and it was alive, so
+                # every guard passed. The scan pressed its way to "row 39" while the
+                # scrollbar sat at 4 and returned 8 cards of a 33-card collection.
+                #
+                # So the desync now RE-RESOLVES the target before pressing again. It is one
+                # pgrep, it happens only when something is already wrong, and if the pid was
+                # right it changes nothing.
+                try:
+                    _was = input_controller.chiaki_pid()
+                    _now = input_controller.chiaki_pid(refresh=True)
+                    if _now != _was:
+                        print(f"  [ban] and the input target was WRONG: {_was} -> {_now}. "
+                              "The presses were going somewhere else.")
+                        record_observation(event="ban_input_target_corrected",
+                                           old_pid=_was, new_pid=_now)
+                except Exception as _exc:
+                    print(f"  [ban] could not re-resolve the input target ({_exc})")
                 record_observation(event="ban_scroll_desync",
                                    press_count_row=top_row, scrollbar_row=_lvl)
                 top_row = _lvl

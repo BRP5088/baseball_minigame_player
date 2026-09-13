@@ -112,12 +112,19 @@ check(br.values_for(card=None, bank=(None, None), ocr_power=6) == ("?6", "-", "o
 check(br.values_for(card=None, bank=(None, None), ocr_power=None) == ("-", "-", "ocr"),
       "and when nothing reads, nothing is claimed")
 
-print("9. A SHIELD IS ONLY REPORTED WHEN THE POWER CONFIRMED A CARD IS THERE")
-check(br.values_for(card=None, bank=(None, 0))[1] == "-",
-      "a shield 0 with NO power is refused — the bank cannot tell 'no badge' from 'this "
-      "window is not on a card' (0.40 vs up to 0.564, one population)")
+print("9. A SHIELD STANDS ON ITS OWN, because the bank now proves the card is there")
+# It did NOT used to. The shield could not tell "no badge" from "this window is not on a
+# card" (0.40 against up to 0.564, one population), so it leaned on read_power to prove a
+# card was present -- which cost the shield on any card whose disc was occluded.
+# ban_digits.on_card matches the card's TOP-LEFT CORNER instead: displaced max 0.708,
+# real cards min 0.859. With the row box shifted a tenth of a card the shield went from
+# 134 WRONG to zero.
+check(br.values_for(card=None, bank=(None, 0)) == ("-", "0", "bank"),
+      "a shield with no power is now reported — the reader proves the card itself")
 check(br.values_for(card=None, bank=(5, 0)) == ("5", "0", "bank"),
-      "...and with a power beside it, the same 0 is a real answer")
+      "...and with a power beside it, unchanged")
+check(br.values_for(card=None, bank=(None, None))[2] == "ocr",
+      "but BOTH None is still nothing read at all, and falls through")
 
 print("10. THE RANGE RULES, pinned as LITERALS")
 check([d for d in range(0, 12) if br.power_ok(d)] == [4, 5, 6, 7, 8, 9],

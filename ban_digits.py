@@ -116,6 +116,38 @@ SHIELD_WIN = (0.60, 0.12, 1.00, 0.46)
 POWER_GLYPH = (0.28, 0.24, 0.72, 0.76)
 SHIELD_GLYPH = (0.34, 0.28, 0.86, 0.80)
 
+# IS THIS WINDOW ON A CARD? A POSITIVE ANSWER, NOT AN ABSENCE.
+#
+# read_shield used to answer 0 whenever no badge sprite cleared the gate -- and a window that
+# is NOT ON A CARD scores the same ~0.40 as a card that simply has no badge. Measured: a
+# displaced window reaches 0.564 and a genuine no-badge card tops out at 0.564 too. ONE
+# POPULATION; no threshold on that quantity can separate them, which is what the first
+# version of this module recorded as its honest limit.
+#
+# WHAT IT COSTS, measured by shifting a real card box and re-reading 250 labelled cells:
+#
+#     shift (card heights)   power right/WRONG/abstain   shield right/WRONG/abstain
+#      0.00 .. +-0.05             250 / 0 /   0               250 /   0 /  0
+#           +-0.08               249 / 0 /   1 (and 4/0/246)  249 /   0 /  1
+#           +-0.10 and beyond      0 / 0 / 250                116 / 134 /  0
+#
+# read_power is SAFE at every displacement -- it abstains. read_shield answers "no badge" for
+# 134 of 250 cards that HAVE one. That is the confidently-wrong answer being closed here, and
+# it is why only read_shield pays for this check.
+#
+# THE LANDMARK IS THE CARD'S TOP-LEFT CORNER, and it had to be a 2D corner. Six boxes were
+# swept (`agent_progress/ban-digit-bank/oncard_sweep.py`): the top-RIGHT corner and the top
+# strip both fail, scoring up to 0.997 on a window shifted UP, because each is dominated by a
+# straight border RUN and a line looks the same at every y. The top-left corner carries the
+# rounded arc AND the type ribbon's pointed tip, which only fit together in one place.
+#
+# Matched in a TINY window on purpose. The question is not "is there a card near here" but
+# "is the card WHERE THE BOX SAYS IT IS"; a generous search finds the displaced card and
+# answers yes, which is the bug. At a search slack of 0.080 card heights the displaced
+# population climbs back to 0.989.
+CORNER_CUT = (-0.02, -0.015, 0.24, 0.130)
+CORNER_SEARCH = 0.020       # card widths/heights of slack around the cut
+
 # THE GATES. Each sits in an EMPTY BAND between two measured populations (10.4), and each
 # is set so that a digit THE BANK DOES NOT HOLD abstains instead of becoming the nearest
 # digit it does hold -- CLAUDE.md 10.31, measured here rather than assumed. Dropping one
@@ -127,6 +159,21 @@ SHIELD_GLYPH = (0.34, 0.28, 0.86, 0.80)
 # Both bands are empty. At 0.70 the power gate let a held-out 8 read as a 5 at 0.809, on all
 # three power-8 cards; at 0.87 all 262 missing-class cells are refused and NOT ONE of the
 # 1,105 held-out correct reads is (their minimum is 0.911).
+# ON_CARD_MIN, and the three populations it sits between (n=1,200 player cells with their own
+# card dropped, 200 owned tactics cells, 1,200 cells x 12 displacements):
+#
+#     displaced by >= 0.08 card heights   max 0.708      <- the shifts that break the read
+#     an owned TACTICS card               max 0.728      <- on a card, but it has no secondary
+#     ON_CARD_MIN 0.79
+#     a player card                       MIN 0.859      (p01 0.915, median 0.988)
+#
+# Displacement UNDER 0.08 is deliberately accepted (+0.05 reaches 0.931): the reader is
+# 250 / 0 / 0 there, so rejecting it would be refusing reads that are right. A LOCKED card
+# scores up to 0.979 and that is correct -- it IS on a card -- but is_locked refuses those
+# first. The single lowest player cell in 1,200 is -0.173, and it is the known mid-scroll
+# cell (test_fixtures/ban_digits/midscroll_1920.jpg): the detector found the one genuinely
+# displaced box in the corpus by itself.
+ON_CARD_MIN = 0.79
 POWER_MIN = 0.87            # in the empty band 0.824 .. 0.911
 SHIELD_ABSENT_MAX = 0.65    # in the empty band 0.576 .. 0.822 (the SPRITE score: is there a badge)
 SHIELD_PRESENT_MIN = 0.75   # ditto; between them is "cannot say", not "no badge"
@@ -139,6 +186,7 @@ GLYPH_PAD = 3               # px of slack around the located sprite, before scal
 # with a legible 5 and 4 painted on it, inside the shield's own search window.
 POWER_RANGE = (4, 9)
 
+_GLYPH = {"power": POWER_GLYPH, "shield": SHIELD_GLYPH, "corner": (0.0, 0.0, 1.0, 1.0)}
 _BANK = None
 
 
@@ -155,14 +203,13 @@ def _bank(drop_cards=()):
         try:
             z = np.load(TEMPLATES)
             src = dict(zip(z["_keys"].tolist(), z["_src"].tolist())) if "_keys" in z.files else {}
-            out = {"power": {}, "shield": {}}
+            out = {}
             for k in z.files:
                 if k.startswith("_"):
                     continue
                 field, d, _ = k.split("_")
-                out[field].setdefault(int(d), []).append(
-                    _with_glyph(z[k], POWER_GLYPH if field == "power" else SHIELD_GLYPH)
-                    + (src.get(k, ""),))
+                out.setdefault(field, {}).setdefault(int(d), []).append(
+                    _with_glyph(z[k], _GLYPH[field]) + (src.get(k, ""),))
             _BANK = out
         except Exception:
             _BANK = {}
@@ -182,22 +229,37 @@ def _with_glyph(t, gf):
 
 
 def _window(img, rows, rel_row, col, cols, frac):
+    """The search window for one card sub-box, and the template scale.
+
+    THE CARD'S HEIGHT COMES FROM THE ROW, NOT FROM card_box. `card_box` CLAMPS its box to
+    the frame, so a row clipped at the bottom edge -- which ban_grid still reports, down to
+    ROW_VISIBLE_MIN 0.65 -- comes back a third short, and every fraction measured against a
+    card height then lands somewhere else. Found by a real mid-scroll frame
+    (`midscroll_video_1920.jpg`), whose third row read powers fine by luck (the disc sits
+    high enough that a squashed window still covered it) while on_card returned "nothing to
+    measure" on four cards that are plainly there. The x axis is taken from card_box because
+    the columns are never clipped.
+    """
     box = bg.card_box(img, rows, rel_row, col, cols)
     if box is None:
         return None, None
     if bg.is_locked(img, box) is not False:
         return None, None            # faded, or unsure: there is nothing there to read
-    x0, y0, x1, y1 = box
-    bw, bh = x1 - x0, y1 - y0
     w, h = img.size
-    b = (max(0, x0 + int(bw * frac[0])), max(0, y0 + int(bh * frac[1])),
-         min(w, x0 + int(bw * frac[2])), min(h, y0 + int(bh * frac[3])))
+    x0, bw = box[0], box[2] - box[0]
+    r = rows[rel_row]
+    if "top" in r and "bottom" in r:
+        y0, bh = r["top"] * h, (r["bottom"] - r["top"]) * h
+    else:
+        y0, bh = box[1], box[3] - box[1]
+    b = (max(0, x0 + int(bw * frac[0])), max(0, int(y0 + bh * frac[1])),
+         min(w, x0 + int(bw * frac[2])), min(h, int(y0 + bh * frac[3])))
     if b[2] - b[0] < 8 or b[3] - b[1] < 8:
         return None, None
     return np.asarray(img.crop(b).convert("L"), dtype=np.uint8), bw / float(REF_CARD_W)
 
 
-def _read(img, rows, rel_row, col, cols, field, frac, bank=None):
+def _read(img, rows, rel_row, col, cols, field, frac, bank=None, locate_only=False):
     """(digit, sprite score, glyph score). digit is None when nothing could be located."""
     tpl = (bank or _bank()).get(field) if isinstance(bank or _bank(), dict) else None
     if not tpl:
@@ -228,6 +290,8 @@ def _read(img, rows, rel_row, col, cols, field, frac, bank=None):
                 loc, sprite = (ml[0], ml[1]), float(mx)
     if loc is None:
         return None, 0.0, 0.0
+    if locate_only:
+        return 0, round(sprite, 4), 0.0
 
     pad = max(1, int(round(GLYPH_PAD * s)))
     digit, glyph = None, -1.0
@@ -259,14 +323,41 @@ def read_power(img, rows, rel_row, col, cols=None, bank=None):
     return d, g
 
 
+def on_card(img, rows, rel_row, col, cols=None, bank=None):
+    """(True / False / None, score) -- is this card box actually ON a drawn player card?
+
+    A POSITIVE test, not an absence: it looks for the card's own top-left corner where the
+    box says the corner should be. True means a player card is there and a badge read can be
+    trusted, including a "there is no badge" read. False means the box is displaced, or the
+    card is a TACTICS card -- which is on a card but has no secondary stat, so refusing it is
+    the right answer rather than a miss. None means there was nothing to measure (off screen,
+    or the card is locked).
+    """
+    d, sprite, _ = _read(img, rows, rel_row, col, cols, "corner",
+                         (CORNER_CUT[0] - CORNER_SEARCH, CORNER_CUT[1] - CORNER_SEARCH,
+                          CORNER_CUT[2] + CORNER_SEARCH, CORNER_CUT[3] + CORNER_SEARCH),
+                         bank, locate_only=True)
+    if d is None:
+        return None, sprite
+    return sprite >= ON_CARD_MIN, sprite
+
+
 def read_shield(img, rows, rel_row, col, cols=None, bank=None):
     """(digit, score) for the shield badge -- speed on a batter, fielding on a pitcher.
 
-    0 IS A REAL ANSWER and means the card shows no badge at all. None means cannot say:
-    either nothing was located, or the presence score landed in the empty band between the
-    two measured populations, where guessing "no badge" would be inventing a reading.
-    `score` is the SPRITE correlation, the one the presence gate is on.
+    0 IS A REAL ANSWER and it is a POSITIVE one: the box is on a player card (`on_card`) AND
+    no badge sprite is there. It is not "the score failed", which is what it used to be, and
+    which answered 0 for 134 of 250 badge-carrying cards on a displaced box.
+
+    None means cannot say, for any of four reasons: the box is not on a player card; the card
+    is a TACTICS card, which has no secondary stat; the presence score landed in the empty
+    band between the two measured populations; or a badge is there but which digit is in it is
+    not settled. `score` is the SPRITE correlation, the one the presence gate is on, and it is
+    0.0 when the on-card test is what refused.
     """
+    ok, _ = on_card(img, rows, rel_row, col, cols, bank)
+    if ok is not True:
+        return None, 0.0          # not on a player card: "no badge" would be a guess
     d, sprite, glyph = _read(img, rows, rel_row, col, cols, "shield", SHIELD_WIN, bank)
     if d is None:
         return None, sprite

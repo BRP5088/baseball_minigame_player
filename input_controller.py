@@ -1873,6 +1873,67 @@ _KEYCODES = {
 _chiaki_pid = None
 
 
+_IDENTITY_TTL_SEC = 5.0
+_identity_checked = {"pid": None, "at": 0.0, "ok": False}
+
+
+def _still_chiaki(pid):
+    """Is this pid STILL the chiaki app? Cached for a few seconds.
+
+    THE LIVENESS GUARD ASKS THE WRONG QUESTION, and 2026-09-13 showed what that costs: it
+    asks "is this pid alive", and the pid it was holding was a live /bin/zsh. Alive is not
+    the property that matters; BEING CHIAKI is. `ps -o comm=` answers it for about 5 ms,
+    which is too much per keypress and nothing at all once every few seconds -- and a
+    process cannot quietly turn into a different program between two ticks of that clock,
+    because a pid only changes identity by dying first, which the liveness check catches.
+    """
+    now = time.time()
+    if (_identity_checked["pid"] == pid
+            and now - _identity_checked["at"] < _IDENTITY_TTL_SEC):
+        return _identity_checked["ok"]
+    try:
+        comm = subprocess.run(["ps", "-p", str(pid), "-o", "comm="],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+        ok = os.path.basename(comm) == CHIAKI_WINDOW_PROCESS_NAME
+    except Exception:
+        ok = True          # a failed LOOKUP is not evidence of a wrong process
+    _identity_checked.update({"pid": pid, "at": now, "ok": ok})
+    return ok
+
+
+def _resolve_chiaki_pid():
+    """The PID of the chiaki APP, never of something that merely mentions it.
+
+    `pgrep -f chiaki` matches the whole COMMAND LINE, and on 2026-09-13 it matched this
+    session's own shell -- a `/bin/zsh -c ...` whose argv contained the word because the
+    commands being run mentioned chiaki paths. It sorted FIRST, so chiaki_pid returned the
+    shell, every CGEventPostToPid went to a terminal, and the liveness guard directly above
+    could not help: the shell is alive. Presses reported success for an afternoon and the
+    console never saw one. The ban scan read 8 cards of a 33-card collection and reported
+    no error.
+    THE SAME SHAPE THE GUARD ABOVE WAS WRITTEN FOR, one step further out: that one asks
+    "is this pid alive", and the question it could not ask was "is this pid CHIAKI".
+
+    So: match the executable NAME exactly first. Fall back to the command-line match only
+    when that finds nothing, and filter it by what each process actually IS.
+    """
+    exact = subprocess.run(["pgrep", "-x", CHIAKI_WINDOW_PROCESS_NAME],
+                           capture_output=True, text=True, timeout=5).stdout.split()
+    if exact:
+        return int(exact[0])
+    loose = subprocess.run(["pgrep", "-f", CHIAKI_WINDOW_PROCESS_NAME],
+                           capture_output=True, text=True, timeout=5).stdout.split()
+    for pid in loose:
+        comm = subprocess.run(["ps", "-p", pid, "-o", "comm="],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+        if os.path.basename(comm) == CHIAKI_WINDOW_PROCESS_NAME:
+            return int(pid)
+    if loose:
+        print(f"  [input] pgrep -f matched {loose} but none of them IS chiaki -- "
+              f"treating chiaki as NOT RUNNING rather than pressing into one of them")
+    return None
+
+
 def chiaki_pid(refresh=False):
     """PID of the running chiaki process, or None."""
     global _chiaki_pid
@@ -1890,7 +1951,11 @@ def chiaki_pid(refresh=False):
         # there, and costs nothing next to the pgrep it guards.
         try:
             os.kill(_chiaki_pid, 0)
-            return _chiaki_pid
+            if _still_chiaki(_chiaki_pid):
+                return _chiaki_pid
+            print(f"  [input] pid {_chiaki_pid} is alive but is NOT chiaki any more — "
+                  "re-resolving (presses would have gone to another process)")
+            _chiaki_pid = None
         except ProcessLookupError:
             print(f"  [input] chiaki pid {_chiaki_pid} is gone — re-resolving "
                   "(input would otherwise vanish silently)")
@@ -1898,9 +1963,7 @@ def chiaki_pid(refresh=False):
         except PermissionError:
             return _chiaki_pid      # alive, merely not ours to signal
     try:
-        out = subprocess.run(["pgrep", "-f", CHIAKI_WINDOW_PROCESS_NAME],
-                             capture_output=True, text=True, timeout=5).stdout.split()
-        _chiaki_pid = int(out[0]) if out else None
+        _chiaki_pid = _resolve_chiaki_pid()
     except Exception as e:
         # SAY SO, exactly as the ProcessLookupError branch above does — its
         # comment is "input would otherwise vanish silently", and this sibling
