@@ -242,6 +242,8 @@ def _digits(frame, rows, row, col, card=None):
     p = "-"
     if pb is not None:
         crop = frame.crop(pb).convert("L")
+        if crop.width < 6 or crop.height < 6:
+            return "-", "-", "ocr"
         up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
         # THE FIRST MODE THAT ANSWERS IN RANGE WINS. One mode reaches 43% of cells; asking
         # three in order and stopping at the first in-range answer reaches 64% at the SAME
@@ -277,7 +279,9 @@ def _tactics_bonus(frame, rows, row, col):
     if bb is None:
         return "-"
     crop = frame.crop(bb).convert("L")
-    up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
+    if crop.width < 6 or crop.height < 6:
+        return "-"                     # leptonica prints "box outside rectangle" and
+    up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)   # answers anyway
     for _psm in (10, 13, 7):
         raw = o._ocr_text(up, psm=_psm, whitelist="0123") or ""
         dig = "".join(ch for ch in raw if ch.isdigit())
@@ -287,6 +291,63 @@ def _tactics_bonus(frame, rows, row, col):
         if dig and dig[0] in "12":
             return "+" + dig[0]
     return "-"
+
+
+# ---------------------------------------------------------------- HOLD A GOOD READ
+# The user, 2026-09-13: "sometimes I see them change while it's just idling." Filmed --
+# twelve grabs of a screen nobody was touching, which is the only way to see this
+# (CLAUDE.md 10.26) -- FOUR OF TEN CELLS CHANGED:
+#
+#     r0c1  pitcher x11, nothing x1
+#     r1c1  SPEED BOOST x9, nothing x3
+#     r1c4  PITCH FOCUS x8, nothing x4
+#     r1c2  SPEED BOOST x6, LOCKED x6
+#
+# THE READER IS NOT CHANGING ITS MIND, IT IS INTERMITTENTLY ABSTAINING. The letters it does
+# return are unambiguous: 'POWERSWING' at 0 edits, 'SPEEPBOOST' at 1, 'PITCHFOCUS' at 0,
+# against 9-12 edits for every runner-up. So the answer is never in doubt when it arrives;
+# some grabs just yield no letters at all.
+#
+# The last cell is a different fault: its card sd runs 32.7-35.8 and LOCKED_SD_MAX is 34.0,
+# so it crosses the gate between grabs. A single frame cannot tell which side it is on --
+# but a card whose LABEL READS is not locked, whatever its contrast says, so a successful
+# read now outranks the sd.
+#
+# The rule is the project's own: local_hand_cards commits only to a hand that read twice
+# running. Here a NEW answer has to appear twice before it replaces the held one, and an
+# ABSTENTION never replaces anything. Cleared when the scroll level changes, because then
+# the cards under these coordinates are genuinely different ones.
+_STABLE = {"scroll": None, "held": {}, "cand": {}}
+
+
+def _rowkey(rows):
+    """A stable id for WHERE the grid is, used to clear the latch when it scrolls.
+
+    NOT read_ban_scroll_level: it returns None often enough that keying on it would leave
+    the latch never cleared, holding the previous page's names over the new page's cards --
+    a stale answer that looks exactly like a confident one (CLAUDE.md 10.1).
+    """
+    if not rows:
+        return None
+    return tuple(round(r["top"], 2) for r in rows)
+
+
+def _latch(key, value, scroll):
+    """The value to SHOW for this cell: held unless a new one has been seen twice."""
+    if scroll != _STABLE["scroll"]:
+        _STABLE.update({"scroll": scroll, "held": {}, "cand": {}})
+    held = _STABLE["held"].get(key)
+    if value is None:                       # an abstention is not evidence of anything
+        return held
+    if value == held:
+        _STABLE["cand"].pop(key, None)
+        return held
+    if _STABLE["cand"].get(key) == value:   # seen twice running -- believe it
+        _STABLE["held"][key] = value
+        _STABLE["cand"].pop(key, None)
+        return value
+    _STABLE["cand"][key] = value
+    return held if held is not None else value
 
 
 def _type_ocr(img):
@@ -365,6 +426,7 @@ def slow_read(frame, crops):
         out["fitted"] = rows is not None
         out["rows"] = rows
         names, types, locks, nums, cellrecs = [], [], [], [], []
+        _scrollkey = _rowkey(rows)
         n_rows = len(rows) if rows else 2
         for row in range(n_rows):
             for col in range(5):
@@ -380,6 +442,12 @@ def slow_read(frame, crops):
                 # wrong: a faded banner returns junk like 'N HER', and a junk banner that
                 # happens to fuzzy-match is a tactics label on a player card.
                 locked = bg.is_locked(frame, box) if fitted_cell else None
+                # is_locked STRADDLES ITS GATE on some cards -- one measured sd 32.7-35.8
+                # against a LOCKED_SD_MAX of 34.0, so it answered True on half the grabs
+                # and None on the rest. Latching the flag is the honest fix: a single frame
+                # genuinely cannot say which side of the gate that card is on, so the
+                # answer should not change unless two frames running agree it has.
+                locked = _latch(key + ":locked", locked, _scrollkey)
                 c = None
                 if not locked:
                     try:
@@ -413,19 +481,28 @@ def slow_read(frame, crops):
                     # answer for one.
                     if raw and sum(ch.isalpha() for ch in raw) < 5:
                         raw = None
-                names.append((key, nm or (raw and raw.title()) or
-                              ("locked" if locked else None)))
+                names.append((key, _latch(key + ":name",
+                                          nm or (raw and raw.title()) or
+                                          ("locked" if locked else None),
+                                          _scrollkey)))
                 # THE TYPE IS ITS OWN FIELD, not crammed into the name (the user,
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
                 t = None
                 if fitted_cell and not locked:
                     t = bg.read_card_type(frame, rows, row, col, ocr=_type_ocr)
+                # A READ DOES NOT BEAT `locked`, AND I TRIED IT. Letting a successful
+                # banner read clear the locked flag put a THIRD "Power Swing" on a screen
+                # that holds two -- a faded card returns junk, junk fuzzy-matches, and the
+                # match is then dressed up as evidence. CLAUDE.md warns about this exact
+                # move in section 3. The flicker is fixed by the latch instead, which costs
+                # nothing and cannot invent a card.
                 # LOCKED AND UNKNOWN ARE DIFFERENT ANSWERS. Locked means the card is there
                 # and the game is drawing it faded; unknown means the reader failed. Saying
                 # "unknown" for a locked card hides the fact that nothing is wrong.
                 label = (t if isinstance(t, str)
                          else (t[1].title() if t else ("locked" if locked else None)))
+                label = _latch(key + ":type", label, _scrollkey)
                 types.append((key, label))
                 locks.append((key, bool(locked)))
                 if isinstance(t, tuple) and names[-1][1] is None:
@@ -602,15 +679,25 @@ def tick():
             # viewer easier to read?"). Three stacked grids meant reading down three
             # separate blocks to assemble one card; this reads across.
             recs = sl.get("ban_cells_full") or []
-            lines = [f"  cell  {'card':22s} {'type':8s} {'pwr':>4s} {'2nd':>4s}  from"]
+            lines = [f"   cell   {'card':24s}  {'type':8s}  {'pwr':>4s} {'2nd':>4s}   from",
+                     "   " + "-" * 60]
+            last_row = None
             for r in recs:
+                # A BLANK LINE BETWEEN THE TWO ROWS OF THE GRID (the user, 2026-09-13:
+                # "can you add more spacing so it easier to tell the information between
+                # the different cards apart?"). The grid IS two rows; the panel should
+                # look like the screen.
+                this_row = r["key"][1]
+                if last_row is not None and this_row != last_row:
+                    lines.append("")
+                last_row = this_row
                 if r.get("kind") == "locked":
-                    lines.append(f"  {r['key']}  — locked —")
+                    lines.append(f"   {r['key']}   {'— locked —':24s}")
                     continue
                 lines.append(
-                    f"  {r['key']}  {(r.get('name') or 'unknown')[:22]:22s} "
-                    f"{(r.get('type') or 'unknown')[:8]:8s} "
-                    f"{r.get('power', '-'):>4s} {r.get('second', '-'):>4s}  "
+                    f"   {r['key']}   {(r.get('name') or 'unknown')[:24]:24s}  "
+                    f"{(r.get('type') or 'unknown')[:8]:8s}  "
+                    f"{r.get('power', '-'):>4s} {r.get('second', '-'):>4s}   "
                     f"{r.get('src', '')}")
             n_res = sum(1 for r in recs if r.get("src") == "roster")
             n_open = sum(1 for r in recs if r.get("kind") not in (None, "locked"))

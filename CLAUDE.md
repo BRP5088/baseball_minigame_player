@@ -592,6 +592,13 @@ recorded on many different days: every (power, secondary) pair is already one of
 roster's, and ZERO novel pairs appeared. Six of the 24 possible combinations are absent from
 the roster and none was ever drawn.
 
+**CORRECTION 2026-09-13: THERE ARE AT LEAST TWO POWER SWING CARDS, NOT ONE.** Seen live on
+the ban grid, side by side in the same row, both reading POWER SWING and carrying DIFFERENT
+badges -- one **+1** and one **+2**. That is consistent with the bonus census two paragraphs
+up (POWER SWING is the only card ever above +1: +1 60%, +2 40%) and it means the count below
+is a floor, not a roster. It was taken by eye off one scroll position. The rest of the line
+still stands as far as it goes.
+
 **THE COLLECTION ALSO HOLDS TACTICS CARDS**, at the bottom of the ban grid: 1 Power Swing,
 3 Speed Boost, 3 Pitch Focus, 3 Fielding Play. Every OWNED one shows a badge of **1** --
 an independent confirmation of the +1 bonus census, from a different source entirely.
