@@ -43,7 +43,10 @@ def F(name):
     return _os.path.join(_ROOT, "test_fixtures", "ban_grid", name)
 
 
-COLS = o.BAN_GRID_COL_X_FRAC
+# ban_grid owns TIGHTER columns than orchestrator: the shipped 0.130 on a 0.135 pitch makes
+# adjacent boxes almost touch, which is harmless for reading a name out of the middle and
+# fatal for anything that looks at a card's EDGE. See CARD_COL_X_FRAC.
+COLS = bg.CARD_COL_X_FRAC
 # Hand-read off a ruler laid on each frame. LITERALS, never the code's own output.
 TRUTH = {"scroll_p00.png": (0.280, 0.607), "scroll_p04.png": (0.229, 0.557)}
 FRAMES = ["scroll_p00.png", "scroll_p04.png", "tactics_row.png"]
@@ -59,7 +62,16 @@ print("1. the columns are a uniform pitch — this is what makes it an ARRAY")
 pitches = [round(COLS[i + 1][0] - COLS[i][0], 4) for i in range(len(COLS) - 1)]
 check(len(set(pitches)) == 1 and pitches[0] == 0.135,
       f"all four column gaps are identical at 0.135 ({pitches})")
-check(round(COLS[0][1] - COLS[0][0], 4) == 0.130, "and the card is 0.130 wide")
+check(round(COLS[0][1] - COLS[0][0], 4) == 0.108,
+      f"and the card is 0.108 wide ({round(COLS[0][1] - COLS[0][0], 4)}) — measured off the "
+      f"intensity profile, page 200 grey against a card body at 160")
+check(COLS[0][1] - COLS[0][0] < o.BAN_GRID_COL_X_FRAC[0][1] - o.BAN_GRID_COL_X_FRAC[0][0],
+      "and it is TIGHTER than orchestrator's, which is the whole point: the shipped box "
+      "contains its card, the gap, and a sliver of both neighbours")
+gap = COLS[1][0] - COLS[0][1]
+check(gap > 0.02,
+      f"there is real space between adjacent boxes ({gap:.3f}) — without it a neighbour's "
+      f"cursor glow bleeds into this card's band")
 
 print("2. THE ROWS MOVE — a fixed fraction cannot frame every scroll position")
 check(abs(TRUTH["scroll_p00.png"][0] - TRUTH["scroll_p04.png"][0]) > 0.04,
@@ -96,6 +108,16 @@ for f in FRAMES:
     check(all(abs(g - 0.328) <= 0.002 for g in gaps),
           f"{f}: consecutive rows are 0.328 apart ({gaps})")
 
+print("5b. rows that hold NO CARDS are not reported at all")
+for f in FRAMES:
+    for r in rows[f]:
+        e = r.get("card_energy")
+        check(e is None or e >= bg.ROW_CARD_ENERGY_GATE or not r["clipped"],
+              f"{f}: every clipped row kept has cards (energy {e})")
+check(bg.ROW_EMPTY_MAX < bg.ROW_CARD_ENERGY_GATE < bg.ROW_CARDS_MIN,
+      f"the gate sits between the two measured populations "
+      f"({bg.ROW_EMPTY_MAX} < {bg.ROW_CARD_ENERGY_GATE} < {bg.ROW_CARDS_MIN})")
+
 print("6. THE TACTICS FRAME — the case that forced this design")
 tac = rows["tactics_row.png"]
 check(tac is not None and len(tac) >= 3,
@@ -131,13 +153,59 @@ print("9. locked and owned are separated, and the gate sits BETWEEN them")
 check(bg.LOCKED_SD_MAX < bg.OWNED_SD_MIN,
       f"the two gates do not overlap ({bg.LOCKED_SD_MAX} < {bg.OWNED_SD_MIN})")
 p00 = rows["scroll_p00.png"]
-r1 = [i for i, r in enumerate(p00) if abs(r["top"] - 0.280) < 0.01][0]
+_cand = [i for i, r in enumerate(p00) if abs(r["top"] - 0.280) < 0.01]
+check(bool(_cand), f"the 0.280 row is present ({[round(r['top'], 3) for r in p00]})")
+r1 = _cand[0]
 # read by eye off the frame: col 2 of that row is faded, cols 0/1/3/4 are not
 verdicts = {c: bg.is_locked(IMG["scroll_p00.png"], bg.card_box(IMG["scroll_p00.png"], p00, r1, c, COLS))
             for c in range(5)}
 check(verdicts[2] is True, f"the faded card in that row reads locked ({verdicts[2]})")
 check(all(verdicts[c] is False for c in (0, 1, 3, 4)),
       f"and the four beside it read owned ({verdicts})")
+
+print("10. THE CURSOR — a white halo on the card's surround, not on its art")
+# Three cursors identified BY EYE off the frames, and one frame where the answer must be
+# "unsure". The tight columns are what make this work: with orchestrator's 0.130 box on a
+# 0.135 pitch the surrounds of adjacent cards overlap and a lit neighbour bleeds in.
+CURSORS = [("cursor_charlie_pepper.jpg", 0.408, 3, "Charlie Pepper"),
+           ("scroll_p00.png", 0.281, 0, "Johnny Drawers"),
+           ("tactics_row.png", 0.684, 0, "Pitch Focus")]
+for fn, top, col, who in CURSORS:
+    if not _os.path.exists(F(fn)):
+        check(False, f"{fn} is missing")
+        continue
+    img = Image.open(F(fn)).convert("RGB")
+    rr = bg.find_card_rows(img)
+    idx = [i for i, r in enumerate(rr) if abs(r["top"] - top) < 0.02]
+    check(bool(idx), f"{fn}: the row at {top} is present")
+    if not idx:
+        continue
+    cell, det = bg.cursor_cell(img, rr)
+    check(cell == (idx[0], col),
+          f"{fn}: the cursor is {who} at r{idx[0]}c{col} (got {cell}; {det['why']})")
+
+print("11. and it ABSTAINS when more than one card is lit")
+splash = Image.open(F("splash_banning_phase.png")).convert("RGB")
+srows = bg.find_card_rows(splash)
+scell, sdet = bg.cursor_cell(splash, srows)
+check(scell is None,
+      f"the BANNING PHASE splash gets no answer (got {scell}) — its white text lands in a "
+      f"whole row's halo windows and lifts four cards at once")
+check(sdet["best"] is not None and sdet["second"] is not None
+      and sdet["best"] / sdet["second"] < bg.CURSOR_MIN_MARGIN,
+      f"...and the reason recorded is the MARGIN, not the level "
+      f"({sdet['best']} vs {sdet['second']})")
+check(sdet["best"] >= bg.CURSOR_GLOW_MIN,
+      f"...which matters: the splash frame's brightest halo ({sdet['best']}) CLEARS the "
+      f"level gate, so a threshold alone would have answered confidently and wrongly")
+
+print("12. the cursor gates sit between two measured populations")
+check(bg.CURSOR_MIN_MARGIN == 2.0,
+      f"the margin is 2.0 ({bg.CURSOR_MIN_MARGIN}) — measured over 41 ban frames the "
+      f"argmax/second ratio is 1.02-1.39 on splash frames and 2.86-8.90 on clean ones, "
+      f"with nothing in between")
+check(bg.GLOW_WHITE == 235 and bg.CURSOR_GLOW_MIN == 0.030,
+      f"the level gates are the measured ones ({bg.GLOW_WHITE}, {bg.CURSOR_GLOW_MIN})")
 
 print()
 if _fails:

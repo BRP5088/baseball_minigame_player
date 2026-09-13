@@ -42,7 +42,35 @@ BANNER_H_RANGE = (0.020, 0.060)   # a plausible banner height, as a fraction of 
 # Measured on the ruler frame: 337 px tall over 260 px wide = 1.296. Without this, a pair
 # of unrelated grid lines 0.058 apart passes as a banner and the box comes out a third too
 # tall -- which it did, on 6 of 16 scroll positions.
-CARD_ASPECT = 1.296
+# THE CARD'S OWN COLUMNS, tighter than orchestrator.BAN_GRID_COL_X_FRAC.
+#
+# The shipped constant is 0.130 wide on a 0.135 pitch, so adjacent boxes almost touch: a
+# box contains its card, the gap, and a sliver of both neighbours. That is harmless for
+# reading a NAME out of the middle of it and fatal for anything that looks at the card's
+# EDGE -- the user, 2026-09-13: "I bet there would be bleed through of neighbors because
+# they would overlap." They were right, and it was already visible in the data: the cursor
+# glow separated at 33x and 99x on two frames and only 1.7x on a third, where a neighbour
+# was also lit.
+#
+# MEASURED off the intensity profile across one card, away from its banners. The notebook
+# page sits at ~200 grey and the card body is darker:
+#     page 199.5 at x=0.295  ->  160.4 at 0.300  ... 160.8 at 0.405  ->  201.0 at 0.410
+# so the card spans 0.300-0.408 and the pitch is the shipped 0.135, giving starts at
+# 0.165 + k*0.135. The shipped box is 0.022 too wide and sits 0.009 left of centre.
+#
+# Scored against the shipped columns on what the loose box was good at -- resolving NAMES
+# over 32 ban frames -- it costs 4 of 170 and finds the same 16 distinct cards. Noise,
+# against geometry that is correct.
+CARD_COL_X_FRAC = [(round(0.165 + k * 0.135, 4), round(0.165 + k * 0.135 + 0.108, 4))
+                   for k in range(5)]
+
+# RE-DERIVED WITH THE TIGHT COLUMNS (2026-09-13). The card height follows from the column
+# WIDTH, so changing the width changes the height: at the loose 0.130 the aspect was 1.296,
+# and carrying that number over to the tight 0.108 made every card 0.249 tall instead of
+# 0.2995 -- the row solve then locked onto the wrong phase entirely. Measured on a
+# 2000x1125 frame: the card is 337 px tall and 216 px wide (0.2995 of height, 0.108 of
+# width), so 337/216 = 1.560. Check: 1.560 * 0.108 * (2000/1125) = 0.2995.
+CARD_ASPECT = 1.560
 CARD_H_TOLERANCE = 0.14           # accept a derived box within +-14% of that height
 ROW_PITCH_RANGE = (0.25, 0.40)    # plausible distance between two rows
 MIN_COLS_AGREEING = 3             # of five, before an edge counts as a grid line
@@ -89,6 +117,30 @@ MIN_EDGE_SAMPLES = 4              # edge samples that must land on screen before
 # score runs 0.535-0.858, right through the ban range -- one population, no gate (10.4).
 # read_ban_counter answers that question; this only refuses to answer about nothing.
 MIN_PHASE_SCORE = 0.15
+# A ROW AT THE EDGE OF THE FRAME MAY BE EMPTY PAGE, NOT A CLIPPED ROW OF CARDS. The phase
+# places rows wherever the grid says they are; at the TOP of the collection there is nothing
+# above the first one, and drawing boxes there shows the user cells that do not exist
+# (their report, 2026-09-13: "it shows bounding boxes on a row of cards that don't exist").
+#
+# A row of cards has strong VERTICAL edges at the column boundaries -- its cards' left and
+# right borders. Empty page has none. Measured over 41 ban frames, 163 rows, with the edge
+# energy normalised over the WHOLE FRAME so bands are comparable (per-band normalisation
+# makes an empty band look as structured as a full one, and did):
+#
+#     CLIPPED rows, empty        0.0037 - 0.0300   (40 rows)
+#     CLIPPED rows, with cards   0.0800 - 0.1400   (40 rows)
+#     nothing at all in between; a 2.7x gap
+#
+# RE-MEASURED WITH THE TIGHT COLUMNS. The first census used the loose ones and put the gate
+# at 0.027 -- which is INSIDE the empty population here. A gate is only a gate against the
+# geometry it was measured on, and changing the columns moved every number.
+#
+# APPLIED ONLY TO CLIPPED ROWS. A fully visible row always holds cards (measured min 0.0310)
+# and is never dropped -- which matters because that floor sits just above the empty
+# ceiling, so testing every row would risk deleting a real row of faded cards.
+ROW_EMPTY_MAX = 0.0300            # measured ceiling of the empty population
+ROW_CARDS_MIN = 0.0800            # measured floor of the clipped-with-cards population
+ROW_CARD_ENERGY_GATE = 0.050      # between them, clear by ~1.7x on both sides
 
 
 def _edge_profile(img, cols):
@@ -106,7 +158,32 @@ def _edge_profile(img, cols):
     return (prof / m) if m > 0 else prof
 
 
-def find_card_rows(img, cols):
+def row_card_energy(img, rows, cols=None):
+    """Vertical-edge energy at the column boundaries, per row. Higher = cards are there.
+
+    Normalised over the WHOLE FRAME, deliberately: normalising each band by its own maximum
+    makes an empty band look exactly as structured as a full one, which is what it did.
+    """
+    g = np.asarray(img.convert("L"), dtype=np.float32)
+    h, w = g.shape
+    dx = np.abs(np.diff(g, axis=1))
+    gmax = float(dx.max()) or 1.0
+    cols = cols or CARD_COL_X_FRAC
+    xs = []
+    for a, b in cols:
+        xs += [int(w * a), int(w * b)]
+    out = []
+    for r in rows:
+        y0, y1 = int(h * max(0.0, r["top"])), int(h * min(1.0, r["bottom"]))
+        if y1 - y0 < 10:
+            out.append(None)
+            continue
+        prof = dx[y0:y1, :].mean(axis=0) / gmax
+        out.append(float(np.mean([prof[max(0, x - 3):x + 4].max() for x in xs])))
+    return out
+
+
+def find_card_rows(img, cols=None):
     """Every visible card row, as fractions of frame height, or None.
 
     THE GRID IS A UNIFORM 2D ARRAY, so it has exactly one unknown: the vertical PHASE.
@@ -134,6 +211,7 @@ def find_card_rows(img, cols):
     population with no gate between them (CLAUDE.md 10.4). And it does not measure the
     pitch per frame; autocorrelation was tried and is wrong one frame in five.
     """
+    cols = cols or CARD_COL_X_FRAC
     prof = _edge_profile(img, cols)
     n_px = len(prof)
 
@@ -177,6 +255,18 @@ def find_card_rows(img, cols):
         rows.append({"top": top, "bottom": bot, "banner_top": bt, "banner_bottom": bb,
                      "measured": all(v is not None and v >= 0.35 for v in own),
                      "clipped": top < 0.0 or bot > 1.0})
+    # DROP A CLIPPED ROW THAT HOLDS NO CARDS. See ROW_CARD_ENERGY_GATE: only clipped rows
+    # are tested, because a fully visible row always has cards and a row of LOCKED cards
+    # sits too close to the empty band to risk.
+    if rows:
+        energy = row_card_energy(img, rows, cols)
+        kept = []
+        for r, e in zip(rows, energy):
+            if r["clipped"] and e is not None and e < ROW_CARD_ENERGY_GATE:
+                continue                 # empty page, not a clipped row of cards
+            r["card_energy"] = None if e is None else round(e, 4)
+            kept.append(r)
+        rows = kept
     return rows or None
 
 
@@ -197,16 +287,16 @@ def _box_px(img, cols, col, top, bot):
     return (int(w * x0), y0, int(w * x1), y1)
 
 
-def card_box(img, rows, rel_row, col, cols):
+def card_box(img, rows, rel_row, col, cols=None):
     """Pixel box for one card, or None if it is entirely off screen."""
     r = rows[rel_row]
-    return _box_px(img, cols, col, r["top"], r["bottom"])
+    return _box_px(img, cols or CARD_COL_X_FRAC, col, r["top"], r["bottom"])
 
 
-def name_box(img, rows, rel_row, col, cols):
+def name_box(img, rows, rel_row, col, cols=None):
     """Pixel box of the NAME BANNER, or None if it is off screen."""
     r = rows[rel_row]
-    return _box_px(img, cols, col, r["banner_top"], r["banner_bottom"])
+    return _box_px(img, cols or CARD_COL_X_FRAC, col, r["banner_top"], r["banner_bottom"])
 
 
 # Measured as fractions of the FITTED CARD BOX, off a ruler laid on a known BATTER cell
@@ -233,6 +323,7 @@ SHIELD_BOX = (0.70, 0.21, 0.96, 0.41)         # the shield badge below it
 
 
 def _sub(img, rows, rel_row, col, cols, frac):
+    cols = cols or CARD_COL_X_FRAC
     box = card_box(img, rows, rel_row, col, cols)
     if box is None:
         return None                      # off screen: nothing to crop, and saying so beats
@@ -243,17 +334,17 @@ def _sub(img, rows, rel_row, col, cols, frac):
             x0 + int(bw * fx1), y0 + int(bh * fy1))
 
 
-def type_box(img, rows, rel_row, col, cols):
+def type_box(img, rows, rel_row, col, cols=None):
     """Pixel box of the card's TYPE banner (BATTER / PITCHER, or a tactics label)."""
     return _sub(img, rows, rel_row, col, cols, TYPE_BANNER_BOX)
 
 
-def power_box(img, rows, rel_row, col, cols):
+def power_box(img, rows, rel_row, col, cols=None):
     """Pixel box of the power disc."""
     return _sub(img, rows, rel_row, col, cols, POWER_DISC_BOX)
 
 
-def shield_box(img, rows, rel_row, col, cols):
+def shield_box(img, rows, rel_row, col, cols=None):
     """Pixel box of the shield badge (speed on a batter, fielding on a pitcher)."""
     return _sub(img, rows, rel_row, col, cols, SHIELD_BOX)
 
@@ -268,7 +359,7 @@ def _lev(a, b):
     return prev[-1]
 
 
-def read_card_type(img, rows, rel_row, col, cols, ocr, max_edits=2):
+def read_card_type(img, rows, rel_row, col, cols=None, ocr=None, max_edits=2):
     """'batter' | 'pitcher' | ('tactics', text) | None for one card's type banner.
 
     `ocr` takes a PIL image and returns text (the caller owns the OCR handle; this module
@@ -340,3 +431,90 @@ def is_locked(img, box):
     if sd >= OWNED_SD_MIN:
         return False
     return None
+
+
+# ---------------------------------------------------------------------------------------
+# THE CURSOR, AND WHAT IS BANNED
+# ---------------------------------------------------------------------------------------
+# The cursor is a bright WHITE HALO drawn around the card it sits on -- the same signal
+# local_hand.cursor_glow reads in the hand, and read the same way: a white FRACTION in a
+# window that is on the card's surround, never on its art. The art is full of white; the
+# halo is not part of it.
+#
+# IT ONLY WORKS ON THE TIGHT COLUMNS. With orchestrator's 0.130-wide box on a 0.135 pitch
+# the surrounds of adjacent cards overlap, and a lit neighbour bleeds into this card's
+# window -- the user called it before it was measured, 2026-09-13: "I bet there would be
+# bleed through of neighbors because they would overlap." Measured on three frames whose
+# cursor was identified by eye, loose box then tight:
+#
+#     Charlie Pepper   1.7x  ->  6.9x
+#     Pitch Focus     33.3x  ->  4.1x      (the 33x was the runner-up reading ~0, not skill)
+#     Johnny Drawers  99.0x  ->  3.2x
+#
+# ARGMAX PLUS A MARGIN, NOT A THRESHOLD ALONE. Over 41 ban frames the ratio of the highest
+# glow to the second highest is sharply bimodal:
+#
+#     1.02 - 1.39   12 frames    the BANNING PHASE splash: its white text lands in the
+#                                windows of a whole row and lifts four cards at once
+#     2.86 - 8.90   29 frames    a real cursor, alone
+#     nothing between 1.39 and 2.86
+#
+# So CURSOR_MIN_MARGIN sits in a gap twice its own width, and the 12 abstentions are exactly
+# the animation frames -- where the cursor genuinely cannot be trusted and saying so is the
+# only honest answer.
+GLOW_PAD = 0.09                   # how far outside the card the window reaches, in card widths
+GLOW_WHITE = 235                  # a GREY LEVEL, so NOT scaled (CLAUDE.md section 3)
+CURSOR_GLOW_MIN = 0.030           # non-cursor cards measured <= 0.0164 on clean frames
+CURSOR_MIN_MARGIN = 2.0           # between the two measured populations above
+
+
+def cell_glow(img, rows, rel_row, col, cols=None):
+    """White fraction in the halo window around one card, or None if it is off screen."""
+    box = card_box(img, rows, rel_row, col, cols)
+    if box is None:
+        return None
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    h, w = g.shape
+    x0, y0, x1, y1 = box
+    bw, bh = x1 - x0, y1 - y0
+    gx, gy = int(bw * GLOW_PAD), int(bh * GLOW_PAD * 0.55)
+    ox0, oy0 = max(0, x0 - gx), max(0, y0 - gy)
+    ox1, oy1 = min(w, x1 + gx), min(h, y1 + gy)
+    outer = g[oy0:oy1, ox0:ox1]
+    if outer.size == 0:
+        return None
+    mask = np.ones(outer.shape, bool)
+    mask[(y0 - oy0):(y1 - oy0), (x0 - ox0):(x1 - ox0)] = False   # the card itself is not the halo
+    px = outer[mask]
+    return float((px >= GLOW_WHITE).mean()) if px.size else 0.0
+
+
+def cursor_cell(img, rows, cols=None):
+    """((row, col), detail) for the cursored card, or (None, detail) when unsure.
+
+    None means NOT READ, never "no cursor": during the BANNING PHASE splash every card in a
+    row lights up and no answer is trustworthy. `detail` carries the glow map and the two
+    best values so a caller or a log can see WHY.
+    """
+    vals = {}
+    for i in range(len(rows)):
+        for c in range(len(cols or CARD_COL_X_FRAC)):
+            v = cell_glow(img, rows, i, c, cols)
+            if v is not None:
+                vals[(i, c)] = round(v, 4)
+    detail = {"glow": vals, "best": None, "second": None, "why": ""}
+    if len(vals) < 2:
+        detail["why"] = "fewer than two cells to compare"
+        return None, detail
+    order = sorted(vals.items(), key=lambda kv: -kv[1])
+    (cell, best), (_, second) = order[0], order[1]
+    detail["best"], detail["second"] = best, second
+    if best < CURSOR_GLOW_MIN:
+        detail["why"] = f"brightest halo {best:.4f} is under {CURSOR_GLOW_MIN}"
+        return None, detail
+    if second > 0 and best / second < CURSOR_MIN_MARGIN:
+        detail["why"] = (f"{best:.4f} vs {second:.4f} is only {best / second:.2f}x — more "
+                         f"than one card is lit, which is what the splash does")
+        return None, detail
+    detail["why"] = f"{best:.4f} against {second:.4f}"
+    return cell, detail
