@@ -108,41 +108,67 @@ for f in FRAMES:
     check(all(abs(g - 0.328) <= 0.002 for g in gaps),
           f"{f}: consecutive rows are 0.328 apart ({gaps})")
 
-print("5b. rows that hold NO CARDS are not reported at all")
+print("5b. ONLY WHOLE ROWS — a part-visible row is not a card to read")
+# The user, 2026-09-13: "you are trying to capture a non existent row -1 (it's in the
+# banned cards header area) ... wouldn't it be better to just have 2 rows be captured and
+# scroll to get everything else?" Two frames here carry the two ways a row goes bad.
 for f in FRAMES:
+    check(1 <= len(rows[f]) <= 2,
+          f"{f}: one or two rows, never three ({len(rows[f])})")
     for r in rows[f]:
-        e = r.get("card_energy")
-        check(e is None or e >= bg.ROW_CARD_ENERGY_GATE or not r["clipped"],
-              f"{f}: every clipped row kept has cards (energy {e})")
-check(bg.ROW_EMPTY_MAX < bg.ROW_CARD_ENERGY_GATE < bg.ROW_CARDS_MIN,
-      f"the gate sits between the two measured populations "
-      f"({bg.ROW_EMPTY_MAX} < {bg.ROW_CARD_ENERGY_GATE} < {bg.ROW_CARDS_MIN})")
+        vis = (min(1.0, r["bottom"]) - max(bg.GRID_TOP_FRAC, r["top"])) / (
+            r["bottom"] - r["top"])
+        check(vis >= 0.65,
+              f"{f}: row at {r['top']:.3f} is {vis:.3f} inside the viewport")
+# tactics_row.png is the BOTTOM of the collection: the array puts a row at 0.028, whose
+# card art is not drawn at all — only its name banner shows, under the header. It is the
+# frame that makes this test bite, and it is named so nothing can glob it away.
+check(all(r["top"] > 0.2 for r in rows["tactics_row.png"]),
+      f"tactics_row.png: the header-occluded row at 0.028 is gone "
+      f"({[round(r['top'], 3) for r in rows['tactics_row.png']]})")
+# scroll_p00.png is the TOP: the array puts a row at 0.937, of which only a sliver of
+# banner is on screen.
+check(all(r["bottom"] <= 1.0 for r in rows["scroll_p00.png"]),
+      f"scroll_p00.png: the sliver row at 0.937 is gone "
+      f"({[round(r['bottom'], 3) for r in rows['scroll_p00.png']]})")
+# ...and scroll_p04.png's first row sits at 0.230, ABOVE the clip, with 6% of its height
+# cut off and every readable feature intact. A rule of "top >= GRID_TOP_FRAC" would throw
+# it away; the visible-fraction rule keeps it. LITERALS, so moving a constant fails here.
+check(bg.GRID_TOP_FRAC == 0.247 and bg.ROW_VISIBLE_MIN == 0.65,
+      f"the measured viewport clip and gate ({bg.GRID_TOP_FRAC}, {bg.ROW_VISIBLE_MIN})")
+check(any(abs(r["top"] - 0.230) < 0.01 for r in rows["scroll_p04.png"]),
+      f"scroll_p04.png: the 0.230 row is KEPT — clipped 6%, wholly readable "
+      f"({[round(r['top'], 3) for r in rows['scroll_p04.png']]})")
 
 print("6. THE TACTICS FRAME — the case that forced this design")
 tac = rows["tactics_row.png"]
-check(tac is not None and len(tac) >= 3,
+check(tac is not None and len(tac) == 2,
       f"it fits ({len(tac) if tac else 0} rows), though most of its cards are LOCKED and "
       f"per-row detection finds nothing there")
 check(any(not r["measured"] for r in tac),
       "and at least one row is placed by the pitch rather than by its own banner")
 
 print("7. a box that is off screen is None, not a rectangle that is not there")
-found_none = False
+# NOW THAT ONLY WHOLE ROWS ARE REPORTED, no CARD box can land off screen — and section 5b
+# proves it, so checking card_box for None here would be checking a thing that cannot
+# happen. The guard still has a job: a SUB-box (a fraction of a card, e.g. the power disc
+# a few percent above its card's top) can, and clamping each end independently gave
+# y1 < y0, which PIL raises on and the viewer's tick swallowed into a label.
+im0 = IMG["scroll_p00.png"]
+check(bg._box_px(im0, COLS, 0, -0.40, -0.10) is None,
+      "a band entirely above the frame is None, not an inverted rectangle")
+check(bg._box_px(im0, COLS, 0, 1.10, 1.40) is None,
+      "a band entirely below the frame is None")
+straddle = bg._box_px(im0, COLS, 0, -0.10, 0.20)
+check(straddle is not None and straddle[3] > straddle[1] and straddle[1] == 0,
+      f"a band that straddles the top edge is clamped, not dropped ({straddle})")
 for f in FRAMES:
-    for i, r in enumerate(rows[f]):
-        cb = bg.card_box(IMG[f], rows[f], i, 0, COLS)
-        nb = bg.name_box(IMG[f], rows[f], i, 0, COLS)
-        for box in (cb, nb):
-            if box is None:
-                found_none = True
-            else:
-                check(box[3] > box[1] and box[2] > box[0],
-                      f"{f} row{i}: box is not inverted ({box})") if False else None
-                if not (box[3] > box[1] and box[2] > box[0]):
-                    check(False, f"{f} row{i}: INVERTED box {box}")
-check(found_none,
-      "at least one off-screen banner returned None — this is what crashed the viewer "
-      "when each end was clamped independently and gave y1 < y0")
+    for i in range(len(rows[f])):
+        for box in (bg.card_box(IMG[f], rows[f], i, 0, COLS),
+                    bg.name_box(IMG[f], rows[f], i, 0, COLS),
+                    bg.type_box(IMG[f], rows[f], i, 0, COLS)):
+            check(box is not None and box[3] > box[1] and box[2] > box[0],
+                  f"{f} row{i}: every box on a WHOLE row is a real rectangle ({box})")
 
 print("8. CONTROL: it must not answer on a frame with no grid at all")
 blank = Image.new("RGB", (1920, 1080), (128, 128, 128))
@@ -211,13 +237,13 @@ print("13. BANNED cards — a big dark X, and darkness alone cannot find it")
 banned_img = Image.open(F("cursor_charlie_pepper.jpg")).convert("RGB")
 brows = bg.find_card_rows(banned_img)
 hits, scores = bg.banned_cells(banned_img, brows)
-check(sorted(hits) == [(1, 2), (2, 3)],
+check(sorted(hits) == [(0, 2), (1, 3)],
       f"the two X'd cards are found and nothing else ({sorted(hits)})")
 check(o.read_ban_counter(banned_img) == 3,
       "the counter on that frame reads 3 — two of the three are on screen and the third is "
       "scrolled away, which is why finding FEWER than the counter is normal")
 # the card that defeats a darkness threshold, pinned by name
-blaze = max((v for k, v in scores.items() if k == (1, 1)), default=None)
+blaze = max((v for k, v in scores.items() if k == (0, 1)), default=None)
 check(blaze is not None and blaze < bg.BAN_X_MIN,
       f"Johnny \"Blaze\" Sweets is NOT banned ({blaze}) though its art is dark — a "
       f"dark-fraction gate scored it 0.551 against a genuinely banned 0.642 and would "

@@ -5,6 +5,17 @@
     .venv/bin/python -B tools/state_viewer.py --scale 0.7
     .venv/bin/python -B tools/state_viewer.py --no-reload    pin the code, do not self-restart
 
+TUNE THE CARD BOXES LIVE, on the ban screen, with the game on the other monitor:
+
+    1 2 3 4        pick type banner / power disc / shield / name banner
+    arrows         slide the selected box      shift+arrows   resize it
+    [  ]           step 0.002 / 0.010
+    w              write the values into ban_grid.py (the viewer then reloads itself)
+    0              throw the working values away and reload from ban_grid.py
+
+Everything is a fraction of the FITTED CARD BOX, so a tuned value holds at every capture
+size and every scroll position. It presses nothing at the console.
+
 IT RELOADS ITSELF when this file, orchestrator, local_hand or local_state changes on disk,
 so a box can be tuned against the live screen without relaunching.
 
@@ -17,7 +28,7 @@ Colour, on the hand: GREEN the card the reader calls the cursor, RED a selected 
 YELLOW neither. A box is the window cursor_glow actually sampled, not a guess at one --
 that distinction is what found both of 2026-09-11's defects.
 """
-import os, sys, argparse, time, tkinter as tk
+import os, sys, re, argparse, time, tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw, ImageTk
 import orchestrator as o, local_hand as lh, local_state as ls, ban_grid as bg
@@ -31,7 +42,8 @@ import orchestrator as o, local_hand as lh, local_state as ls, ban_grid as bg
 # trap this project already pays for in other places (CLAUDE.md 10.17). Replacing the whole
 # process has one state and cannot be half-applied. It presses nothing, so restarting it at
 # any moment is free.
-_WATCH = ["tools/state_viewer.py", "orchestrator.py", "local_hand.py", "local_state.py"]
+_WATCH = ["tools/state_viewer.py", "orchestrator.py", "local_hand.py", "local_state.py",
+          "ban_grid.py"]
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -62,6 +74,19 @@ def _reexec_if_changed():
     os.execv(sys.executable, [sys.executable, "-B"] + sys.argv)
 
 
+def _edit_panel():
+    """One line of editor state, so the keys are never something to remember."""
+    k = _sel_key()
+    v = " ".join(f"{x:.4f}" for x in E["vals"][k])
+    who = "  ".join(f"[{i + 1}]{n.upper() if n == k else n}"
+                    for i, n in enumerate(_EDIT_KEYS))
+    star = "*" if E["dirty"] else " "
+    return (f"BOX{star} {who}   {_EDIT_CONST[k]} = ({v})   step {E['step']:.3f}\n"
+            f"     arrows move | shift+arrows resize | [ fine  ] coarse | "
+            f"w write to ban_grid.py | 0 revert"
+            + (f"   -- {E['msg']}" if E["msg"] else "") + "\n")
+
+
 ap = argparse.ArgumentParser()
 ap.add_argument("--hand", action="store_true", help="hand crop only")
 ap.add_argument("--hz", type=float, default=4.0)
@@ -73,6 +98,7 @@ ap.add_argument("--once", action="store_true",
 A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
+TYPE = "#ffffff"                          # the BATTER / PITCHER ribbon box
 BAN, NAME = "#ff5ecb", "#8affff"          # ban-grid card box, and its name strip
 FALLBACK = "#ff9d00"                      # the FIXED box, drawn when the fit failed
 POWER, SHIELD = "#7CFC00", "#ffa8ff"      # the power disc and the shield badge
@@ -149,7 +175,15 @@ def slow_read(frame, crops):
         # FIT THE BOXES TO THE FRAME. The rows MOVE with scroll position (card tops 0.282 /
         # 0.609 at the top of the grid, 0.231 / 0.558 two presses later), so a fixed
         # fraction cannot frame them all -- see ban_grid.
-        rows = bg.find_card_rows(frame, o.BAN_GRID_COL_X_FRAC)
+        # BAN_GRID'S OWN COLUMNS, never orchestrator's. This viewer passed
+        # o.BAN_GRID_COL_X_FRAC into every ban_grid call, and ban_grid's sub-boxes
+        # (power disc, shield, type and name ribbons) are fractions of the card box THOSE
+        # columns produce -- 0.108 wide, not the shipped 0.130. Handing it the wider box
+        # slid every badge box right and down by a fifth of a card, which is exactly what
+        # the user saw: "the bounding boxes for the batting and pitching power is off now,
+        # same with the shield and pitching debuff" (2026-09-13). Nothing was wrong with
+        # the constants; they were being applied to the wrong rectangle.
+        rows = bg.find_card_rows(frame)
         out["fitted"] = rows is not None
         out["rows"] = rows
         names, types = [], []
@@ -158,39 +192,41 @@ def slow_read(frame, crops):
             for col in range(5):
                 key = f"r{row}c{col}"
                 fitted_cell = bool(rows) and row < len(rows)
-                if fitted_cell and rows[row].get("clipped"):
-                    # A PART-VISIBLE ROW IS NOT A CARD TO READ. Its crop holds a slice of a
-                    # card, and OCR on that returns confident nonsense ('Ss S Ss Ue') --
-                    # which reads as a bad reader rather than as half a card.
-                    names.append((key, "clipped"))
-                    types.append((key, "clipped"))
-                    continue
-                try:
-                    box = (bg.card_box(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC)
-                           if fitted_cell else None)
-                    if fitted_cell and box is not None:
-                        cell = frame.crop(box)
-                    elif fitted_cell:
-                        raise ValueError("off screen")
-                    else:
-                        cell = o.get_ban_grid_card_crop(frame, row, col)
-                    c = o.ocr_ban_card_name(cell)
-                except Exception:
-                    c = None
+                box = (bg.card_box(frame, rows, row, col) if fitted_cell else None)
+                # ASK "IS IT LOCKED" FIRST, AND STOP THERE IF IT IS. The user, 2026-09-13:
+                # "if the card isn't playable, there isn't a need to try to read the info
+                # on the card." Locked is a CONTRAST answer (sd 16-19 faded against 62-66
+                # owned, a 3.5x gap) and it costs no OCR, while every reader below does --
+                # so the order was backwards: this loop OCR'd the name and the type of
+                # every locked card and then threw both away. It also removes a way to be
+                # wrong: a faded banner returns junk like 'N HER', and a junk banner that
+                # happens to fuzzy-match is a tactics label on a player card.
+                locked = bg.is_locked(frame, box) if fitted_cell else None
+                c = None
+                if not locked:
+                    try:
+                        if fitted_cell and box is not None:
+                            cell = frame.crop(box)
+                        elif fitted_cell:
+                            raise ValueError("off screen")
+                        else:
+                            cell = o.get_ban_grid_card_crop(frame, row, col)
+                        c = o.ocr_ban_card_name(cell)
+                    except Exception:
+                        c = None
                 nm = getattr(c, "name", None) if c else None
                 # TACTICS CARDS CANNOT BE NAMED BY THE ROSTER -- KNOWN_BAN_ROSTER is 33
                 # PLAYER cards and no tactics at all (CLAUDE.md section 4). So when the
                 # roster lookup declines, read the banner RAW: that is how a Power Swing or
                 # a Speed Boost gets its real name instead of "unknown", and it also
                 # surfaces whatever is legible on a card the roster has never seen.
-                locked = bg.is_locked(frame, box) if fitted_cell else None
                 raw = None
                 # RAW OCR ONLY ON A CARD THAT IS ACTUALLY LEGIBLE. On a LOCKED card the
                 # game draws the name at sd 16-19, and tesseract returns confident junk
                 # ('Dd', 'Bm --') that reads as a name. "locked" is both true and useful;
                 # a two-letter fragment is neither.
                 if nm is None and fitted_cell and locked is False:
-                    nb = bg.name_box(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC)
+                    nb = bg.name_box(frame, rows, row, col)
                     raw = _ocr_strip(frame, nb) if nb else None
                     # A NAME IS NOT TWO LETTERS. Where the PLAY prompt overlaps a banner,
                     # OCR returns fragments ('Bm --') that read as a name in a grid of
@@ -205,9 +241,8 @@ def slow_read(frame, crops):
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
                 t = None
-                if fitted_cell:
-                    t = bg.read_card_type(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC,
-                                          _type_ocr)
+                if fitted_cell and not locked:
+                    t = bg.read_card_type(frame, rows, row, col, ocr=_type_ocr)
                 # LOCKED AND UNKNOWN ARE DIFFERENT ANSWERS. Locked means the card is there
                 # and the game is drawing it faded; unknown means the reader failed. Saying
                 # "unknown" for a locked card hides the fact that nothing is wrong.
@@ -258,8 +293,7 @@ def tick():
                 for row in range(len(fitted) if fitted else 2):
                     for col in range(5):
                         if fitted and row < len(fitted):
-                            cb = bg.card_box(frame, fitted, row, col,
-                                             o.BAN_GRID_COL_X_FRAC)
+                            cb = bg.card_box(frame, fitted, row, col)
                             if cb is None:
                                 continue              # this row is entirely off screen
                             x0, y0, x1, y1 = cb
@@ -277,17 +311,15 @@ def tick():
                         d.text((x0 + 4, y0 + 3),
                                f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
                         if fitted and row < len(fitted):
-                            nb = bg.name_box(frame, fitted, row, col,
-                                             o.BAN_GRID_COL_X_FRAC)
-                            if nb is not None:
-                                d.rectangle(nb, outline=NAME, width=2)
-                            # the two number boxes, so what the readers LOOK at is visible
-                            for _b, _c in ((bg.power_box(frame, fitted, row, col,
-                                                         o.BAN_GRID_COL_X_FRAC), POWER),
-                                           (bg.shield_box(frame, fitted, row, col,
-                                                          o.BAN_GRID_COL_X_FRAC), SHIELD)):
+                            # Every card sub-box, drawn from the LIVE EDITOR's working
+                            # values so a nudge shows up on the next tick. The selected
+                            # one is drawn thick, so you can see which keys move what.
+                            for _k, _c in (("name", NAME), ("type", TYPE),
+                                           ("power", POWER), ("shield", SHIELD)):
+                                _b = _ebox(frame, fitted, row, col, _k)
                                 if _b is not None:
-                                    d.rectangle(_b, outline=_c, width=2)
+                                    d.rectangle(_b, outline=_c,
+                                                width=4 if _k == _sel_key() else 2)
                         # the strip ocr_ban_card_name reads the NAME from -- drawn because
                         # it is the thing that goes wrong: at some scroll positions a row-1
                         # crop starts on row 0's name banner, so the name and the stats in
@@ -338,7 +370,8 @@ def tick():
             txt.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
                 f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
-                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}"
+                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}\n"
+                + _edit_panel()
                 + (f"\n[s] {S['note']}" if S.get("note") else "\n[s] save a labelling sheet")))
         else:
             txt.config(text=(
@@ -389,14 +422,12 @@ def save_sheet(_event=None):
         return
     tiles = []
     for r in range(len(rows)):
-        if rows[r].get("clipped"):
-            continue
         for c in range(5):
-            b = bg.card_box(frame, rows, r, c, o.BAN_GRID_COL_X_FRAC)
+            b = bg.card_box(frame, rows, r, c)
             if b is not None:
                 tiles.append((f"r{r}c{c}", frame.crop(b)))
     if not tiles:
-        S["note"] = "no unclipped cards to sheet"
+        S["note"] = "no cards to sheet"
         return
     tw = max(t.size[0] for _, t in tiles)
     th = max(t.size[1] for _, t in tiles)
@@ -410,6 +441,108 @@ def save_sheet(_event=None):
     sheet.save(base + "_sheet.jpg", quality=94)
     S["note"] = f"saved {os.path.basename(base)}_sheet.jpg ({len(tiles)} cards)"
 
+
+# ---------------------------------------------------------------- LIVE BOX EDITOR
+# The user, 2026-09-13: "is it possible for you to make it so I can adjust the bounding
+# boxes in real time? I would like to help adjust them."
+#
+# Every card sub-box is a fraction of the FITTED CARD BOX, so they are all the same kind
+# of number and one editor tunes all four. The working values are drawn every tick, so a
+# keypress shows on the live screen inside a frame. `w` writes them back into ban_grid.py,
+# which this viewer WATCHES -- so the write re-execs the process and what you then see is
+# the shipped constant, not a working copy. That closes the loop: nothing is tuned against
+# a value the rest of the project does not have.
+#
+# It presses NOTHING at the console. Every key here edits numbers in this process.
+_EDIT_KEYS = ["type", "power", "shield", "name"]
+_EDIT_CONST = {"type": "TYPE_BANNER_BOX", "power": "POWER_DISC_BOX",
+               "shield": "SHIELD_BOX", "name": "NAME_BANNER_BOX"}
+E = {"i": 1, "step": 0.005, "vals": {}, "dirty": False, "msg": ""}
+
+
+def _sel_key():
+    return _EDIT_KEYS[E["i"]]
+
+
+def _edit_load():
+    E["vals"] = {k: list(getattr(bg, _EDIT_CONST[k])) for k in _EDIT_KEYS}
+    E["dirty"] = False
+
+
+_edit_load()
+
+
+def _ebox(frame, fitted, row, col, key):
+    """One sub-box from the editor's WORKING value, not from ban_grid's constant."""
+    return bg._sub(frame, fitted, row, col, None, tuple(E["vals"][key]))
+
+
+def _nudge(dx, dy, resize):
+    v = E["vals"][_sel_key()]
+    s = E["step"]
+    if resize:                      # move only the far edges: width and height
+        v[2] = round(v[2] + dx * s, 4)
+        v[3] = round(v[3] + dy * s, 4)
+    else:                           # slide the whole box
+        v[0] = round(v[0] + dx * s, 4); v[2] = round(v[2] + dx * s, 4)
+        v[1] = round(v[1] + dy * s, 4); v[3] = round(v[3] + dy * s, 4)
+    E["dirty"] = True
+    E["msg"] = ""
+
+
+def _edit_write(_e=None):
+    """Write the working values into ban_grid.py. The re-exec watcher does the rest.
+
+    Anchored on the constant's exact current text and asserted before the file is touched
+    (CLAUDE.md 10.19): a half-applied write to a module every reader imports is worse than
+    no write at all.
+    """
+    path = os.path.join(_ROOT_DIR, "ban_grid.py")
+    src = out = open(path, encoding="utf-8").read()
+    wrote = []
+    for k in _EDIT_KEYS:
+        name = _EDIT_CONST[k]
+        new_t = tuple(round(x, 4) for x in E["vals"][k])
+        if tuple(getattr(bg, name)) == new_t:
+            continue
+        # ANCHOR ON THE ASSIGNMENT, NOT ON THE LITERAL'S FORMATTING. Matching the current
+        # numbers as text worked exactly once: the first write reformats them, and the
+        # second write then cannot find what it wrote. One regex per constant, and it must
+        # match exactly once or nothing is written at all.
+        pat = re.compile(r"^%s = \([^)]*\)" % re.escape(name), re.M)
+        if len(pat.findall(out)) != 1:
+            E["msg"] = f"NOT WRITTEN: {name} is not one plain assignment — edit by hand"
+            return
+        out = pat.sub("%s = (%s)" % (name, ", ".join(repr(x) for x in new_t)), out, count=1)
+        wrote.append(name)
+    if not wrote:
+        E["msg"] = "nothing changed"
+        return
+    open(path, "w", encoding="utf-8").write(out)
+    E["msg"] = f"wrote {', '.join(wrote)} to ban_grid.py — reloading"
+    E["dirty"] = False
+
+
+def _edit_reset(_e=None):
+    _edit_load()
+    E["msg"] = "working values back to what ban_grid.py says"
+
+
+for _n in range(4):
+    root.bind(f"<KeyPress-{_n + 1}>",
+              lambda e, n=_n: (E.__setitem__("i", n), E.__setitem__("msg", "")))
+root.bind("<Left>",  lambda e: _nudge(-1, 0, False))
+root.bind("<Right>", lambda e: _nudge(+1, 0, False))
+root.bind("<Up>",    lambda e: _nudge(0, -1, False))
+root.bind("<Down>",  lambda e: _nudge(0, +1, False))
+root.bind("<Shift-Left>",  lambda e: _nudge(-1, 0, True))
+root.bind("<Shift-Right>", lambda e: _nudge(+1, 0, True))
+root.bind("<Shift-Up>",    lambda e: _nudge(0, -1, True))
+root.bind("<Shift-Down>",  lambda e: _nudge(0, +1, True))
+root.bind("<KeyPress-bracketleft>",  lambda e: E.__setitem__("step", 0.002))
+root.bind("<KeyPress-bracketright>", lambda e: E.__setitem__("step", 0.010))
+root.bind("<KeyPress-w>", _edit_write)
+root.bind("<KeyPress-0>", _edit_reset)
 
 root.bind("<KeyPress-s>", save_sheet)
 root.bind("<KeyPress-S>", save_sheet)

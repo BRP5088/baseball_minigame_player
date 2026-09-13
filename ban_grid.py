@@ -117,30 +117,45 @@ MIN_EDGE_SAMPLES = 4              # edge samples that must land on screen before
 # score runs 0.535-0.858, right through the ban range -- one population, no gate (10.4).
 # read_ban_counter answers that question; this only refuses to answer about nothing.
 MIN_PHASE_SCORE = 0.15
-# A ROW AT THE EDGE OF THE FRAME MAY BE EMPTY PAGE, NOT A CLIPPED ROW OF CARDS. The phase
-# places rows wherever the grid says they are; at the TOP of the collection there is nothing
-# above the first one, and drawing boxes there shows the user cells that do not exist
-# (their report, 2026-09-13: "it shows bounding boxes on a row of cards that don't exist").
+# THE GRID SCROLLS INSIDE A VIEWPORT, AND ONLY TWO WHOLE ROWS EVER FIT IN IT.
 #
-# A row of cards has strong VERTICAL edges at the column boundaries -- its cards' left and
-# right borders. Empty page has none. Measured over 41 ban frames, 163 rows, with the edge
-# energy normalised over the WHOLE FRAME so bands are comparable (per-band normalisation
-# makes an empty band look as structured as a full one, and did):
+# The phase places rows wherever the array says they are, including above the top of the
+# viewport and below the bottom of the frame. Reporting those part-rows is what made
+# everything downstream complicated, and the user called it, 2026-09-13:
 #
-#     CLIPPED rows, empty        0.0037 - 0.0300   (40 rows)
-#     CLIPPED rows, with cards   0.0800 - 0.1400   (40 rows)
-#     nothing at all in between; a 2.7x gap
+#     "you are trying to capture a non existent row -1 (it's in the banned cards header
+#      area) ... a row that can barely be seen ... wouldn't it be better to just have 2
+#      rows be captured and scroll to get everything else?"
 #
-# RE-MEASURED WITH THE TIGHT COLUMNS. The first census used the loose ones and put the gate
-# at 0.027 -- which is INSIDE the empty population here. A gate is only a gate against the
-# geometry it was measured on, and changing the columns moved every number.
+# They are right, and the frames agree. At the BOTTOM of the collection the top row's card
+# art is not drawn at all -- only its name banner, hanging under the header -- and at the
+# TOP the third row shows one sliver of banner at the bottom edge.
 #
-# APPLIED ONLY TO CLIPPED ROWS. A fully visible row always holds cards (measured min 0.0310)
-# and is never dropped -- which matters because that floor sits just above the empty
-# ceiling, so testing every row would risk deleting a real row of faded cards.
-ROW_EMPTY_MAX = 0.0300            # measured ceiling of the empty population
-ROW_CARDS_MIN = 0.0800            # measured floor of the clipped-with-cards population
-ROW_CARD_ENERGY_GATE = 0.050      # between them, clear by ~1.7x on both sides
+# WHERE THE VIEWPORT CLIPS, MEASURED. Per-pixel-row variance across 150 ban frames at many
+# scroll positions, over the card COLUMNS only: the grid scrolls, the header does not, so
+# variance is near zero above the clip and large below it.
+#
+#     above    0.0000 - 0.2463    sd max  6.04
+#     below    0.2481 - 0.9800    sd min  8.69
+#     the step is 4.92 -> 20.91 between two adjacent sampled rows
+#
+# HOW MUCH OF A ROW IS INSIDE THAT VIEWPORT separates the two kinds of row completely.
+# Measured over 2,072 ban frames -- every 1920x1080 frame the counter census labelled a
+# ban screen -- 6,211 candidate rows:
+#
+#     PART-VISIBLE   n=2068   0.197 - 0.442
+#     WHOLE          n=4137   0.881 - 1.000
+#     in between     n=3      0.553, 0.669, 0.771 -- two MID-SCROLL frames, cards motion-
+#                             blurred and half-drawn; reporting fewer rows there is right
+#
+# At the gate, 2,069 of 2,072 frames give exactly TWO rows and 3 give one. Never zero,
+# never three. Everything else is reached by SCROLLING.
+#
+# This replaces a card-edge-energy gate that told a clipped row of cards from empty page.
+# That gate worked; it was the wrong question. A part-visible row is not readable whether
+# or not it holds cards, and every consumer had to special-case it.
+GRID_TOP_FRAC = 0.247             # between the two measured populations above
+ROW_VISIBLE_MIN = 0.65            # between 0.442 and 0.881, clear by 1.5x and 1.4x
 
 
 def _edge_profile(img, cols):
@@ -156,31 +171,6 @@ def _edge_profile(img, cols):
     prof = np.abs(np.diff(g, axis=0))[:, idx].mean(axis=1)
     m = float(prof.max())
     return (prof / m) if m > 0 else prof
-
-
-def row_card_energy(img, rows, cols=None):
-    """Vertical-edge energy at the column boundaries, per row. Higher = cards are there.
-
-    Normalised over the WHOLE FRAME, deliberately: normalising each band by its own maximum
-    makes an empty band look exactly as structured as a full one, which is what it did.
-    """
-    g = np.asarray(img.convert("L"), dtype=np.float32)
-    h, w = g.shape
-    dx = np.abs(np.diff(g, axis=1))
-    gmax = float(dx.max()) or 1.0
-    cols = cols or CARD_COL_X_FRAC
-    xs = []
-    for a, b in cols:
-        xs += [int(w * a), int(w * b)]
-    out = []
-    for r in rows:
-        y0, y1 = int(h * max(0.0, r["top"])), int(h * min(1.0, r["bottom"]))
-        if y1 - y0 < 10:
-            out.append(None)
-            continue
-        prof = dx[y0:y1, :].mean(axis=0) / gmax
-        out.append(float(np.mean([prof[max(0, x - 3):x + 4].max() for x in xs])))
-    return out
 
 
 def find_card_rows(img, cols=None):
@@ -244,7 +234,10 @@ def find_card_rows(img, cols=None):
     for k in range(-1, MAX_EXTRAPOLATE + 2):
         top = phase + k * ROW_PITCH_DEFAULT - ROW_PITCH_DEFAULT
         bot = top + want
-        if bot <= 0.02 or top >= 0.98:
+        # ONLY WHOLE ROWS, and `whole` is measured against the VIEWPORT, not the frame:
+        # the header clips the top of the grid at GRID_TOP_FRAC. See that constant.
+        visible = (min(1.0, bot) - max(GRID_TOP_FRAC, top)) / want
+        if visible < ROW_VISIBLE_MIN:
             continue
         bt = top + BANNER_EDGES[0] * want
         bb = top + BANNER_EDGES[1] * want
@@ -253,31 +246,19 @@ def find_card_rows(img, cols=None):
         # rows carried evidence and which were placed by the pitch.
         own = [at(bt), at(bb)]
         rows.append({"top": top, "bottom": bot, "banner_top": bt, "banner_bottom": bb,
-                     "measured": all(v is not None and v >= 0.35 for v in own),
-                     "clipped": top < 0.0 or bot > 1.0})
-    # DROP A CLIPPED ROW THAT HOLDS NO CARDS. See ROW_CARD_ENERGY_GATE: only clipped rows
-    # are tested, because a fully visible row always has cards and a row of LOCKED cards
-    # sits too close to the empty band to risk.
-    if rows:
-        energy = row_card_energy(img, rows, cols)
-        kept = []
-        for r, e in zip(rows, energy):
-            if r["clipped"] and e is not None and e < ROW_CARD_ENERGY_GATE:
-                continue                 # empty page, not a clipped row of cards
-            r["card_energy"] = None if e is None else round(e, 4)
-            kept.append(r)
-        rows = kept
+                     "visible": round(visible, 4),
+                     "measured": all(v is not None and v >= 0.35 for v in own)})
     return rows or None
 
 
 def _box_px(img, cols, col, top, bot):
     """A pixel box, clamped to the frame. None when the band is entirely off screen.
 
-    A CLIPPED ROW IS THE COMMON CASE, not an edge case: find_card_rows deliberately reports
-    the part-visible rows above and below. For the row above, the name banner can sit
-    entirely off the top of the frame -- clamping each end independently then produced
-    y1 < y0, which PIL raises on, and the viewer's tick swallowed it into a label. Returning
-    None makes "there is nothing to draw" a value the caller can act on.
+    find_card_rows only reports WHOLE rows now (see GRID_TOP_FRAC), so a card box never
+    lands off screen. The clamp and the None stay for the SUB-boxes: a fraction a few
+    percent outside its card, on the top row, once produced y1 < y0, which PIL raises on
+    and the viewer's tick swallowed into a label. Returning None makes "there is nothing
+    to draw" a value the caller can act on.
     """
     w, h = img.size
     x0, x1 = cols[col]
@@ -295,8 +276,7 @@ def card_box(img, rows, rel_row, col, cols=None):
 
 def name_box(img, rows, rel_row, col, cols=None):
     """Pixel box of the NAME BANNER, or None if it is off screen."""
-    r = rows[rel_row]
-    return _box_px(img, cols or CARD_COL_X_FRAC, col, r["banner_top"], r["banner_bottom"])
+    return _sub(img, rows, rel_row, col, cols, NAME_BANNER_BOX)
 
 
 # Measured as fractions of the FITTED CARD BOX, off a ruler laid on a known BATTER cell
@@ -304,7 +284,21 @@ def name_box(img, rows, rel_row, col, cols=None):
 # get_ban_grid_card_crop's box: that box is 0.400 of frame height starting at 0.195, the
 # fitted one is ~0.297 starting at ~0.282, so the same fraction lands somewhere else
 # entirely. Carrying the old numbers over made the type OCR read '-' and '--'.
-TYPE_BANNER_BOX = (0.16, 0.04, 0.66, 0.15)    # BATTER / PITCHER ribbon, upper left
+# SWEPT, 2026-09-13, after the user saw it clipping: "The bounding boxes for the cards
+# type isn't correct for column 0 and 1. they are slightly cropped off which is causing
+# unknowns." The ribbon itself measures 0.00-0.79 of the card box, so the shipped
+# 0.16-0.66 did cut both ends. Widening it only helps up to a point -- past the ribbon the
+# crop takes in the card border and PSM 11 does worse -- so the box was swept over 31
+# readable cells on four frames, counting how many RETURN A TYPE:
+#
+#     x0   0.16  0.10  0.06  0.02      (at x1 0.66)      reads  24  26  20  17
+#     y    0.04-0.15 is already the best band by a distance: 26 against 22 at 0.02-0.15,
+#          8 at 0.06-0.15, and 14 at 0.00-0.15
+#
+# So x0 0.10 and nothing else. HONEST LIMIT: this is YIELD, not accuracy -- the attempt to
+# label each cell from the roster by its OCR'd name matched 0 of 31, so how many of the 26
+# are RIGHT is unmeasured. Tune it live against the screen (tools/state_viewer.py, key 1).
+TYPE_BANNER_BOX = (0.10, 0.04, 0.66, 0.15)    # BATTER / PITCHER ribbon, upper left
 # READ IT AT PSM 11 (sparse text), not 7. Measured against a hand-labelled row: PSM 7 and 6
 # score 3 of 7 on this banner and PSM 11 scores 6 of 7, and the single miss is the card the
 # CURSOR is highlighting -- its white glow floods the ribbon. Same crop, same whitelist; the
@@ -320,6 +314,11 @@ TYPE_BANNER_PSM = 11
 TACTICS_NAMES = ("POWER SWING", "SPEED BOOST", "PITCH FOCUS", "FIELDING PLAY")
 POWER_DISC_BOX = (0.72, 0.04, 0.96, 0.22)     # the white power disc, upper right
 SHIELD_BOX = (0.70, 0.21, 0.96, 0.41)         # the shield badge below it
+# The NAME ribbon, in the same units, so every card sub-box is one kind of thing and the
+# live editor can tune them all the same way (tools/state_viewer.py, keys 1-4). It is
+# deliberately NOT the same constant as BANNER_EDGES: those two numbers feed the PHASE
+# SOLVER, and nudging the box you are looking at must not move where the rows are found.
+NAME_BANNER_BOX = (0.00, 0.79, 1.00, 0.93)
 
 
 def _sub(img, rows, rel_row, col, cols, frac):
