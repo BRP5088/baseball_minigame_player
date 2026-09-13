@@ -83,7 +83,7 @@ def _edit_panel():
     star = "*" if E["dirty"] else " "
     return (f"BOX{star} {who}   {_EDIT_CONST[k]} = ({v})   step {E['step']:.3f}\n"
             f"     arrows move | shift+arrows resize | [ fine  ] coarse | "
-            f"w write to ban_grid.py | 0 revert"
+            f"w write to ban_grid.py | 0 revert | c copy panel"
             + (f"   -- {E['msg']}" if E["msg"] else "") + "\n")
 
 
@@ -107,8 +107,44 @@ root = tk.Tk()
 root.title("state — what the crawl reads")
 root.attributes("-topmost", True)
 lbl = tk.Label(root, bg="black"); lbl.pack()
-txt = tk.Label(root, font=("Menlo", 12), anchor="w", justify="left")
-txt.pack(fill="x")
+# A SELECTABLE PANEL, not a Label. The user, 2026-09-13: "can you make it so I can copy
+# values from the live viewer?" A tk.Label cannot be selected at all, so every number on it
+# had to be retyped by hand.
+#
+# DISABLED, NOT READ-ONLY-BY-CONVENTION: a disabled Text still selects with the mouse and
+# still answers the <<Copy>> event, but it takes no keyboard focus (takefocus=0) and its
+# own key bindings never fire -- which matters, because the box editor owns the arrow keys
+# and a focused Text would eat them to move an insertion cursor nobody can see.
+txt = tk.Text(root, font=("Menlo", 12), height=18, wrap="none", bd=0,
+              takefocus=0, state="disabled", cursor="arrow")
+txt.pack(fill="both", expand=True)
+
+
+class _Panel:
+    """Keeps txt.config(text=...) working over a Text widget, and remembers the text."""
+
+    last = ""
+
+    @staticmethod
+    def config(text=""):
+        _Panel.last = text
+        txt.config(state="normal")
+        txt.delete("1.0", "end")
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+
+    @staticmethod
+    def cget(_what):
+        return _Panel.last
+
+
+def copy_panel(_e=None):
+    """Put the whole panel on the clipboard. One key, because a mouse selection of a
+    fifteen-line grid is fiddly and the usual reason to copy is to paste the WHOLE read."""
+    root.clipboard_clear()
+    root.clipboard_append(_Panel.last)
+    root.update()                      # macOS needs this before the app can lose focus
+    S["note"] = f"copied {len(_Panel.last)} chars to the clipboard"
 S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 
 
@@ -461,7 +497,7 @@ def tick():
 
             # NAMES AND TYPES IN SEPARATE GRIDS, not one crowded line (the user's call,
             # 2026-09-13). A type of "unknown" on a locked card is a real answer.
-            txt.config(text=(
+            _Panel.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
                 f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
                 f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}\n"
@@ -471,7 +507,7 @@ def tick():
                 + _edit_panel()
                 + (f"\n[s] {S['note']}" if S.get("note") else "\n[s] save a labelling sheet")))
         else:
-            txt.config(text=(
+            _Panel.config(text=(
                 f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
                 f"glow {glow}\n"
                 f"cards {[(r.get('digit'), r.get('kind')) for r in rows]}\n"
@@ -483,9 +519,9 @@ def tick():
         # can paste back (CLAUDE.md 10.1). The traceback goes to stdout as well.
         import traceback
         traceback.print_exc()
-        txt.config(text=f"{type(e).__name__}: {e}")
+        _Panel.config(text=f"{type(e).__name__}: {e}")
     if A.once:
-        print(txt.cget("text"))
+        print(_Panel.cget("text"))
         root.quit()
         return
     _reexec_if_changed()
@@ -641,6 +677,7 @@ root.bind("<KeyPress-bracketright>", lambda e: E.__setitem__("step", 0.010))
 root.bind("<KeyPress-w>", _edit_write)
 root.bind("<KeyPress-0>", _edit_reset)
 
+root.bind("<KeyPress-c>", copy_panel)
 root.bind("<KeyPress-s>", save_sheet)
 root.bind("<KeyPress-S>", save_sheet)
 root.focus_force()
