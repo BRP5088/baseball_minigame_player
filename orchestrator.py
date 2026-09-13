@@ -2829,7 +2829,8 @@ BASE_NUMBER = {"third": 3, "second": 2, "first": 1}
 
 
 def bases_to_travel(bases, batter_speed=None, margin=None):
-    """How many BASES have to be animated after this play. None when it cannot be known.
+    """How many BASE-MOVEMENTS this play sets off -- one runner moving one base is one.
+    None when it cannot be known. NOT a duration: see "zero bases is not zero time" below.
 
     This is the input a post-play wait wants and has never had: a routine out with nobody
     on animates almost nothing, while a home run with the bases loaded sends four runners
@@ -2845,6 +2846,18 @@ def bases_to_travel(bases, batter_speed=None, margin=None):
     MARGIN is unknown: a number built on a hole is worse than no number, and the caller's
     fallback is the fixed budget it already uses. The margin is required because it decides
     whether the batter runs at all -- an out is an out.
+
+    ZERO BASES IS NOT ZERO TIME, and the number must never be read that way. An OUT moves
+    nobody, but it still animates -- the pitch, the swing, the out -- and CLAUDE.md section
+    4 already records that outs have a median reveal of 4.2 s and a MAXIMUM of 14.9 s
+    (n=160). So this is the SLOPE's input only. Any wait built on it needs an intercept:
+
+        wait  ~  FIXED_AT_BAT  +  PER_BASE * bases_to_travel(...)
+
+    and a caller that multiplied a 0 straight into a wait of nothing would read a hand that
+    has not been dealt. The user made the point directly on 2026-09-12: "an out still has an
+    animation." Neither term is measured yet -- see wait_for_hand_deal on why the archived
+    times cannot fit them.
 
     IT IS AN UPPER BOUND, NOT A PREDICTION, in two places that are honest to name. A LOSING
     at-bat can still advance runners (CLAUDE.md section 4) by an amount nobody has measured,

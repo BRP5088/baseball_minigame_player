@@ -54,7 +54,11 @@ print("1. THE BATTER ONLY RUNS IF THEY REACHED BASE")
 # reading the numbers back: an out is an out, the batter takes no base. A test that
 # asserts the bug is worse than no test, which is why this row is now the first one.
 check(o.bases_to_travel(bases(), 1, -2) == 0,
-      "an OUT with nobody on animates NOTHING — the batter does not take a base")
+      "an OUT with nobody on moves NOBODY — the batter does not take a base")
+# ...which is NOT the same as taking no time, and the user said so directly: "an out still
+# has an animation". CLAUDE.md section 4 has outs at a median reveal of 4.2 s, max 14.9 s
+# (n=160). This function is the SLOPE's input; a wait built on it needs an intercept, and a
+# caller that turned 0 bases into 0 seconds would read a hand that has not been dealt.
 check(o.bases_to_travel(bases(), 9, -1) == 0,
       "and no amount of speed changes that, because they are out")
 check(o.bases_to_travel(bases(), 3, 1) == 3, "a HIT moves the batter by their speed")
