@@ -32,6 +32,7 @@ import os, sys, re, argparse, time, tempfile, contextlib, tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw, ImageTk
 import orchestrator as o, local_hand as lh, local_state as ls, ban_grid as bg
+import ban_read as br          # the decisions, where a test can reach them
 
 # RELOAD ITSELF WHEN THE CODE CHANGES, so a constant can be tuned against the live screen
 # without killing and relaunching (the user, 2026-09-13: "so when you make changes, I don't
@@ -221,10 +222,8 @@ def _digits(frame, rows, row, col, card=None):
     secondary is never 0, a pitcher's never 3). If the name match were sloppy, that is
     where it would show.
     """
-    if card is not None and getattr(card, "power", None) is not None:
-        return str(card.power), str(card.secondary), "roster"
     try:
-        import ban_digits as bd                     # the real bank, when it lands
+        import ban_digits as bd
     except Exception:
         bd = None
     if bd is not None:
@@ -242,12 +241,13 @@ def _digits(frame, rows, row, col, card=None):
         # on a card" -- a displaced window scores ~0.40 and a real no-badge card up to
         # 0.564, one population with no gate between them. read_power DOES catch the
         # displaced window, so it is the thing that says a card is there at all.
-        if p is not None:
-            return str(p), ("-" if sh is None else str(sh)), "bank"
-        if sh is not None:
-            return "-", "-", "bank"
+    else:
+        p = sh = None
+    # THE ORDER AND THE RULES ARE ban_read.values_for's; this only supplies the readings.
+    if card is not None or p is not None or sh is not None:
+        return br.values_for(card=card, bank=(p, sh))
     pb = bg.power_box(frame, rows, row, col)
-    p = "-"
+    ocr_p = None
     if pb is not None:
         crop = frame.crop(pb).convert("L")
         if crop.width < 6 or crop.height < 6:
@@ -271,17 +271,17 @@ def _digits(frame, rows, row, col, card=None):
             # POWER IS 4 TO 9 (CLAUDE.md section 4). There is no 1, 2 or 3 power card, so a
             # digit outside that range is a known misread -- 14-18 of 118 crops per mode --
             # and dropping it is what lets the next mode have a turn.
-            if dig and 4 <= int(dig[0]) <= 9:
-                p = "?" + dig[0]
+            if dig and br.power_ok(dig[0]):
+                ocr_p = dig[0]
                 break
     # NO SHIELD READER EXISTS AT BAN SCALE. local_hand.read_shield answers 0 for every card
     # here (0.31-0.42 against its own 0.69 gate) and a scale sweep only reaches argmax 2 of
     # 7, always guessing "1". Printing 0 for everything would look like a reading; "-" is
     # the honest shape of "nobody asked a question that got an answer".
-    return p, "-", "ocr"
+    return br.values_for(card=None, bank=(None, None), ocr_power=ocr_p)
 
 
-def _tactics_bonus(frame, rows, row, col):
+def _tactics_bonus(frame, rows, row, col, label=None):
     """The +N badge on a TACTICS card. Its own box, top CENTRE, not the player disc."""
     bb = bg.tactics_bonus_box(frame, rows, row, col)
     if bb is None:
@@ -296,47 +296,16 @@ def _tactics_bonus(frame, rows, row, col):
         # EVERY OWNED TACTICS CARD SHOWS A 1 -- 299 hand-labelled cards, zero 3s, and a +3
         # does not exist in the game (CLAUDE.md section 4). A 2 is possible only on POWER
         # SWING. Anything else is a misread.
-        if dig and dig[0] in "12":
+        if dig and br.bonus_ok(dig[0], label):
             return "+" + dig[0]
     return "-"
 
 
-# ---------------------------------------------------------------- HOLD A GOOD READ
-# The user, 2026-09-13: "sometimes I see them change while it's just idling." Filmed --
-# twelve grabs of a screen nobody was touching, which is the only way to see this
-# (CLAUDE.md 10.26) -- FOUR OF TEN CELLS CHANGED:
-#
-#     r0c1  pitcher x11, nothing x1
-#     r1c1  SPEED BOOST x9, nothing x3
-#     r1c4  PITCH FOCUS x8, nothing x4
-#     r1c2  SPEED BOOST x6, LOCKED x6
-#
-# THE READER IS NOT CHANGING ITS MIND, IT IS INTERMITTENTLY ABSTAINING. The letters it does
-# return are unambiguous: 'POWERSWING' at 0 edits, 'SPEEPBOOST' at 1, 'PITCHFOCUS' at 0,
-# against 9-12 edits for every runner-up. So the answer is never in doubt when it arrives;
-# some grabs just yield no letters at all.
-#
-# The last cell is a different fault: its card sd runs 32.7-35.8 and LOCKED_SD_MAX is 34.0,
-# so it crosses the gate between grabs. A single frame cannot tell which side it is on --
-# but a card whose LABEL READS is not locked, whatever its contrast says, so a successful
-# read now outranks the sd.
-#
-# The rule is the project's own: local_hand_cards commits only to a hand that read twice
-# running. Here a NEW answer has to appear twice before it replaces the held one, and an
-# ABSTENTION never replaces anything. Cleared when the scroll level changes, because then
-# the cards under these coordinates are genuinely different ones.
-_STABLE = {"scroll": None, "held": {}, "cand": {}}
-
-
-# LEPTONICA AND TK TALK TO fd 2 DIRECTLY, and python cannot see it to filter it. The user,
-# 2026-09-13, pasting a live log: "Error in boxClipToRectangle: box outside rectangle" four
-# times a tick, plus Tk's own "Task policy set failed: 4" on every reload. Neither is ours
-# and neither means anything -- leptonica prints and then answers anyway.
-#
-# NOT a blanket redirect to /dev/null: that would swallow a real traceback, and a viewer
-# that cannot report its own crash is how the last one died silently for an afternoon.
-# fd 2 is captured for the duration of the OCR, then everything that is NOT on the mute
-# list is written straight back out.
+# LEPTONICA AND TK TALK TO fd 2 DIRECTLY, and python cannot see it to filter it. Neither
+# "box outside rectangle" nor Tk's "Task policy set failed: 4" is ours and neither means
+# anything -- leptonica prints and then answers anyway. NOT a blanket redirect to
+# /dev/null: that would swallow a real traceback, and a viewer that cannot report its own
+# crash is how this one already died silently for an afternoon.
 _MUTE = (b"boxClipToRectangle", b"pixScanForForeground", b"Task policy set failed",
          b"pixGetInvBackgroundMap", b"pixaGetPix")
 
@@ -358,34 +327,20 @@ def _quiet_ocr():
         tmp.close()
 
 
-def _rowkey(rows):
-    """A stable id for WHERE the grid is, used to clear the latch when it scrolls.
+# ---------------------------------------------------------------- HOLD A GOOD READ
+# The rule and the evidence live in ban_read, which a test can import; this file builds a
+# Tk window at import and so can never be tested itself. affected_tests.py named that
+# exactly when the viewer changed: "state_viewer.py -> NO TEST IMPORTS IT. Nothing here can
+# prove this change; the full suite cannot either."
+_STABLE = {}
 
-    NOT read_ban_scroll_level: it returns None often enough that keying on it would leave
-    the latch never cleared, holding the previous page's names over the new page's cards --
-    a stale answer that looks exactly like a confident one (CLAUDE.md 10.1).
-    """
-    if not rows:
-        return None
-    return tuple(round(r["top"], 2) for r in rows)
+
+def _rowkey(rows):
+    return br.rowkey(rows)
 
 
 def _latch(key, value, scroll):
-    """The value to SHOW for this cell: held unless a new one has been seen twice."""
-    if scroll != _STABLE["scroll"]:
-        _STABLE.update({"scroll": scroll, "held": {}, "cand": {}})
-    held = _STABLE["held"].get(key)
-    if value is None:                       # an abstention is not evidence of anything
-        return held
-    if value == held:
-        _STABLE["cand"].pop(key, None)
-        return held
-    if _STABLE["cand"].get(key) == value:   # seen twice running -- believe it
-        _STABLE["held"][key] = value
-        _STABLE["cand"].pop(key, None)
-        return value
-    _STABLE["cand"][key] = value
-    return held if held is not None else value
+    return br.latch(_STABLE, key, value, scroll)
 
 
 def _type_ocr(img):
@@ -555,9 +510,7 @@ def slow_read(frame, crops):
                 # maybe it should be a different state." Exactly right -- `None` was
                 # falling through the draw's else branch and painting four player windows
                 # over a tactics card. Latched too, so a single bad frame cannot flip it.
-                kind = ("tactics" if isinstance(t, tuple)
-                        else ("player" if isinstance(t, str) else None))
-                kind = _latch(key + ":kind", kind, _scrollkey)
+                kind = _latch(key + ":kind", br.kind_of(t), _scrollkey)
                 rec = {"key": key, "kind": kind, "locked": bool(locked),
                        "name": names[-1][1], "type": label,
                        "power": "-", "second": "-", "src": ""}
@@ -568,7 +521,8 @@ def slow_read(frame, crops):
                     # type says nothing twice; the useful second column is the KIND.
                     rec["name"] = t[1].title() if isinstance(t, tuple) else rec["name"]
                     rec["type"] = "tactics"
-                    rec["power"] = _tactics_bonus(frame, rows, row, col)
+                    rec["power"] = _tactics_bonus(frame, rows, row, col,
+                                                  t[1] if isinstance(t, tuple) else None)
                     rec["src"] = "badge"
                 else:
                     rec["power"], rec["second"], rec["src"] = _digits(
@@ -708,16 +662,11 @@ def tick():
                             # is top CENTRE where the power disc is top right.
                             _kind = dict(S["slow"].get("ban_kinds") or []).get(
                                 f"r{row}c{col}")
-                            if _kind == "tactics":
-                                _set = (("tac_label", TYPE), ("tac_bonus", POWER))
-                            elif _kind == "player":
-                                _set = (("name", NAME), ("type", TYPE),
-                                        ("power", POWER), ("shield", SHIELD))
-                            else:
-                                _set = ()      # KIND UNKNOWN: draw no reader windows at
-                                               # all. Drawing the player set was a guess
-                                               # wearing the same clothes as an answer.
-                            for _k, _c in _set:
+                            _colour = {"name": NAME, "type": TYPE, "power": POWER,
+                                       "shield": SHIELD, "tac_label": TYPE,
+                                       "tac_bonus": POWER}
+                            for _k in br.boxes_for(_kind):
+                                _c = _colour[_k]
                                 _b = _ebox(frame, fitted, row, col, _k)
                                 if _b is not None:
                                     d.rectangle(_b, outline=_c,
