@@ -60,10 +60,24 @@ live queue. Delete it when the queue is empty.
 
 ### OPEN, in priority order
 
-1. **Deal timing** -- still the user's open ask. Runner speeds now exist, so a
-   bases-to-travel predictor is finally buildable. The workflow's timing axis was mostly
-   REFUTED (16 of 25 timeouts tautological, 9 from a deleted rule, 0 from shipped code) --
-   re-read those verdicts before reusing any of its numbers.
+1. **Deal timing -- HALF DONE. The input is shipped; the coefficient is not, deliberately.**
+   `orchestrator.bases_to_travel(bases, batter_speed, margin)` gives 1 for a routine out
+   and 10 for a bases-loaded home run, and `wait_for_hand_deal(predicted_bases=...)` logs
+   it beside the measured wait. NOT wired at the call site yet -- the prediction must be
+   captured at the PLAY (the bases as they were when the ball was hit) and popped at the
+   gate, the same stash/pop pattern `stash_hand_baseline`/`pop_hand_baseline` already uses
+   in play_one_turn. That is the next concrete step: ~20 lines.
+   **WHY NO SECONDS-PER-BASE CONSTANT.** The archived release times are FLOOR-CENSORED:
+   the gate cannot release before POST_PLAY_MIN_WAIT and 77% land within one poll of it,
+   and the whole distribution MOVES with that constant (floor 6.0 -> pile at 6.1, floor
+   3.0 -> pile at 3.6). There are 76 uncensored turns between 7 and 18.5 s, but no [deal]
+   line on disk carries runner state to join against. So the pair is logged and the
+   coefficient waits for a few matches of real data. A test asserts no PER_BASE constant
+   exists, so adding one has to be justified.
+   NOTE the floor was already fixed on 2026-09-10 (6.0 -> 3.0, hand first settles at
+   median 1.1 s); the workflow's timing axis mined the STALE 6.0 archive and was mostly
+   REFUTED anyway (16 of 25 timeouts tautological, 9 from a deleted rule, 0 from shipped
+   code). Do not reuse its numbers.
 2. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
    numbers reproduce, write-up overstated the sample). Not wired in.
 3. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.

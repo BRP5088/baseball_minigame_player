@@ -2825,6 +2825,52 @@ def hand_deal_threshold(env=None):
     if not 0.0 < v <= 255.0:
         raise ValueError(f"{DEAL_THRESHOLD_ENV}={raw!r} is outside (0, 255]")
     return v
+BASE_NUMBER = {"third": 3, "second": 2, "first": 1}
+
+
+def bases_to_travel(bases, batter_speed=None, margin=None):
+    """How many BASES have to be animated after this play. None when it cannot be known.
+
+    This is the input a post-play wait wants and has never had: a routine out with nobody
+    on animates almost nothing, while a home run with the bases loaded sends four runners
+    all the way round. Measured live, the same gate released 1.1 s after one play and
+    10.8 s after a home run, so the spread is real and large.
+
+    `bases` is local_state.read_runners()["bases"] -- occupancy AND the runner's live speed
+    off their shield badge, which is what makes this computable at all. `margin` is the
+    reveal's margin (orchestrator.reveal_margin); at AUTO_HOME_RUN_MARGIN or above every
+    runner scores from wherever they stand, which is the maximum animation the game has.
+
+    Returns None rather than a guess when a base abstained or a speed did not read: a
+    number built on a hole is worse than no number, and the caller's fallback is the
+    fixed budget it already uses.
+    """
+    if not bases:
+        return None
+    total = 0
+    for name, b in bases.items():
+        if b.get("occupied") is None:
+            return None
+        if not b["occupied"]:
+            continue
+        start = BASE_NUMBER.get(name)
+        if start is None:
+            return None
+        if margin is not None and margin >= AUTO_HOME_RUN_MARGIN:
+            total += 4 - start          # everyone scores from where they stand
+            continue
+        sp = b.get("speed")
+        if sp is None:
+            return None
+        total += min(sp, 4 - start)     # a runner cannot pass home
+    # the batter runs too, on anything that is not an out -- and on a home run, all the way
+    if margin is not None and margin >= AUTO_HOME_RUN_MARGIN:
+        total += 4
+    elif batter_speed is not None:
+        total += max(0, batter_speed)
+    return total
+
+
 # No post-play read before this, edge or no edge: between the fastest release the
 # old gate produced (2.16 s, n=85 live) and the earliest a hand was readable by eye
 # (8.43 s, n=9).
@@ -2889,7 +2935,8 @@ def pop_hand_baseline():
 
 
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
-                       poll_interval: float = 0.15, baseline=None) -> bool:
+                       poll_interval: float = 0.15, baseline=None,
+                       predicted_bases=None) -> bool:
     """Block until the replacement card has visibly landed in the hand.
 
     Returns True if the deal was seen, False on timeout. Rising-edge trigger on
@@ -2897,6 +2944,16 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     _grab_settle_regions(("hand",)) per poll, ~40 ms.
     """
     start = time.time()
+    # PREDICTED BASES, RECORDED BESIDE THE MEASURED WAIT, on its own line so it cannot be
+    # confused with the gate's own numbers. The coefficient that would turn bases_to_travel
+    # into SECONDS cannot be fitted from anything on disk: the archived release times are
+    # floor-censored (77% land within one poll of POST_PLAY_MIN_WAIT, and the whole
+    # distribution MOVES when that constant changes -- floor 6.0 piles at 6.1, floor 3.0 at
+    # 3.6), and no [deal] line on disk carries runner state to join against. So this logs
+    # the PAIR and invents nothing; a few matches of it is what makes the model fittable.
+    # An invented seconds-per-base would be the same bug wearing a fix's clothes.
+    if predicted_bases is not None:
+        print(f"  [deal] predicted {predicted_bases} base(s) to animate")
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
     # compared against THIS, not against its predecessor, so a gradual deal accumulates
     # instead of being divided among the polls that carried it.
