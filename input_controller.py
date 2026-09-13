@@ -996,8 +996,11 @@ BAN_NAV_MAX_STEPS = 14             # per target; a grid is 5 wide and ~8 deep
 BAN_NAV_SETTLE = 0.55              # a scrolling press needs about twice ACTION_DELAY
 
 
+BAN_NAV_MAX_BLIND = 10             # consecutive unreadable frames per target
+
+
 def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
-                         before_confirm=None, log=print):
+                         before_confirm=None, log=print, on_blind=None):
     """Place the bans, checking the cursor on the screen before every select_card.
 
     Returns the list of positions it actually banned. A target it cannot reach is REPORTED
@@ -1010,47 +1013,97 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
         raise ValueError(f"ban positions not all in grid: asked {sorted(banned_positions)}, "
                          f"matched {targets}")
     placed = []
+    toggled = 0                    # select_card presses, whether or not they confirmed
     for want in targets:
-        for step in range(BAN_NAV_MAX_STEPS):
-            here = look()
-            if here is None:
-                time.sleep(BAN_NAV_SETTLE)
-                continue
-            if here == want:
-                press("select_card")
-                time.sleep(BAN_NAV_SETTLE)
-                if confirm_ban is None or confirm_ban(want):
-                    placed.append(want)
+        # SEPARATE BUDGETS. Both moves and blind waits used to spend the same 14, so a
+        # far target with one late frame per scrolling press ran out before arriving:
+        # (6, 2) needs 2*6 + 2 + 1 = 15 and was silently skipped, reported as
+        # ban_nav_incomplete, and the match played with 2 of 3 bans. A blind frame is
+        # not a failed step toward the target; it is no step at all.
+        moves = blind = 0
+        reached = False
+        # AN EXCEPTION HERE USED TO LEAVE THE SCREEN MID-CHANGE. Neither look() nor
+        # confirm_ban was wrapped, and neither is ban_cursor_absolute / ban_x_on. A raise
+        # on the 14th look left the bans ON SCREEN with confirm_play never pressed, and
+        # in run() it unwound before bans_done_this_match and acted_screen were set -- so
+        # the next poll re-entered with the cached collection and TOGGLED THE BANS BACK
+        # OFF. That is the one path that defeats the C3 guard, and the verified navigator
+        # made it likelier by adding a screen read per press.
+        try:
+            while moves < BAN_NAV_MAX_STEPS and blind < BAN_NAV_MAX_BLIND:
+                here = look()
+                if here is None:
+                    blind += 1
+                    time.sleep(BAN_NAV_SETTLE)
+                    continue
+                if here == want:
+                    press("select_card")
+                    toggled += 1
+                    reached = True
+                    time.sleep(BAN_NAV_SETTLE)
+                    if confirm_ban is None or confirm_ban(want):
+                        placed.append(want)
+                    else:
+                        # THE TOGGLE DID NOT TAKE. Pressing again is not safe --
+                        # select_card is a TOGGLE, so a second press on a card that DID
+                        # ban un-bans it. Report.
+                        log(f"  [ban] select_card at {want} did not place an X — leaving it")
+                    break
+                # one step toward the target, then look again
+                if here[0] < want[0]:
+                    press("move_down")
+                elif here[0] > want[0]:
+                    press("move_up")
+                elif here[1] < want[1]:
+                    press("move_right")
                 else:
-                    # THE TOGGLE DID NOT TAKE. Pressing again is not safe -- select_card is
-                    # a TOGGLE, so a second press on a card that DID ban un-bans it. Report.
-                    log(f"  [ban] select_card at {want} did not place an X — leaving it")
-                break
-            # one step toward the target, then look again
-            if here[0] < want[0]:
-                press("move_down")
-            elif here[0] > want[0]:
-                press("move_up")
-            elif here[1] < want[1]:
-                press("move_right")
-            else:
-                press("move_left")
-            time.sleep(BAN_NAV_SETTLE)
-        else:
-            log(f"  [ban] could not reach {want} in {BAN_NAV_MAX_STEPS} steps "
-                f"(cursor last seen at {look()}) — NOT toggling blind")
+                    press("move_left")
+                moves += 1
+                time.sleep(BAN_NAV_SETTLE)
+        except Exception as e:
+            log(f"  [ban] reading the ban screen raised while placing {want} "
+                f"({type(e).__name__}: {e}) — committing what IS placed rather than "
+                "leaving the screen mid-change for the next poll to un-toggle")
+        if not reached:
+            log(f"  [ban] could not reach {want} in {moves} moves / {blind} blind frames "
+                f"— NOT toggling blind")
+
+    # THE PROBE CHECKED THE SENSOR BEFORE, NEVER DURING, and one success committed to
+    # this path with no way back. A cursor that answers the probe and then goes blind
+    # placed ZERO bans here and still pressed confirm_play -- which is Triangle, i.e.
+    # PLAY -- starting a match that had already been debited $50, completely unbanned.
+    # That is the exact failure the probe was added to close, moved one look() later.
+    #
+    # Only when NOTHING was toggled. A target that was pressed but could not be
+    # confirmed may well BE banned (the selection splash makes ban_x_on read False on a
+    # card that is banned), and dead-reckoning over that would toggle it back off.
+    if toggled == 0 and on_blind is not None:
+        log("  [ban] the cursor answered the probe and then went blind: NOTHING was "
+            "toggled. Falling back to the dead-reckoned path rather than pressing PLAY "
+            "on a match that is paid for and unbanned.")
+        on_blind()
+        return sorted(banned_positions)
     if before_confirm is not None:
         try:
             before_confirm()
         except Exception as e:
             log(f"  [ban] pre-confirm verification raised ({e}) — continuing.")
-    # back to the top before confirming, by LOOKING rather than counting
-    for _ in range(BAN_NAV_MAX_STEPS):
-        here = look()
-        if here is None or here[0] <= 0:
-            break
-        press("move_up")
-        time.sleep(BAN_NAV_SETTLE)
+    # back to the top before confirming, by LOOKING rather than counting.
+    # WRAPPED for the same reason as the placement loop: a reader that raises HERE
+    # skipped the confirm entirely, and an unconfirmed ban screen is un-toggled by the
+    # next poll. Triangle commits from anywhere, so an unwind that stops early costs
+    # nothing; not confirming costs the whole ban set.
+    try:
+        for _ in range(BAN_NAV_MAX_STEPS):
+            here = look()
+            if here is None or here[0] <= 0:
+                break
+            press("move_up")
+            time.sleep(BAN_NAV_SETTLE)
+    except Exception as e:
+        log(f"  [ban] reading the ban screen raised while returning to the top "
+            f"({type(e).__name__}: {e}) — confirming from here; Triangle commits "
+            "from anywhere")
     press("confirm_play")
     press("confirm_play")
     return placed

@@ -816,6 +816,92 @@ AST-scans for emission sites so a NEW one fails the test instead of reaching
 someone's keyboard. Four mutants, all caught -- including a planted
 `pyautogui.keyDown` in an unrelated module.
 
+### THE BAN PROBE CHECKED THE SENSOR BEFORE PLACEMENT AND NEVER DURING (2026-09-13)
+
+Third time in one evening that a fix of mine was incomplete in the same way.
+
+`run()` probes `ban_cursor_absolute` up to `BAN_CURSOR_PROBE_TRIES` times and, on ONE
+success, commits to the verified path **with no way back**. A cursor that answers the
+probe and then goes blind placed ZERO bans and still pressed `confirm_play` -- which
+is Triangle, i.e. PLAY -- on a match already debited $50 at the prompt. The probe
+moved the failure one `look()` later; it did not close it. `select_bans_verified` now
+takes an `on_blind` callback and hands over to the dead-reckoned path **only when
+NOTHING was toggled**: a target that was pressed but could not be confirmed may well
+BE banned (the selection splash makes `ban_x_on` read False on a banned card), and
+dead-reckoning over that would toggle it back off.
+
+Two more from the same sweep, both fixed and mutation-tested:
+
+- **A raising reader left the screen mid-change.** Neither `look()` nor `confirm_ban`
+  was wrapped, and neither is `ban_cursor_absolute` / `ban_x_on`. A raise left the
+  bans ON SCREEN with `confirm_play` never pressed, and in `run()` it unwound BEFORE
+  `bans_done_this_match` and `acted_screen` were set -- so the next poll re-entered
+  with the cached collection and TOGGLED THE BANS BACK OFF. That is the one path that
+  defeats the C3 guard, and the verified navigator made it likelier by adding a screen
+  read per press.
+- **Moves and blind waits shared one budget of 14.** A far target with one late frame
+  per scrolling press ran out before arriving: (6, 2) needs 2*6 + 2 + 1 = 15, was
+  silently skipped, reported as `ban_nav_incomplete`, and the match played 2 of 3.
+  Separate budgets now (`BAN_NAV_MAX_BLIND`); a blind frame is not a step.
+
+**STILL OPEN, and it is the worst outcome available: A STALE COLUMN FRAME BANS THE
+WRONG CARD AND READS AS 3/3.** `ban_cursor_absolute` is guarded against mid-animation
+ONLY by the scrollbar. A VERTICAL press mid-travel leaves the scrollbar unreadable, so
+the read is refused -- safe. A HORIZONTAL press moves no scrollbar, so the level reads
+valid and `cursor_cell` reports the halo where it still is: a confident, stale cell.
+An exhaustive search over 10,927 late-frame combinations found 126 wrong-ban outcomes,
+and on the realistic 3-target run **75 of them end with three cards banned, one of them
+wrong** -- so `read_ban_counter` says 3/3 and the run prints `verified 3/3 bans placed`.
+`ban_x_on` cannot see it: it asks "is there an X where I think I am", gets False, and
+logs the wrong ban as a MISSING ban. The fix it points to: `ban_grid.banned_cells`
+already returns EVERY visible X and `ban_x_on` throws all but one away -- comparing the
+full hit set against the expected set after each `select_card` catches it at the press
+that made it. Not built: it changes ban verification on the $50 path and wants a live
+screen to check.
+
+**AND TWO CONSTANTS ON THIS PATH ARE INVENTED, INCLUDING ONE I WROTE TODAY.**
+`BAN_NAV_SETTLE = 0.55` is justified as "about twice ACTION_DELAY" -- derived from
+another constant, not from a measured settle. `BAN_CURSOR_PROBE_TRIES = 3` is
+justified in prose with no measurement of how long a routine blind period lasts.
+Neither sits between two measured populations (10.4). Nothing in `ban_grid.py`,
+`input_controller.py` or `orchestrator.py` measures scroll or splash duration. They
+are recorded here as unmeasured rather than quietly treated as evidence.
+
+**Also stale:** `orchestrator.py`'s comment that under 3 bans the game "refuses to
+start" is refuted 1,500 lines away in the same file ("three of five real sequences
+finished at 2/3 with the match starting anyway") and by section 4 here.
+
+### THE SUITE HAS FOUR DIFFERENT `check()` SIGNATURES, AND A REVERSED CALL ALWAYS PASSES
+
+Written after shipping eight of them in one evening.
+
+    tests/minigame/test_readable_hand_gate.py   def check(name, ok, detail="")
+    tests/rig/test_window_drift_guard.py        def check(name, cond)
+    tests/minigame/_run_harness.py              def check(cond, msg)
+    tests/rig/test_no_real_input_under_test_run.py, test_keymap_matches_chiaki.py,
+    test_chiaki_pid.py, test_deal_timing_tool.py   def check(ok, msg)
+
+Call a name-first `check` as `check(condition, "message")` and the MESSAGE lands in
+the `ok` slot. A non-empty string is truthy, so it prints `PASS True` and appends
+nothing to `fails`. **The check cannot fail, on any input, ever** -- and the only
+visible symptom is the word `True` where a sentence should be, in a file that
+prints dozens of passing lines.
+
+Eight checks written into `test_readable_hand_gate.py` on 2026-09-13 had this
+shape: the crash-recovery check, the x-axis checks, the play_seq check. The suite
+was GREEN with all eight vacuous. **Mutation testing is the only thing that found
+it** -- three mutants survived that should not have, and chasing why led here.
+That is the whole argument for section 10.9 in one incident: a test written, run,
+and passing is not evidence of anything until something it guards has been broken
+and the test has been watched to fail.
+
+The cheap check, before trusting any new assertion in this suite:
+
+    grep -m1 -o "def check(.*)" <the file>          # which order?
+    <run the file> | grep -E "^ *(PASS|ok|FAIL) +(True|False)$"   # any bare bools?
+
+Non-zero means vacuous checks.
+
 ### ...AND THE TARGETED PATH WAS NEVER LOCKED OUT EITHER. THERE ARE FOUR PATHS.
 
 A QA sweep the same night, pointed at the fix above, found the fix incomplete --

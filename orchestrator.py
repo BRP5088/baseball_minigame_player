@@ -3235,9 +3235,28 @@ def capture_diamond_at_play(decision, state_json, log=print):
         return False
 
 
+_DEAL_SEQ = 0
+
+
 def stash_deal_inputs(bases, batter_speed, fielding=0):
-    global _DEAL_INPUTS
-    _DEAL_INPUTS = {"bases": bases, "batter_speed": batter_speed, "fielding": fielding}
+    """Record the diamond at the moment of the play, with a SEQUENCE NUMBER.
+
+    The seq exists because the pop only happens WHEN THE GATE RUNS, and the gate
+    does not always run: play_one_turn raising does `continue`, and a refused play
+    pops the hand baseline but not this. The next turn's gate then consumes a
+    diamond describing an at-bat that never happened, and the row is mislabelled
+    with no way to tell. test_deal_inputs_wired names that hazard and believes
+    popping at the gate closes it; it does not.
+
+    Rather than reorder the turn loop -- control flow on the $50 path that cannot
+    be tested live tonight -- the seq makes the problem VISIBLE: two rows carrying
+    the same play_seq is a reused diamond, and the analysis drops them. Instrument
+    first, decide later, invent nothing.
+    """
+    global _DEAL_INPUTS, _DEAL_SEQ
+    _DEAL_SEQ += 1
+    _DEAL_INPUTS = {"bases": bases, "batter_speed": batter_speed,
+                    "fielding": fielding, "seq": _DEAL_SEQ}
 
 
 def pop_deal_inputs():
@@ -3262,6 +3281,32 @@ def deal_inputs_summary(d):
                 f"fielding {d.get('fielding', 0)} bases {lo}..{hi}")
     except Exception:
         return None
+
+
+def deal_inputs_bounds(d):
+    """(lo, hi) base-movements this play can produce, or (None, None).
+
+    THE X-AXIS THE DATASET WAS MISSING. wait_for_hand_deal takes a
+    `predicted_bases` argument and NOTHING IN PRODUCTION EVER PASSED IT -- the one
+    call site is `wait_for_hand_deal(baseline=pop_hand_baseline())` -- so every row
+    would have carried predicted_bases=None and tools/deal_timing.py would have
+    refused with "0 usable rows" however many matches were played. The pipeline was
+    wired, exercised, green, and collected nothing (10.1, one level up).
+
+    A single number does not exist at the play: bases_to_travel needs the MARGIN and
+    the margin is only known at the reveal. So the bounds are what the moment
+    actually supports, and they are recorded as numbers instead of being formatted
+    into a log line and thrown away.
+    """
+    try:
+        if not d or not d.get("bases"):
+            return None, None
+        lo = bases_to_travel(d["bases"], d.get("batter_speed"), -1, d.get("fielding", 0))
+        hi = bases_to_travel(d["bases"], d.get("batter_speed"),
+                             AUTO_HOME_RUN_MARGIN, d.get("fielding", 0))
+        return lo, hi
+    except Exception:
+        return None, None
 
 
 def stash_hand_baseline(img):
@@ -3295,7 +3340,9 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # An invented seconds-per-base would be the same bug wearing a fix's clothes.
     if predicted_bases is not None:
         print(f"  [deal] predicted {predicted_bases} base(s) to animate")
-    _di = deal_inputs_summary(pop_deal_inputs())
+    _dinputs = pop_deal_inputs()
+    _di = deal_inputs_summary(_dinputs)
+    _bases_lo, _bases_hi = deal_inputs_bounds(_dinputs)
     if _di:
         print(f"  [deal] at the play: {_di}")
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
@@ -3350,6 +3397,9 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             threshold=th,
             biggest=round(biggest, 1),
             edge_seen=seen,
+            bases_lo=_bases_lo,
+            bases_hi=_bases_hi,
+            play_seq=(_dinputs or {}).get("seq"),
             at_the_play=_di or None)
         # BOTH sinks, deliberately. The deque is what a stall bundle carries; the file is
         # what survives a HEALTHY run, and a healthy run is the only kind that produces a
@@ -3365,8 +3415,21 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                   "the turn continues")
     while time.time() - start < max_wait:
         time.sleep(poll_interval)
-        cur = _grab_settle_regions(("hand",))["hand"]
-        d = _mean_abs_delta(baseline, cur)
+        # A CAPTURE THAT RAISES MUST NOT END THE SESSION. These two were the only
+        # unwrapped calls in the loop, and there is no try at the call site
+        # (:7418) -- so a grab raising on poll 3 escaped wait_for_hand_deal,
+        # reached run()'s outer finally, and stopped the run. The timing row was
+        # lost with it, which is the one record that would have said why.
+        # Demonstrated offline by raising from the third grab: 0 rows, run over.
+        try:
+            cur = _grab_settle_regions(("hand",))["hand"]
+            d = _mean_abs_delta(baseline, cur)
+        except Exception as e:
+            print(f"  [deal] the deal gate could not read the hand "
+                  f"({type(e).__name__}: {e}) — reading anyway; the retry path "
+                  "will catch a bad read")
+            _record_row("error")
+            return False
         biggest = max(biggest, d)
         # THE HEARTBEAT. A 35 s silence and a hung process read exactly alike --
         # the user watching the stream on 2026-09-08 could not tell them apart,
@@ -7005,9 +7068,20 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         # toggles, and on one dropped press it bans a card the engine never
                         # chose -- measured head to head on a simulated grid, and seen live
                         # at 2 of 3 with the scrollbar three rows short of its target.
+                        # on_blind IS THE WAY BACK. The probe above checks the sensor
+                        # BEFORE placement and never during, and one success committed to
+                        # this path with no escape: a cursor that answered the probe and
+                        # then went blind placed ZERO bans and still pressed confirm_play
+                        # -- Triangle, i.e. PLAY -- on a match already debited $50. The
+                        # probe moved that failure one look() later; it did not close it.
                         _placed = input_controller.select_bans_verified(
                             grid, banned_positions, look=ban_cursor_absolute,
-                            confirm_ban=ban_x_on, before_confirm=_verify_bans)
+                            confirm_ban=ban_x_on, before_confirm=_verify_bans,
+                            on_blind=lambda: (
+                                record_observation(event="ban_nav_blind_midway"),
+                                select_bans_and_start_full(
+                                    grid, banned_positions,
+                                    before_confirm=_verify_bans)))
                         if sorted(_placed) != sorted(banned_positions):
                             missed = sorted(set(banned_positions) - set(_placed))
                             print(f"  [ban] VERIFIED NAVIGATION placed {sorted(_placed)}; "

@@ -194,6 +194,114 @@ check(g_new.banned == WANT,
       f"the looking path, same grid and same dropped presses, is still correct "
       f"({sorted(g_new.banned)})")
 
+print("\n6. THE SENSOR GOES BLIND MIDWAY — the case with no coverage until now")
+# The probe in run() checks the cursor BEFORE placement and never during, and one
+# success committed to this path with no way back. A cursor that answers the probe
+# and then goes blind placed ZERO bans and still pressed confirm_play -- Triangle,
+# i.e. PLAY -- on a match already debited $50. The covered cases were "always
+# blind" and "always reads"; "reads, then stops" had none.
+_g = Grid()
+_looks = {"n": 0}
+
+
+def _blind_after_one():
+    _looks["n"] += 1
+    return _g.look() if _looks["n"] <= 1 else None
+
+
+_fell_back = []
+_real_press, _real_sleep = ic.press, ic.time.sleep
+ic.press = _g.press
+ic.time.sleep = lambda *_a: None
+try:
+    _placed = ic.select_bans_verified(
+        GRID, WANT, look=_blind_after_one,
+        confirm_ban=lambda pos: pos in _g.banned, log=lambda *a: None,
+        on_blind=lambda: _fell_back.append(1))
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+check(_fell_back == [1],
+      "a cursor that answers once and then goes blind must fall back, not press PLAY "
+      f"on an unbanned $50 match (fell back: {_fell_back})")
+check("confirm_play" not in _g.presses,
+      f"it pressed {[x for x in _g.presses if x == 'confirm_play']} — the navigator must "
+      "not commit when it is handing over to the dead-reckoned path, which confirms itself")
+check(not _g.banned, f"nothing should have been toggled ({sorted(_g.banned)})")
+
+# ...and the control: when it DOES toggle, on_blind must NOT fire, or every run
+# would dead-reckon over bans that are already correctly placed.
+_g2 = Grid()
+_fb2 = []
+ic.press, ic.time.sleep = _g2.press, lambda *_a: None
+try:
+    _p2 = ic.select_bans_verified(GRID, WANT, look=_g2.look,
+                                  confirm_ban=lambda pos: pos in _g2.banned,
+                                  log=lambda *a: None, on_blind=lambda: _fb2.append(1))
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+check(not _fb2 and _g2.banned == WANT,
+      f"CONTROL: a working sensor must NOT fall back (fell back {_fb2}, "
+      f"banned {sorted(_g2.banned)}) — dead-reckoning over correct bans un-toggles them")
+
+print("\n7. A RAISING READER MUST NOT LEAVE THE SCREEN MID-CHANGE")
+# Neither look() nor confirm_ban was wrapped, and neither is ban_cursor_absolute.
+# A raise left the bans ON SCREEN with confirm_play never pressed, and in run() it
+# unwound before bans_done_this_match and acted_screen were set -- so the next poll
+# re-entered with the cached collection and TOGGLED THE BANS BACK OFF. That is the
+# one path that defeats the C3 guard.
+_g3 = Grid()
+_n3 = {"i": 0}
+
+
+def _raises_late():
+    _n3["i"] += 1
+    if _n3["i"] > 6:
+        raise RuntimeError("the ban screen could not be read")
+    return _g3.look()
+
+
+ic.press, ic.time.sleep = _g3.press, lambda *_a: None
+try:
+    _p3 = ic.select_bans_verified(GRID, WANT, look=_raises_late,
+                                  confirm_ban=lambda pos: pos in _g3.banned,
+                                  log=lambda *a: None)
+    _raised = None
+except Exception as _e:
+    _raised = _e
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+check(_raised is None,
+      f"the reader's exception escaped ({_raised!r}) — at the real call site that unwinds "
+      "before either guard is armed, and the next poll un-toggles the bans")
+check(_g3.presses[-2:] == ["confirm_play", "confirm_play"],
+      f"it must still COMMIT what is placed ({_g3.presses[-2:]}) rather than leave the "
+      "screen mid-change for the next poll to undo")
+
+print("\n8. A FAR TARGET IS NOT LOST TO THE WAIT BUDGET")
+# Moves and blind waits shared one budget of 14, so a far target with one late frame
+# per scrolling press ran out before arriving: (6, 2) needs 2*6 + 2 + 1 = 15 and was
+# silently skipped, reported as ban_nav_incomplete, and the match played 2 of 3.
+_g4 = Grid()
+_alt = {"n": 0}
+
+
+def _late_every_other():
+    _alt["n"] += 1
+    return None if _alt["n"] % 2 == 0 else _g4.look()
+
+
+_far = {(6, 2)}
+ic.press, ic.time.sleep = _g4.press, lambda *_a: None
+try:
+    _p4 = ic.select_bans_verified(GRID, _far, look=_late_every_other,
+                                  confirm_ban=lambda pos: pos in _g4.banned,
+                                  log=lambda *a: None)
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+check(sorted(_p4) == sorted(_far) and _g4.banned == _far,
+      f"a far target with a late frame on every other look was not reached: placed "
+      f"{sorted(_p4)}, banned {sorted(_g4.banned)} — moves and waits must not share a budget")
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")

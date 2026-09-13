@@ -218,6 +218,81 @@ if _r:
     check("settled_at is not AFTER the release it precedes",
           _r[0]["settled_at"] <= _r[0]["waited"] + 1e-6, str(_r[0]))
 
+# --- a capture that RAISES must not end the session --------------------------
+# _grab_settle_regions and _mean_abs_delta were the only unwrapped calls in the
+# poll loop, and the call site at orchestrator.py:7418 has no try -- so a grab
+# raising on poll 3 escaped this function, reached run()'s outer finally, and
+# STOPPED THE RUN. The timing row went with it, which is the one record that
+# would have said why.
+_saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+          orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+          orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT)
+orchestrator._OBSERVATIONS.clear()
+_n = {"i": 0}
+
+
+def _dies(names):
+    _n["i"] += 1
+    if _n["i"] >= 3:
+        raise RuntimeError("capture died")
+    return {x: object() for x in names}
+
+
+try:
+    orchestrator._grab_settle_regions = _dies
+    orchestrator._mean_abs_delta = lambda a, b: 999.0
+    orchestrator._hand_signature = lambda img: ("x",)
+    orchestrator._fast_grab = lambda: object()
+    orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
+    orchestrator.POST_PLAY_MIN_WAIT = 0.0
+    _out = orchestrator.wait_for_hand_deal(max_wait=3.0, poll_interval=0.01,
+                                           baseline=object())
+    check(f"a raising capture reports instead of raising (got {_out})", _out is False)
+    _r = _deal_rows()
+    check("a raising capture still records its row — the row that explains the "
+          "failure is exactly the one that must survive it",
+          len(_r) == 1 and _r[0].get("outcome") == "error", str(_r))
+except Exception as _e:
+    check(f"a raising capture propagated out of the gate ({_e!r}) — at the real call "
+          "site there is no try, so this ends the run", False)
+finally:
+    (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+     orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+     orchestrator._fast_grab, orchestrator.POST_PLAY_MIN_WAIT) = _saved
+orchestrator._OBSERVATIONS.clear()
+
+# --- the row must carry an X-AXIS, or the dataset is unusable ----------------
+# predicted_bases was never passed by production -- the only call site is
+# wait_for_hand_deal(baseline=pop_hand_baseline()) -- so every real row would have
+# carried None and tools/deal_timing.py would refuse forever. The gate now pulls
+# the BOUNDS off the stashed diamond itself, which is the number the moment
+# actually supports (the margin that collapses them is not known until the reveal).
+orchestrator._OBSERVATIONS.clear()
+orchestrator.stash_deal_inputs(
+    {"first": {"occupied": True, "speed": 2}, "second": {"occupied": False},
+     "third": {"occupied": False}}, batter_speed=3, fielding=0)
+released, _polls = drive(readable_from=3, max_wait=5.0)   # NO predicted_bases passed
+_r = _deal_rows()
+check("one row for one deal", len(_r) == 1, str(_r))
+if _r:
+    check("the row carries base-movement bounds, so the dataset has an x-axis",
+          isinstance(_r[0].get("bases_lo"), int)
+          and isinstance(_r[0].get("bases_hi"), int), str(_r[0]))
+    check(f"bounds are ordered ({_r[0]['bases_lo']}..{_r[0]['bases_hi']})",
+          _r[0]["bases_lo"] <= _r[0]["bases_hi"])
+    check("the row carries a play_seq, so a diamond REUSED from a play whose gate "
+          "never ran can be told from a fresh one",
+          _r[0].get("play_seq") is not None, str(_r[0]))
+
+# ...and a gate that runs with NO stash must not invent bounds.
+orchestrator._OBSERVATIONS.clear()
+orchestrator.pop_deal_inputs()                     # ensure empty
+released, _polls = drive(readable_from=3, max_wait=5.0)
+_r = _deal_rows()
+check("with no diamond stashed the row says so rather than guessing",
+      bool(_r) and _r[0].get("bases_lo") is None and _r[0].get("play_seq") is None,
+      str(_r))
+
 # A TIMEOUT MUST RECORD TOO, and this is the check that matters most. The slow turns are
 # exactly the ones a bases-loaded home run produces -- the high end of the predictor. A
 # dataset that silently drops them is biased precisely where the effect is supposed to
