@@ -32,10 +32,14 @@ confirmed the enum's ORDER is confirmed with them, and the face buttons follow
 from the same enum without ever having to fire one blind.
 """
 
+import os
 import sys
 import time
 
-sys.path.insert(0, "/Users/bpatterson/Documents/Claude Cowork Personal/Auto Baseball")
+# RELATIVE TO THIS FILE, like every other entry point here. It was the author's absolute
+# home directory, so the script only ran on one machine and one checkout -- and it drives
+# the CONSOLE, which makes "it silently imported nothing" an expensive way to find out.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
 
