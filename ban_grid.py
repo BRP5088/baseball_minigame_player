@@ -518,3 +518,78 @@ def cursor_cell(img, rows, cols=None):
         return None, detail
     detail["why"] = f"{best:.4f} against {second:.4f}"
     return cell, detail
+
+
+# A BANNED CARD CARRIES A BIG DARK X, and darkness alone does not find it.
+#
+# The user, 2026-09-13: "I believe it shows a big black X over the card. I think it also
+# makes the card glow." The X is right; the glow is NOT a persistent state -- on a settled
+# frame with three cards banned, every banned card measured cell_glow 0.0000 while the
+# cursor measured 0.0968. Whatever glows on selection is an animation, and it does not
+# confuse the cursor.
+#
+# DARK FRACTION CANNOT DO THIS. On one frame the two genuinely banned cards scored 0.775
+# and 0.642 -- and Johnny "Blaze" Sweets, which is NOT banned, scored 0.551 on a dark
+# lightning background. It is a SHAPE, not a level (CLAUDE.md 10.23's family).
+#
+# THE X LIES ON THE CARD'S DIAGONALS, so that is where it is measured: the dark fraction
+# inside two diagonal bands. A uniformly dark card is dark everywhere and scores no higher
+# on the diagonals than off them; a banned card does.
+#
+# SCORED AGAINST THE BAN COUNTER, which is independent ground truth -- a frame reading 0/3
+# has NO banned card, whatever the pixels look like:
+#
+#     counter-0 cells   n=4,840   max 0.761
+#     banned cards                clustered 0.90 - 0.944
+#     gate 0.82         ZERO false positives in 4,840, and catches 69 of the 70 cells
+#                       that any looser gate finds
+#
+# A gate of 0.75 was tried first and fired on 47 of 323 counter-0 FRAMES: it sat at the
+# counter-0 p99, which is inside the negative population, not above it.
+#
+# IT FINDS FEWER CARDS THAN THE COUNTER SAYS, and that is correct rather than a miss: the
+# grid shows about fifteen cards of a collection of forty-plus, so a banned card is often
+# scrolled off screen. The counter is the authority on HOW MANY; this says WHICH of the
+# visible ones.
+BAN_X_DARK = 95                   # a GREY LEVEL, so NOT scaled
+BAN_X_BAND = 0.085                # half-width of each diagonal band, in card widths
+BAN_X_MIN = 0.82                  # above a measured counter-0 ceiling of 0.761
+BAN_X_NEG_MAX = 0.761             # that ceiling, recorded so the gate can be re-derived
+
+
+def ban_x_score(img, rows, rel_row, col, cols=None):
+    """Dark fraction along the card's two diagonals, where the ban X lies. None if off screen."""
+    box = card_box(img, rows, rel_row, col, cols)
+    if box is None:
+        return None
+    g = np.asarray(img.convert("L"), dtype=np.float32)
+    x0, y0, x1, y1 = box
+    bw, bh = x1 - x0, y1 - y0
+    sub = g[y0 + int(bh * 0.16):y0 + int(bh * 0.80),
+            x0 + int(bw * 0.06):x1 - int(bw * 0.06)]
+    h, w = sub.shape
+    if h < 10 or w < 10:
+        return None
+    yy, xx = np.mgrid[0:h, 0:w]
+    u, v = xx / (w - 1.0), yy / (h - 1.0)
+    band = (np.abs(u - v) <= BAN_X_BAND) | (np.abs(u - (1.0 - v)) <= BAN_X_BAND)
+    return float((sub <= BAN_X_DARK)[band].mean())
+
+
+def banned_cells(img, rows, cols=None):
+    """[(row, col), ...] for the visible cards showing a ban X, and the score map.
+
+    Returns only what is ON SCREEN. Compare the count against read_ban_counter: fewer is
+    normal (the rest are scrolled away); MORE would mean a false positive and is worth
+    a second look.
+    """
+    scores, hits = {}, []
+    for i in range(len(rows)):
+        for c in range(len(cols or CARD_COL_X_FRAC)):
+            s = ban_x_score(img, rows, i, c, cols)
+            if s is None:
+                continue
+            scores[(i, c)] = round(s, 4)
+            if s >= BAN_X_MIN:
+                hits.append((i, c))
+    return hits, scores

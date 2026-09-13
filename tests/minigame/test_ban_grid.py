@@ -207,6 +207,46 @@ check(bg.CURSOR_MIN_MARGIN == 2.0,
 check(bg.GLOW_WHITE == 235 and bg.CURSOR_GLOW_MIN == 0.030,
       f"the level gates are the measured ones ({bg.GLOW_WHITE}, {bg.CURSOR_GLOW_MIN})")
 
+print("13. BANNED cards — a big dark X, and darkness alone cannot find it")
+banned_img = Image.open(F("cursor_charlie_pepper.jpg")).convert("RGB")
+brows = bg.find_card_rows(banned_img)
+hits, scores = bg.banned_cells(banned_img, brows)
+check(sorted(hits) == [(1, 2), (2, 3)],
+      f"the two X'd cards are found and nothing else ({sorted(hits)})")
+check(o.read_ban_counter(banned_img) == 3,
+      "the counter on that frame reads 3 — two of the three are on screen and the third is "
+      "scrolled away, which is why finding FEWER than the counter is normal")
+# the card that defeats a darkness threshold, pinned by name
+blaze = max((v for k, v in scores.items() if k == (1, 1)), default=None)
+check(blaze is not None and blaze < bg.BAN_X_MIN,
+      f"Johnny \"Blaze\" Sweets is NOT banned ({blaze}) though its art is dark — a "
+      f"dark-fraction gate scored it 0.551 against a genuinely banned 0.642 and would "
+      f"have called it banned")
+check(max(scores[k] for k in hits) > 0.9 and blaze < 0.6,
+      f"and the two populations are far apart (X'd {max(scores[k] for k in hits)}, "
+      f"dark-but-clean {blaze})")
+
+print("14. the X gate sits ABOVE a measured negative population")
+check(bg.BAN_X_NEG_MAX < bg.BAN_X_MIN,
+      f"the gate {bg.BAN_X_MIN} is above the counter-0 ceiling {bg.BAN_X_NEG_MAX} — "
+      f"measured over 4,840 cells on frames whose counter reads 0, so NO card on them is "
+      f"banned whatever the pixels look like")
+check(bg.BAN_X_MIN >= 0.78,
+      f"and it is not the 0.75 that was tried first ({bg.BAN_X_MIN}): that sat at the "
+      f"counter-0 p99, inside the negative population, and fired on 47 of 323 frames")
+
+print("15. a BANNED card does not glow — so it cannot be mistaken for the cursor")
+# The user believed selection also made the card glow. Measured: it does not persist.
+for cell in hits:
+    gv = bg.cell_glow(banned_img, brows, cell[0], cell[1])
+    check(gv is not None and gv < bg.CURSOR_GLOW_MIN,
+          f"banned cell r{cell[0]}c{cell[1]} has glow {gv}, under the cursor gate "
+          f"{bg.CURSOR_GLOW_MIN}")
+ccell, _ = bg.cursor_cell(banned_img, brows)
+check(ccell is not None and ccell not in hits,
+      f"and the cursor ({ccell}) is not one of the banned cards — if selection left a "
+      f"persistent glow these two readers would fight over the same cell")
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")
