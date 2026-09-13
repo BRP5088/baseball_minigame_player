@@ -2983,6 +2983,48 @@ def hand_deal_seen(deltas, threshold=None):
 _HAND_BASELINE = None
 
 
+# THE DEAL'S INPUTS, CAPTURED AT THE PLAY AND POPPED AT THE GATE. Same stash/pop shape as
+# the hand baseline beside it, and for the same reason: the numbers are only true at the
+# moment of the press, and the consumer is a different function several hundred lines away.
+#
+# RAW INPUTS, NOT A PREDICTION. bases_to_travel needs the MARGIN, and the margin is not
+# known at the play -- the opponent's card is revealed afterwards. Guessing it here would
+# invent the very number this instrumentation exists to measure, so what is stashed is the
+# pre-play diamond and the batter's speed, and the margin is joined offline from the row
+# match_log.jsonl already writes. That keeps every term honest and still records the pair
+# the delay model needs: what was on the field, and how long the deal then took.
+_DEAL_INPUTS = None
+
+
+def stash_deal_inputs(bases, batter_speed, fielding=0):
+    global _DEAL_INPUTS
+    _DEAL_INPUTS = {"bases": bases, "batter_speed": batter_speed, "fielding": fielding}
+
+
+def pop_deal_inputs():
+    global _DEAL_INPUTS
+    d, _DEAL_INPUTS = _DEAL_INPUTS, None
+    return d
+
+
+def deal_inputs_summary(d):
+    """One line describing what was on the field, or None. Never raises: this is a log
+    line on the $50 path, and a diagnostic that can kill a turn is worse than no
+    diagnostic (the matchup logger beside it is wrapped for the same reason)."""
+    try:
+        if not d or not d.get("bases"):
+            return None
+        on = [(n, b.get("speed")) for n, b in d["bases"].items() if b.get("occupied")]
+        # the margin is unknown here, so report the BOUNDS the outcome will fall between
+        lo = bases_to_travel(d["bases"], d.get("batter_speed"), -1, d.get("fielding", 0))
+        hi = bases_to_travel(d["bases"], d.get("batter_speed"),
+                             AUTO_HOME_RUN_MARGIN, d.get("fielding", 0))
+        return (f"runners {on or 'none'} batter_speed {d.get('batter_speed')} "
+                f"fielding {d.get('fielding', 0)} bases {lo}..{hi}")
+    except Exception:
+        return None
+
+
 def stash_hand_baseline(img):
     global _HAND_BASELINE
     _HAND_BASELINE = img
@@ -3014,6 +3056,9 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # An invented seconds-per-base would be the same bug wearing a fix's clothes.
     if predicted_bases is not None:
         print(f"  [deal] predicted {predicted_bases} base(s) to animate")
+    _di = deal_inputs_summary(pop_deal_inputs())
+    if _di:
+        print(f"  [deal] at the play: {_di}")
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
     # compared against THIS, not against its predecessor, so a gradual deal accumulates
     # instead of being divided among the polls that carried it.
@@ -5705,6 +5750,24 @@ def play_one_turn(state_json: dict, batters_used: int):
     # already post-deal. It crosses functions the way graph_walk carries a leg-end frame:
     # a module stash that the consumer POPS, so a turn can never inherit the last one.
     stash_hand_baseline(_grab_settle_regions(("hand",))["hand"])
+    # THE DIAMOND AS IT IS AT THE PLAY -- who is on, and how fast. Local, ~40 ms, and
+    # wrapped because a diagnostic must never cost a $50 turn: on any failure the deal gate
+    # simply logs nothing and behaves exactly as before.
+    try:
+        _c = _grab_settle_regions(("third_base", "second_base", "first_base"))
+        _rr = local_state.read_runners(_c["third_base"], _c["second_base"], _c["first_base"])
+        stash_deal_inputs(_rr.get("bases"),
+                          getattr(decision.player_card, "secondary", None),
+                          0 if state_json.get("phase") == "batting"
+                          else (getattr(decision.player_card, "secondary", 0) or 0)
+                          + (decision.tactics_card.bonus
+                             if decision.tactics_card is not None
+                             and getattr(decision.tactics_card, "kind", None) is not None
+                             and getattr(decision.tactics_card.kind, "value", "") == "fielding_boost"
+                             else 0))
+    except Exception as _e:
+        print(f"  [deal] could not record the diamond at the play ({type(_e).__name__}) "
+              f"— the gate is unaffected")
     # CLOSED LOOP, not a press count. `hand_cursor_look` reads the cursor off the screen
     # after every single press; select_and_play refuses rather than commit a card it
     # could not verify. A refusal is NOT a play -- the turn returns played=False and
