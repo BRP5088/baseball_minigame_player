@@ -923,6 +923,92 @@ def select_and_discard(card_index: int, look=None):
     return True
 
 
+# NAVIGATE BY LOOKING, NOT BY COUNTING.
+#
+# select_bans_and_start_full below dead-reckons: it presses move_down (row - current_row)
+# times and then presses select_card, and NOTHING EVER LOOKS. Its own docstring states the
+# two assumptions -- that N presses land on absolute row N, and that banning does not shift
+# the cursor -- and neither is checked at runtime. One press dropped and every later target
+# is a DIFFERENT CARD, banned silently.
+#
+# It is not hypothetical. The code's own comment records "three of five real ban sequences
+# finished at 2/3 and the match started anyway, two seconds later, with a ban set the
+# engine never chose", and a live run on 2026-09-13 reported 2 of 3 at confirm while the
+# scrollbar sat at level 1 after navigating toward a row-3 target -- it never got there.
+# ACTION_DELAY is 0.25 s and a press that causes a SCROLL needs about twice that to settle,
+# which is the likely trigger; the missing verification is why the trigger matters.
+#
+# This is the shape that took route walking from 5/10 to 40/40 (CLAUDE.md section 8): take
+# the position from the SCREEN, never from the count of what was sent.
+#
+# `look()` is supplied by the caller and returns (absolute_row, col) or None -- input_
+# controller must not import ban_grid, and the caller already owns both the fitted rows and
+# the scroll level. `confirm_ban()` returns True once the X is actually on the card.
+VERIFY_BAN_NAVIGATION = False      # measured against the dead-reckoned path before shipping
+BAN_NAV_MAX_STEPS = 14             # per target; a grid is 5 wide and ~8 deep
+BAN_NAV_SETTLE = 0.55              # a scrolling press needs about twice ACTION_DELAY
+
+
+def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
+                         before_confirm=None, log=print):
+    """Place the bans, checking the cursor on the screen before every select_card.
+
+    Returns the list of positions it actually banned. A target it cannot reach is REPORTED
+    and skipped rather than toggled blind: a select_card on the wrong cell bans a card the
+    engine did not choose, which is strictly worse than one missing ban.
+    """
+    targets = sorted(
+        ((row, col) for row, col, _c in grid if (row, col) in banned_positions))
+    if len(targets) != len(banned_positions):
+        raise ValueError(f"ban positions not all in grid: asked {sorted(banned_positions)}, "
+                         f"matched {targets}")
+    placed = []
+    for want in targets:
+        for step in range(BAN_NAV_MAX_STEPS):
+            here = look()
+            if here is None:
+                time.sleep(BAN_NAV_SETTLE)
+                continue
+            if here == want:
+                press("select_card")
+                time.sleep(BAN_NAV_SETTLE)
+                if confirm_ban is None or confirm_ban(want):
+                    placed.append(want)
+                else:
+                    # THE TOGGLE DID NOT TAKE. Pressing again is not safe -- select_card is
+                    # a TOGGLE, so a second press on a card that DID ban un-bans it. Report.
+                    log(f"  [ban] select_card at {want} did not place an X — leaving it")
+                break
+            # one step toward the target, then look again
+            if here[0] < want[0]:
+                press("move_down")
+            elif here[0] > want[0]:
+                press("move_up")
+            elif here[1] < want[1]:
+                press("move_right")
+            else:
+                press("move_left")
+            time.sleep(BAN_NAV_SETTLE)
+        else:
+            log(f"  [ban] could not reach {want} in {BAN_NAV_MAX_STEPS} steps "
+                f"(cursor last seen at {look()}) — NOT toggling blind")
+    if before_confirm is not None:
+        try:
+            before_confirm()
+        except Exception as e:
+            log(f"  [ban] pre-confirm verification raised ({e}) — continuing.")
+    # back to the top before confirming, by LOOKING rather than counting
+    for _ in range(BAN_NAV_MAX_STEPS):
+        here = look()
+        if here is None or here[0] <= 0:
+            break
+        press("move_up")
+        time.sleep(BAN_NAV_SETTLE)
+    press("confirm_play")
+    press("confirm_play")
+    return placed
+
+
 def select_bans_and_start_full(grid: list, banned_positions: set,
                                before_confirm=None):
     """
