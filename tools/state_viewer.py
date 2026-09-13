@@ -203,6 +203,16 @@ S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 #
 # So these numbers carry a "?" prefix and MUST NOT be wired into a ban decision. A ban-scale
 # template bank is being built as ban_digits.py; the moment it exists this picks it up.
+# THE ROSTER, BY NAME. KNOWN_BAN_ROSTER is keyed by (row, col) -- a GRID position, which is
+# no use once the grid scrolls -- so this is the same 33 cards indexed by the thing that is
+# actually read off the screen. It exists so a HELD name keeps supplying exact values on a
+# frame where the name OCR happened to abstain: without it the source flips roster -> bank
+# between ticks while the value stays put, and a column that changes under a value that
+# does not is exactly as unsettling as the value changing.
+_ROSTER_BY_NAME = {c.name: c for c in o.KNOWN_BAN_ROSTER.values()
+                   if getattr(c, "name", None)}
+
+
 def _digits(frame, rows, row, col, card=None):
     """(power, second, source) for one card. `card` is the roster card, if the name read.
 
@@ -525,8 +535,12 @@ def slow_read(frame, crops):
                                                   t[1] if isinstance(t, tuple) else None)
                     rec["src"] = "badge"
                 else:
+                    # A HELD NAME IS STILL A NAME. If this frame's OCR abstained but the
+                    # latch is holding one, look it up rather than falling to a weaker
+                    # reader for a card we have already identified.
+                    known = c if c is not None else _ROSTER_BY_NAME.get(names[-1][1])
                     rec["power"], rec["second"], rec["src"] = _digits(
-                        frame, rows, row, col, c)
+                        frame, rows, row, col, known)
                 # THE NUMBERS ARE LATCHED TOO, and leaving them out was an oversight that
                 # the user saw immediately: the badge box was swept to read 3 of 3 and then
                 # showed "-" on the very next grab. The abstention is the PICTURE -- proved
@@ -534,10 +548,15 @@ def slow_read(frame, crops):
                 # every time -- so a value that read once is better evidence than a blank
                 # that arrived after it. "-" is converted to None first, or a failed read
                 # would overwrite a good one.
-                for _f in ("power", "second"):
-                    _v = _latch(f"{key}:{_f}", None if rec[_f] == "-" else rec[_f],
-                                _scrollkey)
-                    rec[_f] = _v if _v is not None else "-"
+                # LATCHED AS ONE TRIPLE, not three fields. Latching them separately lets
+                # a held power sit beside a fresh source, so the "from" column can say
+                # "bank" over a number the roster supplied -- three fields that are only
+                # meaningful together must move together or not at all.
+                _triple = None if rec["power"] == "-" and rec["second"] == "-" else (
+                    rec["power"], rec["second"], rec["src"])
+                _held = _latch(f"{key}:vals", _triple, _scrollkey)
+                if _held is not None:
+                    rec["power"], rec["second"], rec["src"] = _held
                 cellrecs.append(rec)
                 nums.append((key, f"{rec['power']}/{rec['second']}"
                              if not locked else "locked"))
