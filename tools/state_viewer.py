@@ -3,6 +3,10 @@
     .venv/bin/python -B tools/state_viewer.py              the frame + every region + the read
     .venv/bin/python -B tools/state_viewer.py --hand       just the hand, bigger
     .venv/bin/python -B tools/state_viewer.py --scale 0.7
+    .venv/bin/python -B tools/state_viewer.py --no-reload    pin the code, do not self-restart
+
+IT RELOADS ITSELF when this file, orchestrator, local_hand or local_state changes on disk,
+so a box can be tuned against the live screen without relaunching.
 
 PRESSES NOTHING. One capture and one draw per tick, the same grab the poll loop already
 does, so it is safe to leave up during a live match. The cheap reads (hand, cursor,
@@ -18,13 +22,56 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw, ImageTk
 import orchestrator as o, local_hand as lh, local_state as ls
 
+# RELOAD ITSELF WHEN THE CODE CHANGES, so a constant can be tuned against the live screen
+# without killing and relaunching (the user, 2026-09-13: "so when you make changes, I don't
+# have to kill the process and restart it").
+#
+# RE-EXEC, NOT importlib.reload. Reloading orchestrator mid-tick leaves half the module
+# graph on the old objects and the new ones disagreeing about constants -- a stale-module
+# trap this project already pays for in other places (CLAUDE.md 10.17). Replacing the whole
+# process has one state and cannot be half-applied. It presses nothing, so restarting it at
+# any moment is free.
+_WATCH = ["tools/state_viewer.py", "orchestrator.py", "local_hand.py", "local_state.py"]
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _stamp():
+    out = {}
+    for rel in _WATCH:
+        p = os.path.join(_ROOT_DIR, rel)
+        try:
+            st = os.stat(p)
+            out[rel] = (st.st_mtime, st.st_size)     # mtime AND size: a same-second edit
+        except OSError:                              # of the same length is otherwise invisible
+            out[rel] = None
+    return out
+
+
+_SEEN = _stamp()
+
+
+def _reexec_if_changed():
+    if getattr(A, "no_reload", False):
+        return
+    now = _stamp()
+    changed = [k for k in now if now[k] != _SEEN.get(k)]
+    if not changed:
+        return
+    print(f"[state_viewer] {', '.join(changed)} changed — reloading", flush=True)
+    sys.stdout.flush()
+    os.execv(sys.executable, [sys.executable, "-B"] + sys.argv)
+
+
 ap = argparse.ArgumentParser()
 ap.add_argument("--hand", action="store_true", help="hand crop only")
 ap.add_argument("--hz", type=float, default=4.0)
 ap.add_argument("--scale", type=float, default=0.0, help="0 = fit the window")
+ap.add_argument("--no-reload", action="store_true",
+                help="do not re-exec when the source changes")
 A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
+BAN, NAME = "#ff5ecb", "#8affff"          # ban-grid card box, and its name strip
 root = tk.Tk()
 root.title("state — what the crawl reads")
 root.attributes("-topmost", True)
@@ -58,6 +105,33 @@ def slow_read(frame, crops):
         out["result"] = res.get("outcome") if res.get("is_result") else None
     except Exception as e:
         out["result"] = f"err {type(e).__name__}"
+    # WHICH BOXES BELONG ON THIS SCREEN. Computed HERE, with the other OCR-backed fields,
+    # and not in the draw block: read_ban_counter OCRs the "N/3" counter, and running that
+    # every tick makes the viewer sluggish for a verdict that cannot change between frames.
+    try:
+        n = o.read_ban_counter(frame)
+    except Exception:
+        n = None
+    out["on_ban"] = n is not None
+    out["banned"] = n
+    if out["on_ban"]:
+        # ON A BAN SCREEN, REPORT THE BAN SCREEN. phase/cursor/cards/score are match fields
+        # and read None or nonsense here, which looks like a broken reader rather than the
+        # wrong screen (the user, 2026-09-13). Name what this screen actually has.
+        try:
+            lvl, _thumb = o.read_ban_scroll_level(frame)
+        except Exception:
+            lvl = None
+        out["scroll"] = lvl
+        names = []
+        for row in (0, 1):
+            for col in range(5):
+                try:
+                    c = o.ocr_ban_card_name(o.get_ban_grid_card_crop(frame, row, col))
+                except Exception:
+                    c = None
+                names.append((f"r{row}c{col}", getattr(c, "name", None) if c else None))
+        out["ban_names"] = names
     return out
 
 
@@ -66,7 +140,7 @@ def tick():
         frame = o._fast_grab()
         crops = dict(o.crop_gameplay_regions(frame))
         hand = crops.get("hand")
-        if time.time() - S["t"] > 1.0:
+        if not S["slow"] or time.time() - S["t"] > 1.0:
             S["slow"] = slow_read(frame, crops); S["t"] = time.time()
         rows, glow, boxes, sel, cur, phase = [], [], [], [], None, None
         if hand is not None:
@@ -85,11 +159,36 @@ def tick():
         d = ImageDraw.Draw(canvas)
         ox = oy = 0
         if not A.hand:
-            for name, frac in o.GAMEPLAY_REGIONS_FRAC.items():
-                x0, y0 = int(frame.width * frac[0]), int(frame.height * frac[1])
-                x1, y1 = int(frame.width * frac[2]), int(frame.height * frac[3])
-                d.rectangle((x0, y0, x1, y1), outline=REG, width=2)
-                d.text((x0 + 3, y0 + 2), name, fill=REG)
+            # WHICH BOXES BELONG ON THIS SCREEN? The gameplay regions are meaningless on a
+            # ban grid -- the base crops land on grid CARDS there and read as runners
+            # (orchestrator.on_turn_screen) -- so a viewer that draws them anyway is
+            # showing the user boxes for a screen that is not up. Draw the ban grid
+            # instead when the ban counter reads, which is the same detector the live
+            # ladder uses to name that screen.
+            if S["slow"].get("on_ban"):
+                for row in (0, 1):
+                    for col in range(5):
+                        fx0, fx1 = o.BAN_GRID_COL_X_FRAC[col]
+                        fy0 = o.BAN_CARD_ROW_TOP_FRAC[row]
+                        fy1 = fy0 + o.BAN_GRID_CARD_HEIGHT_FRAC
+                        x0, y0 = int(frame.width * fx0), int(frame.height * fy0)
+                        x1, y1 = int(frame.width * fx1), int(frame.height * fy1)
+                        d.rectangle((x0, y0, x1, y1), outline=BAN, width=3)
+                        d.text((x0 + 4, y0 + 3), f"r{row}c{col}", fill=BAN)
+                        # the strip ocr_ban_card_name reads the NAME from -- drawn because
+                        # it is the thing that goes wrong: at some scroll positions a row-1
+                        # crop starts on row 0's name banner, so the name and the stats in
+                        # one crop come from DIFFERENT cards (CLAUDE.md 10.23).
+                        ny0, ny1 = o.BAN_CARD_NAME_STRIP_FRAC
+                        h = y1 - y0
+                        d.rectangle((x0, y0 + int(h * ny0), x1, y0 + int(h * ny1)),
+                                    outline=NAME, width=2)
+            else:
+                for name, frac in o.GAMEPLAY_REGIONS_FRAC.items():
+                    x0, y0 = int(frame.width * frac[0]), int(frame.height * frac[1])
+                    x1, y1 = int(frame.width * frac[2]), int(frame.height * frac[3])
+                    d.rectangle((x0, y0, x1, y1), outline=REG, width=2)
+                    d.text((x0 + 3, y0 + 2), name, fill=REG)
             f = o.GAMEPLAY_REGIONS_FRAC["hand"]
             ox, oy = int(frame.width * f[0]), int(frame.height * f[1])
         for i, b in enumerate(boxes):
@@ -107,13 +206,24 @@ def tick():
         S["img"] = ImageTk.PhotoImage(canvas)       # held, or Tk drops it
         lbl.config(image=S["img"])
         sl = S["slow"]
-        txt.config(text=(
-            f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
-            f"glow {glow}\n"
-            f"cards {[(r.get('digit'), r.get('kind')) for r in rows]}\n"
-            f"score {sl.get('score')}   runners {sl.get('runners')}   result {sl.get('result')}"))
+        if sl.get("on_ban"):
+            got = [(k, v) for k, v in (sl.get("ban_names") or []) if v]
+            blank = len(sl.get("ban_names") or []) - len(got)
+            txt.config(text=(
+                f"BAN SCREEN   banned {sl.get('banned')}/3   scroll level {sl.get('scroll')}\n"
+                f"names resolved {len(got)} of 10   ({blank} cells blank or unread)\n"
+                + "\n".join(f"   {k}  {v}" for k, v in got[:6])
+                + ("\n   ..." if len(got) > 6 else "")))
+        else:
+            txt.config(text=(
+                f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
+                f"glow {glow}\n"
+                f"cards {[(r.get('digit'), r.get('kind')) for r in rows]}\n"
+                f"score {sl.get('score')}   runners {sl.get('runners')}   "
+                f"result {sl.get('result')}"))
     except Exception as e:
         txt.config(text=f"{type(e).__name__}: {e}")
+    _reexec_if_changed()
     root.after(int(1000 / A.hz), tick)
 
 
