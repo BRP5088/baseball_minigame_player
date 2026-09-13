@@ -27,8 +27,14 @@ import numpy as np
 
 # Measured on a live 2000x1125 ban frame against a ruler, in BANNER HEIGHTS:
 #   name banner 0.518-0.557 (height 0.039);  card top 0.282;  card bottom 0.578
-CARD_TOP_ABOVE_BANNER = 6.05      # banner heights from the banner's TOP up to the card top
-CARD_BOT_BELOW_BANNER = 0.54      # banner heights from the banner's BOTTOM down to the base
+# EVERY CARD IS THE SAME SIZE, so every box is too (the user, 2026-09-13: "all the cards
+# have the same height and width so keep them nice and clean"). Only the vertical OFFSET is
+# unknown per frame. Deriving each box from its own banner's height made them vary -- 0.263
+# on one frame against 0.297 on another -- which is the "weird bounded boxes" on cards the
+# reader could not pin down. The height is now CANONICAL, from the column width and the
+# card's aspect, and the banner supplies the OFFSET only.
+BANNER_TOP_IN_CARD = 0.795        # banner top, as a fraction of card height below the card top
+BANNER_H_IN_CARD = 0.132          # the ribbon's own height, same units (0.039 of 0.297)
 BANNER_H_RANGE = (0.020, 0.060)   # a plausible banner height, as a fraction of frame height
 # THE CARD'S SHAPE IS THE CONSTRAINT THAT PICKS THE RIGHT BANNER PAIR. A card is a fixed
 # shape, so its height follows from the COLUMN WIDTH the grid already defines:
@@ -40,6 +46,20 @@ CARD_ASPECT = 1.296
 CARD_H_TOLERANCE = 0.14           # accept a derived box within +-14% of that height
 ROW_PITCH_RANGE = (0.25, 0.40)    # plausible distance between two rows
 MIN_COLS_AGREEING = 3             # of five, before an edge counts as a grid line
+MAX_EXTRAPOLATE = 3               # rows to step either side of the located pair
+# THE PITCH IS THE PART THAT IS ACTUALLY CONSTANT. The rows' POSITION moves with scroll, but
+# their SPACING does not: measured 0.327 / 0.328 / 0.329 across scroll positions and both
+# capture sizes. It is a distance expressed as a fraction of frame height, so it scales like
+# every other offset here. Used only when a single row is located and there is no second one
+# to measure against -- which is the case on a TACTICS row, where the only detectable
+# banner belongs to the player row above it.
+ROW_PITCH_DEFAULT = 0.328
+# A NAME BANNER IS A DARK RIBBON. The page's own ornate title border is a pair of light
+# lines the right distance apart, and the single-banner fallback anchored on it -- every
+# row then extrapolated from the page title instead of a card. Requiring the ribbon to be
+# DARKER than the card around it rejects that without inventing a brightness threshold:
+# it is a comparison between two regions of the same frame, so it survives any exposure.
+BANNER_DARKER_BY = 18.0
 EDGE_SIGMA = 2.2                  # gradient peak threshold, in sigma above the mean
 
 
@@ -98,7 +118,7 @@ def find_card_rows(img, cols):
     # keep the pair-set whose spacing matches a single consistent row pitch
     col_w = cols[0][1] - cols[0][0]
     want = CARD_ASPECT * col_w * (w / float(h))
-    want_bh = want / (CARD_TOP_ABOVE_BANNER + 1.0 + CARD_BOT_BELOW_BANNER)
+    want_bh = want * BANNER_H_IN_CARD
     cands = []
     for i, p in enumerate(banners):
         for q in banners[i + 1:]:
@@ -108,9 +128,10 @@ def find_card_rows(img, cols):
             cands.append((abs((p[1] - p[0]) - (q[1] - q[0])) + abs(bh - want_bh), p, q))
     cands.sort(key=lambda c: c[0])
 
-    def _box(t, b):
-        bh = b - t
-        return (t - CARD_TOP_ABOVE_BANNER * bh, b + CARD_BOT_BELOW_BANNER * bh)
+    def _box(t, _b):
+        """Card box from a banner TOP. One canonical height, so every box is identical."""
+        top = t - BANNER_TOP_IN_CARD * want
+        return (top, top + want)
 
     # TRY EVERY CANDIDATE IN SCORE ORDER, do not reject on the best one alone. Scoring
     # picks a favourite; the card's height is what DECIDES. Returning None because the
@@ -118,15 +139,57 @@ def find_card_rows(img, cols):
     # (2 of 16 scroll positions, including the frame the offsets were measured on).
     for _score, p, q in cands:
         rows = [_box(*p), _box(*q)]
-        if all((1 - CARD_H_TOLERANCE) * want <= b - t <= (1 + CARD_H_TOLERANCE) * want
-               for t, b in rows):
-            # THE BANNER IS RETURNED WITH THE CARD, because it is the landmark the box was
-            # derived FROM. A caller that wants the name strip should use the banner that
-            # was actually found, not a fraction of the box -- re-deriving it loses the
-            # only measurement here that is not an assumption.
-            return [{"top": max(0.0, t), "bottom": min(1.0, b),
-                     "banner_top": bt, "banner_bottom": bb}
-                    for (t, b), (bt, bb) in zip(rows, (p, q))]
+        if True:                         # height is canonical now, nothing to check
+            # IT IS A 2D ARRAY, SO ONE ROW AND THE PITCH PLACE ALL OF THEM (the user's
+            # observation, 2026-09-13). The columns are already fixed; the rows are evenly
+            # spaced; so a single located row is the whole geometry. That matters because a
+            # row of LOCKED cards offers no edges to detect -- measured sd 16-19 against an
+            # owned card's 62-66 -- and a tactics row can be placed entirely by the player
+            # row above it. Detecting every row independently was never necessary and, on a
+            # faded row, is not possible.
+            pitch = q[0] - p[0]
+            bh = ((p[1] - p[0]) + (q[1] - q[0])) / 2.0
+            out = []
+            for k in range(-MAX_EXTRAPOLATE, MAX_EXTRAPOLATE + 1):
+                bt, bb = p[0] + k * pitch, p[1] + k * pitch
+                t, b = _box(bt, bb)
+                if b <= 0.0 or t >= 1.0:
+                    continue                 # entirely off screen
+                out.append({"top": t, "bottom": b, "banner_top": bt, "banner_bottom": bb,
+                            # a row the fit LOCATED, or one placed by the pitch alone
+                            "measured": k in (0, 1),
+                            # partly off the top or bottom edge of the frame
+                            "clipped": t < 0.0 or b > 1.0})
+            return out
+    # ONE ROW IS ENOUGH. With no second banner to measure the pitch against, take the best
+    # single banner whose derived card height matches and step by the measured default.
+    def _is_dark_ribbon(t, b, top, bot):
+        y0, y1 = int(h * max(0.0, t)), int(h * min(1.0, b))
+        c0, c1 = int(h * max(0.0, top)), int(h * min(1.0, bot))
+        if y1 - y0 < 3 or c1 - c0 < 10:
+            return False
+        for x0f, x1f in cols:
+            a, bb = int(w * x0f), int(w * x1f)
+            ribbon = g[y0:y1, a:bb]
+            card = g[c0:c1, a:bb]
+            if ribbon.size and card.size and ribbon.mean() <= card.mean() - BANNER_DARKER_BY:
+                return True
+        return False
+
+    for t, b in sorted(banners, key=lambda pr: abs((pr[1] - pr[0]) - want_bh)):
+        top, bot = _box(t, b)
+        if not _is_dark_ribbon(t, b, top, bot):
+            continue
+        out = []
+        for k in range(-MAX_EXTRAPOLATE, MAX_EXTRAPOLATE + 1):
+            bt, bb = t + k * ROW_PITCH_DEFAULT, b + k * ROW_PITCH_DEFAULT
+            rt, rb = _box(bt, bb)
+            if rb <= 0.0 or rt >= 1.0:
+                continue
+            out.append({"top": rt, "bottom": rb, "banner_top": bt, "banner_bottom": bb,
+                        "measured": k == 0, "clipped": rt < 0.0 or rb > 1.0})
+        if out:
+            return out
     return None                              # NOT FOUND -- the caller falls back, never guesses
 
 
@@ -135,7 +198,8 @@ def card_box(img, rows, rel_row, col, cols):
     w, h = img.size
     x0, x1 = cols[col]
     r = rows[rel_row]
-    return (int(w * x0), int(h * r["top"]), int(w * x1), int(h * r["bottom"]))
+    return (int(w * x0), int(h * max(0.0, r["top"])),
+            int(w * x1), int(h * min(1.0, r["bottom"])))
 
 
 def name_box(img, rows, rel_row, col, cols):
@@ -143,7 +207,8 @@ def name_box(img, rows, rel_row, col, cols):
     w, h = img.size
     x0, x1 = cols[col]
     r = rows[rel_row]
-    return (int(w * x0), int(h * r["banner_top"]), int(w * x1), int(h * r["banner_bottom"]))
+    return (int(w * x0), int(h * max(0.0, r["banner_top"])),
+            int(w * x1), int(h * min(1.0, r["banner_bottom"])))
 
 
 # Measured as fractions of the FITTED CARD BOX, off a ruler laid on a known BATTER cell
