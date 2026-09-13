@@ -156,6 +156,31 @@ except FileNotFoundError:
 except Exception as e:
     bad(f"could not read {progress_file} ({e})")
 
+# EVERY PROGRESS FILE, NOT JUST THE ONE NAMED. The check above reads sys.argv[1] and
+# defaults to progress.json -- so `python3 preflight.py` with no argument reported READY
+# while progress_testing.json held match_in_progress: true. That is the guard against a
+# $50 double-debit failing to fire in the way the tool is actually run, and this project
+# keeps two progress files ON PURPOSE (CLAUDE.md: "recent training uses
+# progress_testing.json"), so the default is wrong for the workflow that needs it most.
+#
+# The balance/record report stays on the named file; the DANGEROUS flag is checked
+# everywhere, because which file a run will pass is not knowable from here.
+# EVERY PROGRESS FILE, NOT JUST THE ONE NAMED -- orchestrator.open_match_files owns the
+# rule and its reasoning; preflight only decides that an open match elsewhere BLOCKS.
+try:
+    import orchestrator as _orch
+    for _lbl, _bans in _orch.open_match_files(HERE):
+        if _lbl == os.path.basename(progress_file):
+            continue                       # already reported above, in full
+        bad(f"{_lbl} (NOT the file named on the command line) says a paid match was in "
+            f"progress when it was last written (bans placed: {_bans}).",
+            "A run that passes THAT file starts in the state that can spend an UNTRACKED "
+            "$50. CHECK THE SCREEN first: if the match is genuinely still up this is "
+            "correct and the next result scores properly; if it is not, clear it with: "
+            f"python3 clear_match_state.py {_lbl}")
+except Exception as _e:
+    warn(f"could not scan the other progress files ({_e})")
+
 print("\n--- 3. Credentials & dependencies -------------------------------")
 import env_loader
 env_loader.load()   # preflight checks the key WITHOUT importing

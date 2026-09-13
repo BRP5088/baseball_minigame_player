@@ -375,6 +375,31 @@ def _atomic_write_json(path: str, data):
         raise
 
 
+def open_match_files(here=None):
+    """[(filename, bans_done)] for every progress*.json claiming a match is in progress.
+
+    THE FLAG IS THE $50 DOUBLE-DEBIT GUARD, and it was only ever checked on ONE file.
+    preflight read sys.argv[1] and defaulted to progress.json, so `python3 preflight.py`
+    with no argument reported READY while progress_testing.json held the flag -- and this
+    project keeps two progress files deliberately (CLAUDE.md: recent training uses
+    progress_testing.json), so the default is wrong for exactly the workflow that needs the
+    guard. Which file a later run will pass is not knowable in advance, so ALL of them are
+    checked and the caller decides what to do about it.
+    """
+    import glob
+    here = here or os.path.dirname(os.path.abspath(__file__))
+    out = []
+    for path in sorted(glob.glob(os.path.join(here, "progress*.json"))):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except Exception:
+            continue                 # unreadable is the caller's problem, not a claim
+        if data.get("match_in_progress"):
+            out.append((os.path.basename(path), bool(data.get("bans_done_this_match"))))
+    return out
+
+
 def save_progress(wins: int, losses: int, draws: int, balance: int,
                   progress_file: str = PROGRESS_FILE,
                   match_in_progress: bool = False,
