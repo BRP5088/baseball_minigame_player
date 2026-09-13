@@ -68,18 +68,64 @@ CARD_POOL = [
     PlayerCard("Thomas Thomas", 5, 3),
 ]
 
-TACTICS_POOL_BATTING = [
-    TacticsCard("Power Swing", TacticsType.SWING_BOOST, b) for b in (1, 2, 3)
-] + [
-    TacticsCard("Speed Boost", TacticsType.SPEED_BOOST, b) for b in (1, 2, 3)
-]
-TACTICS_POOL_PITCHING = [
-    TacticsCard("Pitch Focus", TacticsType.PITCH_BOOST, b) for b in (1, 2, 3)
-] + [
-    TacticsCard("Fielding Play", TacticsType.FIELDING_BOOST, b) for b in (1, 2)
-]
+# THE BONUSES ARE MEASURED, NOT ASSUMED (2026-09-12). These pools drew 1/2/3 uniformly;
+# a +3 does not exist in this game. Counted over 299 tactics cards labelled BY HAND in
+# hand_labels*.json -- human labels, so this is not the detector under test:
+#
+#     POWER SWING    n= 95   +1 60%   +2 40%      <- the only card that is ever +2
+#     SPEED BOOST    n=132   +1 100%
+#     PITCH FOCUS    n= 35   +1 100%
+#     FIELDING PLAY  n= 37   +1 100%
+#     ALL            n=299   zero 3s, zero unlabelled
+#
+# The user said a +3 does not exist and was right; the paid vision model's eleven "bonus 3"
+# rows are misreads, from the same source that once recorded a bonus of ELEVEN.
+# KNOWN_BAN_ROSTER cannot answer this -- it holds 33 PlayerCards and no tactics cards.
+#
+# This matters beyond tidiness: max effective batter power is 9+2 = 11, so a pitcher
+# playing a 9 CANNOT concede a home run (margin 2) while one playing an 8 can (margin 3).
+# With a +3 in the pool the simulator had both conceding home runs and the asymmetry
+# vanished. Listed by frequency rather than weighted, so random.choice reproduces it.
+TACTICS_POOL_BATTING = (
+    [TacticsCard("Power Swing", TacticsType.SWING_BOOST, 1)] * 3
+    + [TacticsCard("Power Swing", TacticsType.SWING_BOOST, 2)] * 2
+    + [TacticsCard("Speed Boost", TacticsType.SPEED_BOOST, 1)] * 5
+)
+TACTICS_POOL_PITCHING = (
+    [TacticsCard("Pitch Focus", TacticsType.PITCH_BOOST, 1)] * 5
+    + [TacticsCard("Fielding Play", TacticsType.FIELDING_BOOST, 1)] * 5
+)
 
 TACTICS_FRACTION = 0.5  # rough match to observed real hands (roughly half tactics cards)
+
+
+def refill_hand(players, tactics, phase, player_pool=CARD_POOL, size=5):
+    """Top the hand back up to `size`, one fresh card per empty slot.
+
+    THE HAND IS NOT RESHUFFLED BETWEEN ROUNDS, and this simulator used to reshuffle it.
+    Both halves called draw_hand() INSIDE the round loop, so all five cards were new every
+    round -- which makes card economy impossible by construction: nothing can be saved for
+    a later turn because nothing survives to one. That is why the question "play your best
+    pitcher now, or your best FIELDING-0 pitcher, and keep the high-fielding card for a
+    turn with runners on" could not even be asked of this model (user, 2026-09-12).
+
+    The real game deals a REPLACEMENT, singular: orchestrator.wait_for_hand_deal blocks
+    "until the replacement card has visibly landed in the hand", and replace_weakest keeps
+    the rest of the hand on a discard. So a played card is swapped out and the other four
+    stay. A fresh slot is a player or a tactics card on the same TACTICS_FRACTION coin the
+    initial deal uses.
+    """
+    pool = TACTICS_POOL_BATTING if phase == "batting" else TACTICS_POOL_PITCHING
+    while len(players) + len(tactics) < size:
+        if random.random() < TACTICS_FRACTION:
+            tactics.append(random.choice(pool))
+        else:
+            players.append(random.choice(player_pool))
+    # every real hand has at least one player card; if the coin gave none, force one
+    if not players:
+        tactics.pop()
+        players.append(random.choice(player_pool))
+    return players, tactics
 
 
 def draw_hand(phase: str, player_pool=CARD_POOL):
@@ -269,8 +315,13 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
     redraws_left = 2
     defender_redraws_left = 2
 
+    # DEALT ONCE, then topped up one card at a time -- see refill_hand.
+    hand_players, hand_tactics = draw_hand("batting", player_pool)
+    p_hand_players, p_hand_tactics = draw_hand("pitching", defender_player_pool)
+
     for round_idx in range(5):
-        hand_players, hand_tactics = draw_hand("batting", player_pool)
+        hand_players, hand_tactics = refill_hand(hand_players, hand_tactics,
+                                                 "batting", player_pool)
         state = GameState(half="batting", batters_used=round_idx, your_score=score,
                            opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
 
@@ -283,7 +334,8 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
         batter_card = decision.player_card
         batter_power = batter_card.power + power_bonus(decision.tactics_card)
 
-        p_hand_players, p_hand_tactics = draw_hand("pitching", defender_player_pool)
+        p_hand_players, p_hand_tactics = refill_hand(p_hand_players, p_hand_tactics,
+                                                     "pitching", defender_player_pool)
         p_state = GameState(half="pitching", batters_used=round_idx, your_score=0, opp_score=score,
                              target_score=defender_target_score, runners=[c for c, _ in runners],
                              redraws_left=defender_redraws_left)
@@ -303,6 +355,13 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
         p_decision = pitching_heuristic(p_hand_players, p_hand_tactics, p_state)
         pitcher_card = p_decision.player_card
         pitcher_power = pitcher_card.power + power_bonus(p_decision.tactics_card)
+
+        # THE PLAYED CARDS LEAVE THE HAND. Without this the refill is a no-op and the
+        # hand silently grows, which reads exactly like the old reshuffle.
+        for hand, card in ((hand_players, batter_card), (hand_tactics, decision.tactics_card),
+                           (p_hand_players, pitcher_card), (p_hand_tactics, p_decision.tactics_card)):
+            if card is not None and card in hand:
+                hand.remove(card)
 
         outcome = resolve(batter_power, pitcher_power)
         fielding = fielding_of(pitcher_card, p_decision.tactics_card)

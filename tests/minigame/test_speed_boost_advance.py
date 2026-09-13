@@ -11,8 +11,16 @@ WHAT THIS GUARDS, and it is not hypothetical. Until 2026-09-12 simulate.py compu
 `batter_speed` at the top of every at-bat and NEVER READ IT -- an AST scan found it the
 only dead local in the file (CLAUDE.md 10.1: "a measurement taken and discarded"). The
 batter's own advance used card.secondary with no bonus, so a speed boost was worth exactly
-zero while power_bonus paid the swing boost in full. Measured over 9,000 simulated halves,
-attaching a speed boost was worth +0.013 runs/half before the fix and +0.262 after it.
+zero while power_bonus paid the swing boost in full.
+
+THE SIZE OF THE EFFECT WAS FIRST REPORTED AS +0.262 runs/half AND THAT WAS WRONG, twice
+over, in the model rather than in the fix. The tactics pools drew bonuses 1/2/3 uniformly,
+so a simulated speed boost averaged +2 where every one of the 132 hand-labelled SPEED
+BOOST cards is +1; and both hands were redrawn every round instead of being topped up one
+card per play. With the pools matched to the labels and the hand persistent, the honest
+figure is +0.034 runs/half -- stable at +0.0336 +- 0.0026 across seeds, so the effect is
+real and small. For scale, a SWING boost is worth +0.726 in the same model: 21x more,
+which is its own argument for power over speed.
 
 AND IT NEARLY TOOK A SHIPPED CONSTANT WITH IT. blend_play ADDS tac.bonus to the speed it
 scores a choice on, so the chooser paid for speed boosts while the resolver ignored them --
@@ -98,18 +106,22 @@ def half_runs(n, seed):
 _real = S.speed_bonus
 try:
     S.speed_bonus = lambda t: 0
-    old = [r for s in (1, 2, 3) for r in half_runs(1200, s)]
+    old = [r for s in (1, 2, 3) for r in half_runs(1500, s)]
     S.speed_bonus = _real
-    new = [r for s in (1, 2, 3) for r in half_runs(1200, s)]
+    new = [r for s in (1, 2, 3) for r in half_runs(1500, s)]
 finally:
     S.speed_bonus = _real
 gain = statistics.mean(new) - statistics.mean(old)
 # PINNED AS A LITERAL FLOOR, not against the constant it guards (CLAUDE.md 10.11).
 # Measured +0.249 over 9,000 halves; 0.10 is far below that and far above the +0.013
 # the old model produced, so it separates the two models rather than tracking either.
-check(gain > 0.10,
-      f"attaching a speed boost is worth {gain:+.3f} runs/half against the same seeds "
-      f"with the bonus forced to zero (measured +0.249; the old model gave +0.013)")
+# PINNED AS A LITERAL FLOOR, not against the constant it guards (CLAUDE.md 10.11).
+# Measured +0.0336 +- 0.0026 with per-seed gains of 0.029..0.040, so 0.015 sits well under
+# every observed value and well over the 0.000 a reverted fix produces -- the two arms are
+# then identical by construction, which is what this separates.
+check(gain > 0.015,
+      f"attaching a speed boost is worth {gain:+.4f} runs/half against the same seeds "
+      f"with the bonus forced to zero (measured +0.034; a reverted fix gives 0.000)")
 
 print()
 if _fails:
