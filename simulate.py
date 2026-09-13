@@ -399,14 +399,23 @@ def simulate_batting_half(batting_heuristic, pitching_heuristic, defender_target
     for round_idx in range(ROUNDS_PER_HALF):
         hand_players, hand_tactics = refill_hand(hand_players, hand_tactics,
                                                  "batting", player_pool)
+        # THE OPPONENT'S SCORE IS KNOWN WHEN THEY HAVE ALREADY BATTED, and it was being
+        # reported as 0 regardless -- `defender_target_score` holds it, two arguments away.
+        # Inert today (neither best_batting_play nor best_pitching_play reads the score, and
+        # CLAUDE.md section 4 explains why that is correct), which is exactly why it could
+        # sit here: a field nothing reads is a lie nothing catches, until a heuristic reads
+        # it and is quietly wrong on the second half of every match.
+        opp_now = defender_target_score or 0
         state = GameState(half="batting", batters_used=round_idx, your_score=score,
-                           opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
+                           opp_score=opp_now, runners=[c for c, _ in runners],
+                           redraws_left=redraws_left)
 
         if redraw_fn(hand_players, state):
             redraws_left -= 1
             hand_players = replace_weakest(hand_players, player_pool, "batting")
             state = GameState(half="batting", batters_used=round_idx, your_score=score,
-                              opp_score=0, runners=[c for c, _ in runners], redraws_left=redraws_left)
+                              opp_score=opp_now, runners=[c for c, _ in runners],
+                              redraws_left=redraws_left)
         decision = batting_heuristic(hand_players, hand_tactics, state)
         batter_card = decision.player_card
         batter_power = batter_card.power + power_bonus(decision.tactics_card)

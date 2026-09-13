@@ -167,7 +167,37 @@ check(won > 0,
       f"...and winning every flip DOES score ({won}) — without this, a half that can never "
       f"score would satisfy the check above for the wrong reason")
 
-print("6. the UNMEASURED knobs are still reachable — do not pin their VALUES")
+print("6. the BATTING state knows the opponent's score when there is one")
+# It was `opp_score=0` unconditionally, while defender_target_score held the real number
+# two arguments away. Inert today -- no heuristic reads the score, and CLAUDE.md section 4
+# explains why that is correct -- which is exactly why it survived: a field nothing reads
+# is a lie nothing catches, until something reads it and is wrong on the second half of
+# every match.
+_bat, _pit = [], []
+
+
+def _spy(store):
+    def f(hp, ht, st):
+        store.append((st.half, st.your_score, st.opp_score, st.target_score))
+        return Decision(player_card=max(hp, key=lambda c: c.power),
+                        tactics_card=None, reasoning="t")
+    return f
+
+
+random.seed(1)
+s.simulate_batting_half(_spy(_bat), _spy(_pit), defender_target_score=7)
+check(_bat and all(o == 7 for _h, _y, o, _t in _bat),
+      f"the batter is told the defender has 7 ({[o for _h, _y, o, _t in _bat]})")
+check(_pit and all(t == 7 for _h, _y, _o, t in _pit),
+      f"and the pitcher still gets it as target_score ({[t for _h, _y, _o, t in _pit]})")
+_bat2 = []
+random.seed(1)
+s.simulate_batting_half(_spy(_bat2), _spy([]), defender_target_score=None)
+check(_bat2 and all(o == 0 for _h, _y, o, _t in _bat2),
+      "and when the defender has NOT batted yet it is 0, not None — the first half of a "
+      "match has no opponent score to know")
+
+print("7. the UNMEASURED knobs are still reachable — do not pin their VALUES")
 for name in ("OUT_RUNNER_ADVANCE", "FIELDING_SUBTRACT_PER_POINT", "TIE_RUNNERS_ADVANCE",
              "TIE_WIN_PROB", "MODEL_SPEED"):
     check(hasattr(s, name), f"{name} exists as a knob")

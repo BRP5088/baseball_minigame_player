@@ -139,15 +139,23 @@ def best_batting_play(hand_players: List[PlayerCard],
       speed, and it must not be cited as though it had.
       The power half of the reasoning does stand on the confirmed rule:
       extra power raises both hit odds and the odds of a 3+ margin.
-    - The speed alternative is UNEVALUATED, not rejected. Per the rules the
-      user supplied 2026-09-10 (CLAUDE.md §4), a batter's `secondary` is
-      SPEED — how many bases they run — so a fast batter that wins outright
-      can be worth more than a slow one that wins by more. This function
-      cannot see that: it sorts on power alone, and reaches for a speed
-      boost only as a fallback, and only when runners are ALREADY on base.
-      Settling it needs speed in the simulation first.
-    - No swing boost available: fall back to a speed boost if runners
-      are on base, to help them advance.
+    - THE SPEED ALTERNATIVE HAS NOW BEEN EVALUATED, and this paragraph used to
+      say it had not. Speed IS modelled in simulate.py (MODEL_SPEED, since
+      2026-09-12): _step reads the card's secondary, and speed_bonus reaches
+      the batter's own advance. Measured there, a SWING boost is worth
+      +0.726 runs/half and a SPEED boost +0.034 -- a factor of 21 -- which is
+      the argument for power, made against a model that can finally see both.
+    - AND THIS FUNCTION NO LONGER SORTS ON POWER ALONE. It scores every
+      (batter, tactics) pair at POWER_WEIGHT * power + SPEED_WEIGHT * speed,
+      99/1, so speed breaks ties between equal-power plays and decides nothing
+      else: powers are integers, so one point of power is 0.99 while the widest
+      possible speed gap is about 0.06. The older description -- power-only,
+      with a speed boost reached for "as a fallback, and only when runners are
+      already on base" -- describes code that is gone, and a reader acting on it
+      would think the speed field is unread.
+    - 99/1 IS A FREE TIE-BREAK, NOT A TRADE, and must not be read as "speed
+      weighting works": the sweep that chose it measured +0.17 points at 0.4
+      sigma, which is not significant. See POWER_WEIGHT above.
     """
     best = None
     best_score = None
