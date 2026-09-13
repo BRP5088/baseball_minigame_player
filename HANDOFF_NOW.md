@@ -5,7 +5,11 @@
 The console is on the **PS5 HOME SCREEN** ("Continue where you left off - MOUSE: P.I. For
 Hire | 65%"). The game is closed, so the match described below is GONE and its
 `match_in_progress` flag was stale -- checked against the screen, then cleared with
-`clear_match_state.py`. Evidence: `agent_progress/ban-labels/EVIDENCE_ps5_home_match_gone.png`.
+`clear_match_state.py`. Evidence: `agent_progress/ban-labels/EVIDENCE_ps5_home_match_gone.png` -- NOTE that
+`agent_progress/` is gitignored and safe to delete wholesale, so that frame lives only on
+this machine. What it shows is written out above so the record survives without it: the PS5
+home screen, Games tab, "Continue where you left off", with MOUSE: P.I. For Hire at 65% and
+a Play Game button. The game is not running.
 
     money        progress_testing.json balance $96, match_in_progress FALSE
     preflight    READY (it said NOT READY while the flag was set -- correctly)

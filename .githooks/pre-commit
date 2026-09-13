@@ -48,6 +48,35 @@ tests/minigame/test_api_budget.py
 tests/routing/test_leg_distances_match_recording.py
 "
 
+# AND THE TESTS FOR WHAT YOU ACTUALLY CHANGED. The five above are fixed guards -- they
+# catch classes that have broken this project before, whatever the diff is. They cannot
+# catch a regression in the file you just edited, and that is the commonest kind.
+#
+# affected_tests.py maps each test to its transitive import closure. A .py change selects
+# only the tests that reach it; a NON-.py change (a fixture, a JSON) selects EVERYTHING,
+# because import edges cannot see how a data file is used.
+#
+# CAPPED, AND IT SAYS SO WHEN IT CAPS. A change to orchestrator selects ~130 files, which
+# is the full suite in all but name, and "a gate nobody waits for is a gate nobody keeps"
+# is this hook's own founding principle. Above the cap it runs the five and prints what it
+# skipped -- a silent truncation would read as "covered", which is worse than slow.
+MAX_AFFECTED=25
+EXTRA=""
+if AFF=$("$PY" -B affected_tests.py 2>/dev/null); then
+    n=$(echo "$AFF" | grep -c .)
+    if [ "$n" -gt 0 ] && [ "$n" -le "$MAX_AFFECTED" ]; then
+        EXTRA="$AFF"
+        echo "  + $n test(s) affected by this change"
+    elif [ "$n" -gt "$MAX_AFFECTED" ]; then
+        echo "  NOTE: $n tests are affected by this change — too many for a pre-commit"
+        echo "        gate, so only the five guards ran. Before you rely on this commit:"
+        echo "        ./run_tests.sh"
+    fi
+fi
+
+# de-duplicate: a guard that is also 'affected' must not run twice
+TESTS=$(printf '%s\n%s\n' "$TESTS" "$EXTRA" | grep . | sort -u)
+
 fail=0
 start=$(date +%s)
 for t in $TESTS; do
