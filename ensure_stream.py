@@ -21,12 +21,49 @@ MAX_WAIT = 150.0
 
 
 def _pid():
-    out = subprocess.run(["pgrep", "-f", "chiaki-ng-build"],
-                         capture_output=True, text=True).stdout.split()
-    return int(out[0]) if out else None
+    """The chiaki pid, from the ONE resolver that checks what the process IS.
+
+    This was `pgrep -f chiaki-ng-build` taking out[0] -- the same loose
+    command-line match that sent an afternoon of presses into a /bin/zsh
+    (see input_controller._resolve_chiaki_pid). "chiaki-ng-build" is more
+    specific than "chiaki", which is why it survived that round; it is not a
+    guard. REPRODUCED 2026-09-13 in about a minute:
+
+        $ /bin/sh -c 'sleep 20; : chiaki-ng-build' &
+        ensure_stream._pid()          -> 10919   actually chiaki? False
+        input_controller.chiaki_pid() -> 83980
+
+    New pids on this machine are LOWER than chiaki's, so the decoy sorted
+    first and won. _key() below posts straight to whatever this returns, so
+    the escape ladder's Return/Down/Escape would have gone to that shell --
+    and the ladder would then report that it tried and nothing moved, which
+    is 10.1's no-op-indistinguishable-from-success on the recovery path.
+
+    Imported lazily: input_controller pulls in Quartz and pyautogui, and this
+    module is imported by things that only want streaming().
+    """
+    import input_controller
+    return input_controller.chiaki_pid()
 
 
 def _key(pid, code, after=1.2):
+    """Post one key to chiaki's process. HARD OFF under BASEBALL_TEST_RUN.
+
+    It needs its own lockout rather than inheriting one: this is a third path
+    to the console, beside input_controller's keyboard path and
+    analog_replay's stick path, and it resolves its own pid and posts its own
+    Quartz events. The offline suite has driven the live console through
+    exactly this kind of gap before (analog_replay's docstring records it),
+    and today's keyboard hole was the same shape one module over.
+    """
+    if os.environ.get("BASEBALL_TEST_RUN"):
+        print(f"  [stream] BASEBALL_TEST_RUN is set — refusing to post key "
+              f"{code} to pid {pid}. If this is a live run, the recovery "
+              f"ladder is a no-op until you unset it.")
+        return
+    if pid is None:
+        print("  [stream] no chiaki pid — not posting a key to nothing")
+        return
     import Quartz
     for down in (True, False):
         Quartz.CGEventPostToPid(

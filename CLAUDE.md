@@ -784,6 +784,68 @@ answering a narrower question than the one it is credited with.** Two of the
 three sites had a guard; the third had none; and the docstring on the guard
 claimed all of it.
 
+### THERE ARE THREE PATHS TO THE CONSOLE, AND ensure_stream WAS THE UNGUARDED ONE
+
+Found the same evening by enumerating every emission site rather than waiting for
+the next accident:
+
+    input_controller  keyboard   press / hold_combo / walk_at   -> pyautogui
+                                 press_background               -> CGEventPostToPid
+    analog_replay     sticks     send()                         -> the FIFO
+    ensure_stream     recovery   _key()                         -> CGEventPostToPid
+
+`ensure_stream` had NO `BASEBALL_TEST_RUN` lockout at all, and resolved its own pid
+with `pgrep -f chiaki-ng-build` taking `out[0]` -- the same loose command-line match
+that sent an afternoon of presses into a `/bin/zsh`. "chiaki-ng-build" is narrower
+than "chiaki", which is why it survived that round; narrower is not a guard.
+REPRODUCED in about a minute, because new pids on this machine are LOWER than
+chiaki's so a decoy sorts first:
+
+    $ /bin/sh -c 'sleep 20; : chiaki-ng-build' &
+    ensure_stream._pid()          -> 10919   actually chiaki? False
+    input_controller.chiaki_pid() -> 83980
+
+`_key()` posts straight to whatever that returns, so the escape ladder's
+Return/Down/Escape would have gone to that shell -- and the ladder would then
+report that it tried and nothing moved, which is 10.1 on the recovery path.
+`_pid()` now delegates to the one resolver that checks what the process IS.
+
+`tests/rig/test_no_real_input_under_test_run.py` pins all three paths
+BEHAVIOURALLY, carries a control so the checks cannot pass on a dead path, and
+AST-scans for emission sites so a NEW one fails the test instead of reaching
+someone's keyboard. Four mutants, all caught -- including a planted
+`pyautogui.keyDown` in an unrelated module.
+
+### CHIAKI IS RUNNING ON COMPILED-IN DEFAULTS, AND FOUR KEYMAP ENTRIES DO NOTHING
+
+`KEYMAP` is what we believe chiaki binds; `chiaki-ng-src/gui/src/settings.cpp` is
+what chiaki binds. Nothing made those two agree. Checked by reading config, no
+presses:
+
+    the running app    chiaki-ng-build/chiaki.app, bundle org.streetpea.chiaking
+    its settings       QSettings org "Chiaki" / app "Chiaki" -> com.chiaki.Chiaki
+    keymap overrides   ZERO -- it is on the compiled-in defaults
+    where WASD lives   com.chiaki.Chiaki-Taylere, a profile that is NOT running,
+                       and restart_chiaki.sh launches with no profile argument
+
+    walk_up   'w' -> chiaki wants 'insert'     walk_left  'a' -> '['
+    walk_down 's' -> 'delete'                  walk_right 'd' -> ']'
+
+**Those four presses post cleanly through CGEventPostToPid and do nothing.** All
+32 other actions agree exactly -- every button, the D-pad, and the whole right
+stick. It is NARROW: production walking goes over the FIFO (`slow_traverse` ->
+`analog_replay`, section 5's "sticks go over the FIFO"), and only `probe.py` and
+`reset_walk.py` call `walk_at`. It is PINNED rather than corrected, because
+rebinding input that cannot be verified live is how this project gets a confident
+wrong diagnosis -- `tests/rig/test_keymap_matches_chiaki.py` fails if the set
+changes in EITHER direction, so a fix and a regression are equally visible.
+
+**And it invalidated an observation made the same hour.** A live `walk_up` press
+was reported here as having moved the character, on the strength of the scene
+shifting between two frames. It cannot have; that was idle animation. Section
+10.15 again: the frame was looked at, but a small shift between two frames of a
+living scene is not evidence of movement.
+
 ### A BLIND BAN CURSOR MUST NOT MEAN ZERO BANS (2026-09-13)
 
 `select_bans_verified` refuses to toggle a cell it cannot SEE. That is right when
