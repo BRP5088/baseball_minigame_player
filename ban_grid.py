@@ -343,6 +343,30 @@ TYPE_BANNER_PSM = 11
 # returns garbage like "N HER", and calling that tactics puts a wrong label on a player
 # card. "unknown" is the honest answer for a card that cannot be read yet.
 TACTICS_NAMES = ("POWER SWING", "SPEED BOOST", "PITCH FOCUS", "FIELDING PLAY")
+
+# A TACTICS CARD IS NOT A PLAYER CARD WITH DIFFERENT WORDS ON IT -- IT IS A DIFFERENT
+# LAYOUT, and until now it was being read through the player boxes. The user, 2026-09-13:
+# "can their also be detection when the a card isn't a player card, its a tactics card.
+# which means it has different bounding boxes. look for yourself." Looking settles it:
+#
+#                        player card              tactics card
+#     the words          upper LEFT, y 0.04-0.13  CENTRED, y 0.175-0.214, nearly full width
+#     the number         top RIGHT, x 0.72-0.94   top CENTRE, x 0.429-0.623, y 0.000-0.142
+#     a name banner      yes, at the foot         NO -- a decorative emblem sits there
+#     a shield           yes, under the disc      NO -- the badge above IS the bonus
+#
+# The two number boxes are DISJOINT in x and the two word boxes are disjoint in y, so
+# reading a tactics card through the player boxes cannot work and only ever half did: the
+# player ribbon box ends at 0.13 and the tactics text starts at 0.175, so it was clipping
+# the top of the letters and the fuzzy match was recovering the rest.
+#
+# Measured on the owned tactics cards of the tactics fixture: the label's bright text spans
+# y 0.175-0.214 across essentially the whole card width, and the badge blob sits at
+# x 0.429-0.623, y 0.000-0.142. Both boxes below are those extents with margin. n is small
+# -- the collection holds only 10 tactics cards and most are locked -- so these are honest
+# to a few hundredths and worth re-measuring if a tactics read starts failing.
+TACTICS_TYPE_BOX = (0.02, 0.14, 0.98, 0.26)   # POWER SWING / SPEED BOOST / ... , centred
+TACTICS_BONUS_BOX = (0.40, 0.00, 0.66, 0.17)  # the +1 badge, top centre
 # MEASURED, not tuned: with the columns re-fitted the disc lands in the SAME place on
 # every column. Found as the bright blob in the card's upper right over 28 owned cards on
 # four frames: x 0.740-0.919, y 0.062-0.199, and the per-column spread of its centre is
@@ -385,6 +409,16 @@ def shield_box(img, rows, rel_row, col, cols=None):
     return _sub(img, rows, rel_row, col, cols, SHIELD_BOX)
 
 
+def tactics_type_box(img, rows, rel_row, col, cols=None):
+    """Pixel box of a TACTICS card's label. A different band from the player ribbon."""
+    return _sub(img, rows, rel_row, col, cols, TACTICS_TYPE_BOX)
+
+
+def tactics_bonus_box(img, rows, rel_row, col, cols=None):
+    """Pixel box of a TACTICS card's bonus badge. Top CENTRE, not top right."""
+    return _sub(img, rows, rel_row, col, cols, TACTICS_BONUS_BOX)
+
+
 def _lev(a, b):
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
@@ -411,31 +445,42 @@ def read_card_type(img, rows, rel_row, col, cols=None, ocr=None, max_edits=2):
     that text -- KNOWN_BAN_ROSTER is 33 player cards and no tactics at all, so the roster
     can never name one (CLAUDE.md section 4).
     """
-    box = type_box(img, rows, rel_row, col, cols)
-    if box is None:
-        return None
-    best_d, best_w, best_txt = 99, None, ""
-    for invert in (False, True):
-        crop = img.crop(box).convert("L")
-        if invert:
-            crop = crop.point(lambda p: 255 - p)
-        crop = crop.resize((crop.width * 4, crop.height * 4))
-        txt = (ocr(crop) or "").strip().upper()
-        letters = "".join(ch for ch in txt if ch.isalpha())
-        if not letters:
-            continue
-        if len(letters) > len(best_txt):
-            best_txt = letters
+    def _letters(box):
+        """The longest run of letters this box yields, at either polarity."""
+        if box is None:
+            return ""
+        best = ""
+        for invert in (False, True):
+            crop = img.crop(box).convert("L")
+            if invert:
+                crop = crop.point(lambda p: 255 - p)
+            crop = crop.resize((crop.width * 4, crop.height * 4))
+            txt = (ocr(crop) or "").strip().upper()
+            got = "".join(ch for ch in txt if ch.isalpha())
+            if len(got) > len(best):
+                best = got
+        return best
+
+    # THE PLAYER RIBBON FIRST, in its own box.
+    best_d, best_w = 99, None
+    player = _letters(type_box(img, rows, rel_row, col, cols))
+    if player:
         for want in ("BATTER", "PITCHER"):
-            d = _lev(letters, want)
+            d = _lev(player, want)
             if d < best_d:
                 best_d, best_w = d, want
     if best_d <= max_edits and best_w:
         return best_w.lower()
-    for want in TACTICS_NAMES:
-        squished = want.replace(" ", "")
-        if best_txt and _lev(best_txt, squished) <= max_edits:
-            return ("tactics", want)
+    # THEN THE TACTICS LABEL, IN THE TACTICS BOX -- a different band of the card entirely.
+    # It used to be matched against whatever letters the PLAYER box happened to catch,
+    # which is why it worked at all and why it worked badly.
+    tac = _letters(tactics_type_box(img, rows, rel_row, col, cols))
+    for cand in (tac, player):
+        if not cand:
+            continue
+        for want in TACTICS_NAMES:
+            if _lev(cand, want.replace(" ", "")) <= max_edits:
+                return ("tactics", want)
     return None
 
 

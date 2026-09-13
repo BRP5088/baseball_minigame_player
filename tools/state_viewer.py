@@ -202,16 +202,42 @@ S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 #
 # So these numbers carry a "?" prefix and MUST NOT be wired into a ban decision. A ban-scale
 # template bank is being built as ban_digits.py; the moment it exists this picks it up.
-def _digits(frame, rows, row, col):
-    """(power, shield) as display strings. '?' prefixes an unverified reader."""
+def _digits(frame, rows, row, col, card=None):
+    """(power, second, source) for one card. `card` is the roster card, if the name read.
+
+    THE NAME IS THE READER. ocr_ban_card_name resolves the name banner to a roster
+    PlayerCard, and that card ALREADY CARRIES power and secondary exactly -- so where the
+    name reads there is nothing to OCR, and the digit reader is only for the cards it
+    misses. That is not a shortcut, it is the more accurate path, and the evidence is a
+    contact sheet: on every one of the 12 cells where the digit OCR contradicted the
+    roster, the crop plainly showed the ROSTER's digit. Charlie Pepper is an 8 read as 5,
+    Jenny Jody Gain a 6 read as 5, Johnny Drawers a 7 read as 9. The ball sprite clips the
+    top-left of the disc and tesseract loses to it every time.
+    ALL 12 DISAGREEMENTS WENT THE ROSTER'S WAY. Zero went the reader's.
+
+    AND THE NAME MATCH IS SOUND, checked against something it cannot influence: the card's
+    ROLE from simulate.CARD_POOL against the TYPE BANNER, read by a different reader from a
+    different box. 129 of 129 agree, with zero violations of the range rule (a batter's
+    secondary is never 0, a pitcher's never 3). If the name match were sloppy, that is
+    where it would show.
+    """
+    if card is not None and getattr(card, "power", None) is not None:
+        return str(card.power), str(card.secondary), "roster"
     try:
         import ban_digits as bd                     # the real bank, when it lands
     except Exception:
         bd = None
     if bd is not None:
-        p, _ = bd.read_power(frame, rows, row, col)
-        sh, _ = bd.read_shield(frame, rows, row, col)
-        return ("-" if p is None else str(p)), ("-" if sh is None else str(sh))
+        # ADVISORY UNTIL IT ANSWERS. The bank is being built as this runs, so a half-built
+        # one must not silently replace the OCR fallback with a row of dashes -- an empty
+        # answer and a working answer would look the same, which is 10.1's whole family.
+        try:
+            p, _ = bd.read_power(frame, rows, row, col)
+            sh, _ = bd.read_shield(frame, rows, row, col)
+        except Exception:
+            p = sh = None
+        if p is not None or sh is not None:
+            return ("-" if p is None else str(p)), ("-" if sh is None else str(sh)), "bank"
     pb = bg.power_box(frame, rows, row, col)
     p = "-"
     if pb is not None:
@@ -238,15 +264,29 @@ def _digits(frame, rows, row, col):
             if dig and 4 <= int(dig[0]) <= 9:
                 p = "?" + dig[0]
                 break
-    sh = "-"
-    if pb is not None:
-        cx, cy = (pb[0] + pb[2]) // 2, (pb[1] + pb[3]) // 2
-        try:
-            d, sc = lh.read_shield(frame, cx, cy)
-            sh = "-" if d is None else f"?{d}"
-        except Exception:
-            sh = "-"
-    return p, sh
+    # NO SHIELD READER EXISTS AT BAN SCALE. local_hand.read_shield answers 0 for every card
+    # here (0.31-0.42 against its own 0.69 gate) and a scale sweep only reaches argmax 2 of
+    # 7, always guessing "1". Printing 0 for everything would look like a reading; "-" is
+    # the honest shape of "nobody asked a question that got an answer".
+    return p, "-", "ocr"
+
+
+def _tactics_bonus(frame, rows, row, col):
+    """The +N badge on a TACTICS card. Its own box, top CENTRE, not the player disc."""
+    bb = bg.tactics_bonus_box(frame, rows, row, col)
+    if bb is None:
+        return "-"
+    crop = frame.crop(bb).convert("L")
+    up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
+    for _psm in (10, 13, 7):
+        raw = o._ocr_text(up, psm=_psm, whitelist="0123") or ""
+        dig = "".join(ch for ch in raw if ch.isdigit())
+        # EVERY OWNED TACTICS CARD SHOWS A 1 -- 299 hand-labelled cards, zero 3s, and a +3
+        # does not exist in the game (CLAUDE.md section 4). A 2 is possible only on POWER
+        # SWING. Anything else is a misread.
+        if dig and dig[0] in "12":
+            return "+" + dig[0]
+    return "-"
 
 
 def _type_ocr(img):
@@ -324,7 +364,7 @@ def slow_read(frame, crops):
         rows = bg.find_card_rows(frame)
         out["fitted"] = rows is not None
         out["rows"] = rows
-        names, types, locks, nums = [], [], [], []
+        names, types, locks, nums, cellrecs = [], [], [], [], []
         n_rows = len(rows) if rows else 2
         for row in range(n_rows):
             for col in range(5):
@@ -388,15 +428,32 @@ def slow_read(frame, crops):
                          else (t[1].title() if t else ("locked" if locked else None)))
                 types.append((key, label))
                 locks.append((key, bool(locked)))
-                # The digits, on the slow pass with every other OCR. Skipped on a locked
-                # card like everything else -- nothing can read a faded badge.
-                if fitted_cell and not locked:
-                    pw, sd = _digits(frame, rows, row, col)
-                    nums.append((key, f"{pw}/{sd}"))
-                else:
-                    nums.append((key, "locked" if locked else None))
                 if isinstance(t, tuple) and names[-1][1] is None:
                     names[-1] = (key, t[1].title())    # a tactics card names itself
+                # ONE RECORD PER CELL, which is what the panel prints. A tactics card is a
+                # DIFFERENT KIND with different boxes and different fields -- no name, no
+                # shield, a bonus instead of a power -- so it gets its own branch rather
+                # than empty columns under player headings.
+                kind = ("tactics" if isinstance(t, tuple)
+                        else ("player" if isinstance(t, str) else None))
+                rec = {"key": key, "kind": kind, "locked": bool(locked),
+                       "name": names[-1][1], "type": label,
+                       "power": "-", "second": "-", "src": ""}
+                if locked or not fitted_cell:
+                    rec["kind"] = "locked" if locked else None
+                elif kind == "tactics":
+                    # THE LABEL IS THE NAME. Printing "Speed Boost" under both card and
+                    # type says nothing twice; the useful second column is the KIND.
+                    rec["name"] = t[1].title()
+                    rec["type"] = "tactics"
+                    rec["power"] = _tactics_bonus(frame, rows, row, col)
+                    rec["src"] = "badge"
+                else:
+                    rec["power"], rec["second"], rec["src"] = _digits(
+                        frame, rows, row, col, c)
+                cellrecs.append(rec)
+                nums.append((key, f"{rec['power']}/{rec['second']}"
+                             if not locked else "locked"))
         out["ban_names"] = names
         out["ban_types"] = types
         # PUBLISHED SO THE DRAW CAN SEE IT. is_locked is already computed up there, once a
@@ -404,6 +461,8 @@ def slow_read(frame, crops):
         # the panel can disagree about the same cell.
         out["ban_locked"] = locks
         out["ban_nums"] = nums
+        out["ban_cells_full"] = cellrecs
+        out["ban_kinds"] = [(r["key"], r.get("kind")) for r in cellrecs]
     return out
 
 
@@ -478,11 +537,18 @@ def tick():
                         d.text((x0 + 4, y0 + 3),
                                f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
                         if fitted and row < len(fitted):
-                            # Every card sub-box, drawn from the LIVE EDITOR's working
-                            # values so a nudge shows up on the next tick. The selected
-                            # one is drawn thick, so you can see which keys move what.
-                            for _k, _c in (("name", NAME), ("type", TYPE),
-                                           ("power", POWER), ("shield", SHIELD)):
+                            # THE BOXES FOLLOW THE KIND OF CARD. Drawing a player card's
+                            # four windows over a tactics card shows the aim of readers
+                            # that are not the ones running on it -- the tactics label sits
+                            # below where the player ribbon box ends, and the bonus badge
+                            # is top CENTRE where the power disc is top right.
+                            _kind = dict(S["slow"].get("ban_kinds") or []).get(
+                                f"r{row}c{col}")
+                            _set = (("tac_label", TYPE), ("tac_bonus", POWER)) \
+                                if _kind == "tactics" else \
+                                (("name", NAME), ("type", TYPE),
+                                 ("power", POWER), ("shield", SHIELD))
+                            for _k, _c in _set:
                                 _b = _ebox(frame, fitted, row, col, _k)
                                 if _b is not None:
                                     d.rectangle(_b, outline=_c,
@@ -532,15 +598,28 @@ def tick():
                         f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[i:i + 5]))
                 return "\n".join(out)
 
-            # NAMES AND TYPES IN SEPARATE GRIDS, not one crowded line (the user's call,
-            # 2026-09-13). A type of "unknown" on a locked card is a real answer.
+            # ONE LINE PER CARD, ALIGNED (the user, 2026-09-13: "can you make the live
+            # viewer easier to read?"). Three stacked grids meant reading down three
+            # separate blocks to assemble one card; this reads across.
+            recs = sl.get("ban_cells_full") or []
+            lines = [f"  cell  {'card':22s} {'type':8s} {'pwr':>4s} {'2nd':>4s}  from"]
+            for r in recs:
+                if r.get("kind") == "locked":
+                    lines.append(f"  {r['key']}  — locked —")
+                    continue
+                lines.append(
+                    f"  {r['key']}  {(r.get('name') or 'unknown')[:22]:22s} "
+                    f"{(r.get('type') or 'unknown')[:8]:8s} "
+                    f"{r.get('power', '-'):>4s} {r.get('second', '-'):>4s}  "
+                    f"{r.get('src', '')}")
+            n_res = sum(1 for r in recs if r.get("src") == "roster")
+            n_open = sum(1 for r in recs if r.get("kind") not in (None, "locked"))
             _Panel.config(text=(
-                f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
-                f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
-                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}\n"
-                f"PWR/SHD  ? = UNVERIFIED (power 63 right / 12 wrong / 43 abstain of 118; "
-                f"shield has no reader and always says 0)"
-                f"\n{_grid(sl.get('ban_nums') or [])}\n"
+                f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}"
+                f"   {fit}\n"
+                f"from=roster means power and 2nd are the ROSTER's, exact. ocr = guessed, "
+                f"84% right. {n_res}/{n_open} exact\n"
+                + "\n".join(lines) + "\n"
                 + _edit_panel()
                 + (f"\n[s] {S['note']}" if S.get("note") else "\n[s] save a labelling sheet")))
         else:
@@ -624,9 +703,14 @@ def save_sheet(_event=None):
 # a value the rest of the project does not have.
 #
 # It presses NOTHING at the console. Every key here edits numbers in this process.
-_EDIT_KEYS = ["type", "power", "shield", "name"]
+# SIX BOXES, BECAUSE THERE ARE TWO KINDS OF CARD. 1-4 are the player card's; 5 and 6 are
+# the tactics card's, which sits in a different place entirely -- its label is centred at
+# y 0.175-0.214 where the player ribbon is upper-left and ends at 0.13, and its badge is
+# top CENTRE at x 0.43-0.62 where the player disc is top right at 0.72-0.94.
+_EDIT_KEYS = ["type", "power", "shield", "name", "tac_label", "tac_bonus"]
 _EDIT_CONST = {"type": "TYPE_BANNER_BOX", "power": "POWER_DISC_BOX",
-               "shield": "SHIELD_BOX", "name": "NAME_BANNER_BOX"}
+               "shield": "SHIELD_BOX", "name": "NAME_BANNER_BOX",
+               "tac_label": "TACTICS_TYPE_BOX", "tac_bonus": "TACTICS_BONUS_BOX"}
 E = {"i": 1, "step": 0.005, "vals": {}, "dirty": False, "msg": ""}
 
 
@@ -698,7 +782,7 @@ def _edit_reset(_e=None):
     E["msg"] = "working values back to what ban_grid.py says"
 
 
-for _n in range(4):
+for _n in range(len(_EDIT_KEYS)):
     root.bind(f"<KeyPress-{_n + 1}>",
               lambda e, n=_n: (E.__setitem__("i", n), E.__setitem__("msg", "")))
 root.bind("<Left>",  lambda e: _nudge(-1, 0, False))
