@@ -52,25 +52,50 @@ BANNER_H_RANGE = (0.020, 0.060)   # a plausible banner height, as a fraction of 
 # glow separated at 33x and 99x on two frames and only 1.7x on a third, where a neighbour
 # was also lit.
 #
-# MEASURED off the intensity profile across one card, away from its banners. The notebook
-# page sits at ~200 grey and the card body is darker:
-#     page 199.5 at x=0.295  ->  160.4 at 0.300  ... 160.8 at 0.405  ->  201.0 at 0.410
-# so the card spans 0.300-0.408 and the pitch is the shipped 0.135, giving starts at
-# 0.165 + k*0.135. The shipped box is 0.022 too wide and sits 0.009 left of centre.
+# RE-FITTED 2026-09-13 OVER 520 ROW BANDS, because one card is not a lattice. The previous
+# numbers (start 0.165, pitch 0.135, width 0.108) were read off ONE card -- col1, whose
+# edges do sit at 0.300 and 0.408 -- and a start and a pitch cannot be measured from one
+# sample. They were both slightly wrong, and the error ACCUMULATES across the row:
 #
-# Scored against the shipped columns on what the loose box was good at -- resolving NAMES
-# over 32 ban frames -- it costs 4 of 170 and finds the same 16 distinct cards. Noise,
-# against geometry that is correct.
-CARD_COL_X_FRAC = [(round(0.165 + k * 0.135, 4), round(0.165 + k * 0.135 + 0.108, 4))
+#     shipped left-edge error, in card widths:  +0.085  +0.062  +0.040  +0.017  -0.005
+#
+# Column 4 was right and column 0 was off by a twelfth of a card. That is why a badge box
+# tuned on one card broke on another -- the user, 2026-09-13: "I moved them so they fit
+# some of the boxes better and that caused them to be wrong else where." Nothing was wrong
+# with the badge fractions; they were fractions of a card box that was in the wrong place.
+#
+# HOW IT WAS FITTED. The columns do not move -- same x at every scroll position, on every
+# row, in every frame -- so the vertical-edge profile is POOLED over 520 row bands from 260
+# ban frames. A card's borders and its art both make edges, but only the borders are at the
+# same x every time, so the art averages away. What survives is unmistakable: the page
+# BETWEEN cards is DEAD FLAT (under 0.020 of the pooled maximum) while every card band is
+# alive, so the card spans fall out of the gaps without any peak-picking at all.
+#
+#     gaps   0.1160-0.1550  0.2750-0.2930  0.4085-0.4305  0.5575-0.5685
+#            0.6835-0.7055  0.8210-0.8455
+#     cards  0.1550-0.2750  0.2930-0.4085  0.4305-0.5575  0.5685-0.6835  0.7055-0.8210
+#
+# A uniform lattice fits those five to a residual of +-0.0004 of frame width, which is the
+# grid confirming it really is one. (Peak-picking the same profile does NOT work and was
+# tried first: it returns two interleaved lattices 0.033 apart, because a card's outer
+# border and its inner art frame are both strong and both regular.)
+CARD_COL_START = 0.1552           # fitted, residual +-0.0004
+CARD_COL_PITCH = 0.1376
+CARD_COL_WIDTH = 0.1155
+CARD_COL_X_FRAC = [(round(CARD_COL_START + k * CARD_COL_PITCH, 4),
+                    round(CARD_COL_START + k * CARD_COL_PITCH + CARD_COL_WIDTH, 4))
                    for k in range(5)]
 
-# RE-DERIVED WITH THE TIGHT COLUMNS (2026-09-13). The card height follows from the column
-# WIDTH, so changing the width changes the height: at the loose 0.130 the aspect was 1.296,
-# and carrying that number over to the tight 0.108 made every card 0.249 tall instead of
-# 0.2995 -- the row solve then locked onto the wrong phase entirely. Measured on a
-# 2000x1125 frame: the card is 337 px tall and 216 px wide (0.2995 of height, 0.108 of
-# width), so 337/216 = 1.560. Check: 1.560 * 0.108 * (2000/1125) = 0.2995.
-CARD_ASPECT = 1.560
+# THE CARD HEIGHT IS 0.2995 OF THE FRAME AND HAS NEVER MOVED. This constant does not say
+# what the height IS; it says how to get there from the column WIDTH, so every time the
+# width is re-measured this has to be re-derived or the row solve locks onto a wrong phase.
+# It has happened twice now: at the loose 0.130 it was 1.296, at 0.108 it was 1.560, and at
+# the fitted 0.1155 it is 0.2995 / (0.1155 * 16/9) = 1.4587.
+#
+# The height itself is the one number in this file validated against a HAND-READ RULER --
+# phase error +0.000 to +0.003 on 17 of 17 archived frames -- so when the width changes,
+# the height is what is held fixed and the aspect is what moves.
+CARD_ASPECT = 1.4587
 CARD_H_TOLERANCE = 0.14           # accept a derived box within +-14% of that height
 ROW_PITCH_RANGE = (0.25, 0.40)    # plausible distance between two rows
 MIN_COLS_AGREEING = 3             # of five, before an edge counts as a grid line
@@ -298,7 +323,13 @@ def name_box(img, rows, rel_row, col, cols=None):
 # So x0 0.10 and nothing else. HONEST LIMIT: this is YIELD, not accuracy -- the attempt to
 # label each cell from the roster by its OCR'd name matched 0 of 31, so how many of the 26
 # are RIGHT is unmeasured. Tune it live against the screen (tools/state_viewer.py, key 1).
-TYPE_BANNER_BOX = (0.10, 0.04, 0.66, 0.15)    # BATTER / PITCHER ribbon, upper left
+# RE-SWEPT ON THE CORRECTED CARD BOX. Every earlier value for this -- the shipped
+# 0.16-0.66, the swept 0.10, and the one the user tuned live to 0.045-0.605 -- was a
+# fraction of a card box that was in the wrong place, so all three were compensating for
+# the column error rather than framing the ribbon. Re-swept over 33 owned cells on five
+# frames, 96 boxes: the top ten all read 25-27 of 33 and the best is below. That flatness
+# is the finding -- with the lattice right, this box barely matters.
+TYPE_BANNER_BOX = (0.14, 0.04, 0.66, 0.13)    # BATTER / PITCHER ribbon, upper left
 # READ IT AT PSM 11 (sparse text), not 7. Measured against a hand-labelled row: PSM 7 and 6
 # score 3 of 7 on this banner and PSM 11 scores 6 of 7, and the single miss is the card the
 # CURSOR is highlighting -- its white glow floods the ribbon. Same crop, same whitelist; the
@@ -312,8 +343,14 @@ TYPE_BANNER_PSM = 11
 # returns garbage like "N HER", and calling that tactics puts a wrong label on a player
 # card. "unknown" is the honest answer for a card that cannot be read yet.
 TACTICS_NAMES = ("POWER SWING", "SPEED BOOST", "PITCH FOCUS", "FIELDING PLAY")
-POWER_DISC_BOX = (0.72, 0.04, 0.96, 0.22)     # the white power disc, upper right
-SHIELD_BOX = (0.70, 0.21, 0.96, 0.41)         # the shield badge below it
+# MEASURED, not tuned: with the columns re-fitted the disc lands in the SAME place on
+# every column. Found as the bright blob in the card's upper right over 28 owned cards on
+# four frames: x 0.740-0.919, y 0.062-0.199, and the per-column spread of its centre is
+# 0.0043 -- against a spread that used to force a compromise, which is what the user ran
+# into: "I moved them so they fit some of the boxes better and that caused them to be wrong
+# else where." The box below is that extent with a small margin.
+POWER_DISC_BOX = (0.72, 0.04, 0.94, 0.22)     # the white power disc, upper right
+SHIELD_BOX = (0.68, 0.21, 0.94, 0.41)         # the shield badge below it
 # The NAME ribbon, in the same units, so every card sub-box is one kind of thing and the
 # live editor can tune them all the same way (tools/state_viewer.py, keys 1-4). It is
 # deliberately NOT the same constant as BANNER_EDGES: those two numbers feed the PHASE
@@ -403,17 +440,28 @@ def read_card_type(img, rows, rel_row, col, cols=None, ocr=None, max_edits=2):
 
 
 # LOCKED vs OWNED, and the two populations do not overlap. A locked card is drawn faded:
-# measured on one ban frame's tactics rows, contrast (standard deviation of grey) is
-#     owned    62-66   range 15-255
-#     locked   16-19   range 156-233
-# a 3.5x gap with nothing in between, so the gate sits between two measured populations
-# rather than inside one (CLAUDE.md 10.4). It is also WHY a locked row cannot be box-fitted:
-# find_card_rows votes on edges, and a card with sd 16 has none to offer.
+# RE-CENSUSED 2026-09-13 OVER 20,360 CELLS after the columns were re-fitted, because a
+# gate is only a gate against the geometry it was measured on. The old pair came off ONE
+# frame's tactics rows (owned 62-66, locked 16-19) and both numbers were too low:
+#
+#     sd histogram, 20,360 cells on 2,035 ban frames
+#       12.9- 19.3   9358      <- locked
+#       19.3- 25.7   1444      <- STILL locked, and the old gate cut through here
+#       25.7- 32.1    547      <- still locked
+#       32.1- 51.4     53      <- the real empty band
+#       51.4- 70.7   8958      <- owned
+#
+# The old LOCKED_SD_MAX of 24.0 sat INSIDE the locked population -- 1,991 locked cells
+# score above it -- so 1,225 of 20,360 cells (6%) fell in the dead band and answered None,
+# which reads as "the reader failed" about a card that is simply locked. The band with 53
+# cells in it is the one to straddle (CLAUDE.md 10.4).
 #
 # Reported as "locked" rather than "unknown", because they are different answers: locked
-# means the card is there and the game is hiding it, unknown means the reader failed.
-LOCKED_SD_MAX = 24.0
-OWNED_SD_MIN = 40.0
+# means the card is there and the game is hiding it, unknown means the reader failed. It is
+# also WHY a locked row cannot be box-fitted on its own: find_card_rows votes on edges, and
+# a card with sd 16 has none to offer.
+LOCKED_SD_MAX = 34.0
+OWNED_SD_MIN = 48.0
 
 
 def is_locked(img, box):

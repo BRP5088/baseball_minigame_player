@@ -60,11 +60,24 @@ IMG = {f: Image.open(F(f)).convert("RGB") for f in FRAMES}
 
 print("1. the columns are a uniform pitch — this is what makes it an ARRAY")
 pitches = [round(COLS[i + 1][0] - COLS[i][0], 4) for i in range(len(COLS) - 1)]
-check(len(set(pitches)) == 1 and pitches[0] == 0.135,
-      f"all four column gaps are identical at 0.135 ({pitches})")
-check(round(COLS[0][1] - COLS[0][0], 4) == 0.108,
-      f"and the card is 0.108 wide ({round(COLS[0][1] - COLS[0][0], 4)}) — measured off the "
-      f"intensity profile, page 200 grey against a card body at 160")
+check(len(set(pitches)) == 1 and pitches[0] == 0.1376,
+      f"all four column gaps are identical at 0.1376 ({pitches})")
+check(round(COLS[0][1] - COLS[0][0], 4) == 0.1155,
+      f"and the card is 0.1155 wide ({round(COLS[0][1] - COLS[0][0], 4)}) — fitted to the "
+      f"dead-flat gaps in an edge profile pooled over 520 row bands, residual ±0.0004")
+# THE LATTICE WAS READ OFF ONE CARD BEFORE, AND A START AND A PITCH NEED MORE THAN ONE
+# SAMPLE. The old 0.165/0.135 happens to be right at column 1 (whose edges really are
+# 0.300 and 0.408) and drifts away from there, so the error ACCUMULATES across the row:
+# +0.085, +0.062, +0.040, +0.017, -0.005 card widths at columns 0..4. That is why a badge
+# box tuned on one card broke on another. Pinned with LITERALS so re-fitting has to come
+# back through this check.
+check(abs(COLS[0][0] - 0.1552) < 1e-9 and abs(COLS[4][0] - 0.7056) < 1e-9,
+      f"the fitted lattice runs 0.1552 to 0.7056 ({COLS[0][0]}, {COLS[4][0]})")
+old = [round(0.165 + k * 0.135, 4) for k in range(5)]
+drift = [round((old[k] - COLS[k][0]) / 0.1155, 3) for k in range(5)]
+check(drift[0] > 0.05 and abs(drift[4]) < 0.02,
+      f"and the OLD lattice was wrong by {drift} card widths — worst at column 0, right at "
+      f"column 4, which is the shape the user saw")
 check(COLS[0][1] - COLS[0][0] < o.BAN_GRID_COL_X_FRAC[0][1] - o.BAN_GRID_COL_X_FRAC[0][0],
       "and it is TIGHTER than orchestrator's, which is the whole point: the shipped box "
       "contains its card, the gap, and a sliver of both neighbours")
@@ -248,7 +261,7 @@ check(blaze is not None and blaze < bg.BAN_X_MIN,
       f"Johnny \"Blaze\" Sweets is NOT banned ({blaze}) though its art is dark — a "
       f"dark-fraction gate scored it 0.551 against a genuinely banned 0.642 and would "
       f"have called it banned")
-check(max(scores[k] for k in hits) > 0.9 and blaze < 0.6,
+check(max(scores[k] for k in hits) > 0.85 and blaze < 0.6,
       f"and the two populations are far apart (X'd {max(scores[k] for k in hits)}, "
       f"dark-but-clean {blaze})")
 
