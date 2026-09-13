@@ -82,6 +82,25 @@ txt.pack(fill="x")
 S = {"img": None, "slow": {}, "t": 0.0}
 
 
+def _type_ocr(img):
+    """OCR for the TYPE banner. PSM comes from ban_grid, which measured it."""
+    try:
+        return o._ocr_text(img, bg.TYPE_BANNER_PSM, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") or ""
+    except Exception:
+        return ""
+
+
+def _ocr_strip(frame, box):
+    """Upper-case text off one banner strip, or None. Raw OCR, no roster lookup."""
+    try:
+        strip = frame.crop(box).convert("L")
+        strip = strip.resize((strip.width * 4, strip.height * 4))
+        t = (o._ocr_text(strip, 7, "ABCDEFGHIJKLMNOPQRSTUVWXYZ' -\"") or "").strip()
+        return t or None
+    except Exception:
+        return None
+
+
 def slow_read(frame, crops):
     """The OCR-backed fields. Once a second, not every tick."""
     out = {}
@@ -130,11 +149,13 @@ def slow_read(frame, crops):
         rows = bg.find_card_rows(frame, o.BAN_GRID_COL_X_FRAC)
         out["fitted"] = rows is not None
         out["rows"] = rows
-        names = []
+        names, types = [], []
         for row in range(2):
             for col in range(5):
+                key = f"r{row}c{col}"
+                fitted_cell = bool(rows) and row < len(rows)
                 try:
-                    if rows and row < len(rows):
+                    if fitted_cell:
                         cell = frame.crop(bg.card_box(frame, rows, row, col,
                                                       o.BAN_GRID_COL_X_FRAC))
                     else:
@@ -142,11 +163,30 @@ def slow_read(frame, crops):
                     c = o.ocr_ban_card_name(cell)
                 except Exception:
                     c = None
-                # EVERY cell is reported. "unknown" is a real answer here: a card the roster
-                # has never seen still occupies a box, and the user needs to see the box
-                # fitting it before the card is identifiable (2026-09-13).
-                names.append((f"r{row}c{col}", getattr(c, "name", None) if c else None))
+                nm = getattr(c, "name", None) if c else None
+                # TACTICS CARDS CANNOT BE NAMED BY THE ROSTER -- KNOWN_BAN_ROSTER is 33
+                # PLAYER cards and no tactics at all (CLAUDE.md section 4). So when the
+                # roster lookup declines, read the banner RAW: that is how a Power Swing or
+                # a Speed Boost gets its real name instead of "unknown", and it also
+                # surfaces whatever is legible on a card the roster has never seen.
+                raw = None
+                if nm is None and fitted_cell:
+                    raw = _ocr_strip(frame, bg.name_box(frame, rows, row, col,
+                                                        o.BAN_GRID_COL_X_FRAC))
+                names.append((key, nm or (raw and raw.title()) or None))
+                # THE TYPE IS ITS OWN FIELD, not crammed into the name (the user,
+                # 2026-09-13). "unknown" on a locked card is a real answer: the box is
+                # right and the card simply cannot be read yet.
+                t = None
+                if fitted_cell:
+                    t = bg.read_card_type(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC,
+                                          _type_ocr)
+                types.append((key, t if isinstance(t, str)
+                              else (t[1].title() if t else None)))
+                if isinstance(t, tuple) and names[-1][1] is None:
+                    names[-1] = (key, t[1].title())    # a tactics card names itself
         out["ban_names"] = names
+        out["ban_types"] = types
     return out
 
 
@@ -196,17 +236,19 @@ def tick():
                             y1 = int(frame.height * (fy0 + o.BAN_GRID_CARD_HEIGHT_FRAC))
                             colr = FALLBACK      # a different colour, because it is a
                         d.rectangle((x0, y0, x1, y1), outline=colr, width=3)
-                        nm = dict(S["slow"].get("ban_names") or {}).get(f"r{row}c{col}")
+                        nm = dict(S["slow"].get("ban_names") or []).get(f"r{row}c{col}")
+                        ty = dict(S["slow"].get("ban_types") or []).get(f"r{row}c{col}")
                         d.text((x0 + 4, y0 + 3),
-                               f"r{row}c{col} {nm or 'unknown'}", fill=colr)
+                               f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
+                        if fitted and row < len(fitted):
+                            d.rectangle(bg.name_box(frame, fitted, row, col,
+                                                    o.BAN_GRID_COL_X_FRAC),
+                                        outline=NAME, width=2)
                         # the strip ocr_ban_card_name reads the NAME from -- drawn because
                         # it is the thing that goes wrong: at some scroll positions a row-1
                         # crop starts on row 0's name banner, so the name and the stats in
                         # one crop come from DIFFERENT cards (CLAUDE.md 10.23).
-                        ny0, ny1 = o.BAN_CARD_NAME_STRIP_FRAC
-                        h = y1 - y0
-                        d.rectangle((x0, y0 + int(h * ny0), x1, y0 + int(h * ny1)),
-                                    outline=NAME, width=2)
+
             else:
                 for name, frac in o.GAMEPLAY_REGIONS_FRAC.items():
                     x0, y0 = int(frame.width * frac[0]), int(frame.height * frac[1])
@@ -232,14 +274,26 @@ def tick():
         sl = S["slow"]
         if sl.get("on_ban"):
             cells = sl.get("ban_names") or []
+            tys = sl.get("ban_types") or []
             got = [1 for _k, v in cells if v]
+            gott = [1 for _k, v in tys if v]
             fit = "FITTED to the frame" if sl.get("fitted") else "FIT FAILED — fixed box"
-            r0 = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in cells[:5])
-            r1 = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in cells[5:])
+
+            def _grid(pairs):
+                a = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[:5])
+                b = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[5:])
+                return a, b
+
+            n0, n1 = _grid(cells)
+            t0, t1 = _grid(tys)
+            # NAMES AND TYPES IN SEPARATE GRIDS, not one crowded line (the user's call,
+            # 2026-09-13). A type of "unknown" on a locked card is a real answer.
             txt.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
-                f"named {len(got)} of {len(cells)}\n"
-                f" row0  {r0}\n row1  {r1}"))
+                f"NAME  named {len(got)}/{len(cells)}\n"
+                f"  row0  {n0}\n  row1  {n1}\n"
+                f"TYPE  typed {len(gott)}/{len(tys)}\n"
+                f"  row0  {t0}\n  row1  {t1}"))
         else:
             txt.config(text=(
                 f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
