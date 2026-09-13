@@ -382,7 +382,14 @@ TACTICS_BONUS_BOX = (0.47, 0.00, 0.64, 0.19)  # the +1 / +2 badge, top centre
 # into: "I moved them so they fit some of the boxes better and that caused them to be wrong
 # else where." The box below is that extent with a small margin.
 POWER_DISC_BOX = (0.72, 0.04, 0.94, 0.22)     # the white power disc, upper right
-SHIELD_BOX = (0.68, 0.21, 0.94, 0.41)         # the shield badge below it
+# RE-MEASURED 2026-09-13 by the digit-bank build, which searches for the sprite instead of
+# cropping at this box and so could measure where it actually is: x 0.753-0.943,
+# y 0.207-0.367. The old box was ~0.07 card widths too wide on the left and ~0.04 card
+# heights too deep at the bottom; its top and right edges were already right. Nothing
+# READS through this box any more -- ban_digits searches a window -- so it exists only to
+# draw the viewer's overlay, and an overlay that does not sit on the badge is a lie about
+# where the reader is looking.
+SHIELD_BOX = (0.75, 0.20, 0.95, 0.37)         # the shield badge below the disc
 # The NAME ribbon, in the same units, so every card sub-box is one kind of thing and the
 # live editor can tune them all the same way (tools/state_viewer.py, keys 1-4). It is
 # deliberately NOT the same constant as BANNER_EDGES: those two numbers feed the PHASE
