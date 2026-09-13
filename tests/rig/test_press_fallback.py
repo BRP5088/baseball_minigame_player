@@ -50,6 +50,11 @@ _real = (ic.pyautogui, ic.can_use_background_input, ic._bg_hold_keys,
          ic.focus_chiaki_window, ic.ACTION_DELAY)
 fake = _Fake()
 ic.pyautogui = fake
+# This file drives the focus+pyautogui fallback ON PURPOSE, against the fake above.
+# press() refuses that path under BASEBALL_TEST_RUN since 2026-09-13 -- it typed "c"
+# into the frontmost window during a mutation run -- so opt in explicitly.
+_saved_focus_flag = ic.FOCUS_PRESS_IN_TESTS
+ic.FOCUS_PRESS_IN_TESTS = True
 ic.focus_chiaki_window = lambda: False
 ic.ACTION_DELAY = 0.0
 
@@ -80,6 +85,7 @@ check("background injection FAILED" in out,
 check("frontmost" in out.lower(),
       f"the message must say WHERE the keys will go now; got {out!r}")
 
+ic.FOCUS_PRESS_IN_TESTS = _saved_focus_flag
 ic.pyautogui, ic.can_use_background_input, ic._bg_hold_keys, \
     ic.focus_chiaki_window, ic.ACTION_DELAY = _real
 

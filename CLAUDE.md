@@ -751,6 +751,39 @@ measured while buttons were dead was measuring a broken reset, not routing.
   `can_use_background_input()`, so it needs its own lockout or the offline suite
   drives the live console. It did, briefly.
 
+### THE TEST-RUN LOCKOUT ONLY EVER COVERED THE TARGETED PATH (2026-09-13)
+
+`can_use_background_input()` refuses under `BASEBALL_TEST_RUN`, and its docstring
+says that "means a test run can never move the character". **It does not.** It
+means a test run cannot use the BACKGROUND path — and all three callers then fall
+straight through to `pyautogui`, which types into whatever window is FRONTMOST.
+
+    press()        -> pyautogui.keyDown(key)          guarded only above
+    hold_combo()   -> pyautogui.keyDown(k) per key    guarded only above
+    walk_at()      -> pyautogui.keyDown(k) per slice  NO LOCKOUT OF ANY KIND
+
+Found the way these always get found: a mutation run flipped a guard so the
+verified ban navigator ran with a blind cursor, that navigator calls
+`input_controller.press` (NOT the orchestrator's stubbed one), and it ends every
+ban attempt with two `confirm_play` presses. `confirm_play` is **"c"**. The user
+watched "c" appear in their own window, with a paid match parked on the console,
+and said so before any log did. **The offline suite could have walked the
+character, too** — `walk_at`'s blend loop drives the keyboard with nothing
+checking anything.
+
+`input_controller.focus_input_allowed()` now answers the question AT the damage
+rather than one layer above it, and all three sites call it. The four tests that
+drive that path on purpose set `FOCUS_PRESS_IN_TESTS` and restore it; a test that
+forgets sends nothing and FAILS, which is the safe direction to be wrong in —
+silence here means the keyboard. **`importlib.reload()` resets the flag**, which
+`test_input_timing.py` does twice and which silently refused 22 presses.
+
+The shape is §5's own `_inject_press` returning True because the WRITE succeeded,
+and §10.1's whole family: **a guard one layer up from where the damage happens,
+answering a narrower question than the one it is credited with.** Two of the
+three sites had a guard; the third had none; and the docstring on the guard
+claimed all of it.
+
 ### A BLIND BAN CURSOR MUST NOT MEAN ZERO BANS (2026-09-13)
 
 `select_bans_verified` refuses to toggle a cell it cannot SEE. That is right when

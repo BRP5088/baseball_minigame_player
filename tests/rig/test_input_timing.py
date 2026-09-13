@@ -46,6 +46,13 @@ sys.modules["pyautogui"] = _fake
 
 import input_controller as ic
 
+# --- guard 1b: this file MEASURES the focus+pyautogui path, against the fake above.
+# press() refuses that path under BASEBALL_TEST_RUN since 2026-09-13 -- it typed "c"
+# (confirm_play) into the frontmost window during a mutation run -- so opt in explicitly.
+# Not restored: this module installs a fake pyautogui at import and never uninstalls it
+# either, so the process is already committed to being a test process.
+ic.FOCUS_PRESS_IN_TESTS = True
+
 # --- guard 2: no subprocess may actually run ------------------------------
 _OSASCRIPT = []
 ic.subprocess = types.SimpleNamespace(
@@ -572,6 +579,7 @@ print("OK: before_confirm fires once, in the real function, between the last "
 # straight there, and only then steps.
 import importlib as _il
 _il.reload(ic)
+ic.FOCUS_PRESS_IN_TESTS = True   # reload() reset it to the False default
 check(ic.ACTION_DELAY < ic.BACKOFF_SAFE_DELAY,
       f"ACTION_DELAY starts at {ic.ACTION_DELAY}, not below the known-safe "
       f"{ic.BACKOFF_SAFE_DELAY} — the fast default is gone and the jump below "
@@ -591,6 +599,7 @@ for _ in range(40):
 check(ic.ACTION_DELAY <= ic.MAX_ACTION_DELAY,
       f"backoff blew past its {ic.MAX_ACTION_DELAY}s ceiling: {ic.ACTION_DELAY}")
 _il.reload(ic)
+ic.FOCUS_PRESS_IN_TESTS = True   # reload() reset it to the False default
 
 print(f"OK: input starts fast ({ic.ACTION_DELAY}s), first backoff jumps to the "
       f"known-safe {ic.BACKOFF_SAFE_DELAY}s, then steps, ceiling holds")

@@ -68,6 +68,10 @@ pyautogui.keyUp = _fake_key("up")
 import input_controller as ic
 
 ic.focus_chiaki_window = lambda force=False: False      # no osascript, no wait
+# This file drives the focus+pyautogui path ON PURPOSE, against the stubs above.
+# press()/hold_combo()/walk_at() refuse it under BASEBALL_TEST_RUN since 2026-09-13 --
+# it typed "c" into the frontmost window during a mutation run -- so opt in explicitly.
+ic.FOCUS_PRESS_IN_TESTS = True
 
 fails = []
 

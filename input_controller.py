@@ -406,6 +406,38 @@ def _focus_window_windows() -> None:
         pass
 
 
+# Opt-in for the three tests that drive the focus+pyautogui fallback on purpose. OFF by
+# default so the offline suite can never reach the real keyboard; see press().
+FOCUS_PRESS_IN_TESTS = False
+
+
+def focus_input_allowed(action=None):
+    """May this process type into the FRONTMOST window?
+
+    THE TEST-RUN LOCKOUT ONLY EVER COVERED THE TARGETED PATH, and 2026-09-13 showed what
+    that costs. can_use_background_input() refuses under BASEBALL_TEST_RUN and its
+    docstring claims that "means a test run can never move the character" -- it means a
+    test run cannot use the BACKGROUND path, and each of the three callers below then
+    falls straight through to pyautogui, which types into whatever is FRONTMOST. A
+    mutation run of the offline suite reached that line and sent "c"
+    (confirm_play/Triangle) repeatedly while a paid match sat parked on the console; the
+    user saw the keystrokes before any log did.
+
+    The same shape as section 5's `_inject_press` returning True because the WRITE
+    succeeded: a guard one layer up from where the damage happens, answering a narrower
+    question than the one it is credited with. This one is asked AT the damage.
+
+    The tests that exercise this path on purpose set FOCUS_PRESS_IN_TESTS and restore it.
+    A test that forgets sends nothing and FAILS, which is the safe direction to be wrong
+    in -- silence here means the keyboard.
+    """
+    if os.environ.get("BASEBALL_TEST_RUN") and not FOCUS_PRESS_IN_TESTS:
+        print(f"  [input] BASEBALL_TEST_RUN: refusing to send {action or 'keys'} via "
+              "focus+pyautogui — that path types into the FRONTMOST window")
+        return False
+    return True
+
+
 def press(action: str, hold_seconds: float = 0.05, post_delay: float = None):
     """Press a single logical action's mapped key, then pause post_delay
     seconds so the UI/stream has time to register it before the next
@@ -458,6 +490,10 @@ def press(action: str, hold_seconds: float = 0.05, post_delay: float = None):
         # path that spends the money.
         print(f"  [input] background injection FAILED for {action!r} — falling "
               "back to focus+pyautogui, which sends to the FRONTMOST window")
+
+    # Every line below this point types into the FRONTMOST window. See focus_input_allowed.
+    if not focus_input_allowed(action):
+        return
 
     # Counted BEFORE the keys go out, so a press that raises still shows in the
     # summary as having taken this path — the fact worth recording is where the
@@ -1746,6 +1782,8 @@ def hold_combo(actions, seconds):
     if can_use_background_input() and _bg_hold_keys(keys, seconds):
         return
 
+    if not focus_input_allowed("+".join(keys)):
+        return
     if focus_chiaki_window():
         time.sleep(0.15)
     prev_pause = pyautogui.PAUSE
@@ -1766,6 +1804,12 @@ def walk_at(rel_deg, seconds, slice_sec=BLEND_SLICE_SEC):
     Blends the two adjacent 45-degree directions so any angle is reachable.
     Returns the time actually spent moving.
     """
+    # BOTH branches below reach the keyboard -- the pure one through press()/hold_combo(),
+    # the blended one through pyautogui directly, which had no lockout of any kind. Guard
+    # once here so a refusal reports 0.0 travelled either way; the pure branch returns
+    # `seconds` unconditionally and would otherwise claim a walk it did not take (10.1).
+    if not focus_input_allowed(f"walk {rel_deg:.0f} deg"):
+        return 0.0
     rel = rel_deg % 360.0
     # A pure direction needs no blending. Route it through the single-key path
     # in one hold rather than slicing it into duty-cycle chunks: each slice
