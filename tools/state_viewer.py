@@ -83,7 +83,7 @@ def _edit_panel():
     star = "*" if E["dirty"] else " "
     return (f"BOX{star} {who}   {_EDIT_CONST[k]} = ({v})   step {E['step']:.3f}\n"
             f"     arrows move | shift+arrows resize | [ fine  ] coarse | "
-            f"w write to ban_grid.py | 0 revert | c copy panel"
+            f"w write to ban_grid.py | 0 revert | c copy (drag to select, or all)"
             + (f"   -- {E['msg']}" if E["msg"] else "") + "\n")
 
 
@@ -111,12 +111,18 @@ lbl = tk.Label(root, bg="black"); lbl.pack()
 # values from the live viewer?" A tk.Label cannot be selected at all, so every number on it
 # had to be retyped by hand.
 #
-# DISABLED, NOT READ-ONLY-BY-CONVENTION: a disabled Text still selects with the mouse and
-# still answers the <<Copy>> event, but it takes no keyboard focus (takefocus=0) and its
-# own key bindings never fire -- which matters, because the box editor owns the arrow keys
-# and a focused Text would eat them to move an insertion cursor nobody can see.
+# I SHIPPED IT DISABLED FIRST AND THAT KILLED THE SELECTION. The reasoning was that a
+# disabled Text still selects with the mouse; on this Tk it does not, and the user found it
+# in a minute: "It doesn't look like the PWR/SHD is working... I would also like to select
+# a section to copy too."
+#
+# So it is NORMAL, and the keyboard is kept away from it a different way: takefocus=0 keeps
+# Tab out, and a ButtonRelease hands focus straight back to root, so a click selects text
+# and then stops being the focus. That matters because the box editor owns the arrow keys,
+# and a focused Text would eat them to move an insertion cursor nobody can see. Anything
+# typed into it is overwritten by the next tick anyway.
 txt = tk.Text(root, font=("Menlo", 12), height=18, wrap="none", bd=0,
-              takefocus=0, state="disabled", cursor="arrow")
+              takefocus=0, cursor="arrow")
 txt.pack(fill="both", expand=True)
 
 
@@ -128,10 +134,18 @@ class _Panel:
     @staticmethod
     def config(text=""):
         _Panel.last = text
-        txt.config(state="normal")
+        sel = None
+        try:                                  # do not destroy a selection mid-drag
+            sel = (txt.index("sel.first"), txt.index("sel.last"))
+        except tk.TclError:
+            pass
         txt.delete("1.0", "end")
         txt.insert("1.0", text)
-        txt.config(state="disabled")
+        if sel:
+            try:
+                txt.tag_add("sel", *sel)
+            except tk.TclError:
+                pass
 
     @staticmethod
     def cget(_what):
@@ -139,12 +153,22 @@ class _Panel:
 
 
 def copy_panel(_e=None):
-    """Put the whole panel on the clipboard. One key, because a mouse selection of a
-    fifteen-line grid is fiddly and the usual reason to copy is to paste the WHOLE read."""
+    """Copy the SELECTION if there is one, otherwise the whole panel.
+
+    One behaviour on every key that means copy, so there is nothing to remember: drag a few
+    lines and press c (or cmd-C) to get those lines, press it with nothing selected to get
+    the lot. Bound on root rather than on the Text, because the Text deliberately does not
+    hold focus and cmd-C is delivered to whatever does.
+    """
+    try:
+        what = txt.get("sel.first", "sel.last")
+    except tk.TclError:
+        what = _Panel.last
     root.clipboard_clear()
-    root.clipboard_append(_Panel.last)
+    root.clipboard_append(what)
     root.update()                      # macOS needs this before the app can lose focus
-    S["note"] = f"copied {len(_Panel.last)} chars to the clipboard"
+    S["note"] = f"copied {len(what)} chars"
+    return "break"
 S = {"img": None, "slow": {}, "t": 0.0, "frame": None, "rows": None, "note": ""}
 
 
@@ -191,16 +215,29 @@ def _digits(frame, rows, row, col):
     pb = bg.power_box(frame, rows, row, col)
     p = "-"
     if pb is not None:
-        crop = frame.crop(pb)
+        crop = frame.crop(pb).convert("L")
         up = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
-        txt = o._ocr_text(up, psm=7, whitelist="0123456789") or ""
-        dig = "".join(ch for ch in txt if ch.isdigit())
-        # POWER IS 4 TO 9 (CLAUDE.md section 4). There is no 1, 2 or 3 power card, so a
-        # digit outside that range is a misread and saying so beats printing it.
-        if dig and 4 <= int(dig[0]) <= 9:
-            p = "?" + dig[0]
-        elif dig:
-            p = "?!" + dig[0]
+        # THE FIRST MODE THAT ANSWERS IN RANGE WINS. One mode reaches 43% of cells; asking
+        # three in order and stopping at the first in-range answer reaches 64% at the SAME
+        # precision, for 1.93 OCR calls a cell. Measured over 118 labelled crops:
+        #
+        #     psm 10 alone            right 43  WRONG  8  abstain 50
+        #     psm  7 alone            right 41  WRONG  4  abstain 59
+        #     first-in-range 10,13,7  right 63  WRONG 12  abstain 43   84.0% precision
+        #     majority of all three   right 45  WRONG  7  abstain 66   86.5% precision
+        #
+        # A vote buys nothing here -- precision is 84-86% however it is counted, so the
+        # ceiling is tesseract on a 51x61 crop, not the counting. Reach is what a human
+        # checking a panel wants, so reach is what this takes.
+        for _psm in (10, 13, 7):
+            raw = o._ocr_text(up, psm=_psm, whitelist="0123456789") or ""
+            dig = "".join(ch for ch in raw if ch.isdigit())
+            # POWER IS 4 TO 9 (CLAUDE.md section 4). There is no 1, 2 or 3 power card, so a
+            # digit outside that range is a known misread -- 14-18 of 118 crops per mode --
+            # and dropping it is what lets the next mode have a turn.
+            if dig and 4 <= int(dig[0]) <= 9:
+                p = "?" + dig[0]
+                break
     sh = "-"
     if pb is not None:
         cx, cy = (pb[0] + pb[2]) // 2, (pb[1] + pb[3]) // 2
@@ -501,7 +538,7 @@ def tick():
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
                 f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
                 f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}\n"
-                f"PWR/SHD  ? = UNVERIFIED (power 56 right / 4 wrong / 92 abstain of 172; "
+                f"PWR/SHD  ? = UNVERIFIED (power 63 right / 12 wrong / 43 abstain of 118; "
                 f"shield has no reader and always says 0)"
                 f"\n{_grid(sl.get('ban_nums') or [])}\n"
                 + _edit_panel()
@@ -677,7 +714,11 @@ root.bind("<KeyPress-bracketright>", lambda e: E.__setitem__("step", 0.010))
 root.bind("<KeyPress-w>", _edit_write)
 root.bind("<KeyPress-0>", _edit_reset)
 
+txt.bind("<ButtonRelease-1>", lambda e: root.focus_set())
 root.bind("<KeyPress-c>", copy_panel)
+root.bind("<Command-c>", copy_panel)
+root.bind("<Control-c>", copy_panel)
+root.bind("<<Copy>>", copy_panel)
 root.bind("<KeyPress-s>", save_sheet)
 root.bind("<KeyPress-S>", save_sheet)
 root.focus_force()
