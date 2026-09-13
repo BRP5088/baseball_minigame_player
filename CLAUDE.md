@@ -264,6 +264,54 @@ health coin, and the run reported the bankroll collapsing from $246 to $100.
 Misreading that coin has produced two confident wrong findings. Use
 `orchestrator.read_balance_from_pause_menu()`, never a gameplay frame.
 
+### THE BAN GRID IS A UNIFORM 2D ARRAY, AND ITS ROWS MOVE
+
+`BAN_CARD_ROW_TOP_FRAC` pins the two visible rows at fixed fractions. **They are not
+fixed.** At the top of the grid the card tops sit at 0.280 / 0.607; four scroll presses
+later the same rows are at 0.229 / 0.557. No constant frames both, and the shipped one only
+ever "worked" by being loose enough to contain the card wherever it drifted -- which is why
+it wins a name-OCR yield contest (1242 names against 1180 for a tight box, at BOTH capture
+geometries) while being visibly wrong on screen.
+
+Everything ELSE is fixed, measured:
+
+    columns    starts 0.145 0.280 0.415 0.550 0.685    pitch 0.135, all four gaps identical
+               card width 0.130
+    rows       pitch 0.328     card height 0.2995 (= CARD_ASPECT 1.296 x column width x w/h)
+    the name banner sits at 0.79-0.93 of card height -- the ONLY dominant horizontal edges
+    on a card, 0.98 and 1.00 normalised against everything else under 0.25
+
+So the grid has exactly ONE unknown: the vertical PHASE. `ban_grid.find_card_rows` solves it
+by pooling the name banner's two edges across EVERY row at once, which lets a row of locked
+cards be placed by its neighbours' evidence. Phase error against a hand-read ruler: +0.001
+to +0.003, on 17 of 17 archived frames.
+
+**THREE THINGS THAT DO NOT WORK, so they are not retried.** Scoring the card's OUTER top and
+bottom edges: those are thin light lines, and the solver slides until its lower sample finds
+the BANNER instead -- a systematic 0.187 card-heights. Autocorrelating a column to measure
+the pitch: it confirms 0.3280 exactly on a clean frame and is wrong one frame in five on
+faded ones. And horizontal periodicity for the row phase: a card's SIDE borders run its full
+height, so a band's vertical position barely changes the score -- horizontal structure pins
+the COLUMNS and says almost nothing about rows.
+
+**LOCKED IS NOT UNKNOWN.** A locked card is drawn faded: contrast (sd of grey) is **16-19**
+against an owned card's **62-66**, a 3.5x gap with nothing between. That is both a clean
+locked/owned detector (`ban_grid.is_locked`, 10 of 10 on a held-out player row) and the
+reason a locked row cannot be detected on its own. Reporting "unknown" for a locked card
+hides that nothing is wrong.
+
+**THE HAND'S DIGIT BANK DOES NOT READ BAN CARDS.** Argmax correct on only 3 of 7, everything
+scoring under 0.5 wrong; lowering the gate manufactures wrong digits. Auditing the roster's
+NUMBERS offline needs a ban-specific bank, and its labels must be independent of the roster
+or the audit is circular. The card TYPE does read, at **PSM 11** (sparse text) -- PSM 7 and 6
+score 3 of 7 on the same crop and PSM 11 scores 6 of 7, which three rounds of moving the box
+could not find.
+
+**`read_phase` IS NOT A TURN-SCREEN GATE.** Neither is the hand reader, exactly -- but both
+abstain on ban screens (0 of 368 labelled ban frames, against 112 and 116 of 255 non-ban).
+An earlier claim here that read_phase leaked on ban screens was an artefact of scoring an
+UNLABELLED population.
+
 ### The other reading traps
 
 **Hand cards do not display a name.** Vision returns the type banner —
@@ -507,6 +555,46 @@ of **ELEVEN**. That is the seventh documented way that model was wrong about car
 
 **`KNOWN_BAN_ROSTER` CANNOT ANSWER A TACTICS QUESTION** — it is 33 `PlayerCard`s and
 no tactics cards at all. Player powers run **4–9**; a power outside that is a misread.
+
+### EVERY CARD IS A BATTER OR A PITCHER, AND `secondary` MEANS A DIFFERENT STAT IN EACH
+
+The user's call, 2026-09-13: *"it might be useful to also read the players type, so you
+don't mark a pitcher with speed since that doesn't make sense."* `PlayerCard.secondary` is
+SPEED on a batter and FIELDING on a pitcher -- the field's own comment always said so --
+and there was no role field, so nothing could tell them apart. `simulate.draw_hand` dealt
+all 33 cards in BOTH directions: a pitcher dealt as a batter had its fielding read as
+speed, and a batter dealt as a pitcher brought a fielding of 3, which no pitcher has.
+
+**THE TWO RANGES ARE DISJOINT WHERE IT MATTERS**, over 131 HAND-LABELLED cards split by
+whether the hand they came from was batting or pitching:
+
+    batters   speed     1 x14   2 x14   3 x38    n=66   NEVER 0
+    pitchers  fielding  0 x39   1 x23   2 x3     n=65   NEVER 3
+
+So secondary 0 implies PITCHER and 3 implies BATTER; 1 and 2 are shared and need the card's
+banner. 31 of 33 are typed from FOUR signals that never once disagreed: the ban-grid banner
+read by OCR, that range rule, the user reading cards off a ban grid, and **a card seen on a
+BASE is a batter** (runners belong to the batting side, so occupancy types a card for free).
+Brian Coker (8/1) and Zachary Lee (6/2) are still untyped; `simulate.UNTYPED` names them and
+keeps them in both pools, because dropping them biases the draw as surely as mistyping them.
+
+Splitting the pools moved the model **1.7223 -> 1.7862 runs/half (+3.7%, 4.6 sigma** at
+n=20,000 per arm) -- the size of the error the unsplit pool was carrying.
+
+**A CORRECTION THIS FORCED.** "30.5% of hand-labelled player cards are speed 0" was reported
+here and a finding built on it -- that `bases_to_travel` and `simulate` disagree about a
+speed-0 batter. Those cards were PITCHERS, pooled with batters precisely because there was
+no role. **A batter's speed is never 0**, so that disagreement does not arise. It is still
+reachable through fielding subtraction, which is a different open question.
+
+**DO CARD VALUES CHANGE PER GAME? NO.** 1,691 player cards read across 540 hand crops
+recorded on many different days: every (power, secondary) pair is already one of the
+roster's, and ZERO novel pairs appeared. Six of the 24 possible combinations are absent from
+the roster and none was ever drawn.
+
+**THE COLLECTION ALSO HOLDS TACTICS CARDS**, at the bottom of the ban grid: 1 Power Swing,
+3 Speed Boost, 3 Pitch Focus, 3 Fielding Play. Every OWNED one shows a badge of **1** --
+an independent confirmation of the +1 bonus census, from a different source entirely.
 
 **So the maximum effective batter power is 9 + 2 = 11**, and that decides a pitching
 choice the engine cannot see: a pitcher playing a **9 CANNOT concede a home run**
@@ -1485,6 +1573,19 @@ already paid: the money leaves the in-game wallet, `balance` is never debited,
 `save_progress` is never called, and **`max_spend` cannot stop it** —
 `run_one_match.py`'s promise that "no new money is ever spent, whatever the
 tracked balance says" does not hold in that state.
+
+**AND PREFLIGHT'S GUARD AGAINST IT COULD NOT FIRE THE WAY PREFLIGHT IS RUN (2026-09-13).**
+The check read `sys.argv[1]` and defaulted to `progress.json`. This project keeps TWO
+progress files ON PURPOSE (see section 2), so the guard only fired if you named the right
+one. Demonstrated on one tree at one moment:
+
+    python3 preflight.py                          ->  READY
+    python3 preflight.py progress_testing.json    ->  FAIL, match in progress
+
+`orchestrator.open_match_files(here)` now reports EVERY `progress*.json` claiming an open
+match, because which file a later run will pass is not knowable in advance. Corrupt JSON is
+SKIPPED rather than counted as a claim -- unreadable is not "a match is open", and treating
+it as one blocks a run for the wrong reason.
 
 **And the stale state was the NORMAL one.** 25 call sites reload the save; only
 `run_cycles` repaired the record. Every navigation run left the flag armed.
