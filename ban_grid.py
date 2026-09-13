@@ -53,6 +53,20 @@ MAX_EXTRAPOLATE = 3               # rows to step either side of the located pair
 # every other offset here. Used only when a single row is located and there is no second one
 # to measure against -- which is the case on a TACTICS row, where the only detectable
 # banner belongs to the player row above it.
+# CONFIRMED INDEPENDENTLY, by the user's pointer (2026-09-13: "to figure out the spacing
+# between rows, look at Row0 col 3 and Row 1 Col 3"). A single column's intensity profile is
+# PERIODIC with the row pitch, so autocorrelating it reads the spacing with no landmark and
+# nothing to identify. On a live frame three of four columns peaked at exactly 0.3280 --
+# matching the banner-pair estimate to four decimals, by a completely different method. The
+# fourth column held the cursor-highlighted card and is not periodic; it said 0.3867.
+#
+# IT IS NOT A BETTER ESTIMATOR, THOUGH, AND WAS TRIED AS ONE. Over 16 archived scroll
+# frames autocorrelation returned 0.254 / 0.281 / 0.262 on faded rows -- it answers even
+# when there is no card structure to find, locking onto the page texture -- and requiring
+# three columns to agree within 2% still left three frames confidently wrong. A constant
+# measured at 0.327-0.329 across every scroll position and both capture sizes beats a
+# per-frame measurement that is wrong one time in five, so the constant stays and the
+# autocorrelation code is deleted rather than kept as an unused trap.
 ROW_PITCH_DEFAULT = 0.328
 # A NAME BANNER IS A DARK RIBBON. The page's own ornate title border is a pair of light
 # lines the right distance apart, and the single-banner fallback anchored on it -- every
