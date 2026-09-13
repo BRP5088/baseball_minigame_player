@@ -24,6 +24,32 @@ live queue. Delete it when the queue is empty.
     689de6d  paid vision model locked OFF at the choke point
     e3dfed8  simulator reshuffled both hands every round; tactics pools drew a +3
 
+## !!! BROKEN RIGHT NOW — fix first, found by QA 2026-09-13 !!!
+
+**The diamond capture is a NO-OP. Committed broken in e1c1f4a.**
+`local_state` is imported only INSIDE two orchestrator functions (:3536, :4130), never at
+module scope. The capture in play_one_turn calls `local_state.read_runners(...)`, raises
+NameError, is swallowed by its own try/except, and the stash is never set — so
+wait_for_hand_deal logs nothing and the deal-timing data this was all built to collect is
+not being collected.
+
+  fix:  add a module-level `import local_state` to orchestrator (check for a cycle first:
+        local_state imports local_hand, and orchestrator imports both — verify which way).
+  and:  tests/minigame/test_deal_inputs_wired.py is GREEN against a call site that cannot
+        execute. It AST-checks that stash_deal_inputs is CALLED, not that the call WORKS.
+        Make it drive the path and assert the stash is actually populated.
+  note: tests/harness/test_no_undefined_names.py did not catch this — QA reports it credits
+        a FUNCTION-LOCAL import to the module scope, so it is blind to exactly this shape.
+        That is a second fix and it guards the whole repo, not just this line.
+
+Other CONFIRMED call-site bugs in the same wiring, from the same QA round:
+  * while PITCHING it passes our pitcher's FIELDING as the batter's SPEED (one name, two
+    meanings)
+  * a SPEED BOOST attached to our own batter is never added to the stashed batter speed
+  * a REFUSED play leaves the diamond stashed and the next gate pops it — the logged
+    diamond then belongs to the wrong turn
+  * with the gate switched off, nothing ever pops the stash
+
 ## QUEUE — updated 2026-09-12 late
 
 ### CLOSED
