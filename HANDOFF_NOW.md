@@ -15,6 +15,17 @@ a Play Game button. The game is not running.
     preflight    READY (it said NOT READY while the flag was set -- correctly)
     to resume    press Play Game on the PS5, then reload the save
 
+**LABELLING SHEETS ARE READY, seven of them**, at
+`agent_progress/ban-labels/roster_{1_4,5_8,9_12,13_16,17_20,21_24,25_25}.jpg` -- every card
+the ban archive can identify, four per sheet, each captioned with what the roster CLAIMS.
+Reading them confirms or corrects the roster's NUMBERS, which no independent source has ever
+checked (IGN confirmed the 33 NAMES; the stats rest on spot-checks). It needs no console.
+
+The same sheets are also what a ban-specific DIGIT BANK would be cut from -- see the parked
+item in OFFLINE_QUEUE.md for why the hand's bank cannot read ban cards (argmax 3 of 7).
+While the game is up, the viewer's `s` key dumps the same thing live for whatever is on
+screen.
+
 **THE ONE WARNING WORTH ACTING ON**, and it is the oldest open item on the project:
 
     no calibrated window position recorded for this machine yet
