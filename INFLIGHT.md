@@ -42,21 +42,31 @@ live queue. Delete it when the queue is empty.
   read_runners["speeds"]. 171/172 occupied bases read, 0 false reads on 1,106 bare bases,
   shipped SHIELD_MIN 0.69 already sits between the populations (empty max 0.592, occupied
   p05 0.857). Five mutants; the first two SURVIVED and the test was fixed, not the mutant.
-- **Simulator: two innings.** simulate_match played ONE. 99/1 re-validated and survives.
+- **Simulator match shape: SETTLED.** The match is:
+      new hand / play as the BATTER / inning 1 ends /
+      new hand / inning 2 starts / play as the PITCHER / inning 2 ends.
+  So the two innings ARE the two halves -- you bat in inning 1, pitch in inning 2, done.
+  simulate_match's original A-bats-then-B-bats shape was right; a change earlier the same
+  day that looped it over two innings played FOUR halves and doubled every score. Reverted.
+  Confirmed by the user and by the live board: `your [2,0,2]` vs `opponent [0,0,0]` is us
+  scoring 2 batting in inning 1, not batting in inning 2, and them yet to score in the
+  inning they are batting now.
+- **ROUNDS_PER_HALF = 5 is SETTLED too** -- five at-bats batting, five pitching, which is
+  what simulate_batting_half has always looped. CLAUDE.md's "a match is 5 rounds" is per
+  half. (Was listed as open; it is not.)
+- **What DID need fixing in the simulator** was one level down: both hands were redrawn
+  every ROUND, where the real hand is dealt once per half and topped up a card at a time
+  (refill_hand). That fix stands. 99/1 re-validated and survives.
 
 ### OPEN, in priority order
 
-1. **ROUNDS_PER_HALF = 5 is UNVERIFIED.** CLAUDE.md's "a match is 5 rounds" was written
-   when the model had one inning per side. At two innings that could mean 5 per half (10
-   at-bats a side) or 5 across the match. Named and left at 5; ask the user or count it
-   off a real match.
-2. **Deal timing** -- still the user's open ask. Runner speeds now exist, so a
+1. **Deal timing** -- still the user's open ask. Runner speeds now exist, so a
    bases-to-travel predictor is finally buildable. The workflow's timing axis was mostly
    REFUTED (16 of 25 timeouts tautological, 9 from a deleted rule, 0 from shipped code) --
    re-read those verdicts before reusing any of its numbers.
-3. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
+2. **Runner NAME** reads 140/171 with ZERO names on 1,106 bare bases (verdict NEEDS_WORK:
    numbers reproduce, write-up overstated the sample). Not wired in.
-4. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.
+3. The live match is still parked mid-turn. Slot 2 vs slot 4 is a genuine coin-flip.
 
 ## (historical) the reader fix, from the workflow's own skeptics
 

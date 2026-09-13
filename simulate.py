@@ -98,14 +98,11 @@ TACTICS_POOL_PITCHING = (
 
 TACTICS_FRACTION = 0.5  # rough match to observed real hands (roughly half tactics cards)
 
-# TWO INNINGS, each side batting once per inning, a fresh hand every half (user, 2026-09-12).
-INNINGS = 2
-# ROUNDS PER HALF IS NOT VERIFIED. CLAUDE.md section 4 says "a match is 5 rounds", which was
-# written when this model had one inning per side; at two innings that same 5 could mean 5
-# rounds per half (10 at-bats a side) or 5 across the match. simulate_batting_half has
-# always looped 5 and every number ever measured here assumes it, so it is left at 5 and
-# named rather than quietly changed -- an unverified constant that moves invalidates every
-# comparison it touches, and this one already invalidated a match length.
+# THE MATCH IS TWO INNINGS AND THEY ARE THE TWO HALVES: you BAT in inning one, you PITCH in
+# inning two, and it ends. Each gets a fresh hand. So simulate_match's two calls ARE the two
+# innings -- there is no outer loop, and adding one (briefly, on 2026-09-12) played four
+# halves and doubled every score. "A match is 5 rounds" (CLAUDE.md section 4) is therefore
+# 5 rounds per half, which is what this has always looped.
 ROUNDS_PER_HALF = 5
 
 
@@ -421,27 +418,27 @@ def simulate_match(team_a: dict, team_b: dict):
     b_redraw = team_b.get("redraw", should_redraw)
     a_pool = team_a.get("pool", CARD_POOL)
     b_pool = team_b.get("pool", CARD_POOL)
-    # A MATCH IS TWO INNINGS, AND THIS PLAYED ONE. The scoreboard carries two columns and a
-    # total for a reason -- orchestrator.ocr_scoreboard has documented it as
-    # [round1, round2, total] all along -- and the user confirmed the shape on 2026-09-12:
-    # "Fresh hand, first inning. Fresh hand second inning. End game", with a fresh hand at
-    # every half boundary. This ran a single inning per side, so every win rate ever
-    # measured through simulate_match describes a shorter game than the one being played.
+    # TWO HALVES, WHICH ARE THE TWO INNINGS. The user spelled the match out on 2026-09-12:
     #
-    # Each half already deals its own hand, so "fresh hand each half" needs nothing extra;
-    # what was missing is the second inning. The defender's target_score is the batter's
-    # score SO FAR ACROSS THE MATCH, since that is what a pitcher is actually defending.
-    a_score = b_score = 0
-    for inning in range(INNINGS):
-        a_score += simulate_batting_half(
-            team_a["batting"], team_b["pitching"],
-            defender_target_score=(b_score if inning else None),
-            redraw_fn=a_redraw, player_pool=a_pool, defender_player_pool=b_pool,
-            defender_redraw_fn=b_redraw)
-        b_score += simulate_batting_half(
-            team_b["batting"], team_a["pitching"], defender_target_score=a_score,
-            redraw_fn=b_redraw, player_pool=b_pool, defender_player_pool=a_pool,
-            defender_redraw_fn=a_redraw)
+    #     New hand / play as the BATTER / inning ends /
+    #     new hand / inning 2 starts / play as the PITCHER / inning ends.
+    #
+    # So you bat in inning ONE and pitch in inning TWO, and the match is over. The
+    # scoreboard's two columns are those two innings, which is why the live board reads
+    # `your [2, 0, 2]` against `opponent [0, 0, 0]`: we scored 2 batting in inning 1, we do
+    # not bat in inning 2, and they have not scored yet in the inning they are batting.
+    #
+    # This function's original A-bats-then-B-bats shape was therefore RIGHT, and a change
+    # on 2026-09-12 that looped it over two innings was wrong -- it played four halves and
+    # roughly doubled every score. Reverted. What DID need fixing is one level down: both
+    # hands were redrawn every ROUND (see refill_hand), where the real hand is dealt once
+    # per half and topped up a card at a time.
+    a_score = simulate_batting_half(team_a["batting"], team_b["pitching"], defender_target_score=None,
+                                     redraw_fn=a_redraw, player_pool=a_pool, defender_player_pool=b_pool,
+                                     defender_redraw_fn=b_redraw)
+    b_score = simulate_batting_half(team_b["batting"], team_a["pitching"], defender_target_score=a_score,
+                                     redraw_fn=b_redraw, player_pool=b_pool, defender_player_pool=a_pool,
+                                     defender_redraw_fn=a_redraw)
     return a_score, b_score
 
 
