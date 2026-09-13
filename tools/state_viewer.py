@@ -178,11 +178,18 @@ def slow_read(frame, crops):
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
                 t = None
+                locked = None
                 if fitted_cell:
+                    locked = bg.is_locked(frame, bg.card_box(frame, rows, row, col,
+                                                             o.BAN_GRID_COL_X_FRAC))
                     t = bg.read_card_type(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC,
                                           _type_ocr)
-                types.append((key, t if isinstance(t, str)
-                              else (t[1].title() if t else None)))
+                # LOCKED AND UNKNOWN ARE DIFFERENT ANSWERS. Locked means the card is there
+                # and the game is drawing it faded; unknown means the reader failed. Saying
+                # "unknown" for a locked card hides the fact that nothing is wrong.
+                label = (t if isinstance(t, str)
+                         else (t[1].title() if t else ("locked" if locked else None)))
+                types.append((key, label))
                 if isinstance(t, tuple) and names[-1][1] is None:
                     names[-1] = (key, t[1].title())    # a tactics card names itself
         out["ban_names"] = names

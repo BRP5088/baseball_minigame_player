@@ -242,3 +242,31 @@ def read_card_type(img, rows, rel_row, col, cols, ocr, max_edits=2):
         if best_txt and _lev(best_txt, squished) <= max_edits:
             return ("tactics", want)
     return None
+
+
+# LOCKED vs OWNED, and the two populations do not overlap. A locked card is drawn faded:
+# measured on one ban frame's tactics rows, contrast (standard deviation of grey) is
+#     owned    62-66   range 15-255
+#     locked   16-19   range 156-233
+# a 3.5x gap with nothing in between, so the gate sits between two measured populations
+# rather than inside one (CLAUDE.md 10.4). It is also WHY a locked row cannot be box-fitted:
+# find_card_rows votes on edges, and a card with sd 16 has none to offer.
+#
+# Reported as "locked" rather than "unknown", because they are different answers: locked
+# means the card is there and the game is hiding it, unknown means the reader failed.
+LOCKED_SD_MAX = 24.0
+OWNED_SD_MIN = 40.0
+
+
+def is_locked(img, box):
+    """True / False / None for the card in `box`. None = between the populations, so unsure."""
+    import numpy as _np
+    sub = _np.asarray(img.crop(box).convert("L"), dtype=_np.float32)
+    if sub.size == 0:
+        return None
+    sd = float(sub.std())
+    if sd <= LOCKED_SD_MAX:
+        return True
+    if sd >= OWNED_SD_MIN:
+        return False
+    return None
