@@ -171,22 +171,33 @@ def find_card_rows(img, cols):
     return rows or None
 
 
-def card_box(img, rows, rel_row, col, cols):
-    """Pixel box for one card, from find_card_rows' output."""
+def _box_px(img, cols, col, top, bot):
+    """A pixel box, clamped to the frame. None when the band is entirely off screen.
+
+    A CLIPPED ROW IS THE COMMON CASE, not an edge case: find_card_rows deliberately reports
+    the part-visible rows above and below. For the row above, the name banner can sit
+    entirely off the top of the frame -- clamping each end independently then produced
+    y1 < y0, which PIL raises on, and the viewer's tick swallowed it into a label. Returning
+    None makes "there is nothing to draw" a value the caller can act on.
+    """
     w, h = img.size
     x0, x1 = cols[col]
+    y0, y1 = int(h * max(0.0, min(1.0, top))), int(h * max(0.0, min(1.0, bot)))
+    if y1 <= y0:
+        return None
+    return (int(w * x0), y0, int(w * x1), y1)
+
+
+def card_box(img, rows, rel_row, col, cols):
+    """Pixel box for one card, or None if it is entirely off screen."""
     r = rows[rel_row]
-    return (int(w * x0), int(h * max(0.0, r["top"])),
-            int(w * x1), int(h * min(1.0, r["bottom"])))
+    return _box_px(img, cols, col, r["top"], r["bottom"])
 
 
 def name_box(img, rows, rel_row, col, cols):
-    """Pixel box of the NAME BANNER -- the strip the card's name is printed on."""
-    w, h = img.size
-    x0, x1 = cols[col]
+    """Pixel box of the NAME BANNER, or None if it is off screen."""
     r = rows[rel_row]
-    return (int(w * x0), int(h * max(0.0, r["banner_top"])),
-            int(w * x1), int(h * min(1.0, r["banner_bottom"])))
+    return _box_px(img, cols, col, r["banner_top"], r["banner_bottom"])
 
 
 # Measured as fractions of the FITTED CARD BOX, off a ruler laid on a known BATTER cell
@@ -213,7 +224,10 @@ SHIELD_BOX = (0.70, 0.21, 0.96, 0.41)         # the shield badge below it
 
 
 def _sub(img, rows, rel_row, col, cols, frac):
-    x0, y0, x1, y1 = card_box(img, rows, rel_row, col, cols)
+    box = card_box(img, rows, rel_row, col, cols)
+    if box is None:
+        return None                      # off screen: nothing to crop, and saying so beats
+    x0, y0, x1, y1 = box                 # handing back a rectangle that is not there
     bw, bh = x1 - x0, y1 - y0
     fx0, fy0, fx1, fy1 = frac
     return (x0 + int(bw * fx0), y0 + int(bh * fy0),
@@ -262,6 +276,8 @@ def read_card_type(img, rows, rel_row, col, cols, ocr, max_edits=2):
     can never name one (CLAUDE.md section 4).
     """
     box = type_box(img, rows, rel_row, col, cols)
+    if box is None:
+        return None
     best_d, best_w, best_txt = 99, None, ""
     for invert in (False, True):
         crop = img.crop(box).convert("L")
@@ -303,6 +319,8 @@ OWNED_SD_MIN = 40.0
 
 def is_locked(img, box):
     """True / False / None for the card in `box`. None = between the populations, so unsure."""
+    if box is None:
+        return None
     import numpy as _np
     sub = _np.asarray(img.crop(box).convert("L"), dtype=_np.float32)
     if sub.size == 0:

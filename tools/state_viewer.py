@@ -68,6 +68,8 @@ ap.add_argument("--hz", type=float, default=4.0)
 ap.add_argument("--scale", type=float, default=0.0, help="0 = fit the window")
 ap.add_argument("--no-reload", action="store_true",
                 help="do not re-exec when the source changes")
+ap.add_argument("--once", action="store_true",
+                help="run one tick, print what the panel would say, and exit")
 A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
@@ -155,10 +157,20 @@ def slow_read(frame, crops):
             for col in range(5):
                 key = f"r{row}c{col}"
                 fitted_cell = bool(rows) and row < len(rows)
+                if fitted_cell and rows[row].get("clipped"):
+                    # A PART-VISIBLE ROW IS NOT A CARD TO READ. Its crop holds a slice of a
+                    # card, and OCR on that returns confident nonsense ('Ss S Ss Ue') --
+                    # which reads as a bad reader rather than as half a card.
+                    names.append((key, "clipped"))
+                    types.append((key, "clipped"))
+                    continue
                 try:
-                    if fitted_cell:
-                        cell = frame.crop(bg.card_box(frame, rows, row, col,
-                                                      o.BAN_GRID_COL_X_FRAC))
+                    box = (bg.card_box(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC)
+                           if fitted_cell else None)
+                    if fitted_cell and box is not None:
+                        cell = frame.crop(box)
+                    elif fitted_cell:
+                        raise ValueError("off screen")
                     else:
                         cell = o.get_ban_grid_card_crop(frame, row, col)
                     c = o.ocr_ban_card_name(cell)
@@ -170,19 +182,29 @@ def slow_read(frame, crops):
                 # roster lookup declines, read the banner RAW: that is how a Power Swing or
                 # a Speed Boost gets its real name instead of "unknown", and it also
                 # surfaces whatever is legible on a card the roster has never seen.
+                locked = bg.is_locked(frame, box) if fitted_cell else None
                 raw = None
-                if nm is None and fitted_cell:
-                    raw = _ocr_strip(frame, bg.name_box(frame, rows, row, col,
-                                                        o.BAN_GRID_COL_X_FRAC))
-                names.append((key, nm or (raw and raw.title()) or None))
+                # RAW OCR ONLY ON A CARD THAT IS ACTUALLY LEGIBLE. On a LOCKED card the
+                # game draws the name at sd 16-19, and tesseract returns confident junk
+                # ('Dd', 'Bm --') that reads as a name. "locked" is both true and useful;
+                # a two-letter fragment is neither.
+                if nm is None and fitted_cell and locked is False:
+                    nb = bg.name_box(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC)
+                    raw = _ocr_strip(frame, nb) if nb else None
+                    # A NAME IS NOT TWO LETTERS. Where the PLAY prompt overlaps a banner,
+                    # OCR returns fragments ('Bm --') that read as a name in a grid of
+                    # names. The shortest real card name on the roster is "Rube Sharp";
+                    # anything under five letters is a fragment, and unknown is the honest
+                    # answer for one.
+                    if raw and sum(ch.isalpha() for ch in raw) < 5:
+                        raw = None
+                names.append((key, nm or (raw and raw.title()) or
+                              ("locked" if locked else None)))
                 # THE TYPE IS ITS OWN FIELD, not crammed into the name (the user,
                 # 2026-09-13). "unknown" on a locked card is a real answer: the box is
                 # right and the card simply cannot be read yet.
                 t = None
-                locked = None
                 if fitted_cell:
-                    locked = bg.is_locked(frame, bg.card_box(frame, rows, row, col,
-                                                             o.BAN_GRID_COL_X_FRAC))
                     t = bg.read_card_type(frame, rows, row, col, o.BAN_GRID_COL_X_FRAC,
                                           _type_ocr)
                 # LOCKED AND UNKNOWN ARE DIFFERENT ANSWERS. Locked means the card is there
@@ -233,8 +255,11 @@ def tick():
                 for row in range(len(fitted) if fitted else 2):
                     for col in range(5):
                         if fitted and row < len(fitted):
-                            x0, y0, x1, y1 = bg.card_box(frame, fitted, row, col,
-                                                         o.BAN_GRID_COL_X_FRAC)
+                            cb = bg.card_box(frame, fitted, row, col,
+                                             o.BAN_GRID_COL_X_FRAC)
+                            if cb is None:
+                                continue              # this row is entirely off screen
+                            x0, y0, x1, y1 = cb
                             colr = BAN
                         else:
                             fx0, fx1 = o.BAN_GRID_COL_X_FRAC[col]
@@ -249,9 +274,10 @@ def tick():
                         d.text((x0 + 4, y0 + 3),
                                f"{nm or 'unknown'} [{ty or 'unknown'}]", fill=colr)
                         if fitted and row < len(fitted):
-                            d.rectangle(bg.name_box(frame, fitted, row, col,
-                                                    o.BAN_GRID_COL_X_FRAC),
-                                        outline=NAME, width=2)
+                            nb = bg.name_box(frame, fitted, row, col,
+                                             o.BAN_GRID_COL_X_FRAC)
+                            if nb is not None:
+                                d.rectangle(nb, outline=NAME, width=2)
                         # the strip ocr_ban_card_name reads the NAME from -- drawn because
                         # it is the thing that goes wrong: at some scroll positions a row-1
                         # crop starts on row 0's name banner, so the name and the stats in
@@ -288,20 +314,21 @@ def tick():
             fit = "FITTED to the frame" if sl.get("fitted") else "FIT FAILED — fixed box"
 
             def _grid(pairs):
-                a = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[:5])
-                b = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[5:])
-                return a, b
+                # ONE LINE PER ROW, however many rows the fit returned. This assumed two
+                # and ran fifteen cells onto one line the moment the fit started reporting
+                # the part-visible rows as well.
+                out = []
+                for i in range(0, len(pairs), 5):
+                    out.append(f"  row{i // 5}  " + "  ".join(
+                        f"{k[-2:]}:{v or 'unknown'}" for k, v in pairs[i:i + 5]))
+                return "\n".join(out)
 
-            n0, n1 = _grid(cells)
-            t0, t1 = _grid(tys)
             # NAMES AND TYPES IN SEPARATE GRIDS, not one crowded line (the user's call,
             # 2026-09-13). A type of "unknown" on a locked card is a real answer.
             txt.config(text=(
                 f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
-                f"NAME  named {len(got)}/{len(cells)}\n"
-                f"  row0  {n0}\n  row1  {n1}\n"
-                f"TYPE  typed {len(gott)}/{len(tys)}\n"
-                f"  row0  {t0}\n  row1  {t1}"))
+                f"NAME  named {len(got)}/{len(cells)}\n{_grid(cells)}\n"
+                f"TYPE  typed {len(gott)}/{len(tys)}\n{_grid(tys)}"))
         else:
             txt.config(text=(
                 f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
@@ -310,7 +337,16 @@ def tick():
                 f"score {sl.get('score')}   runners {sl.get('runners')}   "
                 f"result {sl.get('result')}"))
     except Exception as e:
+        # PRINT IT TOO. Showing the error only in the label means a viewer that is failing
+        # looks identical to one that is working badly, and nothing lands in a log anyone
+        # can paste back (CLAUDE.md 10.1). The traceback goes to stdout as well.
+        import traceback
+        traceback.print_exc()
         txt.config(text=f"{type(e).__name__}: {e}")
+    if A.once:
+        print(txt.cget("text"))
+        root.quit()
+        return
     _reexec_if_changed()
     root.after(int(1000 / A.hz), tick)
 
