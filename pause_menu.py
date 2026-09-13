@@ -274,3 +274,69 @@ def selected_item(img):
     if rest and max(rest) > 0.0 and fracs[best] < SELECTED_MARGIN * max(rest):
         return None
     return menu_items(img)[best][0]
+
+
+# ---------------------------------------------------------------- THE MONEY, READ LOCALLY
+# THE ONLY BALANCE READER ON THIS PROJECT WAS A PAID CALL, and the paid model is off -- so
+# the tracked balance had no way to be checked against the game at all. It is the money
+# guard; a guard nothing can verify is the shape this project keeps finding.
+#
+# WHERE THE NUMBER IS. Three counters stack along the RIGHT edge of the pause book and the
+# TOPMOST is money (CLAUDE.md section 3, which also records that the big coin in the world
+# HUD is HEALTH and has been misread as money three times). Measured on the pause fixture,
+# the digits of "246" span x 0.9036-0.9336, y 0.2181-0.2381, with the other two counters at
+# y 0.293 and y 0.370 -- so the stack is real and the top one is the one wanted.
+#
+# The box extends LEFT of the measured digits because the text is RIGHT-ALIGNED: 246 and 96
+# and 1246 all end at the same x and start at different ones.
+# MEASURED ON BOTH CAPTURE GEOMETRIES, because the first version was measured on one and
+# missed on the other -- clipping the last digit at x 0.947 and the tops of the digits at
+# y 0.205. Both frames are 16:9 and the counter still sits in a slightly different place:
+#
+#     1867x1050 (fixture)   digits x 0.9036-0.9336   y 0.2181-0.2381
+#     2000x1125 (live)      digits x 0.9185-0.9475   y 0.1929-0.2130
+#
+# CLAUDE.md section 3 says exactly this: one session produced two capture sizes and anything
+# reading a fixed region must be checked against BOTH. The box below is the union with
+# margin, and it extends LEFT because the text is RIGHT-ALIGNED -- 96, 246 and 1246 all end
+# at the same x and begin at different ones.
+MONEY_BOX_FRAC = (0.852, 0.176, 0.962, 0.252)
+from PIL import Image  # for the money crop's resample filter
+MONEY_MIN, MONEY_MAX = 0, 9999
+
+
+def read_money(img, ocr=None):
+    """The money total off an OPEN pause menu, locally. None when it cannot be read.
+
+    REFUSES UNLESS THE PAUSE MENU IS CONFIRMED FIRST, and that is not defensive padding:
+    toggle_pause is a TOGGLE that does not always land, and when it did not the capture was
+    the WORLD -- where the only number on screen is the HEALTH coin. That misread reported
+    the bankroll collapsing from $246 to $100 (CLAUDE.md section 3).
+    """
+    if not is_pause_screen(img):
+        return None
+    # PSM 6 AND TWO SCALES, AND THEY MUST AGREE. Swept over both capture geometries:
+    #
+    #     psm 7   reads the fixture (246) and NOT the live frame
+    #     psm 6   reads BOTH, at either scale
+    #     psm 8 / 13   return "1966" for 196 -- a spurious digit, on the money field
+    #
+    # The first version used psm 7 and a single read, and on the live frame it returned
+    # 106 for 196: a confidently WRONG balance, which on the money guard is worse than no
+    # answer at all. Two scales that agree is the same rule local_hand_cards uses, and it
+    # costs one extra OCR on a screen that is open for seconds.
+    import ocr_glyphs
+    _ocr = ocr or (lambda im, psm=6: ocr_glyphs.image_to_text(
+        im, psm=psm, whitelist="0123456789"))
+    w, h = img.size
+    x0, y0, x1, y1 = MONEY_BOX_FRAC
+    base = img.convert("L").crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    seen = []
+    for up in (4, 6):
+        c = base.resize((base.width * up, base.height * up), Image.LANCZOS)
+        txt = _ocr(c) or ""
+        digits = "".join(ch for ch in txt if ch.isdigit())
+        seen.append(int(digits) if digits else None)
+    if seen[0] is not None and seen[0] == seen[1] and MONEY_MIN <= seen[0] <= MONEY_MAX:
+        return seen[0]
+    return None

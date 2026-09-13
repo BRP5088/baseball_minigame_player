@@ -76,11 +76,25 @@ def latch(state, key, value, scrollkey):
     return held
 
 
-# HOW OFTEN A SETTLED CELL IS RE-READ ANYWAY. Not never: a first read that happened to
-# land on a degraded frame would otherwise be held forever with nothing able to correct it,
-# which is a stale answer wearing a confident one's clothes. Every twelfth pass is about
-# once every six seconds at the shipped 2 Hz -- cheap, and fast enough that a wrong value
-# cannot sit there unnoticed while someone is looking at it.
+# HOW OFTEN A SETTLED CELL IS RE-READ ANYWAY. Not never: a first read that happened to land
+# on a degraded frame would otherwise be held forever with nothing able to correct it, which
+# is a stale answer wearing a confident one's clothes.
+#
+# THE NUMBER IS NOT TUNED, AND SAYING SO IS THE HONEST PART. To settle wrong, a reader has
+# to return the SAME WRONG ANSWER TWICE RUNNING -- and across every corpus measured on
+# 2026-09-13 these readers do not return wrong answers at all, they abstain:
+#
+#     type banner vs each card's ROLE (a different reader, a different box)   156 of 156
+#     ban_digits power and shield vs the roster, held-out cells               219 of 219
+#     ban_digits leave-one-CARD-out, 1,105 cells, per class                   0 wrong
+#
+# Zero wrong in every one. So this guards a failure that has never been observed, and no
+# measurement can choose 12 over 6 or 30 until one is. It is cheap insurance at a cost of
+# about one extra read per cell every six seconds, and it is written down as insurance
+# rather than dressed up as a tuned constant.
+#
+# What WOULD move it: a single confirmed case of a cell holding a wrong value. The instrument
+# already exists -- tools/state_viewer.py --ticks N films the panel in one process.
 REFRESH_EVERY = 12
 
 
