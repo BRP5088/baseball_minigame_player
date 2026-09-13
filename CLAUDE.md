@@ -2577,7 +2577,24 @@ Numbering: **OPEN-15 is the compass reader**, **OPEN-16 was the injector release
 window** (closed, §5), **OPEN-17 is the arrival heading**. Older worktree copies
 of this file used those numbers differently; this file is the authority.
 
-**OPEN-23 — THE LIVE BAN SCAN RETURNS A PARTIAL COLLECTION WITHOUT FAILING, and
+**OPEN-23 — CLOSED THE SAME DAY, AND THE DIAGNOSIS IN IT WAS WRONG. The scan was fine;
+every PRESS was going to a /bin/zsh.** `pgrep -f chiaki` matched this session's own shell --
+its command line contained the word because the commands being run mentioned chiaki paths --
+it sorted first, and `chiaki_pid` took `out[0]`. The liveness guard passed because a shell is
+alive. So the scan pressed, nothing moved, its desync guard correctly refused to catalogue
+rows it could not verify, and it returned what it had. **Every part of that behaved as
+designed.** Fixed in `input_controller._resolve_chiaki_pid` (match the executable NAME, then
+filter the loose match by what each process IS) plus an identity re-check on the cached pid
+and a re-resolve on the ban scan's desync branch; pinned by
+`tests/rig/test_input_target_is_chiaki.py`, 4 mutants caught. With the right pid the same
+scan returns 23 cards on the old geometry and 25 on the fitted one.
+
+**The lesson worth keeping is the shape, not the ticket:** the entry below blamed the loop
+that reported the symptom. The guard that "could not fire" was one level further out and was
+asking the wrong question -- "is this pid alive" rather than "is this pid CHIAKI" -- which is
+this project's signature failure wearing a new hat. The original text follows.
+
+**OPEN-23 (original) — THE LIVE BAN SCAN RETURNS A PARTIAL COLLECTION WITHOUT FAILING, and
 choose_bans then picks the best 3 of 8 instead of the best 3 of ~33 (2026-09-13).**
 
 Found while A/B-ing the fitted ban geometry, by running the REAL
