@@ -640,8 +640,25 @@ noted; the rest is the user's reading, not this project's measurement.
   sources, 2026-09-12). That is why `simulate.speed_bonus` is added at the batter's own
   step and nowhere else: a runner is stored as its CARD and `advance_runners` re-derives
   speed from `card.secondary`, so reverting is free. It was worth ZERO until then
-  (`batter_speed` was computed and never read), and is worth **+0.034 runs/half** now —
-  small, and 21x less than a SWING boost's **+0.726**, which is its own argument for
+  (`batter_speed` was computed and never read).
+
+  **RE-MEASURED 2026-09-13 ON THE ROLE-SPLIT POOLS, and the speed figure was wrong by 4x.**
+  The numbers below it replaced (+0.034 speed, +0.726 swing, "21x less") were taken on the
+  SCRAMBLED pool, before cards had roles: pitchers were dealt as batters with their FIELDING
+  read as SPEED, so a third of "batters" had speed 0 and a speed boost on them bought
+  almost nothing. A speed measurement taken where a third of the batters are pitchers is
+  not a speed measurement. Same harness, same seeds, correct pools, n=20,000 halves an arm:
+
+      no tactics     0.9589 runs/half
+      SWING boost    1.5727   delta +0.614  (+52.8 sigma)
+      SPEED boost    1.0901   delta +0.131  (+12.4 sigma)
+
+  **THE CONCLUSION SURVIVES AND THE MARGIN DOES NOT.** Swing still wins decisively, so the
+  engine's preference for it is unchanged and 99/1 still describes a tie-break rather than a
+  trade. But the ratio is **4.7x, not 21x**, and any argument that leaned on "21x" as
+  evidence that speed is negligible was leaning on an artefact.
+
+  It is worth **+0.131 runs/half**, still less than a SWING boost's **+0.614**, which is
   power over speed.
   **A RUNNER'S CURRENT SPEED IS READABLE OFF THEIR BASE**, from the shield badge:
   `local_state.read_runners()["speeds"]`. 171 of 172 occupied bases read it, zero of
