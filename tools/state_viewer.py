@@ -20,7 +20,7 @@ that distinction is what found both of 2026-09-11's defects.
 import os, sys, argparse, time, tkinter as tk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PIL import Image, ImageDraw, ImageTk
-import orchestrator as o, local_hand as lh, local_state as ls
+import orchestrator as o, local_hand as lh, local_state as ls, ban_grid as bg
 
 # RELOAD ITSELF WHEN THE CODE CHANGES, so a constant can be tuned against the live screen
 # without killing and relaunching (the user, 2026-09-13: "so when you make changes, I don't
@@ -72,6 +72,7 @@ A = ap.parse_args()
 
 CUR, SEL, BOX, REG = "#00ff66", "#ff3b30", "#ffcc00", "#4da3ff"
 BAN, NAME = "#ff5ecb", "#8affff"          # ban-grid card box, and its name strip
+FALLBACK = "#ff9d00"                      # the FIXED box, drawn when the fit failed
 root = tk.Tk()
 root.title("state — what the crawl reads")
 root.attributes("-topmost", True)
@@ -123,13 +124,27 @@ def slow_read(frame, crops):
         except Exception:
             lvl = None
         out["scroll"] = lvl
+        # FIT THE BOXES TO THE FRAME. The rows MOVE with scroll position (card tops 0.282 /
+        # 0.609 at the top of the grid, 0.231 / 0.558 two presses later), so a fixed
+        # fraction cannot frame them all -- see ban_grid.
+        rows = bg.find_card_rows(frame, o.BAN_GRID_COL_X_FRAC)
+        out["fitted"] = rows is not None
+        out["rows"] = rows
         names = []
-        for row in (0, 1):
+        for row in range(2):
             for col in range(5):
                 try:
-                    c = o.ocr_ban_card_name(o.get_ban_grid_card_crop(frame, row, col))
+                    if rows and row < len(rows):
+                        cell = frame.crop(bg.card_box(frame, rows, row, col,
+                                                      o.BAN_GRID_COL_X_FRAC))
+                    else:
+                        cell = o.get_ban_grid_card_crop(frame, row, col)
+                    c = o.ocr_ban_card_name(cell)
                 except Exception:
                     c = None
+                # EVERY cell is reported. "unknown" is a real answer here: a card the roster
+                # has never seen still occupies a box, and the user needs to see the box
+                # fitting it before the card is identifiable (2026-09-13).
                 names.append((f"r{row}c{col}", getattr(c, "name", None) if c else None))
         out["ban_names"] = names
     return out
@@ -166,15 +181,24 @@ def tick():
             # instead when the ban counter reads, which is the same detector the live
             # ladder uses to name that screen.
             if S["slow"].get("on_ban"):
-                for row in (0, 1):
+                fitted = S["slow"].get("rows")
+                for row in range(2):
                     for col in range(5):
-                        fx0, fx1 = o.BAN_GRID_COL_X_FRAC[col]
-                        fy0 = o.BAN_CARD_ROW_TOP_FRAC[row]
-                        fy1 = fy0 + o.BAN_GRID_CARD_HEIGHT_FRAC
-                        x0, y0 = int(frame.width * fx0), int(frame.height * fy0)
-                        x1, y1 = int(frame.width * fx1), int(frame.height * fy1)
-                        d.rectangle((x0, y0, x1, y1), outline=BAN, width=3)
-                        d.text((x0 + 4, y0 + 3), f"r{row}c{col}", fill=BAN)
+                        if fitted and row < len(fitted):
+                            x0, y0, x1, y1 = bg.card_box(frame, fitted, row, col,
+                                                         o.BAN_GRID_COL_X_FRAC)
+                            colr = BAN
+                        else:
+                            fx0, fx1 = o.BAN_GRID_COL_X_FRAC[col]
+                            fy0 = o.BAN_CARD_ROW_TOP_FRAC[row]
+                            x0, y0 = int(frame.width * fx0), int(frame.height * fy0)
+                            x1 = int(frame.width * fx1)
+                            y1 = int(frame.height * (fy0 + o.BAN_GRID_CARD_HEIGHT_FRAC))
+                            colr = FALLBACK      # a different colour, because it is a
+                        d.rectangle((x0, y0, x1, y1), outline=colr, width=3)
+                        nm = dict(S["slow"].get("ban_names") or {}).get(f"r{row}c{col}")
+                        d.text((x0 + 4, y0 + 3),
+                               f"r{row}c{col} {nm or 'unknown'}", fill=colr)
                         # the strip ocr_ban_card_name reads the NAME from -- drawn because
                         # it is the thing that goes wrong: at some scroll positions a row-1
                         # crop starts on row 0's name banner, so the name and the stats in
@@ -207,13 +231,15 @@ def tick():
         lbl.config(image=S["img"])
         sl = S["slow"]
         if sl.get("on_ban"):
-            got = [(k, v) for k, v in (sl.get("ban_names") or []) if v]
-            blank = len(sl.get("ban_names") or []) - len(got)
+            cells = sl.get("ban_names") or []
+            got = [1 for _k, v in cells if v]
+            fit = "FITTED to the frame" if sl.get("fitted") else "FIT FAILED — fixed box"
+            r0 = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in cells[:5])
+            r1 = "  ".join(f"{k[-2:]}:{v or 'unknown'}" for k, v in cells[5:])
             txt.config(text=(
-                f"BAN SCREEN   banned {sl.get('banned')}/3   scroll level {sl.get('scroll')}\n"
-                f"names resolved {len(got)} of 10   ({blank} cells blank or unread)\n"
-                + "\n".join(f"   {k}  {v}" for k, v in got[:6])
-                + ("\n   ..." if len(got) > 6 else "")))
+                f"BAN SCREEN   banned {sl.get('banned')}/3   scroll {sl.get('scroll')}   {fit}\n"
+                f"named {len(got)} of {len(cells)}\n"
+                f" row0  {r0}\n row1  {r1}"))
         else:
             txt.config(text=(
                 f"phase {phase}   cursor {cur}   selected {sel}   rows {len(rows)}\n"
