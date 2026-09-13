@@ -10,10 +10,18 @@ labelled home_run at a margin that cannot produce one, 10 of them at a LOSING ma
 
 HONEST SCOPE. These checks pin the RULE, not the field data. The recorded labels cannot
 validate the new classifier because they are the thing it replaces -- re-scoring them
-reconstructs `runs` from the old label, which is circular. Live rows now carry
-runs_scored, margin and outcome_basis, which is what makes a real check possible later;
-26 rows whose margin is >= 3 but which the old rule called "out" are unexplained and are
-the first thing to look at when that data exists.
+reconstructs `runs` from the old label, which is circular.
+
+AND THE OLD LABELS ARE DEMONSTRABLY THE WRONG HALF. 26 rows carry a margin of 3 or more
+and were labelled "out", which under an absolute rule is impossible. All 26 have a KNOWN
+tactics kind on both sides, so the margin is not a guess. The user confirmed the rule is
+absolute from the scoreboard on 2026-09-12 -- their own home run raised it -- so what
+those rows record is the OLD evidence failing: "out" meant only that `new_score` did not
+appear to exceed `score_before`, and the score read is exactly what the margin replaces.
+They are a measure of how bad the old labelling was, not an open question about the rule.
+
+Live rows now carry runs_scored, margin and outcome_basis, so a row says which evidence
+decided it and the two can finally be compared on real data.
 """
 import os as _os, sys as _sys
 

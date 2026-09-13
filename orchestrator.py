@@ -144,6 +144,24 @@ def _ocr_text_raw(image, psm, whitelist=None):
         image, config=ocr_glyphs.tesseract_config(psm, whitelist))
 
 
+class PaidModelDisabled(RuntimeError):
+    """Raised when something tries to spend a paid vision call while the model is OFF."""
+
+
+# OFF by the user's instruction, 2026-09-12. See _BudgetedMessages.create for why the
+# lockout lives at the choke point rather than at the four call sites.
+PAID_MODEL_ENABLED = False
+
+
+def paid_model_allowed():
+    """Read at CALL time, never captured in a default (CLAUDE.md 10.18).
+
+    The env var is the one-process escape hatch; the module flag is the durable one.
+    Anything that resolved this at import would let a stale value outlive the switch.
+    """
+    return PAID_MODEL_ENABLED or os.environ.get("BASEBALL_ALLOW_PAID") == "1"
+
+
 class _LazyAnthropic:
     """Builds the real Anthropic client on first use, not at import.
 
@@ -184,6 +202,28 @@ class _BudgetedMessages:
         self._inner = inner
 
     def create(self, *args, **kwargs):
+        # THE PAID MODEL IS OFF, BY THE USER'S INSTRUCTION (2026-09-12):
+        # "stop using the paid model. you are no longer allowed to use it unless I say
+        # so. comment out the paid model calls."
+        #
+        # The block sits HERE and not at the four call sites for the same reason the
+        # budget does: a fifth `messages.create` added later is covered automatically,
+        # where four commented-out call sites would leave the next one free to spend.
+        # It RAISES rather than returning None, because a paid read that silently
+        # answers nothing is this project's signature failure -- a no-op indistinguishable
+        # from success (CLAUDE.md 10.1) -- and every caller of these four sites branches
+        # on the answer. Failing loudly is what makes the lockout visible.
+        #
+        # Turning it back on is deliberate and reversible: set PAID_MODEL_ENABLED = True
+        # here, or export BASEBALL_ALLOW_PAID=1 for one process. Nothing else re-enables
+        # it, and nothing enables it by accident.
+        if not paid_model_allowed():
+            raise PaidModelDisabled(
+                "the paid vision model is OFF by the user's instruction (2026-09-12). "
+                "Every field the loop needs has a local reader: local_hand for the hand, "
+                "local_state for phase/runners/result, ocr_scoreboard for the score. "
+                "Set orchestrator.PAID_MODEL_ENABLED = True or BASEBALL_ALLOW_PAID=1 to "
+                "re-enable, and only if the user has said so.")
         import api_budget
         api_budget.note_call()
         resp = self._inner.create(*args, **kwargs)
