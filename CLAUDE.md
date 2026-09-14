@@ -2329,6 +2329,31 @@ Delete `__pycache__/<module>*.pyc` between mutants. Also: `str.replace(a, b, 1)`
 on a pattern that appears twice mutates half the code — **count the occurrences
 first**.
 
+**10b. AND RE-COUNT AFTERWARDS, BECAUSE PROSE THAT QUOTES CODE CREATES NEW
+MATCHES.** Counting first is necessary and not sufficient. A patch that removes
+a constant and leaves a comment EXPLAINING the removal quotes the very names it
+is deleting, and every quote is a fresh match for any later search. Three edits
+to `compass.py` were corrupted this way in one sitting, 2026-09-13, each
+differently:
+
+    the comment quoted `    pitch = ...` as `#     pitch = ...`, and
+    "#     pitch" CONTAINS "    pitch" -- so replace(dead_line, "") deleted the
+    line out of the middle of the NEW COMMENT and left the real dead store
+    untouched, with the count having been taken before the insertion
+
+    a later `assert "PITCH_PX_PER_90 = 293.0" not in src` fired on CORRECT code,
+    because the new prose says "PITCH_PX_PER_90 = 293.0 lived here"
+
+    a second span's anchor went from 1 occurrence to 2 the moment the prose
+    landed, so its excision refused to run
+
+**THE RULE: do every CODE removal first, assert the code is gone, and insert the
+prose LAST, in one operation.** Then assert on an ASSIGNMENT (`^NAME\s*=`) or on
+the code half of each line (`line.split("#", 1)[0]`), never on a bare substring —
+a substring test cannot tell a comment from a constant and will fail on correct
+code, which is section 11's shape pointed at the patch script instead of the
+test.
+
 **10a. A MUTATION DRIVER'S RESTORE MUST OWN ITSELF, BECAUSE THE THING THAT
 KILLS THE DRIVER DOES NOT CARE WHICH LINE IT WAS ON.** 2026-09-07: an inline
 driver mutated `places.py:491` in the checkout, and the tool running it hit its
@@ -2441,6 +2466,37 @@ the step. Measured 2026-09-07: four flagship agents drafting scripts burned
 ~850k tokens in five minutes, two of them on ideas the same day's A/B data had
 already killed; the static QA audit on Haiku, ten agents, cost 1.16M for an
 evening's findings. Token bleed is a failure of the DISPATCH, not of the agent.
+
+**16c. THIS SHELL IS zsh WITH BSD/ALTERNATIVE TOOLS, AND FOUR COMMON GNU/bash
+IDIOMS SILENTLY DO NOTHING HERE.** All four were hit in ONE evening, 2026-09-13,
+while VERIFYING other work -- so each one is 10.1 inside the instrument: the
+check did not run, and "found nothing" is indistinguishable from "nothing is
+wrong".
+
+    find -newermt '3 hours ago'   this machine's find is bfs: "Invalid
+                                  timestamp" AND EXITS 0. Printed nothing, the
+                                  `|| echo` fallback never fired, and it read as
+                                  "no agent wrote a progress note" -- which was
+                                  false; 17 had.  USE -mmin -180.
+    awk '/\byes\b/'               POSIX awk has no \b. Matches NOTHING, always.
+                                  Use grep -w, or a plain substring.
+    for f in $list                zsh does NOT word-split unquoted parameters.
+                                  The whole list becomes ONE argument ->
+                                  "File name too long". Use
+                                  `while IFS= read -r f; do ... done < file`
+                                  or zsh's ${(f)list}.
+    cmd | tail                    $? is TAIL's status, not cmd's. A script that
+                                  died on a traceback reported EXIT=0. Capture
+                                  the status before piping, or use
+                                  ${PIPESTATUS[1]} / set -o pipefail.
+
+There is no `timeout` either (GNU coreutils); use the harness timeout or
+`perl -e 'alarm shift; exec @ARGV'`, which run_tests.sh already does.
+
+**THE RULE THIS EARNS:** a verification command gets the same suspicion as the
+code it verifies. Before believing a check that came back CLEAN, make it fail
+on purpose once -- the same discipline section 10.9 demands of a test. A check
+that cannot fire is worse than no check, because it is reported as evidence.
 
 **16b. IN A FAN-OUT, EVERY DEFAULT IS A COLLISION, AND OMITTING A SETTING IS
 NOT NEUTRAL.** Written 2026-09-13 after breaking BOTH halves of the rule above

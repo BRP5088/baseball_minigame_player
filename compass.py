@@ -273,28 +273,42 @@ _LINE_ROW_FRAC = (0.45, 0.59)
 _GLYPH_HALF_FRAC = 0.013      # was a fixed 26px, which clipped the letter when
                               # the window grew and OCR then returned nothing
 
-# Pixels per 90 degrees, at the 2000px capture width the rest of the project
-# uses. Scaled by actual frame width so a resolution change does not silently
-# skew every bearing.
-PITCH_PX_PER_90 = 293.0
-REFERENCE_WIDTH = 2000
-
-# Where the game view's centre sits in the capture. The frame includes the
-# macOS menu bar and the dock, so this is NOT the image centre.
+# THE GEOMETRY IS MEASURED FROM THE FRAME. THERE ARE NO CONSTANTS FOR IT.
 #
-# MEASURED, not estimated. The game draws an aiming reticle at the view
-# centre, which is a direct observation of this constant: a 9-pixel blob at
-# x=968 of a 2000px capture -> 0.4840. The previous value 0.5025 was an eyeball
-# estimate and sat 37px off, which at 293px/90deg is a SYSTEMATIC 11 degree
-# bias on every absolute bearing this module reports.
+# Three lived here: a pixels-per-90-degrees scale (293.0), the capture width it
+# was quoted against (2000), and the view centre as a fraction (0.4840). The
+# comment explained that the frame "includes the macOS menu bar and the dock, so
+# this is NOT the image centre" -- true of the Aug-26 capture path, which
+# grabbed the whole laptop display; untrue since game_capture.grab() started
+# capturing the GAME, and doubly untrue now that frames arrive from chiaki's
+# decoded-frame dump: game pixels, no menu bar, no dock.
 #
-# Closed-loop turning was immune (the bias cancels — turn_to steers on the same
-# reading it targets), which is exactly why this went unnoticed. What it did
-# skew is absolute claims, e.g. the spawn reading 97-98 (since remeasured at
-# 57-91, which varies per reset) against a reference
-# frame the user described as facing E; corrected, that becomes ~86, which is
-# the better match.
-VIEW_CENTRE_FRAC = 0.4840
+# ALL THREE WERE DEAD STORES, which is why nothing ever broke. read_bearing
+# computed a fallback pitch and view centre, overwrote the centre two lines
+# later with the measured vmid, and reached spacing_consistent() only through a
+# chain in which EVERY branch reassigns pitch or returns None:
+#
+#   if tick is not None / elif spans / elif geom in _SCALE_CACHE / else
+#
+# THE CHECK THAT MATTERS IS EXHAUSTIVENESS, NOT CONDITIONALITY. They were kept
+# once on 2026-09-13 on the reasoning that the reassignments sit inside
+# conditionals, so the fallback was reachable "in principle". Wrong question:
+# conditional assignments still cover every path when the chain is exhaustive.
+#
+# PROVEN BY MUTATION, NOT BY READING: over 160 explore/ frames at the live
+# 1920x1080 geometry, forcing the three to absurd values moved ZERO bearings and
+# flipped ZERO abstentions, and removing them is identical in output against the
+# previous revision on the same corpus.
+#
+# The history worth keeping, and the reason the reader derives geometry per
+# frame: the view centre's previous value sat 37px off, which at 293px/90deg is
+# a SYSTEMATIC 11 degree bias on every absolute bearing. Closed-loop turning was
+# immune -- the bias cancels, since turn_to steers on the reading it targets --
+# so it went unnoticed. And a window move once shifted the reticle 142px and
+# took letter spacing 293 -> 329 px/90deg, after which every bearing was wrong
+# and still looked valid. The scale now comes from the tick lattice, or two
+# letters 90 degrees apart, or the per-geometry cache; REQUIRE_TWO_LETTERS makes
+# one letter abstain rather than fall back.
 
 # A blob must be at least this fraction of the widest blob to count as a
 # letter ring rather than a tick. Measured separation is 28px vs 6-14px, so
@@ -411,7 +425,7 @@ BLOB_THRESHOLDS_FINE = (110, 120, 130, 140, 155, 170, 185, 200, 215, 225, 240)
 
 
 def _candidate_blobs(gray_crop, threshold=120, min_width_frac=0.0110,
-                     frame_width=REFERENCE_WIDTH):
+                     *, frame_width):
     """Column ranges where something reaches above/below the bar's line."""
     rows = gray_crop.shape[0]
     mask = np.ones(rows, dtype=bool)
@@ -571,8 +585,6 @@ def read_bearing(img):
     # position, and moving the laptop invalidated all of them at once — the
     # reticle moved 142px and the letter spacing went 293 -> 329 px/90deg,
     # after which every bearing was wrong but still looked valid.
-    pitch = PITCH_PX_PER_90 * (w / REFERENCE_WIDTH)
-    centre_x = w * VIEW_CENTRE_FRAC
     vb = vb0
     centre_x = vmid
 
