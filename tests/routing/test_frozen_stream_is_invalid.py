@@ -70,6 +70,40 @@ ROUTE = ["portrait_room", "bar_pool_room", "bar_jukebox"]
 # in this file measures time, so the sleeps are pure cost.
 gw.time.sleep = lambda *a: None
 
+# NOTHING HERE MAY REACH THE RIG, AND THAT MUST BE CHECKED RATHER THAN HOPED.
+#
+# Everything below injects `capture=` and `read_heading=`, so no path should
+# ever fall back to graph_walk's hardware defaults. One did:
+# _look_around_for_a_node called ws.read_heading()/ws.turn_to() bare, which go
+# to compass.fast_capture(), and the relocalise sweep therefore needed a live
+# chiaki window. THE FILE STILL PASSED, all evening on 2026-09-09, because
+# chiaki happened to be streaming; it went red at ~04:00 when chiaki exited.
+# That is CLAUDE.md 10.1 -- it passed for a reason unrelated to what it guards
+# -- and running it with chiaki down is the only thing that exposed it.
+#
+# Counting the fallbacks closes that: it fails the same way whether or not the
+# console is up, so nobody has to remember to quit chiaki first. Note the
+# defaults are still CALLABLE rather than raising, so a leak is reported as a
+# named FAIL beside the others instead of a traceback that hides them.
+#
+# The production seam this guards (read_heading threaded through
+# _look_around_for_a_node into ws.turn_to) is already on main; this is the
+# part that proves it stays there.
+_FELL_BACK = {"capture": 0, "heading": 0}
+
+
+def _no_capture():
+    _FELL_BACK["capture"] += 1
+    return FROZEN.copy()
+
+
+def _no_heading():
+    _FELL_BACK["heading"] += 1
+    return 90.0
+
+
+gw._default_capture, gw._default_heading = _no_capture, _no_heading
+
 
 # ---------------------------------------------------------------------------
 # 1. failure_kind.classify: liveness gates the class, and only the class
@@ -413,6 +447,24 @@ try:
     check("the returned dict exposes the invalid count too", r["invalid"] == 1)
 finally:
     gw.follow_verified = real_follow
+
+# THE OFFLINE CHECK ITSELF. Asserted last so it covers every section above.
+check("nothing fell back to the live capture (compass.fast_capture)",
+      _FELL_BACK["capture"] == 0)
+check("nothing fell back to the live compass (walk_steps.read_heading)",
+      _FELL_BACK["heading"] == 0)
+# TWO ANTI-VACUITY CONTROLS, because a counter that reads 0 for the wrong
+# reason passes both checks above. The first pins the counters to the real
+# names; the second proves they can actually COUNT. Without the second, a
+# mutation sweep deleting the capture counter's increment left the file green
+# -- nothing here leaks to _default_capture today, so a counter wired to
+# nothing is indistinguishable from a correct one until it is made to fire.
+check("the fallback counters are actually installed",
+      gw._default_capture is _no_capture and gw._default_heading is _no_heading)
+gw._default_capture()
+gw._default_heading()
+check("...and they DO count a fallback when one happens",
+      _FELL_BACK == {"capture": 1, "heading": 1})
 
 print(f"\n{len(FAILS)} FAIL" if FAILS else "\nall green")
 sys.exit(1 if FAILS else 0)
