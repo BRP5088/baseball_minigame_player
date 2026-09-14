@@ -4040,6 +4040,20 @@ def local_game_state():
         except Exception:
             pass
     st.setdefault("discards_left", None)
+    # AND THE SCORES, for the same reason and with a worse failure. They are set only
+    # inside the `try` above, so an ocr_scoreboard that raises -- or a turn with no
+    # scoreboard crop at all -- leaves the KEYS ABSENT, and play_one_turn indexes them
+    # unconditionally. Driven through run(): "Couldn't act on this turn ('your_score'),
+    # retrying... (1/15)" fifteen times, then stop_reason="turn_action_failed", mid-match,
+    # with the $50 already spent.
+    #
+    # A None score is harmless -- decision_engine reads none of your_score, opp_score,
+    # target_score or batters_used, and section 4 says the score must not change which
+    # card to play. It is the MISSING KEY that kills the run. On the paid path
+    # validate_game_state's "turn screen missing required field" check caught this;
+    # locally nothing did, because that validator is reached only from the paid reader.
+    st.setdefault("your_score", None)
+    st.setdefault("opp_score", None)
 
     try:
         ph, _ = local_state.read_phase(hand_img)
@@ -4389,6 +4403,33 @@ def local_hand_cards(hand_img):
                 # one invisible card is still playable -- that card simply is not played.
                 # hand_index is preserved on the others, so input targeting still hits the
                 # right card.
+                dropped.append(i)
+                continue
+            # A POWER OUTSIDE 4-9 IS A MISREAD, NOT A CARD. Section 4: player powers run
+            # 4-9 across all 33 catalogued cards, and 1 and 2 are the TACTICS BONUS
+            # digits -- which the power disc's own template bank contains
+            # (digit_templates.npz holds 1 x200 and 2 x200), so the reader can and does
+            # produce them. Found in the archive:
+            # hand_samples/hand_20260824_201140_317.jpg slot 0 reads power='1'.
+            #
+            # The cost is not a cosmetic one. Reproduced: a true hand [9,5,4,4,5] read as
+            # [1,5,4,4,5] puts max power at 5, under REDRAW_POWER_THRESHOLD 6, so
+            # should_redraw fires and the engine discards min(power) -- THE REAL 9. One
+            # of only two discards in the match, spent to throw the best card in it.
+            #
+            # validate_game_state already rejects this range and is reached ONLY from the
+            # paid reader, so with the paid model off it runs for nobody. This is the same
+            # answer its docstring gives, on the path that is actually taken. A slot with
+            # an impossible power is treated exactly like an unreadable one: dropped, not
+            # invented. 10.28 -- a card that cannot be read is not a hand that cannot be.
+            try:
+                _pw = int(digit)
+            except (TypeError, ValueError):
+                _pw = None
+            if _pw is None or not (CARD_POWER_MIN <= _pw <= CARD_POWER_MAX):
+                print(f"  [local] slot {i}: power {digit!r} is outside "
+                      f"{CARD_POWER_MIN}-{CARD_POWER_MAX} — a misread, not a card. "
+                      f"Dropping the slot rather than letting it decide a discard.")
                 dropped.append(i)
                 continue
             # EVERY READABLE CARD AUDITS THE MEMORY, free of charge. A disagreement means
@@ -6753,8 +6794,23 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # because it is the moment we are about to abandon the run.
                 _paused = False
                 try:
-                    _probe = read_game_state()
-                    _scr = _probe.get("screen")
+                    # LOCAL WHEN THE PAID MODEL IS OFF. This was read_game_state()
+                    # unconditionally -- the same family as read_state_for_turn, found
+                    # the same night: with the model off it raises PaidModelDisabled,
+                    # _paused stays False, and the run stops as frozen_stream with the
+                    # $50 already spent. The paused/menu branch exists precisely so a
+                    # false alarm does not "throw away a paid match", and it was
+                    # unreachable -- on exactly the static screens it was written for:
+                    # the "Give up?" dialog and the PS5 overlays.
+                    if paid_model_allowed():
+                        _probe = read_game_state()
+                        _scr = _probe.get("screen")
+                    else:
+                        _st_probe, _gap_probe = local_game_state()
+                        # A named GAP means the readers could not place the screen, which
+                        # is what a menu or dialog looks like to them -- the same verdict
+                        # "other" carries on the paid path.
+                        _scr = (_st_probe or {}).get("screen", "other")
                     # A pause/menu overlay is exactly what "other" catches, and
                     # a still frame on it is expected rather than alarming.
                     _paused = _scr == "other"
@@ -7235,6 +7291,23 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     #
                     # So ask the sensor BEFORE trusting it. A few tries, because a single
                     # None is routine (mid-scroll, mid-animation) and says nothing.
+                    # ONCE ANYTHING MIGHT BE TOGGLED, THE BANS COUNT AS DONE.
+                    #
+                    # Cells are toggled inside the placement below, while
+                    # bans_done_this_match and acted_screen are both set AFTER it -- so a
+                    # raise mid-placement unwinds past both guards, the next poll
+                    # re-enters with the cached collection, and select_card toggles the
+                    # same cells BACK OFF. Reproduced: one failure -> two submissions of
+                    # the same three cards, NET ZERO BANS, then bans_done_this_match=True
+                    # and a $50 match played completely unbanned. Parity decided whether
+                    # they ended banned or not.
+                    #
+                    # Set here, before the first press, it is deterministic: a partial ban
+                    # set survives, and nothing can un-ban what landed. A failure before
+                    # any toggle costs the same match either way. The counter check below
+                    # still reports what actually landed, and C3 already relies on this
+                    # flag being checked at the TOP of the branch.
+                    bans_done_this_match = True
                     _cursor = None
                     if input_controller.VERIFY_BAN_NAVIGATION:
                         for _try in range(BAN_CURSOR_PROBE_TRIES):
@@ -7283,6 +7356,20 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         select_bans_and_start_full(grid, banned_positions,
                                                    before_confirm=_verify_bans)
 
+                    # AND IF THE PLACEMENT RAISED, THE BANS ARE STILL DONE.
+                    #
+                    # Cells are toggled before `bans_done_this_match` and before
+                    # `acted_screen` are set, both of which happen after this block -- so
+                    # a raise unwinds past both guards, the next poll re-enters with the
+                    # cached collection, and select_card TOGGLES THE SAME CELLS BACK OFF.
+                    # Reproduced: one failure -> two submissions of the same three cards,
+                    # NET ZERO BANS, then bans_done_this_match=True and a $50 match played
+                    # completely unbanned. Parity decides whether they end banned or not.
+                    #
+                    # Treating them as done is the safe direction: a PARTIAL ban set beats
+                    # a cancelled one, and CLAUDE.md section 4 records that the game starts
+                    # at 1 of 3 anyway. The counter check below still reports what actually
+                    # landed.
                     # VERIFY, don't assume. Measured on the cached frames:
                     # three of five real ban sequences finished at 2/3 and the
                     # match started anyway, two seconds later, with a ban set
@@ -7727,8 +7814,20 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
         print(settle_stats_summary())
         if plays:
             _pct = 100.0 * misfires / plays
-            _verdict = ("input timing looks safe" if misfires == 0 else
-                        "RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py")
+            # A ZERO THAT WAS NEVER MEASURED IS NOT A PASS. The misfire detector lives
+            # entirely in the REVEAL path, and read_matchup_reveal is the only reveal
+            # reader there is -- local_state has none. With the paid model off every
+            # reveal raises, zero turns are logged, and this line then certified "input
+            # timing looks safe" off a detector that never ran. 10.1 verbatim: a success
+            # path and a no-op path with identical output, on the one line in the whole
+            # run that judges input.
+            if misfires == 0 and not paid_model_allowed():
+                _verdict = ("NOT MEASURED — the misfire detector lives in the reveal "
+                            "path, which is paid-only, so this 0 means the detector "
+                            "never ran, not that input is clean")
+            else:
+                _verdict = ("input timing looks safe" if misfires == 0 else
+                            "RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py")
             print(f"  [input] {plays} cards played, {misfires} suspected misfire(s) "
                   f"({_pct:.1f}%) — {_verdict}")
             try:

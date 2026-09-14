@@ -796,7 +796,14 @@ def _look_settled(look):
             return glow, ys, n, sel
         if attempt + 1 < LOOK_RETRIES:
             time.sleep(LOOK_RETRY_SEC)
-    return glow, ys, 0, sel
+    # AND THE SELECTION IS EMPTIED WITH IT. Returning n=0 alongside the bad frame's `sel`
+    # is what made a forgetful caller dangerous rather than merely wrong: _select_verified
+    # read `target in before` off an UNGATED frame, took its "already selected, no press
+    # needed" branch, and confirm_play then committed whatever was really up. Reproduced:
+    # select_and_play(3) returned True having pressed only move_right twice and
+    # confirm_play, committing slot 1. Emptying it makes the failure direction "not
+    # selected" (which presses) rather than "already selected" (which commits).
+    return glow, ys, 0, []
 
 
 def _walk_cursor_to(target, look):
@@ -822,6 +829,9 @@ def _walk_cursor_to(target, look):
         steps += 1
         time.sleep(MOVE_SETTLE_SEC)
         glow, ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) — refusing")
+            return False, sel
         cur = local_hand.cursor_slot(glow, sel)
         if cur is None:
             print(f"  [cursor] lost the cursor after {steps} press(es) "
@@ -847,6 +857,15 @@ def _select_verified(target, look):
     """
     import local_hand
     _g, _ys, n, before = _look_settled(look)
+    # THE GUARD _look_settled's DOCSTRING ASSUMES. It says the unusable read "must not"
+    # be handed back "because the caller's guard tests the row count" -- and four of its
+    # five callers had no such guard. On an ungated frame `before` is whatever the bad
+    # read produced, and if it happens to contain the target this returns success WITHOUT
+    # PRESSING, leaving confirm_play to commit whatever is actually up.
+    if n != MAX_HAND_SIZE:
+        print(f"  [cursor] cannot read the fan to check the selection (rows={n}) — "
+              "refusing rather than assuming the card is already up")
+        return False, before
     if target in before:
         return True, before
 
@@ -860,6 +879,10 @@ def _select_verified(target, look):
         press("select_card")
         time.sleep(SELECT_SETTLE_SEC)
         _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print(f"  [cursor] cannot read the fan after select_card (rows={n}) — "
+                  "refusing; a press whose result cannot be seen is not a selection")
+            return False, sel
         if target in sel:
             if attempt > 1:
                 print(f"  [cursor] select_card landed on attempt {attempt}")
@@ -873,6 +896,10 @@ def _select_verified(target, look):
         if attempt < SELECT_ATTEMPTS:
             time.sleep(SELECT_RETRY_CONFIRM_SEC)
             _g, _ys, n, sel = _look_settled(look)
+            if n != MAX_HAND_SIZE:
+                print(f"  [cursor] cannot read the fan on the late re-check (rows={n})"
+                      " — refusing")
+                return False, sel
             if target in sel:
                 print(f"  [cursor] select_card landed late ({SELECT_RETRY_CONFIRM_SEC}s)")
                 return True, sel
@@ -901,9 +928,94 @@ def _verified_select_and_play(card_index, tactics_index, look):
             invalidate_cursor()
             return False
 
+    # COMMIT ONLY WHAT THE ENGINE CHOSE.
+    #
+    # _verified_select_and_play returns False WITHOUT undoing the selection it already
+    # made, and nothing anywhere deselects -- `grep` for a deselect routine finds none.
+    # So a refusal on the TACTICS walk leaves the player card lifted, run() re-reads and
+    # calls play_one_turn again, the retry selects its own target, and confirm_play
+    # commits BOTH. Reproduced: the engine chose slot 0, slot 2 was still up from the
+    # previous attempt, and [0, 2] went in together.
+    #
+    # It is also reachable without a refusal: local_hand's own comment records that
+    # find_tactics stops matching a card once it is selected, so a target can go
+    # unreadable AT THE MOMENT IT LIFTS -- _select_verified then presses a second time,
+    # and 1 in 5 of those presses is swallowed (the code's own measured figure), leaving
+    # the card up.
+    #
+    # This is CLAUDE.md 10.29 with the production refusal path as the poisoner instead of
+    # a human probe: "an investigation that leaves state behind poisons the next
+    # experiment, and the result still looks like a finding".
+    want = {t for t in (card_index, tactics_index) if t is not None}
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE:
+        print("  [cursor] cannot read the fan before committing — refusing. A "
+              "confirm_play whose lifted set was never seen is a blind commit.")
+        invalidate_cursor()
+        return False
+    lifted = set(sel)
+    extra = lifted - want
+    if extra:
+        # TRY TO PUT THEM DOWN, with the same walk-and-verify used to raise them.
+        # select_card is a TOGGLE, so this is the documented way to clear one -- but it
+        # is only safe because every step is confirmed against the screen.
+        for slot in sorted(extra):
+            print(f"  [cursor] slot {slot} is lifted and the engine did not choose it "
+                  f"(it chose {sorted(want)}) — putting it back down before committing")
+            ok, _s = _walk_cursor_to(slot, look)
+            if ok:
+                ok, _s = _deselect_verified(slot, look)
+            if not ok:
+                print(f"  [cursor] could not clear slot {slot} — REFUSING to commit. "
+                      "Playing a card the engine did not choose is worse than playing "
+                      "nothing; the caller will re-read and retry.")
+                invalidate_cursor()
+                return False
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE or set(sel) - want:
+            print(f"  [cursor] after clearing, the lifted set is still {sel} against "
+                  f"{sorted(want)} — refusing to commit")
+            invalidate_cursor()
+            return False
+    if not want <= set(sel):
+        print(f"  [cursor] the engine's cards {sorted(want)} are not all lifted "
+              f"({sel}) — refusing to commit a partial play")
+        invalidate_cursor()
+        return False
+
     press("confirm_play")
     invalidate_cursor()
     return True
+
+
+def _deselect_verified(target, look):
+    """Press select_card to put a lifted card DOWN, confirmed against the screen.
+
+    The mirror of _select_verified, and it exists for the same reason: select_card is a
+    TOGGLE, so pressing blind on a card that is already down RAISES it. Every attempt is
+    confirmed, and a press that is merely LATE is waited out rather than repeated.
+    """
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE:
+        return False, sel
+    if target not in sel:
+        return True, sel                      # already down; nothing to do
+    for attempt in range(1, SELECT_ATTEMPTS + 1):
+        press("select_card")
+        time.sleep(SELECT_SETTLE_SEC)
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            return False, sel
+        if target not in sel:
+            return True, sel
+        if attempt < SELECT_ATTEMPTS:
+            time.sleep(SELECT_RETRY_CONFIRM_SEC)
+            _g, _ys, n, sel = _look_settled(look)
+            if n == MAX_HAND_SIZE and target not in sel:
+                return True, sel
+    print(f"  [cursor] slot {target} would not go back down after {SELECT_ATTEMPTS} "
+          "attempts")
+    return False, sel
 
 
 def select_and_discard(card_index: int, look=None):

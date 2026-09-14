@@ -170,7 +170,16 @@ class FakeScreen:
             self.cur += 1 if key == "move_right" else -1
             self.cur = max(0, min(4, self.cur))
         elif key == "select_card":
-            self.y[self.cur] -= 44           # a selected card RISES
+            # A TOGGLE, like the real one. This used to lower y unconditionally, which
+            # models select_card as ONE-WAY -- and the whole selection design is built on
+            # it being a toggle ("a second press on a card that DID ban un-bans it").
+            # A fixture that cannot put a card back down cannot exercise the path that
+            # clears a card the engine did not choose, and made that fix look like a
+            # refusal.
+            if self.REST[self.cur] - self.y[self.cur] >= 25:
+                self.y[self.cur] = self.REST[self.cur]   # already up -> put it DOWN
+            else:
+                self.y[self.cur] -= 44                    # a selected card RISES
 
     def selected(self):
         return [i for i, y in enumerate(self.y) if self.REST[i] - y >= 25]
@@ -817,7 +826,19 @@ finally:
     ic.press = _old
 check(ok is True and 2 in fs.selected(),
       f"with slot 4 already selected it still selected slot 2 ({fs.selected()})")
-check(4 in fs.selected(), "and it left the pre-selected card alone")
+# THIS ASSERTION USED TO BE ITS OPPOSITE: `check(4 in fs.selected(), "and it left the
+# pre-selected card alone")`. Working from any board state is right for the WALK and for
+# the READ -- that is the user's ask it was written for, and it still holds above. It was
+# carried into the COMMIT, where it means confirm_play sends a card the engine did not
+# choose. Nothing anywhere deselects, and _verified_select_and_play returns False without
+# undoing the selection it already made, so a refused tactics walk leaves the player card
+# up and the retry commits BOTH: reproduced as [0, 2] going in together.
+#
+# 10.29 with the production refusal path as the poisoner instead of a human probe.
+check(4 not in fs.selected(),
+      f"the pre-selected slot 4 is still lifted at confirm_play ({fs.selected()}) — the "
+      "engine chose slot 2 only, and a card it did not choose must be put back down "
+      "before committing, not ridden along with the play")
 
 # (c) and the absolute reader itself, against the fan anchors
 _im = Image.open(os.path.join(FIX, "slot1_selected_cursor_on_1.png"))
