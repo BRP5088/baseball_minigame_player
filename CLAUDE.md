@@ -510,6 +510,20 @@ ever reports UP on one, add it to `test_fixtures/not_streaming/` and re-score.
 
 - A match costs **$50** in-game. BOX/Square at the table starts one.
 - "Load Last Save" restores the wallet to **$246** (4 matches).
+- **SO MONEY SPENT IS RECOVERABLE, AND THAT IS WHAT MAKES UNATTENDED ONLINE WORK
+  AFFORDABLE.** The user's call, 2026-09-13: *"You can do online work too. A reset
+  recovers spent money."* A match that goes wrong costs TIME, not money -- one
+  `reset_env.reset_environment(progress_file=...)` restores the wallet to $246 AND
+  clears `match_in_progress` (see "A RESET IS THE MONEY RECONCILER" below, walked
+  end to end on the live rig). The tracked balance is still set BY HAND afterwards,
+  because the wallet is not read from the game.
+
+  **What this does and does not license.** It removes MONEY as a reason to refuse
+  an overnight run. It does not remove the others, and they are the ones that
+  matter: a run that bans the WRONG CARD and reports 3/3 produces a result nobody
+  can attribute, and no reset repairs a conclusion drawn from it. Cheap to redo is
+  not the same as safe to trust -- spend the recovered money on runs whose OUTPUT
+  will mean something.
 - `api_budget` is a HARD ceiling for the whole process, set via
   `BASEBALL_API_BUDGET`. Every retry on a bad read is a paid call.
 - A **stable misread cannot be fixed by retrying** — same frame, same prompt,
