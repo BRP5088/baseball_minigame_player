@@ -302,6 +302,73 @@ check(sorted(_p4) == sorted(_far) and _g4.banned == _far,
       f"a far target with a late frame on every other look was not reached: placed "
       f"{sorted(_p4)}, banned {sorted(_g4.banned)} — moves and waits must not share a budget")
 
+print("\n9. A WRONG BAN IS CAUGHT AT THE PRESS THAT MADE IT")
+# ban_x_on asks "is there an X where I THINK I am" and throws away the rest of what
+# banned_cells found. When a STALE frame puts the cursor elsewhere, the X lands on a
+# different card, ban_x_on looks at the intended cell, sees nothing, and reports the
+# target as MISSING -- so a wrong ban is logged as a missing ban and read_ban_counter
+# still says 3/3. Exhaustive search over 10,927 late-frame combinations: 126 wrong-ban
+# outcomes, 75 of them ending with three bans, one wrong, and a 3/3 counter.
+_g5 = Grid()
+_stale = {"n": 0}
+
+
+def _stale_column_look():
+    """Reports the cursor ONE COLUMN AHEAD of where it really is.
+
+    That is what a late frame after a HORIZONTAL press looks like: the press has been
+    sent and the halo has not moved yet, so the reader confidently returns the cell the
+    cursor is about to leave -- and the navigator, comparing against its target, decides
+    it has ARRIVED one press early. A VERTICAL press mid-travel is safe by contrast: the
+    scrollbar is unreadable, so the whole read is refused. That asymmetry is the hole.
+
+    The stale read has to fire BEFORE the cursor arrives, or the press lands on the
+    right card anyway and the fixture proves nothing -- a first version reported the
+    correct cell for four looks and banned the target correctly.
+    """
+    _stale["n"] += 1
+    return (_g5.r, min(_g5.cols - 1, _g5.c + 1))
+
+
+_wrong = []
+_real_press, _real_sleep = ic.press, ic.time.sleep
+ic.press, ic.time.sleep = _g5.press, lambda *_a: None
+try:
+    _p5 = ic.select_bans_verified(
+        GRID, {(0, 2)}, look=_stale_column_look,
+        banned_set=lambda: set(_g5.banned),
+        on_wrong_ban=lambda want, got: _wrong.append((want, sorted(got))),
+        log=lambda *a: None)
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+
+check(bool(_wrong),
+      f"a stale COLUMN read banned {sorted(_g5.banned)} while aiming at (0, 2) and "
+      "nothing noticed — that is a card the engine never chose, in a $50 match, with "
+      "the counter still reading 3/3")
+check((0, 2) not in _p5,
+      f"the wrong ban was REPORTED AS PLACED ({_p5}) — choose_bans would believe the "
+      "engine's pick landed")
+if _wrong:
+    _want, _got = _wrong[0]
+    check(_want == (0, 2) and _got and _got[0] != (0, 2),
+          f"the report must name the card actually banned, got want={_want} got={_got}")
+
+# CONTROL: a healthy sensor must NOT report a wrong ban, or every run would.
+_g6 = Grid()
+_wrong6 = []
+ic.press, ic.time.sleep = _g6.press, lambda *_a: None
+try:
+    _p6 = ic.select_bans_verified(GRID, WANT, look=_g6.look,
+                                  banned_set=lambda: set(_g6.banned),
+                                  on_wrong_ban=lambda w, g: _wrong6.append((w, g)),
+                                  log=lambda *a: None)
+finally:
+    ic.press, ic.time.sleep = _real_press, _real_sleep
+check(not _wrong6 and _g6.banned == WANT and sorted(_p6) == sorted(WANT),
+      f"CONTROL: a healthy run reported wrong bans {_wrong6}, banned "
+      f"{sorted(_g6.banned)}, placed {sorted(_p6)} — the check is firing on correct runs")
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")

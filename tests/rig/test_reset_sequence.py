@@ -679,6 +679,50 @@ g, res, err = run("menu never opens", state="gameplay", pause_opens=False)
 must_raise("menu never opens", err, "pause menu will not open")
 
 
+# --- A BAN SCREEN MUST NOT BE NAVIGATED AS A MENU -----------------------------
+# is_pause_screen cannot tell the pause book from the BAN book: over 10,239 frames,
+# 1,122 of 1,140 ban frames clear PAGE_MIN_FRAC 0.80 (BAN 0.7101..0.8587 vs PAUSE
+# 0.9263..0.9446), and MENU_TEXT_MIN_FRAC overlaps completely, so no threshold on
+# that quantity separates two notebooks. reset_env used to break on that and then
+# navigate it AS A MENU -- selected_item() names an entry on 19 of 1,140 ban frames,
+# so up to five dpad_down presses land in a live ban screen. It never named 'Load
+# Last Save' in those 1,140, so no `cross` followed; that is luck, not a guard.
+#
+# reset_env imports input_controller and pause_menu INSIDE the function, so they are
+# locals -- the real modules are what must be patched, not attributes of reset_env.
+import reset_env as _re2
+import input_controller as _ic2
+import pause_menu as _pm2
+import orchestrator as _o2          # the FAKE this file installed in sys.modules
+
+_pressed2 = []
+_saved2 = (_pm2.is_pause_screen, _ic2.press, _re2.give_up_dialog,
+           getattr(_o2, "read_ban_counter", None))
+try:
+    _pm2.is_pause_screen = lambda img: True     # the guard that admits a ban screen
+    _o2.read_ban_counter = lambda img: 1        # ...but the ban counter answers
+    _ic2.press = lambda k, *a, **kw: _pressed2.append(k)
+    _re2.give_up_dialog = lambda img: False
+    try:
+        _re2.reset_environment(log=lambda *a: None)
+        _ok2 = False
+    except _re2.ResetError as _e2:
+        _ok2 = "ban screen" in str(_e2)
+    except Exception:
+        _ok2 = False
+    _nav2 = [k for k in _pressed2 if k in ("dpad_down", "move_down", "cross")]
+    check(_ok2, "a ban screen must be REFUSED, not navigated as a menu — "
+                "is_pause_screen admits both notebooks")
+    check(not _nav2, f"menu navigation was pressed into a live ban screen: {_nav2}")
+finally:
+    (_pm2.is_pause_screen, _ic2.press, _re2.give_up_dialog) = _saved2[:3]
+    if _saved2[3] is None:
+        if hasattr(_o2, "read_ban_counter"):
+            delattr(_o2, "read_ban_counter")
+    else:
+        _o2.read_ban_counter = _saved2[3]
+
+
 if fails:
     for f in fails:
         print("  FAIL:", f)

@@ -238,7 +238,34 @@ def reset_environment(log=print, progress_file=None):
     menu_tries = give_up_tries = 0
     while menu_tries < PAUSE_OPEN_ATTEMPTS:
         img = cap()
+        # A BAN SCREEN IS A NOTEBOOK PAGE TOO, and is_pause_screen cannot tell the two
+        # books apart: censused over 10,239 frames, 1,122 of 1,140 ban frames clear
+        # PAGE_MIN_FRAC 0.80 (BAN 0.7101..0.8587 against PAUSE 0.9263..0.9446), and
+        # MENU_TEXT_MIN_FRAC overlaps completely so no threshold on that quantity
+        # separates them. Breaking here on a ban screen means the code below then
+        # navigates it AS A MENU -- selected_item() names an entry on 19 of 1,140 ban
+        # frames, so up to five dpad_down presses go into a live ban screen. It never
+        # named 'Load Last Save' in those 1,140, so no `cross` followed; that is luck,
+        # not a guard.
+        #
+        # The ban counter is the instrument that separates them, already measured: 0
+        # false positives off ban screens over 3,000 random frames. Imported lazily --
+        # orchestrator pulls in a great deal, and a pure navigation caller should not
+        # pay for it until this branch is actually reached.
         if pm.is_pause_screen(img):
+            try:
+                import orchestrator as _o
+                _banned = _o.read_ban_counter(img)
+            except Exception:
+                _banned = None
+            if _banned is not None:
+                log(f"  this is a BAN screen (counter reads {_banned}), not the pause "
+                    "book — both are notebook pages and is_pause_screen admits either. "
+                    "Not navigating it as a menu.")
+                raise ResetError(
+                    "a ban screen is up, not the pause menu — refusing to press "
+                    "dpad_down into it. Leave the ban screen first (TRIANGLE commits "
+                    "whatever is banned and starts the match)")
             break
         if give_up_dialog(img):
             if give_up_tries >= GIVE_UP_ATTEMPTS:

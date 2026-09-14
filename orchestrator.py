@@ -5657,6 +5657,36 @@ def ban_x_on(pos):
     return (pos[0] - lvl, pos[1]) in hits
 
 
+def ban_x_cells():
+    """Every ABSOLUTE position currently showing a ban X, or None if unreadable.
+
+    ban_x_on asks "is there an X where I THINK I am" and throws away the rest of what
+    banned_cells found. That is the wrong question when the cursor is not where we
+    think: a stale frame puts the X on a DIFFERENT card, ban_x_on looks at the
+    intended cell, sees nothing, and reports the target as MISSING -- so a wrong ban
+    is logged as a missing ban and the counter still reads 3/3.
+
+    Measured by exhaustive search over 10,927 late-frame combinations: 126 wrong-ban
+    outcomes, and on the realistic 3-target run 75 of them end with three cards
+    banned, one of them wrong, with read_ban_counter saying 3 of 3.
+
+    A VERTICAL press mid-travel is safe -- the scrollbar is unreadable, so the whole
+    read is refused. A HORIZONTAL press moves no scrollbar, so the level reads valid
+    and the halo is reported where it still is. That asymmetry is why the counter
+    cannot see this and the full set can.
+    """
+    import ban_grid as _bg
+    img = _fast_grab()
+    rows = _bg.find_card_rows(img)
+    if not rows:
+        return None
+    lvl, _thumb = read_ban_scroll_level(img)
+    if lvl is None:
+        return None
+    hits, _scores = _bg.banned_cells(img, rows)
+    return {(lvl + r, c) for (r, c) in hits}
+
+
 def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                              trust_roster: bool = None):
     """
@@ -7226,7 +7256,11 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         # probe moved that failure one look() later; it did not close it.
                         _placed = input_controller.select_bans_verified(
                             grid, banned_positions, look=ban_cursor_absolute,
-                            confirm_ban=ban_x_on, before_confirm=_verify_bans,
+                            confirm_ban=ban_x_on, banned_set=ban_x_cells,
+                            on_wrong_ban=lambda want, got: record_observation(
+                                event="ban_wrong_card", wanted=list(want),
+                                got=sorted(list(x) for x in got)),
+                            before_confirm=_verify_bans,
                             on_blind=lambda: (
                                 record_observation(event="ban_nav_blind_midway"),
                                 select_bans_and_start_full(

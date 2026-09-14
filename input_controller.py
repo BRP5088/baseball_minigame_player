@@ -1000,7 +1000,8 @@ BAN_NAV_MAX_BLIND = 10             # consecutive unreadable frames per target
 
 
 def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
-                         before_confirm=None, log=print, on_blind=None):
+                         before_confirm=None, log=print, on_blind=None,
+                         banned_set=None, on_wrong_ban=None):
     """Place the bans, checking the cursor on the screen before every select_card.
 
     Returns the list of positions it actually banned. A target it cannot reach is REPORTED
@@ -1037,10 +1038,36 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                     time.sleep(BAN_NAV_SETTLE)
                     continue
                 if here == want:
+                    # WHAT WAS BANNED BEFORE THIS PRESS. `confirm_ban` can only say
+                    # whether an X is on the cell we AIMED at, so an X that landed
+                    # somewhere else reads as a missing ban and the counter still
+                    # says 3/3. The difference of the full set names the actual card.
+                    _before = banned_set() if banned_set is not None else None
                     press("select_card")
                     toggled += 1
                     reached = True
                     time.sleep(BAN_NAV_SETTLE)
+                    _after = banned_set() if banned_set is not None else None
+                    if _before is not None and _after is not None:
+                        _new = _after - _before
+                        if _new == {want}:
+                            placed.append(want)
+                        elif _new:
+                            # A CARD THE ENGINE DID NOT CHOOSE IS NOW BANNED. Not
+                            # re-pressed: select_card is a TOGGLE and the cursor is
+                            # demonstrably not where we believed, so a second press
+                            # would land somewhere else again. Report, record, and
+                            # do NOT count it as placed.
+                            log(f"  [ban] WRONG CARD: pressing at {want} put an X on "
+                                f"{sorted(_new)} — the cursor was not where the last "
+                                f"look said. NOT re-pressing; a toggle from an unknown "
+                                f"cell bans another one.")
+                            if on_wrong_ban is not None:
+                                on_wrong_ban(want, _new)
+                        else:
+                            log(f"  [ban] select_card at {want} placed no X anywhere "
+                                "— leaving it")
+                        break
                     if confirm_ban is None or confirm_ban(want):
                         placed.append(want)
                     else:
