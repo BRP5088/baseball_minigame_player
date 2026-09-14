@@ -2195,10 +2195,40 @@ def _settle_region_box(name):
 # mss grabs the same full screen in ~32 ms (12x faster). Used for the settle
 # poll loop only — the vision-read path still goes through
 # capture_screenshot_image(), which needs the focus handling and downscale.
-# Width the settle thresholds were measured at (the logged frames). Any
-# capture backend must be normalised to this before its deltas are compared
-# against SETTLE_THRESHOLDS.
-SETTLE_CALIBRATION_WIDTH = 2000
+# Width the settle thresholds were measured at. Any capture backend must be
+# normalised to this before its deltas are compared against SETTLE_THRESHOLDS.
+#
+# WAS 2000, AND THAT WAS A FOSSIL OF THE Aug-26 DESKTOP-GRAB ERA. The only
+# 2000px frames in the archive are 32 files at 2000x1292 -- aspect 1.548, the
+# BUILT-IN DISPLAY (1728x1117) upscaled -- showing the macOS menu bar and the
+# Dock, dated the day before the game moved to a second monitor and
+# game_capture.grab() was written to capture the GAME. They are named
+# snapshots, not a consecutive stream, so the idle-PAIR statistics these
+# thresholds cite cannot have come from them.
+#
+# MEASURED, over 3,000 consecutive pairs of run_20260828_140236 (the one 10Hz
+# stream, 14,437 frames, all 1920x1080). The comment above SETTLE_THRESHOLDS
+# claims that at a shared 6.0, 17.4% of idle `hand` pairs read as moving:
+#
+#     claimed 17.4%     at 1920: 17.70%     at 2000: 12.27%
+#
+# 1920 reproduces it to 0.3pp. (The same comment's scoreboard and legacy_roi
+# figures reproduce at NEITHER width, so that part of it is unreliable and is
+# recorded here as unverified rather than quietly trusted.)
+#
+# WHAT THE UPSCALE COST, over 2,500 pairs: 25 verdict flips, every one of them
+# moving@1920 -> settled@2000 -- the gate calling a MOVING screen SETTLED, which
+# is what hands the hand reader a mid-animation frame. Conditional on genuinely
+# moving: hand 18.3%, first_base 16%, third_base 12%. Zero flips the other way.
+# Interpolation smooths, so the upscale lowers every delta; the ratio is not one
+# number but per-region (0.934 hand .. 0.993 third_base), because how much a
+# region loses depends on the spatial frequency of what is in it -- which is why
+# no arithmetic can convert a threshold between widths and the populations have
+# to be re-measured.
+#
+# The reveal gate is indifferent: over all 15,799 archived frames only 8 change
+# side (0.051%), all toward DETECTING a reveal the upscale missed.
+SETTLE_CALIBRATION_WIDTH = 1920
 
 try:
     import mss as _mss
@@ -2290,12 +2320,13 @@ def _fast_grab():
     mon = _MSS.monitors[1]
     raw = _MSS.grab(mon)
     img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
-    # NORMALISE THE SCALE. mss returns logical points (1728x1117 here) while
-    # pyautogui returns physical Retina pixels (3456x2234), and the logged
-    # frames the SETTLE_THRESHOLDS were calibrated against were 2000px wide.
-    # Mean-absolute-delta is scale-sensitive — downscaling averages noise
-    # differently — so feeding a different resolution silently shifts every
-    # threshold. Resize to the calibration width so the numbers stay valid.
+    # NORMALISE THE SCALE. This is the FALLBACK path and the normalisation is
+    # real work here: mss returns logical points (1728x1117) while pyautogui
+    # returns physical Retina pixels (3456x2234), and mean-absolute-delta is
+    # scale-sensitive, so two backends cannot be compared without a common
+    # width. The PRIMARY path above is already 1920 (chiaki's decoded frame
+    # dump, the PS5's own output), so the resize there is a no-op --
+    # game_capture.grab only resizes when the width differs.
     if img.width != SETTLE_CALIBRATION_WIDTH:
         ratio = SETTLE_CALIBRATION_WIDTH / img.width
         img = img.resize((SETTLE_CALIBRATION_WIDTH, int(img.height * ratio)))

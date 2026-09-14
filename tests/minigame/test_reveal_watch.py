@@ -579,11 +579,22 @@ check(v2.b64 == "SENTINEL-FRESH-CAPTURE",
 # the pre-flip pair of card backs whose 0.050-0.054 is what the live poll kept
 # reporting as its peak.
 #
-# BOTH WIDTHS MATTER. The statistic is a gradient-pixel count normalised by
-# area, so it rises as the capture shrinks: the watcher scores the dump at its
+# BOTH WIDTHS STILL MATTER, THOUGH THE DISAGREEMENT THEY GUARDED IS GONE.
+# The statistic is a gradient-pixel count normalised by area, so it rises as the
+# capture shrinks. This comment used to read: "the watcher scores the dump at its
 # native 1920, and orchestrator's own poll path resizes to
 # SETTLE_CALIBRATION_WIDTH = 2000. If the threshold only separated at one of
-# them, the watcher and the poll would disagree about the same screen.
+# them, the watcher and the poll would disagree about the same screen."
+#
+# That was a real split -- two readers of the SAME screen working at different
+# widths by design -- and it closed on 2026-09-13 when the calibration width was
+# corrected to 1920, the geometry the thresholds were actually measured at and
+# the one the PS5 streams. Both paths are now 1920 and cannot disagree.
+#
+# The both-widths check stays anyway, as a ROBUSTNESS guard rather than a
+# reconciliation: the fallback capture path can still hand back an mss logical
+# grab (1728) or a pyautogui Retina grab (3456), and a threshold that separates
+# at only one width would fail silently on those.
 FIXTURES = os.path.join(_ROOT, "test_fixtures", "reveal_episode")
 REVEALS = {
     "reveal_t0113.54.jpg": "batter + boost vs pitcher + focus, fully drawn",
