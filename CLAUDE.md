@@ -20,6 +20,61 @@ needs them.** No need to ask each time. The console auto-sleeps when nothing
 reaches it — that killed the 2026-09-01 overnight run four minutes in, and
 contaminated a whole leg-tolerance A/B on 2026-09-03.
 
+### Putting the console to sleep, and knowing it already is
+
+**FIRST: CHECK WHETHER IT IS ALREADY ASLEEP, BECAUSE IT USUALLY IS.** The
+auto-sleep above is not a hazard to work around here, it is the mechanism. Asked
+to put the console to sleep on 2026-09-13, the answer was that it had already
+done it: a live game frame at bearing 87 had been captured minutes earlier, then
+the suite ran, nothing reached the console, and it went to standby on its own.
+A `ps_button` press was sent against a state verified SEVERAL MINUTES EARLIER
+rather than re-checked at the moment of acting — 10.29's shape (assert the
+starting state, never carry one forward).
+
+**THREE CHEAP TELLS, all measured 2026-09-13, no input required:**
+
+    game_capture.grab()          1831x1030, NOT 1920x1080
+                                 the frame dump is gone, so this is the mss
+                                 WINDOW grab -- i.e. the chiaki app, not a game
+    ensure_stream.looks_like_ui()   True
+    ensure_stream.streaming()       False
+
+The window size is the fastest of the three: a capture that is not the PS5's
+1920x1080 means you are looking at chiaki, not at the game. `streaming()`
+answering False on the standby host list is OPEN-18's fix doing its job -- that
+same screen once answered True in 0.0s.
+
+**IF IT IS ALREADY ASLEEP, DO NOTHING.** The user's call, 2026-09-13: *"maybe
+its already asleep. if so, leave it alone."*
+
+**AND DO NOT PRESS `ps_button` TO FIND OUT.** With no session running, chiaki
+has the host list up and that press raises **chiaki's own "Quit — Are you sure
+you want to quit?" dialog**, one keystroke from killing the app. Dismiss it with
+**ESCAPE**, which Qt treats as reject, i.e. "No". Do NOT use Enter or Space:
+those activate whichever button holds focus, and Yes is the left one. The dialog
+is a Qt modal, so it only takes input with chiaki FRONTMOST (section 1's ladder
+rule) -- `_key()` posting to the pid will not touch it.
+
+**THE WAY TO ACTUALLY PUT IT TO SLEEP, when it is awake.** The user's recipe,
+2026-09-13: *"press the playstation button, scroll all the way to the right.
+should be a power symbol select sleep."* That is the PS5 Control Center path.
+**RECORDED FROM THE USER, NOT EXECUTED HERE** — the console was already in
+standby, so none of it was walked. Treat it as instructions, not as measurement,
+and note that section 3's warning applies to every press on that overlay: X is
+SUBMIT and takes whatever the cursor sits on, which from a fresh Control Center
+can be the PS5 HOME SCREEN.
+
+**CHIAKI CAN ALSO DO IT, and that path avoids the overlay entirely.** Read from
+`chiaki-ng-src`, also NOT executed here: `StreamSession::GoToBed()` is the
+console-sleep call, reached from `QmlBackend::goToSleep()` and from the session
+stop path. The UI exposes it as a **"Sleep" button** on the dialog
+`StreamView.qml:944` ("Do you want the Console to go into sleep mode?"), and
+Settings has a disconnect action with **"Do Nothing / Enter Sleep Mode / Ask"**
+(`SettingsDialog.qml:475`, backed by `DisconnectAction::AlwaysSleep`). So
+setting that preference once makes stopping a session sleep the console, with no
+blind navigation of the PS5 overlay at all. Worth trying before the Control
+Center route; verify it the first time by reading `State:` on the host list.
+
 - The stream needs the **patched** build in `chiaki-ng-build/`.
   `/Applications/chiaki-ng.app` is stock: no injection, every input silently
   goes nowhere. Verify a binary with `nm -U <binary> | grep -i inject`.
