@@ -20,6 +20,7 @@ the two readings the validator would have caught now reach the engine.
 
 Both are fixed where the path actually runs, not where the validator sits.
 """
+import glob
 import os
 import sys
 
@@ -148,6 +149,69 @@ if _st is not None:
     except KeyError:
         _indexable = False
     check(_indexable, "play_one_turn's unconditional index would still raise")
+
+# --- THE HAND CROP MUST REACH ITS READER AT THE WIDTH IT WAS CALIBRATED AT ----
+# The reader is not scale-free: find_circles' and _card_digit_box's size gates are RAW
+# PIXELS (DISC_MIN_R 18, DISC_WHITE_SIZE 30-50, DIGIT_W 6-26), so a crop a few percent
+# wide falls outside them. The rig captures 2000x1125, whose hand crop is 1020 px against
+# the 979 the reader was measured at, and at that width the fan reads MARGINALLY -- over
+# one live match's own frames, 12 of 20 player cards, failures TOTAL rather than partial.
+# All 22 decisions came back "Playing None" and not one card was played.
+#
+# NOTHING ON DISK COULD HAVE CAUGHT IT: every archived run is 1920x1080, whose hand crop
+# is exactly 979, so the corpus sits at the calibration width by construction.
+from PIL import Image
+import local_hand as _lh
+
+# NAMED, not globbed. The first version of this block globbed diagnostics/*/ -- a
+# directory a LIVE RUN writes to -- and picked up an older bundle that is not a turn
+# screen at all, so the read checks failed against the wrong picture. That is exactly
+# the rule CLAUDE.md states after test_map_admit was fed 165 live leg-end frames and a
+# pinned profile moved with no code change: name the fixture files.
+_FIX_GEOM = os.path.join(_ROOT, "test_fixtures", "capture_geometry",
+                         "turn_2000x1125_hand_unreadable.png")
+check(os.path.exists(_FIX_GEOM),
+      f"the capture-geometry fixture is missing ({_FIX_GEOM}) — this is the actual frame "
+      "a $50 match stalled on, and without it nothing here is measured")
+if os.path.exists(_FIX_GEOM):
+    _src = Image.open(_FIX_GEOM)
+    for _w, _h in ((2000, 1125), (1920, 1080), (1867, 1050)):
+        _im = _src if _src.size == (_w, _h) else _src.resize((_w, _h), Image.LANCZOS)
+        _crop = dict(o.crop_gameplay_regions(_im)).get("hand")
+        check(_crop is not None and _crop.width == int(_lh.ANCHOR_W),
+              f"at {_w}x{_h} the hand crop reaches the reader at "
+              f"{None if _crop is None else _crop.width}px, not ANCHOR_W "
+              f"{int(_lh.ANCHOR_W)} — the size gates are raw pixels, so a crop that is "
+              "a few percent wide reads nothing and every decision becomes 'Playing None'")
+
+    # ...and ONLY the hand. Every other region has its OWN anchor --
+    # SCOREBOARD_ANCHOR_W 359, BASE_ANCHOR_W third/second/first 221/288/220 -- and each
+    # reader divides by its own. Normalising them all to the hand's 979 would silently
+    # rescale every one of those. A mutant that dropped the `label == "hand"` test
+    # SURVIVED the first version of this file.
+    import local_state as _ls
+    _im2 = _src.resize((2000, 1125), Image.LANCZOS)
+    _crops2 = dict(o.crop_gameplay_regions(_im2))
+    for _label in ("scoreboard", "first_base", "second_base", "third_base"):
+        _c = _crops2.get(_label)
+        if _c is None:
+            continue
+        _frac = o.GAMEPLAY_REGIONS_FRAC[_label]
+        _expect = int(2000 * _frac[2]) - int(2000 * _frac[0])
+        check(_c.width == _expect,
+              f"the {_label} crop came back {_c.width}px, not its own {_expect}px — only "
+              f"the HAND may be normalised; {_label}'s reader divides by a different "
+              "anchor and rescaling it silently moves every window inside it")
+
+    # ...and it must actually READ at the live geometry, not merely be the right width.
+    _im2k = _src if _src.size == (2000, 1125) else _src.resize((2000, 1125), Image.LANCZOS)
+    _rows = _lh.read_hand(dict(o.crop_gameplay_regions(_im2k))["hand"])
+    _readable = sum(1 for r in _rows if r.get("kind") == "player" and r.get("digit"))
+    check(len(_rows) == 5,
+          f"the fan came back as {len(_rows)} rows at 2000x1125, not 5")
+    check(_readable >= 3,
+          f"only {_readable} player cards read at the LIVE capture geometry — this is the "
+          "frame a $50 match stalled on, and it reads 4 at the calibration width")
 
 print("\n" + ("FAILED: " + "; ".join(fails) if fails else "all checks passed"))
 sys.exit(1 if fails else 0)

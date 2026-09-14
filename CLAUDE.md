@@ -816,6 +816,78 @@ AST-scans for emission sites so a NEW one fails the test instead of reaching
 someone's keyboard. Four mutants, all caught -- including a planted
 `pyautogui.keyDown` in an unrelated module.
 
+## THE FIRST LIVE MATCH: THE HAND READER IS CALIBRATED AT A WIDTH THE RIG NO LONGER CAPTURES
+
+A $50 match played end to end on 2026-09-13, the first ever -- every earlier one died at
+the paid orientation read. It could not play a single card, and the cause is one number.
+
+**The reader is calibrated at a HAND CROP 979 px wide (`local_hand.ANCHOR_W`). The rig
+captures 2000x1125, whose hand crop is 1020 px -- 1.042x.** Section 3 has carried "the
+hand reader itself is not scale-free" as an open item; this is what it costs. The size
+gates are RAW PIXELS (`DISC_MIN_R` 18, `DISC_WHITE_SIZE` 30-50, `circle_finder.DIGIT_W`
+6-26) while every SCALED constant already divides by ANCHOR_W.
+
+The SAME frame, resized:
+
+    (2000, 1125)   6 rows, 0 readable player cards      <- the live capture
+    (1920, 1080)   5 rows, 4 readable
+    (1867, 1050)   5 rows, 4 readable
+
+Over the match's own frames it is 12 of 20, and the failures are TOTAL (0 of 4) rather
+than partial -- it reads marginally, not never, which is why nothing looked obviously
+broken. All 22 decisions came back `Playing None`, 11 plays were refused for want of a
+cursor (glow 10.4-10.9 against `CURSOR_GLOW_MIN` 15), and not one card was played.
+
+**NOTHING ON DISK COULD HAVE CAUGHT IT.** Every archived run is 1920x1080, whose hand crop
+is EXACTLY 979 -- the whole corpus sits at the calibration width by construction, so
+normalising is a literal no-op there and no census could show the gap. 10.31's shape
+again: a population that cannot contain the failing class.
+
+Fixed by normalising the hand crop to ANCHOR_W in `crop_gameplay_regions`, the one place
+every consumer takes it from, so `s = img.width / ANCHOR_W` is 1.0 for all of them at
+once. Measured over 40 archived turn frames (156 readable cards):
+
+    native 1920x1080     156 as-is   156 normalised     (no-op, as it must be)
+    upscaled to 2000x1125 109 as-is  133 normalised     (a LOWER bound: resampled twice)
+    the five live frames   12 as-is   20 normalised     (full recovery)
+
+**ONLY the hand.** Every other region has its own anchor (`SCOREBOARD_ANCHOR_W` 359,
+`BASE_ANCHOR_W` 221/288/220) and its own reader dividing by it; a mutant that dropped the
+`label == "hand"` test SURVIVED the first version of the guard and returned a 979 px
+scoreboard crop against its own 374.
+
+**This does not close the open item.** The gates are still raw pixels, and a rig that
+captures a third geometry will land outside them again. It puts the reader back on the
+geometry it was measured at.
+
+### WHAT THE FIRST MATCH ALSO SHOWED
+
+Working, live, on the paths built the same day: the ban scan hit a real SCROLL DESYNC and
+correctly REFUSED TO CACHE its 26 cards; the ban cursor could not be read and the blind
+fallback placed 3 of 3 by dead reckoning; zero wrong-card bans; 120 presses delivered 120
+background Quartz and 0 focus+pyautogui; the `your_score` default kept the run alive when
+`ocr_scoreboard` returned None on a plainly legible board; and the closing input verdict
+correctly said NOT MEASURED instead of certifying a detector that never ran.
+
+**And nothing was ever played blind.** Eleven refusals, zero wrong cards.
+
+**`ocr_scoreboard` CANNOT READ A LEGIBLE BOARD.** "JACK PEPPER 3 0 3 / OPPONENT 0 4 4"
+plainly on screen, `{'your': None, 'opponent': None}` returned. Unmeasured rate, open.
+
+### THE DEAL-TIMING QUESTION IS ANSWERED, AND THE ANSWER IS "NOT FROM THIS DATA"
+
+27 rows, the first ever collected:
+
+    by outcome   stable 15, timeout 12
+    INSTRUMENT   pearson(settled_at, released) = +0.246, 25 of 27 pinned at or under 1.5s
+    slope        -0.0065 s per base-movement, permutation p = 0.9872 -- NOT significant
+
+Two independent reasons, both now MEASURED rather than assumed. The instrument measures
+the pre-deal fan, not the deal (predicted 0.226 from the archive, reproduced 0.246 live).
+And the predictor barely varied: 19 of 21 usable rows sat at the same 2.0 base-movements
+because there were almost no runners on. **A dataset needs matches WITH RUNNERS to answer
+this, and a probe that starts at the deal's onset rather than the gate's first poll.**
+
 ### THE RUNNER COULD NOT PLAY A MATCH AT ALL WITH THE PAID MODEL OFF (2026-09-13)
 
 `read_state_for_turn` made the ORIENTATION read PAID, unconditionally, and set

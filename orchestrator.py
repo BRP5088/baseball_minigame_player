@@ -1775,12 +1775,50 @@ GAMEPLAY_REGIONS_FRAC = {
 OVERVIEW_MAX_WIDTH = 900
 
 
+# The hand crop is normalised to local_hand.ANCHOR_W before anyone reads it.
+#
+# THE READER IS NOT SCALE-FREE, and CLAUDE.md section 3 has carried that as an open
+# item: find_circles' and _card_digit_box's size gates are RAW PIXELS
+# (DISC_MIN_R 18, DISC_WHITE_SIZE 30-50, DIGIT_W 6-26), so a crop that is a few
+# percent wide falls outside them. Every SCALED constant already divides by
+# ANCHOR_W; these are the ones that do not.
+#
+# It went live on 2026-09-13 and cost a whole $50 match. The rig captures
+# 2000x1125, whose hand crop is 1020 px -- 1.042x the 979 the reader was
+# calibrated at -- and at that width the fan reads MARGINALLY: over the match's
+# own frames, 12 of 20 player cards, with the failures TOTAL (0 of 4) rather than
+# partial. Every one of the 22 decisions came back "Playing None", 11 plays were
+# refused for want of a cursor, and not one card was played by the engine.
+#
+# NOTHING ON DISK COULD HAVE CAUGHT IT: every archived run is 1920x1080, whose
+# hand crop is exactly 979 -- so the whole corpus sits at the calibration width by
+# construction, and normalising is a literal NO-OP there. Measured over 40
+# archived turn frames (156 readable cards): native 156 as-is and 156 normalised,
+# identical. Upscaled to the live geometry: 109 as-is, 133 normalised -- and that
+# 133 is a LOWER bound, because those frames are resampled twice. On the five
+# genuine 2000x1125 frames it is 12 -> 20, full recovery.
+#
+# This does not close the open item -- the gates are still raw pixels, and a rig
+# that captures something else will still land outside them. It puts the reader
+# back on the geometry it was measured at, at the one place every consumer takes
+# its crop from, so `s = img.width / ANCHOR_W` is 1.0 for all of them at once.
 def crop_gameplay_regions(img) -> list:
     """Returns [(label, PIL.Image), ...] for every region in
-    GAMEPLAY_REGIONS_FRAC, cropped from img at img's own resolution."""
+    GAMEPLAY_REGIONS_FRAC, cropped from img at img's own resolution -- except the
+    HAND, which is normalised to the width its reader was calibrated at."""
+    import local_hand as _lh
     w, h = img.size
+
+    def _cut(label, box):
+        crop = img.crop(box)
+        if label == "hand" and crop.width != int(_lh.ANCHOR_W):
+            tw = int(_lh.ANCHOR_W)
+            crop = crop.resize((tw, max(1, round(crop.height * tw / crop.width))),
+                               Image.LANCZOS)
+        return crop
+
     return [
-        (label, img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))))
+        (label, _cut(label, (int(w * x0), int(h * y0), int(w * x1), int(h * y1))))
         for label, (x0, y0, x1, y1) in GAMEPLAY_REGIONS_FRAC.items()
     ]
 
