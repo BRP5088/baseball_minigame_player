@@ -1,162 +1,192 @@
-# HANDOFF — 2026-09-13
+# HANDOFF — 2026-09-13, overnight
 
-## GOOD MORNING. Everything is green and nothing needs untangling.
+## STATE AT HANDOFF
 
-    preflight            READY
-    suite                186 files green, and green at JOBS=1 too (830s) --
-                         so no result depends on parallelism. Never checked before.
-    working tree         clean, 26 commits overnight
-    console              PS5 home screen; the game is closed (see below)
-    money                $96, match_in_progress FALSE
+    preflight            READY (1 warning: 2 other displays attached)
+    suite                196 files green
+    working tree         clean
+    console              awake, idle in the world at the spawn, NO match running
+    match_in_progress    False
+    money                GAME WALLET 246 (restored by the reset earlier today)
+                         progress_testing.json tracks 196  <-- NOT RECONCILED
+    paid vision model    OFF and staying off
 
-**THE THREE THINGS WORTH KNOWING BEFORE YOU START:**
+**THE ONE THING TO LOOK AT FIRST IN THE MORNING:** the money line above. The
+tracked balance is $50 below the game's because a match was debited and then
+given up + reset away. Reconcile it from a LIVE PAUSE-MENU READ, never from
+memory or from this file -- a wrong $50 got into this record once already that
+way. `pause_menu.read_money` on a confirmed pause screen; then
+`orchestrator.save_progress(..., 246, "progress_testing.json", ...)`.
 
-1. **preflight's $50 guard could not fire the way preflight is run.** It checked one
-   progress file and defaulted to the wrong one -- bare `preflight.py` said READY while
-   `progress_testing.json` held an open match. Fixed; it now checks every progress file.
-2. **Every tactics number in CLAUDE.md was measured on the scrambled pool.** Re-measured on
-   the role-split pools: a SPEED boost is worth **+0.131** runs/half, not +0.034 -- wrong by
-   4x. Swing still wins (+0.614), so no decision changes, but "21x less" was an artefact.
-3. **The open speed-boost question is now priced**: +0.046 runs/half, 4.2 sigma. Real, and
-   it cannot flip the engine's preference. One at-bat settles it; do not plan around it.
+## THE SESSION'S THEME: FOSSILS
 
-## First two things to do, in order
+The user, on being shown the first one: *"That's a code smell... a lot of ideas
+that didn't pan out still exist in code and things may have been reused."*
 
-1. **Arm the window-drift guard.** It is the oldest open item and it protects a MONEY path
-   (a 110px window shift silently flipped a ban-grid cell and banned a different card).
-   Needs the game up and a ban screen that is reading correctly, then one command --
-   see "THE ONE WARNING WORTH ACTING ON" below.
-2. **Label the roster sheets** (`agent_progress/ban-labels/roster_*.jpg`, seven of them).
-   No console needed. That is the only independent check the roster's NUMBERS have ever had.
+**THE TEMPLATE, CONFIRMED.** `orchestrator.SETTLE_CALIBRATION_WIDTH = 2000`
+upscales every settle frame from the native 1920 before any reader sees it. Its
+comment says the calibration frames "were 2000px wide". The ONLY 2000px frames
+in the archive are 32 files at **2000x1292, aspect 1.548**. 1728x1117 -- this
+Mac's BUILT-IN DISPLAY -- upscaled to width 2000 gives 2000x1293, aspect 1.547.
+Opened, they show the macOS menu bar, the Dock down the right edge, and chiaki
+in a window. They are dated **Aug 26**; on **Aug 27** the game moved to a second
+monitor and `game_capture.grab()` was written to capture the GAME instead.
 
----
+    the capture layer was replaced underneath the constant, and the constant
+    never moved
 
+Cost: the hand reader is handed a 1020px crop against `local_hand.ANCHOR_W`
+979, and read ZERO cards in the first live match.
 
+**AND IT IS A FAMILY, NOT ONE CONSTANT.** Two more of the same Aug-26 geometry
+surfaced, both verified by hand:
 
-## UPDATE, ~04:30: THE PS5 LEFT THE GAME. Nothing is mid-match any more.
+  * `compass.REFERENCE_WIDTH = 2000` with `PITCH_PX_PER_90 = 293.0` and
+    `VIEW_CENTRE_FRAC = 0.4840`. **The comment states the dead world outright:**
+    "Where the game view's centre sits in the capture. The frame includes the
+    macOS menu bar and the dock, so this is NOT the image centre." Measured as
+    "a 9-pixel blob at x=968 of a 2000px capture". Today's capture is chiaki's
+    FRAME DUMP -- the game's own decoded pixels, no menu bar, no dock -- where
+    the view centre would be 0.5. The gap is ~0.016 of width = ~30.7px at 1920
+    = **~9.8 degrees of systematic bearing bias**, almost exactly the size of
+    the 11-degree bias this constant was introduced to REMOVE.
+    **DO NOT ACT ON THIS YET. There is a contradicting measurement:** the spawn
+    read 87 tonight and section 8(d) has it deterministic at 86.9-87, which the
+    user describes as facing E (90). A 10-degree error would not land there.
+    SETTLE IT BY MEASUREMENT: find the aiming reticle in a modern frame-dump
+    capture and compute its x-fraction. ~0.484 -> the constant is right and only
+    the comment is stale. ~0.5 -> it is a live fossil costing ~10 degrees on
+    every absolute bearing.
+  * `orchestrator._CALIBRATED_ASPECT = 1728 / 1117` -- the laptop display's
+    aspect, compared against `_MSS.monitors[1]` at import to warn that
+    "fractional crops will target the wrong pixels". The capture no longer comes
+    from mss at all; it comes from the frame dump. So the warning watches a
+    display that is not the capture source. It only PRINTS, so it is low blast,
+    but it is a guard that cannot mean what it says.
 
-The console is on the **PS5 HOME SCREEN** ("Continue where you left off - MOUSE: P.I. For
-Hire | 65%"). The game is closed, so the match described below is GONE and its
-`match_in_progress` flag was stale -- checked against the screen, then cleared with
-`clear_match_state.py`. Evidence: `agent_progress/ban-labels/EVIDENCE_ps5_home_match_gone.png` -- NOTE that
-`agent_progress/` is gitignored and safe to delete wholesale, so that frame lives only on
-this machine. What it shows is written out above so the record survives without it: the PS5
-home screen, Games tab, "Continue where you left off", with MOUSE: P.I. For Hire at 65% and
-a Play Game button. The game is not running.
+## WHAT LANDED TONIGHT (2 commits, both mutation-tested)
 
-    money        progress_testing.json balance $96, match_in_progress FALSE
-    preflight    READY (it said NOT READY while the flag was set -- correctly)
-    to resume    press Play Game on the PS5, then reload the save
+  ae83835  Cherry-pick the fallback counter: the fix landed, its guard did not
+  cfac235  A reset recovers spent money, so money is not a reason to refuse a run
 
-**LABELLING SHEETS ARE READY, seven of them**, at
-`agent_progress/ban-labels/roster_{1_4,5_8,9_12,13_16,17_20,21_24,25_25}.jpg` -- every card
-the ban archive can identify, four per sheet, each captioned with what the roster CLAIMS.
-Reading them confirms or corrects the roster's NUMBERS, which no independent source has ever
-checked (IGN confirmed the 33 NAMES; the stats rest on spot-checks). It needs no console.
+**The cherry-pick is the interesting one.** Auditing the stale worktrees found
+one commit never on main, a2b71d7. Checked BOTH halves rather than assuming:
+the production seam (`read_heading` threaded through `_look_around_for_a_node`
+into `ws.turn_to`) was ALREADY on main; the TEST's fallback counter was ABSENT.
+So the fix was fine and the thing that PROVES it stays fine was sitting where
+nothing runs it. `test_frozen_stream_is_invalid.py` still passed for the reason
+it always had -- because chiaki happened to be up -- and went red at ~04:00 on
+2026-09-09 when chiaki exited. Two mutants, both caught:
+  M1 `start = (read_heading or _default_heading)()` -> `_default_heading()`
+     -> FAIL on the compass check, capture check still PASSES (the original
+        bug's exact signature: only read_heading leaked)
+  M2 delete `_FELL_BACK["capture"] += 1`
+     -> caught by the second anti-vacuity control, which is the mutant that
+        SURVIVED before that control existed
 
-The same sheets are also what a ban-specific DIGIT BANK would be cut from -- see the parked
-item in OFFLINE_QUEUE.md for why the hand's bank cannot read ban cards (argmax 3 of 7).
-While the game is up, the viewer's `s` key dumps the same thing live for whatever is on
-screen.
+The commit's two OTHER test edits were deliberately NOT taken: they widened
+stubs to `**_kw`, while main now MIRRORS the real signature -- strictly better,
+because `**_kw` swallows a signature drift instead of failing on it.
 
-**THE ONE WARNING WORTH ACTING ON**, and it is the oldest open item on the project:
+## WORKTREES REMOVED (user-approved), 987M -> 8K
 
-    no calibrated window position recorded for this machine yet
+Both held complete, runnable copies of the whole input stack with NONE of
+today's lockouts:
 
-`window_drift()` can only ever report "ok" until a reference exists, and what it guards is
-a MONEY path -- a 110px window shift silently flipped a ban-grid cell and banned a different
-card, with no error raised. Arming it takes one command, on a ban screen that is reading
-correctly:
+                          focus_input_allowed  targeted  BASEBALL_TEST_RUN
+    live checkout                   5              3            12
+    both worktrees                  0              0           3-5
+    ensure_stream.py     live 5  ·  worktrees 0
+    inject_reset.py      live 3  ·  worktrees 0
 
-    python3 -c 'import input_controller as i; i.save_window_reference()'
+Unguarded `inject_reset.reset()` is OPTIONS x5 -> DPAD_DOWN x4 -> **CROSS x6**;
+mid-match OPTIONS opens "Give up?" and CROSS answers YES.
 
-That needs the game up and a good ban screen, so it is the first thing to do on waking.
+Checked before deleting: everything was tracked (overnight/ alone is 4,880
+tracked files), the only untracked things were .DS_Store and one JSON that is
+byte-identical and same-dated in main. The xenodochial tree's ignored entries
+were SYMLINKS INTO THE MAIN CHECKOUT (.venv, paddle_venv, screenshot_log, ...)
+-- `git worktree remove` was used rather than anything that could follow them,
+and all nine targets were verified present afterwards, with `git status` clean
+and no tracked file turned into a symlink (10.16a's signature).
 
-## THE ORIGINAL NOTE, kept for the money trail
+**The branch `claude/eloquent-spence-03fe41` was KEPT** so a2b71d7 stays
+reachable at zero disk cost. `git log --oneline -1 claude/eloquent-spence-03fe41`.
 
-## THE CONSOLE IS LEFT MID-MATCH. READ THIS FIRST.
+## IN FLIGHT WHEN THIS WAS WRITTEN
 
-A **paid match is open** and parked on the **ban screen, 0/3 banned**. Nothing was pressed
-after that. `$50 was spent and IS tracked`: `progress_testing.json` went 146 -> 96 with
-`match_in_progress: true`, debited BEFORE the press, which is the order `run()` uses so a
-crash leaves the record over-debited rather than under.
+Two background workflows, both in their Refute phase:
 
-    what            where
-    screen          ban screen, BANNED CARDS 0/3, scroll level 0
-    money           progress_testing.json balance 96, match_in_progress true
-    stream          healthy (chiaki restarted this session, see below)
+  wf_e5ec5d71-6c8   settle-width-provenance -- re-derives SETTLE_THRESHOLDS at
+                    1920 and at 2000 off the 14,437-frame 10Hz run, measures how
+                    many pairs change side of their gate, maps what breaks if
+                    the upscale is deleted
+  wf_013a062e-f8b   fossil-hunt -- five axes (stale constants, dead generations,
+                    duplicated facts, obsolete workarounds, inert flags), three
+                    skeptics per confirmed finding
 
-**Do not start another match without checking that flag.** A stale `match_in_progress`
-with a real dealer prompt on screen is how this project spends an untracked $50
-(CLAUDE.md). The flag is TRUE and CORRECT right now — a match really is open.
+Transcripts under
+`~/.claude/projects/-Users-bpatterson-.../subagents/workflows/<runId>/`;
+read `journal.jsonl` before assuming any cached result is non-empty.
 
-To finish it: Triangle plays with 0 bans. To abandon: OPTIONS, then Cross (YES); the
-reload restores the wallet. Either is fine; neither is urgent.
+## THE PROTOCOL FOR ACTING ON A FOSSIL (user-approved)
 
-## The stream froze mid-session and the fix is documented
+Never delete on an agent's say-so. CLAUDE.md's loudest warning is that the
+claims it gets WRONG are exactly the "unused / safe to remove" ones --
+`paddle_venv` was 777M of "nothing uses it" while five production runners
+shelled into it by subprocess.
 
-`tools/doctor.py` reported `picture frozen True` with the frame dump 6.6 MINUTES stale, and
-captures silently fell back to screen-grabbing the chiaki window — so two "live" renders
-were of a frozen picture. The user spotted it, not me. `_clear_blocking_ui()` did not clear
-it (the sequence number never moved), `./restart_chiaki.sh` did, in ~12 s. **Check
-`doctor.py`'s frozen line before trusting any capture**; a frozen frame looks completely
-normal.
+  1. Re-verify personally. An agent describing its own finding is the weakest
+     evidence available (10.16).
+  2. **Prove inertness by MUTATION, not grep.** A constant claimed unread: set
+     it to an absurd VALUE and run the suite -- if nothing changes, nothing
+     reads it. A function claimed uncalled: make the body raise -- if nothing
+     raises, nothing calls it. A grep misses `getattr`, a dict registry, a path
+     built from a string; a value change cannot be missed by a real reader.
+  3. **Name what the suite does not reach, and stop there.** The offline suite
+     never walks a leg, plays a match, or takes the recovery ladder. A fossil
+     living on one of those passes step 2 and is still live -- record it as
+     UNVERIFIED-DEAD and leave it. This is the step that would have saved
+     paddle_venv.
+  4. **Quarantine to `_obsolete/`, do not delete.** Git makes deletion
+     recoverable in principle; nobody does archaeology at 3am mid-run. The
+     exception is anything whose EXISTENCE is the hazard -- a second unguarded
+     copy of an input path -- which is why the worktrees went.
+  5. One commit per fossil, with a pointer left where it was, so a bisect names
+     it and the next person does not re-derive it.
 
-## What landed today (all committed, suite green at 182 files)
+**NOT TO BE TOUCHED:** `armor_venv` (601M, arrived 2026-09-09 with the local-OCR
+bake-off; its ONLY reference anywhere is a test's SKIP_DIRS list -- the exact
+paddle_venv shape, so it is recorded, not removed). Anything invoked by
+subprocess. Anything whose only consumer is a test -- a test IS a use.
 
-    1f22a23  the diamond capture never ran, and test_no_undefined_names was blind to it
-    92465ff  the paid lockout was one attribute name wide; the diamond lies on a ban screen
-    00365bf  every card is a BATTER or a PITCHER, and the simulator did not know
-    7001662  the live viewer drew match boxes on a ban screen
-    62755f6  the ban-grid rows MOVE; find them in the frame
-    290736c  read the card TYPE off the ban grid
-    a981ea2  locked is not unknown
-    d8b4f79  it is a 2D array: one row and the pitch place all of them
-    01a88cc  the pitch is confirmed by a second method (which is not a better estimator)
-    2b2bc1f  solve the grid's one unknown: 17 of 17 frames, phase error <= 0.003
-    053d5c4  the live viewer was broken and its error was only visible on screen
+## RULES IN FORCE
 
-## The ban grid is solved; here is the geometry, measured
+  * The paid vision model is OFF. `orchestrator.PAID_MODEL_ENABLED = False`,
+    raises `PaidModelDisabled`. Re-enabling needs the user to say so.
+  * Online work IS permitted (user, tonight): a reset recovers spent money, so a
+    bad match costs time and not money. It does NOT make a bad RESULT cheap --
+    see the wrong-ban defect below.
+  * Button presses go to the chiaki window and nothing else.
+  * Never read or print `PERSONAL_ANTHROPIC_API_KEY`; presence only.
+  * Mutation testing runs here only while nothing timing-sensitive is in flight
+    (no stick held, no leg walked, no A/B, no settle measured). Quote the
+    mechanism when overriding. Otherwise Snoopy, or wait.
 
-    columns   starts 0.145 0.280 0.415 0.550 0.685   pitch 0.135 (all four gaps identical)
-              width 0.130
-    rows      pitch 0.328   card height 0.2995   name banner at 0.79-0.93 of card height
-    phase     SOLVED PER FRAME by pooling the name banner's edges across every row
-              error vs a hand-read ruler: +0.001 +0.001 +0.001 +0.003 +0.003
-    coverage  17 of 17 archived frames, one box height per frame
+## THE OPEN DEFECT THAT SHOULD GATE ANY UNATTENDED MATCH
 
-`ban_grid.py` is standalone and has no test file yet — **that is the first thing to do.**
-It is load-bearing for everything below and is currently guarded only by the fact that I
-ran it on 17 frames by hand.
+**A stale column frame bans the WRONG CARD and reads as 3/3.** A horizontal
+press mid-travel moves no scrollbar, so `ban_cursor_absolute` reads a valid
+level and reports the halo where it still is -- a confident, stale cell. 126
+wrong-ban outcomes over 10,927 late-frame combinations; on the realistic
+3-target run **75 of them end with three cards banned, one of them wrong**, and
+`read_ban_counter` says 3/3 while the run prints "verified 3/3 bans placed".
+`ban_x_on` logs the wrong ban as a MISSING ban.
 
-## Open, in the order I would take them
+The fix is identified and not built: `ban_grid.banned_cells` already returns
+EVERY visible X and `ban_x_on` throws all but one away -- compare the full hit
+set against the expected set after each `select_card`. It changes ban
+verification on the $50 path and wants a live screen.
 
-1. **`ban_grid` has no tests.** Pin the phase against the frames in
-   `agent_progress/ban-labels/` (gitignored — copy the two or three that matter into
-   `test_fixtures/` first, named, never globbed) and mutation-test it.
-2. **Promote the fit into `orchestrator`.** `get_ban_grid_card_crop` still uses the fixed
-   fractions, which are wrong at most scroll positions. The offline 383-frame harvest
-   should be re-run through the fitted box; that is what finally audits the roster's
-   numbers rather than its names.
-3. **Read power and shield off ban cards.** `ban_grid.power_box` / `shield_box` exist and
-   are unused. The hand reader's TEMPLATE matcher is the right tool (the user's suggestion)
-   and beats tesseract, but it is anchored on a disc centre in hand-strip anchor units, so
-   the ban card has to be mapped into that frame first.
-4. **Two cards still untyped:** Brian Coker (8/1) and Zachary Lee (6/2). 31 of 33 are typed
-   from four agreeing signals. `simulate.UNTYPED` names them and keeps them in both pools.
-5. **QA findings not yet fixed** — two git worktrees still hold pre-lockout `orchestrator.py`
-   with 5 unguarded paid call sites reading the real key. Removal is destructive and needs
-   the user's yes. `xenodochial-babbage-349ee0` has 0 unique commits; `eloquent-spence-03fe41`
-   has 1 that duplicates `bea5fa4`.
-
-## Open questions that need the console, not code
-
-  * **Does a speed boost persist while a runner sits on base?** Two runners read +1 over
-    their card (Rube Sharp 1->2, Noah Kelly 2->3). The user's source says it does NOT
-    persist, and `simulate` models it that way. Unresolved; one live at-bat decides it.
-  * `FIELDING_SUBTRACT_PER_POINT = 1` is still unmeasured.
-
-## Rules in force
-
-The paid vision model is OFF and may not be re-enabled without the user saying so. Crawl
-mode: no console action without explicit approval.
+**Do that BEFORE spending recovered money on matches**, because a reset repairs
+the wallet and does not repair a conclusion.
