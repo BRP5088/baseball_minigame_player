@@ -1933,6 +1933,46 @@ pitched-down-at-the-table pose.
   The lesson that survives it: a guard whose trigger is a hand-kept list of
   NAMES rots silently, because nothing fails when a new name is missing.
 
+## A RESET IS THE MONEY RECONCILER, AND IT IS THE ONLY ONE (verified live 2026-09-13)
+
+The user's point, and it closes a question the QA sweep left open. There is no
+debit-undo anywhere in `orchestrator.py` -- `grep -nE "balance \+=|refund"` returns
+one prose comment -- so a $50 debited for a press the wallet was too poor to accept
+is never given back, and the tracked figure drifts below the game's forever.
+
+**It does not need one.** `Load Last Save` restores the wallet to **$246**, and
+`reset_env.reset_environment(progress_file=...)` clears `match_in_progress` on a
+CONFIRMED reset. So one action repairs BOTH halves of the drift, and the repair is
+free. What it does NOT do is set the tracked balance -- that is still by hand, because
+the wallet is not read from the game.
+
+    reset_env.reset_environment(progress_file="progress_testing.json")   # wallet -> 246,
+                                                                         # flag cleared
+    orchestrator.save_progress(w, l, d, 246, "progress_testing.json", ...)  # record -> 246
+
+**Walked end to end on the live rig, and every step is worth recording:**
+
+- The PS5 had auto-slept. `streaming()` returned **False** on chiaki's own host list
+  (`State: standby`) -- OPEN-18's fix doing exactly its job on the one screen that used
+  to make it answer True in 0.0s on a sleeping console. `ensure_live()` woke it in 8 s.
+- **The pause menu was found OPEN**, left that way by an earlier `read_balance_from_
+  pause_menu` whose paid call raised before reaching the close. That is the live form
+  of the bug fixed hours earlier by moving the close into a `finally`; the evidence
+  arrived after the fix, not before.
+- `pause_menu.read_money` read **196**, then **246** after the reload -- its first ever
+  use on the production path, correct both times, no paid call. The frame scored
+  `page_fraction` **0.9401**, inside the PAUSE band 0.9263..0.9446 and well clear of the
+  ban book's 0.8587 maximum: the census that found the ban-screen false positive is
+  confirmed from the other side.
+- **The local reader needs RETRIES right after a reload.** The settle gate reported the
+  regions still moving at 6.0 s, `read_money` correctly refused (its two OCR scales
+  disagreed), and a single-shot read then fell through to the paid call and raised. The
+  reader was right; asking once was wrong. `MONEY_READ_TRIES = 5`, the same lesson
+  `_verify_bans` already carries for the ban counter. More tries can only turn a
+  refusal into an answer -- every attempt is the same conservative reader -- so this
+  invents no confidence.
+- The reset landed at spawn bearing **87 (E)**, reproducing section 8(d) exactly.
+
 ## A STALE match_in_progress SPENDS AN UNTRACKED $50
 
 Reproduced 2026-09-04. When the flag is stale and a real dealer prompt is on

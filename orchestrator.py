@@ -5993,6 +5993,14 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     return full_collection
 
 
+# How many times to ask the LOCAL money reader before giving up on it. It requires
+# two OCR scales to agree, which a mid-animation frame will not satisfy -- and the
+# menu is still animating for seconds after a Load Last Save. Not a confidence
+# threshold: every attempt is the same conservative reader, so more tries can only
+# turn a refusal into an answer, never a wrong answer into a confident one.
+MONEY_READ_TRIES = 5
+
+
 def read_balance_from_pause_menu() -> int:
     """
     Open the pause menu, read the money total off it via vision, then
@@ -6086,7 +6094,19 @@ def read_balance_from_pause_menu() -> int:
             raise RuntimeError(
                 "refusing to read the wallet off a ban screen — the page-brightness "
                 "guard admits it, and a confident wrong balance is worse than none")
-        _local_money = _pm.read_money(_frame)
+        # RETRY, for the same reason _verify_bans retries the ban counter: "one
+        # unlucky frame (mid-animation) returned None and the whole check failed".
+        # Measured live 2026-09-13 right after a Load Last Save -- the settle gate
+        # reported the regions still moving at 6.0 s, read_money correctly refused
+        # (its two OCR scales disagreed), and the single-shot path then fell through
+        # to the paid call and raised. The reader was right; asking once was wrong.
+        for _try in range(MONEY_READ_TRIES):
+            _local_money = _pm.read_money(_frame)
+            if _local_money is not None:
+                break
+            if _try + 1 < MONEY_READ_TRIES:
+                time.sleep(0.6)
+                _frame = _fast_grab()
     except RuntimeError:
         raise
     except Exception as _e:
