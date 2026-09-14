@@ -821,8 +821,37 @@ someone's keyboard. Four mutants, all caught -- including a planted
 A $50 match played end to end on 2026-09-13, the first ever -- every earlier one died at
 the paid orientation read. It could not play a single card, and the cause is one number.
 
-**The reader is calibrated at a HAND CROP 979 px wide (`local_hand.ANCHOR_W`). The rig
-captures 2000x1125, whose hand crop is 1020 px -- 1.042x.** Section 3 has carried "the
+**CORRECTION, and it matters: THE RIG DID NOT CHANGE. THE CODE UPSCALES ON PURPOSE.**
+The first write-up of this said "the rig captures 2000x1125" as though the hardware had
+moved. It has not. The PS5 streams 1920x1080 and both capture functions return exactly
+that -- `compass.fast_capture()` and `game_capture.grab()` measured live, both 1920x1080.
+It is `_fast_grab` that asks for something else:
+
+    img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)   # 2000
+
+and its own comment says why: "the logged frames the SETTLE_THRESHOLDS were calibrated
+against were 2000px wide. Mean-absolute-delta is scale-sensitive -- downscaling averages
+noise differently -- so feeding a different resolution silently shifts every threshold."
+
+**So there are TWO CALIBRATION WIDTHS IN THIS CODEBASE AND THEY DISAGREE:**
+
+    SETTLE_CALIBRATION_WIDTH = 2000     the settle gate; mean-abs-delta is scale-sensitive
+    local_hand.ANCHOR_W      =  979     the hand crop, which a 1920 px frame produces
+
+    a 1920 px frame  ->  hand crop  979 px   (= ANCHOR_W, exactly)
+    a 2000 px frame  ->  hand crop 1020 px   (4% too wide)
+
+One `_fast_grab` serves both readers, and the hand reader is the one that loses. That is
+also why the diagnostics bundle carried both sizes: `screen_at_stall.png` comes from
+`_fast_grab()` (upscaled) and `after_stall_*.png` from `game_capture.grab()` with no
+width argument (native).
+
+Normalising the HAND CROP to ANCHOR_W reconciles the two rather than picking a side: the
+settle gate keeps its 2000 px frame and its thresholds stay valid, the hand reader gets
+the 979 px crop it was measured on. Neither calibration is broken and no constant moves.
+
+**The reader is calibrated at a HAND CROP 979 px wide (`local_hand.ANCHOR_W`). `_fast_grab`
+hands it 1020 px -- 1.042x.** Section 3 has carried "the
 hand reader itself is not scale-free" as an open item; this is what it costs. The size
 gates are RAW PIXELS (`DISC_MIN_R` 18, `DISC_WHITE_SIZE` 30-50, `circle_finder.DIGIT_W`
 6-26) while every SCALED constant already divides by ANCHOR_W.
@@ -838,10 +867,12 @@ than partial -- it reads marginally, not never, which is why nothing looked obvi
 broken. All 22 decisions came back `Playing None`, 11 plays were refused for want of a
 cursor (glow 10.4-10.9 against `CURSOR_GLOW_MIN` 15), and not one card was played.
 
-**NOTHING ON DISK COULD HAVE CAUGHT IT.** Every archived run is 1920x1080, whose hand crop
-is EXACTLY 979 -- the whole corpus sits at the calibration width by construction, so
-normalising is a literal no-op there and no census could show the gap. 10.31's shape
-again: a population that cannot contain the failing class.
+**NOTHING ON DISK COULD HAVE CAUGHT IT.** Every archived frame is 1920x1080 -- they were
+written by `game_capture.grab()`, which does not upscale -- so the whole corpus sits at
+the calibration width by construction, normalising is a literal no-op there, and no
+census taken from it could show the gap. The failing geometry exists ONLY in memory,
+between `_fast_grab` and the reader, and is never written to disk. 10.31's shape again:
+a population that cannot contain the failing class.
 
 Fixed by normalising the hand crop to ANCHOR_W in `crop_gameplay_regions`, the one place
 every consumer takes it from, so `s = img.width / ANCHOR_W` is 1.0 for all of them at
