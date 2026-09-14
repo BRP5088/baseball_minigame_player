@@ -2442,6 +2442,52 @@ the step. Measured 2026-09-07: four flagship agents drafting scripts burned
 already killed; the static QA audit on Haiku, ten agents, cost 1.16M for an
 evening's findings. Token bleed is a failure of the DISPATCH, not of the agent.
 
+**16b. IN A FAN-OUT, EVERY DEFAULT IS A COLLISION, AND OMITTING A SETTING IS
+NOT NEUTRAL.** Written 2026-09-13 after breaking BOTH halves of the rule above
+in one evening, having read it first.
+
+Two workflows dispatched **57 agents**. The nine hunters were fine: each got its
+own axis key, so each got its own directory, and each left a 85-221 line
+`progress.md` with the scripts that produced its numbers sitting beside them --
+which is what the rule asks for, and what survives a kill.
+
+**The other 46 were refuters spawned from ONE prompt template, and the template
+carried ONE literal path.** Every skeptic was told to write to
+`agent_progress/qa4-refute/progress.md`. They overwrote each other all evening:
+28 lines survived for ~24 agents, and the file's own header names a single lens,
+so 23 agents' reasoning is simply gone. The same template also omitted
+`opts.model`, and in a workflow script **omitting the model INHERITS THE
+MAIN-LOOP MODEL** -- so 46 agents ran grep, `ast.parse` and caller-tracing on
+the flagship at high effort, which is precisely what the paragraph above
+measured and forbade.
+
+    the shape: a per-agent setting written ONCE in a shared template
+               produces N agents that are identical where they must differ
+
+So the check before any fan-out is not "did I follow 10.16" -- I had -- it is
+**"which fields in this template must VARY per agent, and does each actually
+vary?"** Today that is exactly two:
+
+    the scratch path   parameterise it:  <wf>-refute/<claim-slug>-<lens>/
+                       a literal path in a loop body is N agents, one file
+    the model          set it EXPLICITLY: haiku for grep / AST / caller-trace /
+                       file census; flagship only for synthesis, and for
+                       adversarial refutation of a finding on the money path
+
+Both failures are SILENT. A clobbered note looks exactly like a note nobody
+wrote, and a flagship agent grepping looks exactly like a cheap one grepping
+until the bill arrives -- 10.1's family, one level up, in the dispatch itself.
+
+**AND VERIFY THE NOTES EXIST RATHER THAN TRUSTING THE INSTRUCTION**, because
+the instruction being in the prompt is not evidence it was followed. The check
+that was run first here was
+`find agent_progress -name progress.md -newermt '3 hours ago'` -- and this
+machine's `find` is **bfs**, which rejects a relative timestamp with
+`Invalid timestamp` AND EXITS 0. It printed nothing, the `|| echo` fallback
+never fired, and the empty output read as "no agent wrote anything", which was
+false. Use `-mmin -180`. A verification that cannot fire is worse than none,
+and it is the same bug the fan-out itself had.
+
 **16a. A SUB-AGENT'S SCRATCH TREE IS A COPY, NEVER A SYMLINK FARM, AND NEVER
 INSIDE THE CHECKOUT.** 2026-09-07 22:47: a skeptic building a "scratch copy
 with symlinks to the rest of the checkout" ran its `ln -s` loop with the
