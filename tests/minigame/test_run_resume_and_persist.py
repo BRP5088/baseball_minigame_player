@@ -329,6 +329,53 @@ check(len(hc.batters_seen) >= 3 and hc.batters_seen[2] == 0,
       "matches because last_phase never resets")
 
 
+# A NEW HALF DEALS A FRESH HAND, so the memory of the old one is five wrong cards.
+# reset_hand_memory() had exactly two call sites, both in the match_start_prompt
+# branch; the phase-change branch called neither. Demonstrated: a batting-half slot
+# remembered as secondary 3 -- a BATTER'S SPEED, which the role census says a pitcher
+# is never -- stayed live for every pitching turn. Its safety net cannot catch this:
+# memory is consulted only for slots the reader CANNOT see, so a readable card never
+# audits it.
+class _MemoryHarness(Harness):
+    """Records what the hand memory held at the start of each turn."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.memory_at_turn = []
+
+    def _play_one_turn(self, state_json, turns_this_half):
+        self.memory_at_turn.append((state_json.get("phase"),
+                                    dict(orchestrator._hand_memory)))
+        # stand in for a card the reader could see and remembered
+        orchestrator._hand_memory[3] = PlayerCard("Remembered", 9, 3)
+        return super()._play_one_turn(state_json, turns_this_half)
+
+
+_BAT = {"screen": "turn", "phase": "batting", "your_score": 0, "opp_score": 0,
+        "hand": [], "runners": [], "discards_left": 2}
+_PIT = dict(_BAT, phase="pitching")
+orchestrator._hand_memory.clear()
+hm = _MemoryHarness(["match_start_prompt", _BAT, _BAT, _PIT, _PIT],
+                    play_results=[(True, None)] * 4, balance=500)
+hm.run(target_wins=99, max_spend=500)
+_phases = [p for p, _m in hm.memory_at_turn]
+check(_phases[:4] == ["batting", "batting", "pitching", "pitching"],
+      f"fixture error: the harness must cross a half boundary, saw {_phases}")
+_first_pitch = next((m for p, m in hm.memory_at_turn if p == "pitching"), None)
+check(_first_pitch == {},
+      f"the first PITCHING turn inherited the batting half's hand memory "
+      f"({_first_pitch}) — a new half deals a fresh five, so every remembered slot "
+      "is a wrong card, and a remembered secondary of 3 is a batter's speed that no "
+      "pitcher has")
+# ...and the control: within a half the memory must SURVIVE, or the reader loses the
+# occluded-card recovery the memory exists for.
+_second_bat = [m for p, m in hm.memory_at_turn if p == "batting"][1:2]
+check(_second_bat and _second_bat[0] != {},
+      f"CONTROL: the memory was cleared WITHIN a half ({_second_bat}) — that throws "
+      "away the occluded-card recovery it exists for")
+orchestrator._hand_memory.clear()
+
+
 # QA1-F8. Guard-suppressed stalls used to break without setting stop_reason, so
 # they wrote no bundle and printed the same closing line as a healthy stop —
 # from the terminal, indistinguishable from running out of money. Those are the

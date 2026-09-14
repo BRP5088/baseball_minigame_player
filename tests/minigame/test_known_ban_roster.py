@@ -55,6 +55,11 @@ assert len(roster_hits) != len(mixed_batch)
 # TWO INDEPENDENT AGREEING reads — one sighting is held in memory only.
 test_file = "test_learned_roster_scratch.json"
 orchestrator.LEARNED_BAN_ROSTER_FILE = test_file
+# This file drives PERSISTENCE on purpose, against the scratch path above.
+# _learn_roster_entry refuses to write under BASEBALL_TEST_RUN since
+# 2026-09-13 -- a learned entry is permanent ground truth that vision
+# never re-reads -- so opt in explicitly.
+orchestrator.LEARN_ROSTER_IN_TESTS = True
 if os.path.exists(test_file):
     os.remove(test_file)
 new_pos = (6, 3)
@@ -174,11 +179,21 @@ import orchestrator as _o
 # read_full_ban_collection against a short collection and asserts the session
 # cache is not poisoned. The source-text check below stays as a cheap tripwire
 # for the specific line being removed.
-_src = __import__("inspect").getsource(_o.read_full_ban_collection)
-assert "len(full_collection) >= 3" in _src, (
-    "read_full_ban_collection caches unconditionally again — a single bad "
-    "frame will poison the whole process")
-print("OK: short/empty ban scans are not cached (>=3 cards required)")
+# A SOURCE-SUBSTRING TRIPWIRE WAS HERE, and it fired on a CORRECT change. It asserted
+# the literal "len(full_collection) >= 3" appeared in the source; refactoring that into a
+# named _short flag plus a new desync gate -- strictly stronger behaviour -- broke it
+# while the guarantee got better. That is the failure mode of every source-text
+# assertion, and this project hit it twice on 2026-09-13 alone.
+#
+# Behavioural instead, and cheap: the function must still REFUSE to cache something it
+# cannot trust. test_ban_scan.py sections 3 and 3b drive the real scan for both reasons
+# (too short, and desynced) with a control proving a healthy scan IS cached; four
+# mutants confirmed all three bite. This asserts the seam those rely on still exists.
+assert hasattr(_o, "_cached_ban_collection"), (
+    "the session ban cache is gone — test_ban_scan's poisoning guards now test nothing")
+_o._cached_ban_collection = ["sentinel"]
+_o._cached_ban_collection = None
+print("OK: short/desynced ban scans are not cached (behaviour pinned in test_ban_scan)")
 
 
 # --- The two ground truths must not drift apart --------------------------

@@ -17,6 +17,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
     _ROOT = _os.path.dirname(_ROOT)
 _sys.path.insert(0, _ROOT)
 
+import glob
 import os
 os.environ["BASEBALL_TEST_RUN"] = "1"
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
@@ -120,6 +121,110 @@ check(pm.read_money(imgs[LIVE], ocr=_steady) == 196,
 print("\n7. AND IT NEVER RETURNS SOMETHING A WALLET CANNOT HOLD")
 check(pm.MONEY_MIN == 0 and pm.MONEY_MAX == 9999,
       f"the range is 0..9999 ({pm.MONEY_MIN}..{pm.MONEY_MAX})")
+
+# --- IT MUST ACTUALLY BE CALLED, and the menu must always close --------------
+# This reader was built, measured on both capture geometries, fully tested -- and had
+# ZERO production callers. Both sites wanting a balance called
+# read_balance_from_pause_menu, which is a PAID call; with the paid model off it raises,
+# run_cycles swallows that and returns its hardcoded RESET_BALANCE_FALLBACK of 246 every
+# cycle. So the only thing able to reconcile the tracked balance against the game was a
+# constant, while "Load Last Save" keeps putting $246 back in the wallet and the tracked
+# figure only ever marches down. A measurement built and never wired (10.1).
+import orchestrator as _o
+
+_saved = (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+          pm.is_pause_screen, pm.read_money, _o.read_ban_counter)
+_presses = []
+try:
+    _o.press = lambda k, *a, **kw: _presses.append(k)
+    _o.wait_for_screen_to_settle = lambda *a, **k: True
+    _o._fast_grab = lambda: "FRAME"
+    pm.is_pause_screen = lambda img: True
+    # The money path now refuses a BAN screen, so this block has to say which book
+    # it is looking at. None = "not a ban screen", i.e. the pause book.
+    _o.read_ban_counter = lambda img: None
+
+    pm.read_money = lambda img, ocr=None: 196
+    _presses.clear()
+    _got = _o.read_balance_from_pause_menu()
+    check(_got == 196,
+          f"read_balance_from_pause_menu ignored the LOCAL reader and returned {_got}")
+    check(_presses == ["toggle_pause", "toggle_pause"],
+          f"the menu must be opened and closed exactly once each, got {_presses}")
+
+    # ...and when the local reader abstains, the paid path raises (the model is off) --
+    # the menu must STILL close. It used to close only AFTER the paid call, so any
+    # exception from it left the game PAUSED for the rest of the run, and the symptom
+    # looks like dead input at a healthy stream.
+    pm.read_money = lambda img, ocr=None: None
+    _presses.clear()
+    try:
+        _o.read_balance_from_pause_menu()
+        check(False, "with the paid model off the paid path must raise, not answer")
+    except Exception as _e:
+        check(type(_e).__name__ == "PaidModelDisabled",
+              f"expected PaidModelDisabled, got {_e!r}")
+    check(_presses.count("toggle_pause") == 2,
+          f"the pause menu was left OPEN when the read raised ({_presses}) — every "
+          "press after this lands in a menu instead of the world")
+finally:
+    (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+     pm.is_pause_screen, pm.read_money, _o.read_ban_counter) = _saved
+
+# --- THE BAN SCREEN IS A NOTEBOOK PAGE TOO -----------------------------------
+# is_pause_screen's negative population was a bright WALL (n=1). The ban book is a
+# THIRD CLASS that was never in it -- 10.31's missing-class shape exactly. Censused
+# over 10,239 frames: PAUSE 0.9263..0.9446 (n=14), BAN 0.7101..0.8587 (n=1140),
+# everything else up to 0.9272. 1,122 of 1,140 ban frames clear PAGE_MIN_FRAC 0.80,
+# and MENU_TEXT_MIN_FRAC cannot rescue it (ban 0.1224-0.4148 vs pause 0.0733-0.4309,
+# complete overlap -- no threshold on that quantity separates two notebooks).
+#
+# Over 1,131 ban frames read_money returns a CONFIDENT WRONG balance on 5 ($7 x4,
+# $1 x1) with both OCR scales agreeing. That is the "$246 -> $100" failure its own
+# docstring exists to prevent, reached THROUGH the guard. Harmless while read_money
+# had no callers; wiring it into the money path is what made it live.
+_saved2 = (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+           pm.is_pause_screen, pm.read_money, _o.read_ban_counter)
+_p2 = []
+try:
+    _o.press = lambda k, *a, **kw: _p2.append(k)
+    _o.wait_for_screen_to_settle = lambda *a, **k: True
+    _o._fast_grab = lambda: "FRAME"
+    pm.is_pause_screen = lambda img: True        # the guard that admits a ban screen
+    pm.read_money = lambda img, ocr=None: 7      # the confident wrong value it gives there
+
+    _o.read_ban_counter = lambda img: 2          # ...but the ban counter answers
+    _p2.clear()
+    try:
+        _got2 = _o.read_balance_from_pause_menu()
+        check(False, f"read the wallet off a BAN screen and returned ${_got2} — a "
+                     "confident wrong balance is worse than none")
+    except RuntimeError as _e:
+        check("ban screen" in str(_e),
+              f"refused for the wrong reason: {_e!r}")
+    check(_p2.count("toggle_pause") == 2,
+          f"refusing left the pause menu OPEN ({_p2})")
+
+    # CONTROL: a real pause screen has no ban counter, and must still read.
+    _o.read_ban_counter = lambda img: None
+    pm.read_money = lambda img, ocr=None: 196
+    _p2.clear()
+    check(_o.read_balance_from_pause_menu() == 196,
+          "CONTROL: a genuine pause screen must still be read — otherwise this rule "
+          "disables the money path entirely and reads like a working guard (10.1)")
+finally:
+    (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+     pm.is_pause_screen, pm.read_money, _o.read_ban_counter) = _saved2
+
+# ...and the underlying fact, on real frames, so the census above is not just prose.
+_ban_fx = sorted(glob.glob(os.path.join(_ROOT, "test_fixtures", "ban_digits", "*.jpg")))
+_admitted = [os.path.basename(f) for f in _ban_fx
+             if pm.is_pause_screen(Image.open(f))]
+check(_admitted,
+      f"fixture error: no ban fixture is admitted by is_pause_screen ({len(_ban_fx)} "
+      "scanned) — then this whole section is guarding nothing and the census is stale")
+print(f"  (is_pause_screen admits {len(_admitted)} of {len(_ban_fx)} ban fixtures: "
+      f"{_admitted})")
 
 print()
 if _fails:

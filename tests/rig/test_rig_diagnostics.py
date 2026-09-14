@@ -83,6 +83,12 @@ def _say(fn, *a, **kw):
 # 1. ensure_stream.is_frozen() — a failed capture is not "the picture is fine"
 # ===========================================================================
 import ensure_stream as es
+# This file drives ensure_stream's ORCHESTRATION on purpose, against stubbed
+# internals. The module refuses to run under BASEBALL_TEST_RUN since 2026-09-13 --
+# the offline suite was reaching the LIVE rig, and one rung further is
+# restart_chiaki.sh, i.e. kill -9 on the user's stream -- so opt in explicitly.
+es.RIG_DRIVER_IN_TESTS = True
+
 
 
 class _Img:

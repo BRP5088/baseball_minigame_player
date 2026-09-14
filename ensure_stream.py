@@ -237,6 +237,36 @@ def looks_like_ui(img):
         return False
 
 
+# Opt-in for the tests that drive this module's ORCHESTRATION on purpose, against
+# stubbed internals (test_ensure_live_clears_ui, test_frozen_stream,
+# test_rig_diagnostics). OFF by default so no test can reach the real rig; a test
+# that forgets gets a refusal and FAILS, which is the safe direction to be wrong in.
+RIG_DRIVER_IN_TESTS = False
+
+
+def _refuse_under_test(what):
+    """The whole module is a RIG DRIVER. No test may run it.
+
+    Demonstrated 2026-09-13: tests/minigame/test_budget_reserve_fits.py imports
+    run_cycles, which reaches ensure() -> streaming() -> _heartbeat_seen(), which
+    polls the live chiaki log for up to HEARTBEAT_WAIT_SEC. The file HUNG at the
+    suite's 300 s ceiling. The ceiling is the only thing that stopped it, and the
+    next rung is worse: ensure_live() shells out to ./restart_chiaki.sh, which is
+    `pgrep -x chiaki` then `kill -9`. An offline test run could kill the user's
+    live stream -- with a paid match on screen -- and nothing would have said why.
+
+    _key() alone was not enough, and gating it made this MORE likely rather than
+    less: with the keys suppressed the clear ladder posts nothing, is_frozen()
+    stays true, and the loop falls straight through to the restart. Guarding the
+    leaf without guarding the entry point pushed the failure downhill.
+    """
+    if os.environ.get("BASEBALL_TEST_RUN") and not RIG_DRIVER_IN_TESTS:
+        print(f"  [stream] BASEBALL_TEST_RUN is set — refusing to {what}. "
+              "This module drives the rig; a test must stub it, not run it.")
+        return True
+    return False
+
+
 def streaming(img=None):
     """Is a game stream actually on screen?
 
@@ -347,6 +377,8 @@ def streaming(img=None):
 
 def ensure(log=print):
     """Return True once the stream is up, reconnecting if it is not."""
+    if _refuse_under_test("probe the stream"):
+        return False
     if streaming():
         # ONCE, at the entry — not on the poll below, which runs every few
         # seconds. Without this the log says only "the stream is up", and a
@@ -404,6 +436,8 @@ def is_frozen(gap=1.2):
     measures delta 0.0 and reports "NO input is reaching the game" — which sent
     two investigations at the input path while input was fine.
     """
+    if _refuse_under_test("compare live frames"):
+        return False
     import numpy as np
     import compass
 
@@ -443,6 +477,8 @@ def ensure_live(log=print, restarts=2):
     measurement was lost on 2026-09-02 because every reset in it probed a still
     picture and concluded the input was dead.
     """
+    if _refuse_under_test("probe or RESTART the stream"):
+        return False
     import subprocess
 
     for attempt in range(restarts + 1):

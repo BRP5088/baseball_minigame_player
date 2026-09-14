@@ -209,14 +209,49 @@ check((off_ocr, off_vision) != (on_ocr, on_vision),
 # later call in the process is served the empty list, including the caller's
 # own retry loop. One bad frame cost the match fee and ended the session.
 _blank = Image.new("RGB", _REAL.size, (10, 10, 10))
+# CAPTURED INSIDE THE BLOCK. Rig.__exit__ sets _cached_ban_collection = None
+# unconditionally, so an `is None` assertion placed after the `with` passes
+# whatever the scan did -- this check could not fail until 2026-09-13, and the
+# control added below is what exposed it.
 with Rig(frames=[_blank]) as rig:
     bad = o.read_full_ban_collection(max_presses=2, use_cache=True,
                                      trust_roster=True)
+    _cached_after_bad = o._cached_ban_collection
     check(len(bad) < 3, f"fixture error: blank frame yielded {len(bad)} cards")
-    check(o._cached_ban_collection is None,
+    check(_cached_after_bad is None,
           f"a {len(bad)}-card scan was cached — a single bad frame now poisons "
           "every later scan in this process, and the retry loop cannot recover "
           "because it is served the same bad result")
+
+# --- 3b. A DESYNCED scan must not poison the cache either -----------------
+# The >= 3 floor above was sized against a mid-animation frame that returns [].
+# OPEN-23's real failure returned EIGHT cards of a ~33-card collection, which
+# clears that floor comfortably -- and the scan's own desync branch had already
+# printed "press count says row 39, the scrollbar says 4", so it KNEW. The result
+# was cached anyway and served to every later ban screen in the process with zero
+# captures, and run() never clears it. Every match after the first then bans the
+# best 3 of a stale fraction, silently.
+with Rig(scroll_override=1) as rig:          # scrollbar pinned: presses advance, it does not
+    desynced = o.read_full_ban_collection(max_presses=8, use_cache=True,
+                                          trust_roster=True)
+    _cached_after_desync = o._cached_ban_collection
+check(len(desynced) >= 3,
+      f"fixture error: this scan must return ENOUGH cards to clear the >= 3 floor, "
+      f"or it proves nothing about the desync gate (got {len(desynced)})")
+check(_cached_after_desync is None,
+      f"a scan that disagreed with the scrollbar cached {len(desynced)} card(s) — it "
+      "may be a fraction of the collection, and a cached fraction bans the best of "
+      "that fraction for the rest of the process")
+
+# ...and the CONTROL: a healthy scan must still cache, or this rule would quietly
+# disable caching altogether and read exactly like a working one (10.1).
+with Rig() as rig:
+    healthy = o.read_full_ban_collection(max_presses=6, use_cache=True,
+                                         trust_roster=True)
+    _cached_after_healthy = o._cached_ban_collection
+check(len(healthy) >= 3 and _cached_after_healthy is not None,
+      f"CONTROL: a healthy scan of {len(healthy)} card(s) was NOT cached — the desync "
+      "gate is rejecting everything, which reads exactly like a working gate (10.1)")
 
 # --- 4. The cursor is returned to the top ---------------------------------
 # The scan scrolls down to read; select_bans_and_start_full() then navigates

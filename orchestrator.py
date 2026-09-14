@@ -501,7 +501,15 @@ def _running_under_test() -> bool:
     return entry.startswith("test_") and entry.endswith(".py")
 
 
-_SYNTHETIC_LOG = _running_under_test()
+# READ AT CALL TIME. This was `_SYNTHETIC_LOG = _running_under_test()`, bound at
+# import -- two functions below a docstring that teaches the opposite rule for exactly
+# this file ("Call time, not import time (10.18) ... a footgun that reads as working and
+# silently does not"). Set BASEBALL_TEST_RUN after `import orchestrator` and the stamp
+# was False while _running_under_test() was True, so a test row landed UNSTAMPED in the
+# real match_log.jsonl -- which the documented `grep -v '"_synthetic": true'` cleanup
+# would never have removed. That happened during the QA sweep that found it.
+def _synthetic_log():
+    return _running_under_test()
 
 
 # THE DEAL-TIMING DATASET, and it is a SEPARATE FILE on purpose.
@@ -538,7 +546,7 @@ def _deal_log_path():
     explicit = os.environ.get("BASEBALL_DEAL_LOG")
     if explicit:
         return explicit
-    return None if _SYNTHETIC_LOG else DEAL_LOG_FILE
+    return None if _synthetic_log() else DEAL_LOG_FILE
 
 
 def log_deal_timing(record: dict):
@@ -557,7 +565,7 @@ def log_deal_timing(record: dict):
         if path is None:
             return                     # under test with no redirect: write nothing
         record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **record}
-        if _SYNTHETIC_LOG:
+        if _synthetic_log():
             record = dict(record, _synthetic=True, _source="test-suite")
         with open(path, "a") as f:
             f.write(json.dumps(record) + "\n")
@@ -573,7 +581,7 @@ def log_matchup(record: dict):
     # by diffing a count taken before and after. `ts` first, so a row's origin
     # is visible without parsing the whole line.
     record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **record}
-    if _SYNTHETIC_LOG:
+    if _synthetic_log():
         record = dict(record, _synthetic=True,
                       _source="test-suite", _written=time.strftime("%Y-%m-%dT%H:%M:%S"))
     with open(MATCH_LOG_FILE, "a") as f:
@@ -4471,7 +4479,20 @@ def read_state_for_turn():
     stuck attempts, so the run surfaces the missing reader instead of buying past it.
     """
     global _paid_state_done
-    if not PAID_STATE_ONCE or not _paid_state_done:
+    # ...AND `paid_model_allowed()`, or the turn loop cannot run at all.
+    #
+    # This branch made the ORIENTATION read PAID, unconditionally. With the paid model
+    # off -- the shipped default and the user's standing instruction -- read_game_state
+    # raises PaidModelDisabled, and `_paid_state_done = True` is set AFTER the call so it
+    # is never reached: EVERY turn raises, run() counts 15 stuck attempts and stops with
+    # `unreadable_screens`. The loop this project exists to run could not play a single
+    # match. No test caught it because every run harness stubs read_state_for_turn.
+    #
+    # Nothing is lost by skipping it. Section 3 lists a local reader for every field the
+    # orientation read supplies, and the line below already falls through to exactly
+    # those; the paid read was a convenience for the first turn of a cycle, not a
+    # dependency. When the model IS allowed the old behaviour is unchanged.
+    if (not PAID_STATE_ONCE or not _paid_state_done) and paid_model_allowed():
         st = read_game_state()
         _paid_state_done = True
         print(f"  [state] orientation read (PAID): screen={st.get('screen')!r} "
@@ -4677,7 +4698,18 @@ KNOWN_BAN_ROSTER = {
 # runs (any save) never need vision for that position again. The roster is
 # game-wide fixed data, not per-save, so unlike _cached_ban_collection this
 # is safe — and useful — to keep across runs.
-LEARNED_BAN_ROSTER_FILE = "known_ban_roster_learned.json"
+# Opt-in for the one test that drives persistence on purpose (test_known_ban_roster),
+# which points LEARNED_BAN_ROSTER_FILE at its own scratch path first. OFF by default so
+# an offline run can never write PERMANENT ground truth into the real file; a test that
+# forgets writes nothing and FAILS, which is the safe direction to be wrong in.
+LEARN_ROSTER_IN_TESTS = False
+
+# ANCHORED ON THIS FILE, like compass_scale.json and view_bounds.json, not on cwd.
+# A bare relative name means a run launched from anywhere else loads no learned
+# entries at import and writes a fresh file there -- the learned roster silently
+# stops applying, with nothing to see.
+LEARNED_BAN_ROSTER_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "known_ban_roster_learned.json")
 
 
 def _load_learned_roster():
@@ -4742,6 +4774,17 @@ def _learn_roster_entry(pos, card, source="unknown"):
 
     KNOWN_BAN_ROSTER[pos] = card
     ROSTER_BY_NAME[norm_name(card.name)] = card   # M7: keep name lookup in sync
+
+    # THE WRITE IS SUPPRESSED UNDER TEST, like every other per-machine cache. This was
+    # the one write-then-read file without the guard: compass._save_scale_cache and
+    # input_controller._save_view_cache both have it, this did not. And the cost here is
+    # worse than theirs -- a learned entry is PERMANENT ground truth ("once written,
+    # that position short-circuits and vision NEVER re-reads it, on any save, ever"), so
+    # an offline run driving the ban scan with two agreeing reads poisons the roster for
+    # good. The in-memory learning above still happens, so tests exercise the same path
+    # with the same values; only the persistence stops.
+    if os.environ.get("BASEBALL_TEST_RUN") and not LEARN_ROSTER_IN_TESTS:
+        return True
     raw = {}
     if os.path.exists(LEARNED_BAN_ROSTER_FILE):
         # Tolerate a corrupt cache here too. _load_learned_roster() already
@@ -5655,6 +5698,9 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     wasteful, bounded by max_presses).
     """
     global _cached_ban_collection
+    # Did this scan ever disagree with the scrollbar? A scan that did may have seen a
+    # fraction of the collection, and caching a fraction is worse than re-scanning.
+    _saw_desync = False
     if trust_roster is None:
         trust_roster = TRUST_ROSTER_ONLY
     if use_cache and _cached_ban_collection is not None:
@@ -5706,6 +5752,7 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                 wait_for_screen_to_settle(max_wait=6.0, regions="ban")
                 continue
             if _lvl != top_row:
+                _saw_desync = True
                 print(f"  [ban] SCROLL DESYNC: press count says row {top_row}, "
                       f"the scrollbar says {_lvl}. Trusting the scrollbar — the "
                       "press count cannot see a dropped keystroke, and a wrong "
@@ -5923,9 +5970,23 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     #
     # Three bans are needed, so anything under three cards is not a usable
     # collection regardless of why it came back short.
-    if use_cache and len(full_collection) >= 3:
+    # ...AND NEVER CACHE A SCAN THAT KNOWS IT WENT WRONG. The >= 3 floor was sized
+    # against a mid-animation frame that returns []; OPEN-23's real failure returned
+    # EIGHT cards of ~33, which clears it comfortably. The scan's own desync branch
+    # had already printed "press count says row 39, the scrollbar says 4" -- it knew --
+    # and the result was cached anyway and served to every later ban screen in the
+    # process, with zero captures. That turns a one-match problem into a whole-process
+    # one: every match after the first bans the best 3 of a stale eighth of the
+    # collection, silently. run() never clears it either.
+    _short = len(full_collection) < 3
+    _suspect = bool(_saw_desync)
+    if use_cache and not _short and not _suspect:
         _cached_ban_collection = full_collection
-    elif len(full_collection) < 3:
+    elif _suspect:
+        print(f"Ban scan hit a scroll desync — NOT caching its {len(full_collection)} "
+              "card(s). It may be a fraction of the collection, and a cached fraction "
+              "would ban the best of an eighth for the rest of the process.")
+    elif _short:
         print(f"Ban scan returned only {len(full_collection)} card(s) — not "
               "caching it; the next attempt will re-capture rather than be "
               "served a bad read.")
@@ -5973,24 +6034,93 @@ def read_balance_from_pause_menu() -> int:
             "money from — refusing to read a number off the world, where the "
             "only counter is the HEALTH coin and any answer would be wrong")
 
-    img_b64 = capture_screenshot_b64()
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=500,  # thinking disabled below — no more thinking-token headroom needed
-        thinking={"type": "disabled"},
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": SCREENSHOT_MEDIA_TYPE, "data": img_b64}},
-                {"type": "text", "text": READ_BALANCE_PROMPT},
-            ],
-        }],
-    )
-    text = "".join(block.text for block in response.content if block.type == "text").strip()
-    result = extract_json(text)
+    def _close_pause_menu():
+        """Shut the menu, and SAY SO if it did not shut.
 
-    press("toggle_pause")
-    wait_for_screen_to_settle(max_wait=6.0)  # let the menu animate closed
+        In a helper because it now has to run on EVERY exit, including the raising
+        one. It used to sit only after the paid call, so any exception from that
+        call -- PaidModelDisabled being the certain one now -- skipped it and left
+        the game PAUSED. run_cycles hits this once per cycle and swallows the
+        exception, so every cycle walked 76 s to the table and then parked the
+        console in a paused menu. The symptom looks like dead input; it is neither.
+        """
+        press("toggle_pause")
+        wait_for_screen_to_settle(max_wait=6.0)  # let the menu animate closed
+
+    # LOCAL FIRST. pause_menu.read_money is measured on BOTH capture geometries,
+    # refuses unless is_pause_screen agrees, and requires two OCR scales to agree
+    # before answering -- and it had ZERO production callers. Both sites that wanted
+    # a balance called THIS function, which is a paid call; with the paid model off it
+    # raises, run_cycles swallows the exception and returns its hardcoded
+    # RESET_BALANCE_FALLBACK of 246 every cycle. So the only thing able to reconcile
+    # the tracked balance against the game was a constant, while reloads keep putting
+    # $246 back in the wallet and the tracked figure only ever marches down.
+    # A measurement built, tested, and never wired (10.1).
+    _local_money = None
+    try:
+        _frame = _fast_grab()
+        # THE BAN SCREEN IS A NOTEBOOK PAGE TOO, and is_pause_screen cannot tell the
+        # two books apart. Censused 2026-09-13 over 10,239 frames:
+        #
+        #     PAUSE book   n=  14   0.9263 .. 0.9446
+        #     BAN book     n=1140   0.7101 .. 0.8587      <- 1,122 clear PAGE_MIN_FRAC 0.80
+        #     everything else       0.0000 .. 0.9272 (a bright wall)
+        #
+        # MENU_TEXT_MIN_FRAC cannot rescue it -- ban 0.1224-0.4148 against pause
+        # 0.0733-0.4309 is complete overlap, and no threshold on that quantity separates
+        # two notebooks (10.4). Over 1,131 ban frames read_money returns a CONFIDENT
+        # WRONG balance on 5 ($7 four times, $1 once) with both OCR scales agreeing --
+        # which is the "$246 -> $100" failure its own docstring exists to prevent,
+        # reached THROUGH the guard. It was harmless while read_money had no callers;
+        # wiring it in an hour ago is what made it live.
+        #
+        # The ban counter is the instrument that already separates them, measured rather
+        # than invented: 0 false positives off ban screens over 3,000 random frames, and
+        # a confident answer on 313 of 317 ban frames. No new constant.
+        _banned = read_ban_counter(_frame)
+        if _banned is not None:
+            print(f"  [balance] this is a BAN screen (counter reads {_banned}), not the "
+                  "pause book — refusing to read money off it. Both are notebook pages "
+                  "and is_pause_screen cannot tell them apart.")
+            _close_pause_menu()
+            raise RuntimeError(
+                "refusing to read the wallet off a ban screen — the page-brightness "
+                "guard admits it, and a confident wrong balance is worse than none")
+        _local_money = _pm.read_money(_frame)
+    except RuntimeError:
+        raise
+    except Exception as _e:
+        print(f"  [balance] the local reader raised ({_e!r}) — falling through")
+    if _local_money is not None:
+        print(f"  [balance] read LOCALLY from the pause menu: ${_local_money} "
+              "(no paid call)")
+        _close_pause_menu()
+        return _local_money
+
+    # THE CLOSE MUST RUN EVEN WHEN THIS RAISES, which with the paid model off it
+    # certainly does. Without the finally, PaidModelDisabled skipped the close and
+    # left the game paused for the rest of the run.
+    try:
+        img_b64 = capture_screenshot_b64()
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=500,   # thinking disabled below
+            thinking={"type": "disabled"},
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64",
+                                                 "media_type": SCREENSHOT_MEDIA_TYPE,
+                                                 "data": img_b64}},
+                    {"type": "text", "text": READ_BALANCE_PROMPT},
+                ],
+            }],
+        )
+        text = "".join(block.text for block in response.content
+                       if block.type == "text").strip()
+        result = extract_json(text)
+    finally:
+        _close_pause_menu()
     # THE CLOSE IS A TOGGLE TOO, and nothing checked it. The open is verified
     # three times over; the close was fire-and-forget. If it drops, the game
     # stays PAUSED and every press after this lands in a menu instead of the
@@ -7192,6 +7322,22 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # is safe and still catches a genuinely stuck screen.
                 if state_json["phase"] != last_phase:
                     turns_this_half = 0
+                    # A NEW HALF DEALS A FRESH HAND OF FIVE, so the memory of the old
+                    # one is not memory, it is five wrong cards. reset_hand_memory had
+                    # exactly two call sites, both in the match_start_prompt branch, so
+                    # a batting-half entry stayed live for every pitching turn.
+                    # Demonstrated: a batting slot remembered as secondary 3 -- a
+                    # BATTER'S SPEED, which the role census says a pitcher is never --
+                    # was served for all three pitching turns. The memory's own comment
+                    # names the case it does not handle ("the user pointed out it was
+                    # the last hand of the inning, so the whole hand was replaced").
+                    #
+                    # And its safety net cannot catch this: memory is consulted only for
+                    # slots the reader CANNOT see, so a readable card never audits it.
+                    if last_phase is not None:
+                        print(f"  [hand] phase {last_phase} -> {state_json['phase']}: "
+                              "a new half deals a fresh hand — forgetting the old one")
+                        reset_hand_memory()
                     last_phase = state_json["phase"]
                 try:
                     played, matchup_info = play_one_turn(state_json, turns_this_half)

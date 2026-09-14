@@ -131,6 +131,58 @@ finally:
     os.environ.pop("BASEBALL_ALLOW_PAID", None)
     o._LazyAnthropic._real = _saved
 
+# --- THE TURN LOOP MUST RUN WITH THE MODEL OFF -------------------------------
+# read_state_for_turn made the ORIENTATION read paid, unconditionally, and set
+# `_paid_state_done = True` only AFTER the call -- so with the model off it raised
+# PaidModelDisabled on every turn, run() counted 15 stuck attempts and stopped with
+# `unreadable_screens`. The loop this project exists to run could not play a single
+# match, and no test caught it because every run harness stubs this function.
+_saved_local = o.local_game_state
+_saved_done = o._paid_state_done
+_paid_calls = []
+_saved_rgs = o.read_game_state
+try:
+    o.read_game_state = lambda *a, **k: (_paid_calls.append(1),
+                                         {"screen": "turn", "phase": "paid"})[1]
+    o.local_game_state = lambda: ({"screen": "turn", "phase": "batting"}, None)
+    o._paid_state_done = False
+    _st = o.read_state_for_turn()
+    check(_st == {"screen": "turn", "phase": "batting"},
+          f"with the model off the turn loop must read LOCALLY, got {_st}")
+    check(not _paid_calls,
+          f"it called the paid reader {len(_paid_calls)} time(s) with the model off")
+
+    # ...and a NAMED GAP must still raise, or a missing local reader would be
+    # papered over as "no state" and the run would buy past it.
+    o.local_game_state = lambda: (None, "the hand reader found 0 rows")
+    o._paid_state_done = False
+    try:
+        o.read_state_for_turn()
+        check(False, "a local gap must RAISE so the run surfaces the missing reader")
+    except ValueError as _e:
+        check("hand reader" in str(_e),
+              f"the raise must NAME the gap, got {_e!r}")
+    except Exception as _e:
+        check(False, f"a local gap raised the wrong type: {_e!r}")
+
+    # CONTROL: when the paid model IS allowed, the orientation read still happens --
+    # otherwise this check would pass just as well on a function that never reads.
+    _paid_calls.clear()
+    o.local_game_state = lambda: ({"screen": "turn"}, None)
+    o._paid_state_done = False
+    os.environ["BASEBALL_ALLOW_PAID"] = "1"
+    try:
+        o.read_state_for_turn()
+    finally:
+        os.environ.pop("BASEBALL_ALLOW_PAID", None)
+    check(len(_paid_calls) == 1,
+          f"CONTROL: with paid allowed the orientation read must still fire, got "
+          f"{len(_paid_calls)} — if this fails the checks above prove nothing")
+finally:
+    o.local_game_state = _saved_local
+    o.read_game_state = _saved_rgs
+    o._paid_state_done = _saved_done
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")

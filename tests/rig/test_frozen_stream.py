@@ -27,6 +27,12 @@ sys.path.insert(0, _ROOT)
 import numpy as np
 
 import ensure_stream
+# This file drives ensure_stream's ORCHESTRATION on purpose, against stubbed
+# internals. The module refuses to run under BASEBALL_TEST_RUN since 2026-09-13 --
+# the offline suite was reaching the LIVE rig, and one rung further is
+# restart_chiaki.sh, i.e. kill -9 on the user's stream -- so opt in explicitly.
+ensure_stream.RIG_DRIVER_IN_TESTS = True
+
 
 fails = []
 

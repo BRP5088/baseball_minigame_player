@@ -253,13 +253,13 @@ assert '"_synthetic": true' in json.dumps(_row), (
 # override would leave this asserting nothing once the stamp started keying on
 # test context rather than on the redirect.
 _r2 = subprocess.run(
-    [_sys.executable, "-c", "import orchestrator as o; print(o._SYNTHETIC_LOG)"],
+    [_sys.executable, "-c", "import orchestrator as o; print(o._synthetic_log())"],
     env={k: v for k, v in os.environ.items()
          if k not in ("BASEBALL_MATCH_LOG", "BASEBALL_TEST_RUN")}
         | {"PERSONAL_ANTHROPIC_API_KEY": "dummy-offline-test"},
     capture_output=True, text=True, cwd=_ROOT)
 assert "False" in _r2.stdout, (
-    f"_SYNTHETIC_LOG is true without an override ({_r2.stdout!r}) — genuine "
+    f"_synthetic_log() is true without an override ({_r2.stdout!r}) — genuine "
     "rows would be stamped and then stripped by the cleanup one-liner")
 
 # Screenshot folders: new runs are foldered, the calibration corpus is not
@@ -275,7 +275,7 @@ assert _o.SCREENSHOT_LOG_DIR == "screenshot_log", (
 # the flaw in the first version: it only marked rows that were already going
 # somewhere harmless, and left rows unstamped in the one case that matters.
 _r3 = subprocess.run(
-    [_sys.executable, "-c", "import orchestrator as o; print(o._SYNTHETIC_LOG)"],
+    [_sys.executable, "-c", "import orchestrator as o; print(o._synthetic_log())"],
     env={k: v for k, v in os.environ.items() if k != "BASEBALL_MATCH_LOG"}
         | {"PERSONAL_ANTHROPIC_API_KEY": "dummy-offline-test",
            "BASEBALL_TEST_RUN": "1"},
@@ -291,7 +291,7 @@ assert "True" in _r3.stdout, (
 # `grep -v` cleanup would DELETE them — the loss the stamp exists to prevent,
 # inverted. Verified 2026-08-25 as a live defect.
 _r4 = subprocess.run(
-    [_sys.executable, "-c", "import orchestrator as o; print(o._SYNTHETIC_LOG)"],
+    [_sys.executable, "-c", "import orchestrator as o; print(o._synthetic_log())"],
     env={k: v for k, v in os.environ.items() if k != "BASEBALL_TEST_RUN"}
         | {"PERSONAL_ANTHROPIC_API_KEY": "dummy-offline-test",
            "BASEBALL_MATCH_LOG": _synth},

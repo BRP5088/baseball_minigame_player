@@ -181,6 +181,42 @@ check(_picked != _decoy.pid,
       f"'chiaki-ng-build' — _key() posts straight to whatever this returns, so the "
       f"recovery ladder would type into that shell and report that nothing moved")
 
+# --- THE RIG DRIVER ITSELF MUST REFUSE, NOT JUST ITS KEYS --------------------
+# Gating _key() alone made things WORSE. With the keys suppressed the clear ladder
+# posts nothing, is_frozen() stays true, and ensure_live() falls through to
+# ./restart_chiaki.sh -- `pgrep -x chiaki` then `kill -9`. Demonstrated the same
+# night: tests/minigame/test_budget_reserve_fits.py imports run_cycles, reached
+# ensure() -> streaming() -> _heartbeat_seen(), and HUNG at the suite's 300 s
+# ceiling polling the live chiaki log. The ceiling was the only thing between an
+# offline test run and killing the user's stream with a paid match on screen.
+#
+# Guarding the leaf without guarding the entry point pushes the failure downhill.
+_saved_rig = ensure_stream.RIG_DRIVER_IN_TESTS
+ensure_stream.RIG_DRIVER_IN_TESTS = False      # the shipped default; tests opt IN
+try:
+    check(ensure_stream.ensure() is False,
+          "ensure() must refuse under the flag — it polls the live chiaki log")
+    check(ensure_stream.ensure_live() is False,
+          "ensure_live() must refuse under the flag — it shells out to "
+          "restart_chiaki.sh, which kill -9s the user's stream")
+    check(ensure_stream.is_frozen() is False,
+          "is_frozen() must refuse under the flag — it compares live captures")
+
+    # CONTROL: with the opt-in the orchestration is REACHABLE, or the three checks
+    # above would pass just as well on functions that do nothing at all.
+    ensure_stream.RIG_DRIVER_IN_TESTS = True
+    _reached = []
+    _saved_streaming = ensure_stream.streaming
+    try:
+        ensure_stream.streaming = lambda img=None: _reached.append(1) or True
+        ensure_stream.ensure()
+    finally:
+        ensure_stream.streaming = _saved_streaming
+    check(_reached == [1],
+          f"CONTROL: with the opt-in ensure() must still run its body, got {_reached}")
+finally:
+    ensure_stream.RIG_DRIVER_IN_TESTS = _saved_rig
+
 # ------------------------------------------------------------------ structural
 # EVERY emission site, by (module, enclosing function). A new one changes this set
 # and fails the test.

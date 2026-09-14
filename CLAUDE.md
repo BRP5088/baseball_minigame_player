@@ -816,6 +816,87 @@ AST-scans for emission sites so a NEW one fails the test instead of reaching
 someone's keyboard. Four mutants, all caught -- including a planted
 `pyautogui.keyDown` in an unrelated module.
 
+### THE RUNNER COULD NOT PLAY A MATCH AT ALL WITH THE PAID MODEL OFF (2026-09-13)
+
+`read_state_for_turn` made the ORIENTATION read PAID, unconditionally, and set
+`_paid_state_done = True` only AFTER the call -- so with the model off (the shipped
+default since 2026-09-12) it raised `PaidModelDisabled` on EVERY turn, `run()` counted
+15 stuck attempts and stopped with `unreadable_screens`. The loop this project exists
+to run could not play a single match. **No test caught it because every run harness
+stubs `read_state_for_turn`.** The paid branch now also requires `paid_model_allowed()`;
+section 3 already lists a local reader for every field it supplied, and a local GAP
+still raises with the reader named.
+
+### THE BAN SCREEN IS A NOTEBOOK PAGE TOO, AND THE MONEY GUARD ADMITS IT
+
+`is_pause_screen`'s negative population was a bright WALL, n=1. The ban book is a THIRD
+CLASS that was never in it -- 10.31's missing-class shape, the same one the DRAW screen
+made. Censused over 10,239 frames:
+
+    PAUSE book   n=  14   0.9263 .. 0.9446
+    BAN book     n=1140   0.7101 .. 0.8587     <- 1,122 clear PAGE_MIN_FRAC 0.80
+    everything else       0.0000 .. 0.9272 (the bright wall)
+
+`MENU_TEXT_MIN_FRAC` cannot rescue it: ban 0.1224-0.4148 against pause 0.0733-0.4309 is
+complete overlap. **No threshold on that quantity separates two notebooks.** Over 1,131
+ban frames `read_money` returns a CONFIDENT WRONG balance on 5 ($7 x4, $1 x1) with both
+OCR scales agreeing -- the "$246 -> $100" failure its own docstring exists to prevent,
+reached THROUGH the guard. Harmless while it had no callers; wiring it into the money
+path the same evening is what made it live.
+
+**No constant was invented.** The money path refuses when `read_ban_counter` answers --
+an instrument already measured at 0 false positives off ban screens over 3,000 random
+frames. Still open: `selected_item()` names a menu entry on 19 of 1,140 ban frames, so
+`reset_env` would send `dpad_down` into a live ban screen (never `Load Last Save`, so
+no `cross`, in 1,140 frames), and `reset_env` tests `is_pause_screen` BEFORE
+`give_up_dialog`, making the give-up recovery unreachable on a false positive.
+
+### THE OFFLINE SUITE WAS DRIVING THE LIVE RIG, AND GUARDING THE LEAF MADE IT WORSE
+
+`tests/minigame/test_budget_reserve_fits.py` imports `run_cycles`, which reaches
+`ensure()` -> `streaming()` -> `_heartbeat_seen()` and polls the live chiaki log. The
+file HUNG at the suite's 300 s ceiling. **The ceiling was the only thing between an
+offline test run and `ensure_live()` -> `./restart_chiaki.sh` -> `pgrep -x chiaki` then
+`kill -9`** -- killing the user's stream with a paid match on screen.
+
+**And gating `_key()` alone made it MORE likely, not less.** With the keys suppressed
+the clear ladder posts nothing, `is_frozen()` stays true, and the loop falls straight
+through to the restart. Guarding the leaf without guarding the entry point pushes the
+failure downhill. `ensure`, `ensure_live` and `is_frozen` now refuse under
+`BASEBALL_TEST_RUN`, with `RIG_DRIVER_IN_TESTS` as the opt-in for the three tests that
+drive the orchestration against stubs.
+
+**AND THE OBVIOUS MUTANT IS ITSELF THE HAZARD.** Deleting that guard and running the
+test makes `ensure()` poll the rig for real: it hung 300 s against a live console. A
+lockout on hardware is mutation-tested by stubbing everything BEHIND the guard and
+asserting only that the body was entered --
+
+    guard REMOVED  -> BODY_ENTERED
+    guard RESTORED -> REFUSED
+
+### FOUR MORE STATE BUGS, ALL CONFIRMED THE SAME NIGHT
+
+- **The ban collection cache stored a PARTIAL scan.** Its `>= 3` floor was sized against
+  a mid-animation frame that returns `[]`; OPEN-23's real failure returned EIGHT cards
+  of ~33, which clears it. The scan's own desync branch had already printed "press count
+  says row 39, the scrollbar says 4" -- it KNEW -- and the result was cached and served
+  to every later ban screen in the process with zero captures. `run()` never clears it.
+  A desynced scan is no longer cached.
+- **The hand memory survived the HALF boundary.** `reset_hand_memory` had two call sites,
+  both at match start; a new half deals a FRESH FIVE. A batting slot remembered as
+  `secondary 3` -- a batter's speed, which no pitcher has -- was served on every pitching
+  turn. Its safety net cannot catch this: memory is consulted only for slots the reader
+  CANNOT see, so a readable card never audits it.
+- **`known_ban_roster_learned.json` was the one write-then-read cache with no test
+  guard**, and its path was cwd-relative while both siblings anchor on `__file__`. A
+  learned entry is PERMANENT ground truth that vision never re-reads, so an offline run
+  could poison the roster for good.
+- **`_SYNTHETIC_LOG` was bound at IMPORT**, two functions below a docstring teaching
+  10.18 for this very file. Setting the flag after `import orchestrator` left the stamp
+  False while `_running_under_test()` was True, and an UNSTAMPED test row reached the
+  real `match_log.jsonl` -- which the documented `grep -v '"_synthetic": true'` cleanup
+  would never have removed. It happened during the sweep that found it.
+
 ### THE BAN PROBE CHECKED THE SENSOR BEFORE PLACEMENT AND NEVER DURING (2026-09-13)
 
 Third time in one evening that a fix of mine was incomplete in the same way.
