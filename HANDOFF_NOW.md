@@ -3,20 +3,127 @@
 ## STATE AT HANDOFF
 
     preflight            READY (1 warning: 2 other displays attached)
-    suite                196 files green
+    suite                197 files green at JOBS=4 (281s) AND at JOBS=1 (901s),
+                         both AFTER the width change -- so no result depends on
+                         parallelism
     working tree         clean
     console              awake, idle in the world at the spawn, NO match running
     match_in_progress    False
-    money                GAME WALLET 246 (restored by the reset earlier today)
-                         progress_testing.json tracks 196  <-- NOT RECONCILED
+    money                GAME WALLET 246, progress_testing.json 246 -- RECONCILED
+                         (read live from the pause menu, locally, no paid call)
     paid vision model    OFF and staying off
 
-**THE ONE THING TO LOOK AT FIRST IN THE MORNING:** the money line above. The
-tracked balance is $50 below the game's because a match was debited and then
-given up + reset away. Reconcile it from a LIVE PAUSE-MENU READ, never from
-memory or from this file -- a wrong $50 got into this record once already that
-way. `pause_menu.read_money` on a confirmed pause screen; then
-`orchestrator.save_progress(..., 246, "progress_testing.json", ...)`.
+**THE MONEY IS DONE -- that was the first job and it is closed.** The tracked
+balance had been $50 below the game's because a match was debited and then given
+up + reset away. `pause_menu.read_money` on a confirmed pause screen returned
+$246 locally with no paid call, and progress_testing.json now matches. The input
+target was verified BEFORE any press: `chiaki_pid()` -> 83980, and `ps` confirms
+that pid is the patched binary under `chiaki-ng-build/`.
+
+**NOTHING IS OUTSTANDING OR BROKEN.** The JOBS=1 confirmation ran after every
+change tonight and came back all green, 197 files, 901s. The working tree is
+clean and every change is committed. Start from section 6 below ("WHAT IS LEFT")
+if you want more of the same work; nothing there is urgent and nothing is on the
+money path.
+
+## TONIGHT'S PROGRESS (appended as it landed)
+
+**1. MONEY IS RECONCILED.** `pause_menu.read_money` on a confirmed pause screen
+returned **$246**, locally, no paid call, menu opened once and closed in its
+`finally`. `progress_testing.json` balance 196 -> 246. Preflight agrees; the
+file is gitignored, so the pre-edit copy is in the session scratchpad.
+Input target was verified BEFORE any press: `chiaki_pid()` -> 83980, and
+`ps` confirms that pid is the patched binary under `chiaki-ng-build/`.
+
+**2. THE COMPASS WORRY IS REFUTED AND THE DEAD STORE IS GONE.** See the fossil
+section below -- the short version is that `VIEW_CENTRE_FRAC` was computed into
+a variable overwritten two lines later, proven inert by mutation over 160
+frames, and is now deleted with its history kept. Behaviour-preserving against
+HEAD on the same 160 frames.
+
+**3. THE REVEAL GATE DOES NOT BLOCK REMOVING THE UPSCALE.** Full census, all
+15,799 archived frames, `center_card_edge_fraction` at 1920 native vs 2000
+upscaled:
+
+    frames classified REVEAL   @1920 298   @2000 290
+    frames that CHANGE SIDE if the upscale goes:  8 of 15,799  (0.051%)
+    direction: all 8 are 1920-detects / 2000-misses -- the SAFE direction
+    ratio b/a: p05 0.675  p50 0.921  p95 0.944
+
+So `REVEAL_EDGE_THRESHOLD = 0.065` needs NO re-derivation. **Two corrections to
+my own earlier reasoning, both from the same mistake -- reading a 700-frame
+sample as if it were the census:**
+  * I claimed the upscale "widens the false-positive margin 4x and is doing real
+    work". WITHDRAWN. At n=700 the 1920 band looked like [0.0627, 0.0745]; at
+    n=15,799 it is [0.0649, 0.0664]. The gap closed 8x. That is the at_table
+    lesson again -- 500 frames said zero and the 701st fired.
+  * The "empty band" metric itself was over-read. It measures the gap around an
+    ARBITRARY cut point, not the separation between two LABELLED classes, and in
+    any continuous distribution more samples fill in near any cut. It was never
+    evidence either way.
+  HONEST RESIDUAL: no clean cut exists at either width (largest gap ~0.0015
+  both), so that gate has never sat in an empty band. Whether 0.065 is WELL
+  placed cannot be answered without labelled reveal frames. Recorded as
+  unmeasured, not treated as evidence.
+
+**4. THE WIDTH IS FIXED, AND IT WAS ONE NUMBER, NOT A DELETION.**
+`SETTLE_CALIBRATION_WIDTH = 2000 -> 1920` (commit 27cd4ae). I first proposed
+deleting the upscale; that was wrong. The normalisation is REAL WORK on the
+FALLBACK path, which can return an mss logical grab (1728x1117) or a pyautogui
+Retina grab (3456x2234) -- mean-abs-delta is scale-sensitive, so those must be
+brought to a common width or the statistic is not comparable between backends.
+Only the WIDTH was wrong. At 1920 the primary path is a true no-op, because
+game_capture.grab resizes only when the width differs.
+
+It also closed a split `test_reveal_watch` had documented all along: the reveal
+watcher scored the dump at native 1920 while the poll resized to 2000 -- two
+readers of the SAME screen at different widths BY DESIGN. Both are 1920 now.
+
+NEW GUARD: `tests/rig/test_settle_calibration_width.py`. Nothing had pinned this
+constant for months. It asserts BEHAVIOUR, not the value (10.11): a frame at the
+rig's geometry passes through untouched, a foreign geometry is normalised, the
+hand crop lands on ANCHOR_W from either. Two mutants caught, and the driver
+PROVES each mutant is live first, because 1920 -> 2000 is a same-SIZE edit and
+10.10's stale-bytecode trap would otherwise report a good test as decorative.
+
+**5. THE COMPASS GEOMETRY CONSTANTS ARE GONE** (commit 14ffada): two dead stores
+plus PITCH_PX_PER_90 / REFERENCE_WIDTH / VIEW_CENTRE_FRAC. Equivalence against
+the previous revision on 160 explore/ frames: 0 differing bearings, 0 abstention
+flips -- WITH a control proving the harness bites (a deliberate
+`centre_x = vmid + 30.0` gives 135/160). 44 of 44 compass tests green.
+
+**6. WHAT IS LEFT, in order:**
+  a. the surviving fossils in `agent_progress/HARVEST/triage.json` -- but see
+     the note below on how few of them are real
+  b. `compass.TURN_FIXED_DEG` / `TURN_RATE_DEG_PER_SEC` / `MIN_HOLD_SEC` are
+     value-for-value duplicates of `turn_gain.FIXED_DEG` / `RATE_DEG_PER_SEC` /
+     `MIN_HOLD_SEC`, and production turning goes through `turn_gain.run_turn`.
+     `tests/routing/test_turn_control.py` builds its FAKE actuator from the
+     compass copies, so if turn_gain's values changed the test would keep
+     simulating with the stale ones and pass. NOTE: an agent filed this as
+     10.11 ("a test asserting against the constant it guards") and that framing
+     is WRONG -- the test guards the stop RULE, not the value, and simulating an
+     actuator that matches the controller's model is legitimate. Fix it as
+     "the fake models the wrong module", which is narrower and true.
+  c. `MASK_KERNEL = 41  # roughly card-art scale at SCREENSHOT_MAX_WIDTH`
+     is a raw-pixel kernel calibrated at 2000 and now applied to 1920 frames;
+     the matched value would be ~39. Marginal, unmeasured, NOT acted on.
+
+**7. HOW MUCH OF THE FOSSIL SWEEP WAS REAL -- read this before mining the
+triage file.** Two workflows produced 48 CONFIRMED fossils. Three skeptics per
+finding then refuted **17 of the 22 they reached -- a 77% kill rate -- including
+EVERY wrong-card, money and ends-match candidate, all 3/3 unanimous.** Four
+survived, all low-blast compass/turning items. 27 were never tested because the
+workflows were stopped.
+
+    THE 27 UNTESTED ARE NOT A BACKLOG OF FINDINGS. At the observed kill rate
+    expect ~20 of them to die too. Each one gets the mutation-prove treatment
+    (change the value / make the body raise, run the suite) or nothing.
+
+That is the lesson worth more than any single fossil: the raw fan-out output was
+mostly noise, and the adversarial pass is what turned it into signal. Reported
+without it, most of that list would have been wrong -- including the
+scary-sounding entries.
 
 ## THE SESSION'S THEME: FOSSILS
 
@@ -50,13 +157,24 @@ surfaced, both verified by hand:
     the view centre would be 0.5. The gap is ~0.016 of width = ~30.7px at 1920
     = **~9.8 degrees of systematic bearing bias**, almost exactly the size of
     the 11-degree bias this constant was introduced to REMOVE.
-    **DO NOT ACT ON THIS YET. There is a contradicting measurement:** the spawn
-    read 87 tonight and section 8(d) has it deterministic at 86.9-87, which the
-    user describes as facing E (90). A 10-degree error would not land there.
-    SETTLE IT BY MEASUREMENT: find the aiming reticle in a modern frame-dump
-    capture and compute its x-fraction. ~0.484 -> the constant is right and only
-    the comment is stale. ~0.5 -> it is a live fossil costing ~10 degrees on
-    every absolute bearing.
+    **SETTLED, AND THE WORRY IS REFUTED. The constants are INERT.** The
+    contradicting measurement (the spawn reading 87, i.e. facing E) was the true
+    one. `read_bearing` computes `centre_x = w * VIEW_CENTRE_FRAC` and then
+    OVERWRITES it two lines later with `centre_x = vmid`, measured from the bar
+    itself -- a dead store wearing the comment of a live calibration. Proven by
+    MUTATION rather than by reading: over 160 explore/ frames at the live
+    1920x1080 geometry, forcing VIEW_CENTRE_FRAC to 0.10, PITCH_PX_PER_90 to
+    50.0 and REFERENCE_WIDTH to 600 each moved ZERO bearings and flipped ZERO
+    abstentions. (Baseline abstention 25/160 = 15.6%, reproducing OPEN-15's
+    recorded 15.6% exactly -- an independent check that the harness reads the
+    way the project does.)
+    FIXED: the dead store and VIEW_CENTRE_FRAC are deleted, the history kept in
+    a comment; verified behaviour-preserving against HEAD's compass.py on the
+    same 160 frames (0 differing bearings, 0 abstention flips).
+    PITCH_PX_PER_90 and REFERENCE_WIDTH are KEPT: they measured inert over the
+    same corpus, but their consumer `pitch` is only reassigned inside
+    CONDITIONALS, so the fallback is reachable in principle. Empirically inert
+    is not structurally dead.
   * `orchestrator._CALIBRATED_ASPECT = 1728 / 1117` -- the laptop display's
     aspect, compared against `_MSS.monitors[1]` at import to warn that
     "fractional crops will target the wrong pixels". The capture no longer comes
