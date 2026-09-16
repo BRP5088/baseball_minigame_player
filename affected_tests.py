@@ -22,6 +22,7 @@ read the latter.
 """
 
 import ast
+import functools
 import os
 import subprocess
 import sys
@@ -55,8 +56,20 @@ def _project_modules():
     return mods
 
 
-def _imports(path):
-    """Top-level module names imported anywhere in a file, nesting included."""
+@functools.lru_cache(maxsize=None)
+def _imports_cached(path, _mtime):
+    """The parse, memoised. KEYED ON MTIME so an edited file still re-parses.
+
+    closure() recurses the import graph, so a module every test reaches --
+    orchestrator.py is ~8,600 lines -- was re-parsed once per test per select()
+    call. Measured on tests/harness/test_affected_tests.py, which calls select()
+    repeatedly: 270s before, and it was the SINGLE SLOWEST FILE in the suite and
+    therefore its entire critical path (the suite runs 3.97x of a possible 4.00x at
+    JOBS=4, so wall time is bounded by the longest file, not by parallelism).
+
+    Returns a FROZENSET, and _imports() copies it. A cached mutable handed out
+    repeatedly is one caller's .add() away from poisoning every later answer.
+    """
     try:
         with open(path, encoding="utf-8") as fh:
             tree = ast.parse(fh.read(), path)
@@ -70,7 +83,17 @@ def _imports(path):
         elif isinstance(node, ast.ImportFrom):
             if node.level == 0 and node.module:
                 names.add(node.module.split(".")[0])
-    return names
+    return frozenset(names)
+
+
+def _imports(path):
+    """Top-level module names imported anywhere in a file, nesting included."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    got = _imports_cached(path, mtime)
+    return None if got is None else set(got)
 
 
 def closure(path, mods, _seen=None):
