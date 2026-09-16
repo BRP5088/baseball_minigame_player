@@ -1863,10 +1863,31 @@ REGRESSED / UNPLACED. `WEDGED_MAX_KEYPOINTS = 50` sits between two measured
 populations: a frame pressed against geometry holds 9-11 keypoints, the next
 lowest non-wedged frame holds 744, and a genuine arrival 339-1500.
 
-**Report arrival BY CLASS, never just overall.** Arrival averages several
-different failures, so a change that eliminates an entire class moves the
-overall rate by roughly a third of it — invisible at n=10. That is a leading
-explanation for why so many well-motivated changes measured flat.
+**AND IT DOES NOT RUN ON THE PRODUCTION PATH. Verified 2026-09-17, and this
+section read as though it did.** `failure_kind.classify` has exactly ONE call
+site, `graph_walk.py:2260`, which is inside `follow_verified` (2106-2296).
+Production routing does not go through `follow_verified`: `go_now.py:46` calls
+`graph_walk.go_to_table`, and go_to_table calls plain `follow()` at :328 and
+:348. So a production trial produces NO class census at all, and every "report
+arrival by class" instruction below describes the A/B harnesses
+(`overnight/_harness.py`, `ab_attempts.py`, `profile_trial.py`) and nothing else.
+
+`leg_reliability.record()` is in the same position — only inside
+`follow_verified`, and additionally behind `RECORD_RELIABILITY = False`.
+
+**THE OPEN QUESTION IS WHETHER PRODUCTION SHOULD USE follow_verified, AND IT IS
+NOT A DOCUMENTATION FIX.** It is a NAVIGATION CHANGE: §9 records thirteen
+well-motivated navigation changes that moved no number, and GRAVEYARD.md is
+required reading before another. It needs an interleaved live A/B, 10 trials an
+arm (§10.3), which needs the console and the user. Flipping it unattended would
+be exactly the shape this file spends §9 warning about. Until then this section
+describes a harness-only instrument, and says so.
+
+**Report arrival BY CLASS, never just overall** -- in the harnesses, where the
+census exists. Arrival averages several different failures, so a change that
+eliminates an entire class moves the overall rate by roughly a third of it —
+invisible at n=10. That is a leading explanation for why so many well-motivated
+changes measured flat.
 
 **But the class distribution itself is currently unsupported** — see OPEN-1. The
 eight frames it was derived from describe the recovery fan, not the leg.
