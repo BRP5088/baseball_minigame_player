@@ -1952,6 +1952,60 @@ LOCAL_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 RECORDED_CROPS = ("hand", "scoreboard", "third_base", "first_base", "second_base")
 
 
+# Where a reveal frame goes when WE played a tactics card. It is under
+# test_fixtures/ ON PURPOSE: the corpus this widens (test_fixtures/reveal_kind_truth/)
+# spent its life in agent_progress/, which is gitignored and which CLAUDE.md calls safe
+# to delete wholesale, and OPEN-24 is the record of what that cost -- 148 rows of
+# ground truth in match_log.jsonl with ZERO surviving frames, because
+# SCREENSHOT_KEEP_RUNS is 3 and the row outlives the picture.
+REVEAL_KIND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "test_fixtures", "reveal_kind_truth", "live")
+
+# JPEG, not PNG, and measured rather than assumed (2026-09-17). A kept frame can
+# answer differently from the live capture it came from -- that is why a compass
+# fixture must be a PNG, where a re-encode once flipped a letter and cost 90 deg.
+# Re-encoding at 88 moves the tactics-KIND score by at most 0.0022 over 12 readings
+# (PNG moves it 0.0000), against a gate of 0.75 with the wrong-kind population
+# topping out at 0.710. So the loss is irrelevant HERE, and matching the 48 frames
+# already in that corpus is worth more than the fidelity.
+REVEAL_KIND_QUALITY = 88
+
+
+def record_reveal_kind(reveal_img, matchup_info, out_dir=None):
+    """Keep the reveal frame for a turn where WE played a tactics card. Never raises.
+
+    THE LABEL IS WHAT THE ENGINE CHOSE, WHICH IS WHY THIS IS GROUND TRUTH AND NOT
+    CIRCULAR. `our_tactics_kind` comes from `decision.tactics_card.kind` -- the card
+    this code picked and played -- so scoring the reader against it is not the
+    pipeline marking its own homework (10.22). The OPPONENT's kind is READ, and
+    carries the bonus-of-3 values RULES.md says cannot exist, so only our side counts.
+
+    It writes the frame the reader was actually handed: `reveal_img` is the watcher's
+    peak frame, already in memory for `read_matchup_reveal`, so this adds no capture,
+    no poll and no delay to the turn loop.
+
+    Returns the filename written, or None. `out_dir` is for tests -- with it the
+    BASEBALL_TEST_RUN suppression is bypassed, so a test can prove the write happens
+    without writing into the real corpus.
+    """
+    try:
+        kind = (matchup_info or {}).get("our_tactics_kind")
+        if not kind or reveal_img is None:
+            return None
+        if out_dir is None and _running_under_test():
+            return None
+        d = out_dir or REVEAL_KIND_DIR
+        os.makedirs(d, exist_ok=True)
+        fname = f"{kind}_{time.time_ns()}.jpg"
+        reveal_img.convert("RGB").save(os.path.join(d, fname),
+                                       quality=REVEAL_KIND_QUALITY)
+        return fname
+    except Exception:
+        # Never into the turn loop. A missing corpus frame costs a slower census
+        # later; an exception here costs a $50 match.
+        return None
+
+
 def record_local_hand(crops, rows, state_json):
     """Keep one labelled example of EVERY gameplay region. Never raises into the turn loop.
 
@@ -8321,6 +8375,11 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # any run without the patched chiaki.
                             _reveal_mark = matchup_info.pop("reveal_mark", None)
                             reveal_img = reveal_frame_for(_reveal_mark)
+                            # OPEN-24: keep this frame when WE played a tactics
+                            # card. The label is the engine's own choice, the
+                            # frame is already in memory, and the corpus that
+                            # gates the kind reader stands on TWO matches.
+                            record_reveal_kind(reveal_img, matchup_info)
                             reveal_cards = read_matchup_reveal(img=reveal_img)
                             # Known accepted limitation (QA, 2026-08-23): if our
                             # card and the opponent's happen to share a name
