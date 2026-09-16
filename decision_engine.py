@@ -341,11 +341,20 @@ def choose_bans(collection: List[PlayerCard], count: int = 3) -> List[PlayerCard
     Choose which player cards to ban from your collection before a match.
 
     Heuristic: ban your weakest player cards by primary stat (swing
-    power / pitch focus). Tactics cards are never in this pool to begin
-    with — a boost is useful regardless of which base card you draw, so
-    there'd be no reason to remove one even if they were eligible.
+    power / pitch focus), breaking ties on `secondary`. Tactics cards are
+    never in this pool to begin with — a boost is useful regardless of
+    which base card you draw, so there'd be no reason to remove one even
+    if they were eligible.
+
+    THE TIE-BREAK IS NOT COSMETIC, AND IT IS ROLE-INDEPENDENT. Sorting on
+    power alone left ties to scan order: on the 2026-09-16 collection that
+    banned two 4/3 cards and KEPT a 4/1 and a 4/2, which are strictly worse
+    cards to draw. `secondary` decides it without needing to know the role,
+    because higher is better in BOTH of its meanings -- SPEED on a batter is
+    bases run, FIELDING on a pitcher subtracts runner movement -- so
+    ascending (power, secondary) is worst-first either way. See RULES.md.
     """
-    return sorted(collection, key=lambda c: c.power)[:count]
+    return sorted(collection, key=lambda c: (c.power, c.secondary))[:count]
 
 
 if __name__ == "__main__":
