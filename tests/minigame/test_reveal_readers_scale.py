@@ -6,8 +6,17 @@ everywhere else". Both banks were fixed uint8 arrays handed to matchTemplate at
 NATIVE size while their search bands are FRACTIONS of the frame, so a 4% change in
 width put the word and the template at different scales.
 
-AND 2000px IS THE RIG'S OWN GEOMETRY, not a hypothetical: orchestrator._fast_grab
-asks game_capture.grab for SETTLE_CALIBRATION_WIDTH = 2000. Measured before the fix:
+THE RIG'S OWN WIDTH IS 1920, NOT 2000, and an earlier version of this docstring
+said otherwise. SETTLE_CALIBRATION_WIDTH is 1920 (27cd4ae, "the width it was
+actually measured at"); the 2000 was taken from a stale CLAUDE.md note rather than
+from the source. At 1920 the scale factor is 1.0 and the fix changes nothing.
+
+WHAT MAKES IT LOAD-BEARING is 1867x1050, the other geometry this rig has produced
+(CLAUDE.md records both from one session). On a HELD-OUT frame, against BANNER_MIN
+0.80: unscaled 0.706 -- a MISS -- against 0.978 scaled. The 2000 column below is a
+plain scale-invariance case and is not a claim about what the rig captures.
+
+Measured before the fix:
 
     reveal_banner (gate 0.80)      1920     2000     1867     1600
       HOME RUN!                    1.000    0.517    0.679    0.328   <- all MISSED
@@ -186,6 +195,93 @@ for _name in ("midanim_opener", "midanim_early"):
     check(rb.read_banner(_im)[0] is None,
           f"...and {_name} reads no banner either")
 
+
+# =========================================================================
+# PIN THE LIVE WIDTH, so the claim above cannot rot again. Three comment blocks in
+# this module and its two readers asserted that the rig captures 2000px, taken from
+# a stale CLAUDE.md note rather than from the source -- SETTLE_CALIBRATION_WIDTH had
+# already been changed to 1920 by 27cd4ae, "the width it was actually measured at".
+# A prose claim about another module's constant is exactly the kind that goes stale
+# silently, so it is asserted here instead of merely written down.
+# =========================================================================
+import orchestrator as _o
+check(_o.SETTLE_CALIBRATION_WIDTH == 1920,
+      f"SETTLE_CALIBRATION_WIDTH is {_o.SETTLE_CALIBRATION_WIDTH} — the comments in "
+      "reveal_banner.py and reveal_cards.py name 1920 as the live width and say the "
+      "scaling is load-bearing at 1867 instead. If this moved, re-measure and rewrite "
+      "them rather than leaving prose that no longer matches the source.")
+
+# ...and that the scaling really is load-bearing at 1867, which is the claim those
+# comments now make. Without this the correction is just a different unverified story.
+_im67 = at("heldout_play_ball", 1867)
+_saved67 = rb.REF_W
+try:
+    rb.REF_W = 1867
+    _unscaled67 = max(rb.scores(_im67).values())
+    rb.REF_W = 1920
+    _scaled67 = max(rb.scores(_im67).values())
+finally:
+    rb.REF_W = _saved67
+check(_unscaled67 < rb.BANNER_MIN <= _scaled67,
+      f"at 1867x1050 the UNSCALED reader misses a held-out banner "
+      f"({_unscaled67:.3f} < {rb.BANNER_MIN}) and the scaled one reads it "
+      f"({_scaled67:.3f}) — this is what makes the fix load-bearing, not 2000")
+
+# =========================================================================
+# AND _discs' RAW-PIXEL GATES ARE FLAT, MEASURED. reveal_cards is deliberately
+# inconsistent -- _side scales READ_R and its 20px offsets, _discs does not -- and
+# the comment there says scaling DISC_R/DISC_MIN_REACH was tried and changed
+# nothing. A claim like that rots the moment a geometry changes, so it is checked
+# rather than merely written down. (Full sweep was 138 zones over 23 frames at
+# three widths, 0 different; this is the cheap standing version.)
+# =========================================================================
+_flat = _changed = 0
+for _n in ("reveal_cards", "home_run", "heldout_tactics"):
+    for _w in (1920, 1867, 1600):
+        _im = at(_n, _w)
+        _s = _w / rc.REF_W
+        _R0, _R1, _RE = rc.DISC_R[0], rc.DISC_R[1], rc.DISC_MIN_REACH
+        for _z in (rc.ZONE_HOME, rc.ZONE_MOUND):
+            _raw = rc._discs(_im, _z)
+            try:
+                rc.DISC_R = (_R0 * _s, _R1 * _s)
+                rc.DISC_MIN_REACH = _RE * _s
+                _sc = rc._discs(_im, _z)
+            finally:
+                rc.DISC_R = (_R0, _R1)
+                rc.DISC_MIN_REACH = _RE
+            if _raw == _sc:
+                _flat += 1
+            else:
+                _changed += 1
+# AND PIN THE *REASON*, NOT JUST THE OUTCOME. Asserting only "_changed == 0" is a
+# check I could not make fail: I tried scaling the gate in the reader and tightening
+# DISC_R to (16, 17), and both mutants SURVIVED, because flatness here is robust.
+# An assertion no mutant can break is decorative -- the thing this file exists to
+# remove -- so it asserts the MARGIN that makes it flat, which a mutant does break.
+#
+# Measured over the same corpus: every disc found has r in 10..14, against a raw
+# gate of (9, 17) and a scaled gate at the narrowest width tested (1600, s=0.833) of
+# (7.5, 14.2). Every observed radius clears BOTH, which is exactly why scaling
+# changes nothing -- and if a future geometry or a narrower gate pushes a radius
+# past either edge, this fails and the comment in reveal_cards.py must be rewritten
+# rather than the gate quietly scaled.
+_radii = set()
+for _n in ("reveal_cards", "home_run", "heldout_tactics"):
+    for _w in (1920, 1867, 1600):
+        for _z in (rc.ZONE_HOME, rc.ZONE_MOUND):
+            _radii.update(c[2] for c in rc._discs(at(_n, _w), _z))
+_smin = 1600 / rc.REF_W
+check(bool(_radii) and min(_radii) > rc.DISC_R[0]
+      and max(_radii) < rc.DISC_R[1] * _smin,
+      f"every observed disc radius {sorted(_radii)} sits strictly inside BOTH the "
+      f"raw gate {rc.DISC_R} and the scaled gate "
+      f"({rc.DISC_R[0] * _smin:.1f}, {rc.DISC_R[1] * _smin:.1f}) — that margin is "
+      "WHY scaling _discs is flat, and it is the thing that can actually change")
+
+check(_changed == 0,
+      f"...and scaling the gates does in fact change nothing ({_changed} of "
+      f"{_flat + _changed} zones differ)")
 
 print()
 if fails:

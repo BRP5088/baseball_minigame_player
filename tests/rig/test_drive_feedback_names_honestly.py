@@ -82,6 +82,13 @@ if os.path.exists(STREET):
 # A real reference frame must still be named, or the fix has gone too far the
 # other way and the feedback can never say KNOWN.
 REF = os.path.join(_ROOT, "places", "portrait_room", "live_00.jpg")
+# THE FIXTURE MUST EXIST, exactly as the STREET half already requires. This
+# block is the file's only anti-vacuity control -- its own comment says "A real
+# reference frame must still be named, or the fix has gone too far the other way
+# and the feedback can never say KNOWN". Behind a bare os.path.exists it would
+# disappear SILENTLY if the fixture went missing, and the file would still pass
+# while proving only that the negative half works.
+check("the reference fixture exists", os.path.exists(REF))
 if os.path.exists(REF):
     room, score, verdict = rd._novelty(Image.open(REF), refs, [])
     check(f"a genuine reference frame IS named ({room} {score} {verdict})",

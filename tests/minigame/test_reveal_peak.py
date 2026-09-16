@@ -193,8 +193,31 @@ check("baseline=None" in inspect.signature(o.wait_for_hand_deal).__str__() or
       o.wait_for_hand_deal.__defaults__ is not None,
       "wait_for_hand_deal takes a baseline")
 _src2 = open(os.path.join(_ROOT, "orchestrator.py")).read()
-check("wait_for_hand_deal(baseline=pop_hand_baseline())" in _src2, "the turn loop passes the play-time baseline")
-check("stash_hand_baseline(_grab_settle_regions" in _src2, "...which it stashed beside the reveal mark")
+
+
+def _in_code(needle):
+    """True only if `needle` appears OUTSIDE a comment or a docstring line.
+
+    A bare substring cannot tell a call from prose that quotes one (CLAUDE.md
+    10.10b). Both needles below occur TWICE in orchestrator.py: once inside a
+    docstring describing the wiring and once as the real call. Deleting the real
+    call left the check green, because the docstring still supplied the needle --
+    the same shape as the preflight guard that was pinned by a substring its own
+    comment also provided.
+    """
+    for line in _src2.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("#", '"', "'")):
+            continue
+        if needle in line.split("#", 1)[0]:
+            return True
+    return False
+
+
+check(_in_code("wait_for_hand_deal(baseline=pop_hand_baseline())"),
+      "the turn loop passes the play-time baseline (as CODE, not as prose)")
+check(_in_code("stash_hand_baseline(_grab_settle_regions"),
+      "...which it stashed beside the reveal mark (as CODE, not as prose)")
 o.stash_hand_baseline("X")
 check(o.pop_hand_baseline() == "X", "the stash round-trips")
 check(o.pop_hand_baseline() is None, "...and a second pop yields None, so no turn inherits the last one's hand")

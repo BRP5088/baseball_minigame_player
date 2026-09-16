@@ -25,6 +25,26 @@ import numpy as np
 # Generous on purpose: the words are 328-578 px wide and move as they animate.
 BAND = (0.28, 0.40, 0.75, 0.63)      # x0, y0, x1, y1 as fractions
 
+# THE LIVE WIDTH IS 1920, NOT 2000. An earlier version of this comment said
+# "orchestrator._fast_grab asks game_capture.grab for SETTLE_CALIBRATION_WIDTH =
+# 2000, so the geometry that breaks this reader is the rig's own". THAT IS FALSE:
+# SETTLE_CALIBRATION_WIDTH is 1920 (orchestrator.py), changed by 27cd4ae -- "the
+# width it was actually measured at" -- and the 2000 was read out of a stale
+# CLAUDE.md note instead of out of the source. At 1920 the scale factor is exactly
+# 1.0 and this fix does nothing at all.
+#
+# IT IS STILL LOAD-BEARING, at the OTHER geometry the rig has actually produced.
+# CLAUDE.md records 1867x1050 captures from this machine (the chiaki window grab),
+# and on a HELD-OUT frame, against BANNER_MIN 0.80:
+#
+#     width   unscaled   scaled
+#     1920     0.974      0.974     s = 1.0, no change, as it must be
+#     1867     0.706      0.978     <- MISSED before, read after
+#
+# So the reader really was breaking on a real rig geometry; it was not the one
+# originally claimed. 2000 stays in the test's width sweep as a plain
+# scale-invariance case, not as a claim about what the rig captures.
+#
 # THE TEMPLATES ARE PIXELS AND THE BAND IS A FRACTION, SO THE TEMPLATES MUST SCALE.
 # BAND scales with the capture; the bank is a fixed uint8 array handed to
 # matchTemplate at native size. A 4% change in width therefore puts the word and
@@ -37,11 +57,9 @@ BAND = (0.28, 0.40, 0.75, 0.63)      # x0, y0, x1, y1 as fractions
 #       1867          0.679       0.723     <- MISSED
 #       1600          0.328       0.197     <- MISSED
 #
-# 2000 IS NOT HYPOTHETICAL: orchestrator._fast_grab asks game_capture.grab for
-# SETTLE_CALIBRATION_WIDTH = 2000, so the geometry that breaks this reader is the
-# rig's own, on the live path. CLAUDE.md section 3's named family, again: "a new
-# window written in raw pixels works perfectly on the machine it was tuned on and
-# silently lands on the wrong thing everywhere else".
+# CLAUDE.md section 3's named family: "a new window written in raw pixels works
+# perfectly on the machine it was tuned on and silently lands on the wrong thing
+# everywhere else". The 2000 row above is a scale-invariance case, not the rig's width.
 REF_W = 1920                         # the geometry every template was cut at
 
 # DERIVED, NOT WRITTEN. The floor exists so a CROP cannot be handed in, and it has

@@ -52,6 +52,20 @@ ZONE_MOUND = (0.48, 0.23, 0.62, 0.50)    # the PITCHER's card, whoever owns it
 ZONE_OURS = ZONE_HOME
 ZONE_THEIRS = ZONE_MOUND
 
+# DISC_R AND DISC_MIN_REACH ARE RAW PIXELS, DELIBERATELY, AND THAT IS RECORDED
+# RATHER THAN FIXED. Twenty lines below, _side writes READ_R * sc and 20 * sc, and
+# both banner readers scale their templates -- so this module is inconsistent on
+# purpose and a later reader would otherwise "fix" it on sight.
+#
+# SCALING THEM WAS TRIED AND MEASURED FLAT: over the 23 archived reveal frames at
+# 1920, 1867 and 1600 -- 138 zones -- multiplying both gates by s changed the disc
+# set on ZERO of them. find_circles' own DIGIT_W / ENCLOSED_MIN / REACH_MAX are raw
+# pixels too, so scaling only one layer of a raw-pixel stack buys nothing anyway.
+#
+# A change with no measured effect is how this project acquires constants it cannot
+# defend, so the honest answer is the measurement plus this note. What WOULD change
+# it is a rig geometry far enough from 1920 to move a radius past a gate; the 1600
+# column above is the widest case on disk and it did not.
 DISC_R = (9, 17)        # the reveal's discs measure 13; the fan's measure 19
 DISC_MIN_REACH = 3.0    # the fan's gate is 6 and rejects every reveal disc
 READ_R = 11             # the radius read_digit scores best at here
@@ -223,9 +237,12 @@ def _side(img, zone):
 # uint8 array handed to matchTemplate at native size, and BANNER_ZONE_PAD is raw
 # pixels. Mixing the two means a 4% change in width puts the banner and its template
 # at different scales and the correlation collapses -- measured on the sibling
-# reveal_banner reader, where HOME RUN! went 1.000 at 1920 to 0.517 at 2000 against
-# a gate of 0.80. 2000 is the width orchestrator._fast_grab actually asks for, so
-# that is the live path, not a hypothetical.
+# reveal_banner reader. THE LIVE WIDTH IS 1920, NOT 2000 -- an earlier version of
+# this said _fast_grab asks for 2000, which is false: SETTLE_CALIBRATION_WIDTH is
+# 1920 (27cd4ae, "the width it was actually measured at") and the 2000 came from a
+# stale CLAUDE.md note. At 1920 the scale factor is 1.0 and this does nothing. It is
+# load-bearing at 1867x1050, the OTHER geometry this rig has produced, where a
+# held-out banner frame reads 0.706 unscaled against BANNER_MIN 0.80 and 0.978 scaled.
 REF_W = 1920
 
 BANNER_ZONE_PAD = 45                 # px at REF_W; scaled at use

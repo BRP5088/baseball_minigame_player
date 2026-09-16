@@ -1390,6 +1390,28 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
 # path, which is the one that bans a card nobody chose in a match that costs $50.
 VERIFY_BAN_NAVIGATION = True
 BAN_NAV_MAX_STEPS = 14             # per target; a grid is 5 wide and ~8 deep
+# UNMEASURED, AND SAID SO HERE RATHER THAN LEFT TO READ LIKE EVIDENCE.
+#
+# CLAUDE.md already names this and BAN_CURSOR_PROBE_TRIES as invented; a QA sweep
+# confirmed both and added LOCK_CONFIRM_TRIES. None of the three sits between two
+# measured populations, which is the standard every other gate on this path is held
+# to (10.4):
+#
+#   BAN_NAV_SETTLE 0.55        justified as "about twice ACTION_DELAY" -- DERIVED
+#                              FROM ANOTHER CONSTANT, not from a measured settle
+#   BAN_CURSOR_PROBE_TRIES 3   justified in prose, with no measurement of how long a
+#                              routine blind period lasts -- and denominated in
+#                              BAN_NAV_SETTLE, so it inherits that constant's error
+#   LOCK_CONFIRM_TRIES 4       no comment and no measurement at all, and unlike the
+#                              conservative-reader budgets (MONEY_READ_TRIES,
+#                              BAN_COUNTER_READ_TRIES) exhausting it ANSWERS rather
+#                              than refuses -- the opposite kind of budget
+#
+# THE VALUES ARE NOT BEING CHANGED. There is no measurement to move them toward, and
+# inventing one is the same bug wearing a fix's clothes. What would settle all three
+# is one offline pass: log a timestamp and ban_cursor_absolute()'s answer on every
+# poll through a real ban navigation, then read off how long a routine blind period
+# actually is. Until then they are working guesses, and they are labelled as such.
 BAN_NAV_SETTLE = 0.55              # a scrolling press needs about twice ACTION_DELAY
 
 
