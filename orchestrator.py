@@ -6224,6 +6224,15 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     if trust_roster is None:
         trust_roster = TRUST_ROSTER_ONLY
     if use_cache and _cached_ban_collection is not None:
+        # A CACHE HIT MUST STILL LEAVE THE CURSOR WHERE THE CALLER IS PROMISED IT.
+        # This returned BEFORE _ban_scroll_to_top, so on the second and later ban
+        # screens of a process nothing established row 0 at all -- and the
+        # dead-reckoned placement path assumes it. The scan is skipped; the homing
+        # is not, and it costs nothing when the level already reads 0.
+        try:
+            _ban_scroll_to_top()
+        except Exception:
+            pass
         return _cached_ban_collection
 
     # START AT THE TOP, OR SAY THE SCAN IS PARTIAL. See _ban_scroll_to_top.
@@ -6486,11 +6495,33 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
             presses_so_far += 2
             wait_for_screen_to_settle(max_wait=6.0)
     finally:
-        # Always unwind back to (0, 0), even on a failed read mid-scroll —
-        # leaving the cursor scrolled would corrupt any retry's assumption
-        # that it starts at the top.
-        for _ in range(presses_so_far):
-            press("move_up")
+        # UNWIND BY LOOKING, NOT BY COUNTING -- the same rule the scan itself
+        # follows one screen up.
+        #
+        # This pressed move_up exactly `presses_so_far` times, which re-trusts the
+        # press count that this function's OWN desync branch exists to distrust.
+        # That branch corrects `top_row` from the scrollbar and never corrects
+        # `presses_so_far`, so a scroll that outran its presses left the grid parked
+        # BELOW row 0 and the unwind under-pressed by exactly the amount nobody was
+        # counting. The docstring promised "(0, 0) when done" and this is the line
+        # that was supposed to deliver it.
+        #
+        # It matters because select_bans_and_start_full's own docstring says
+        # "Assumes the caller starts at (0, 0)" and it does not home -- so an
+        # under-wound cursor makes every one of its counted presses land on the
+        # wrong card. Observed live 2026-09-16: three consecutive scans left the
+        # grid at level 3+, and the next scan then read rows 3-6 only.
+        #
+        # _ban_scroll_to_top presses nothing when the level already reads 0, so
+        # this is free on the healthy path.
+        try:
+            _ok, _lvl = _ban_scroll_to_top()
+            if not _ok:
+                print(f"  [ban] could not unwind the grid to row 0 (level reads "
+                      f"{_lvl}) — a later dead-reckoned placement would start from "
+                      "the wrong row")
+        except Exception as _exc:
+            print(f"  [ban] unwinding the grid raised ({_exc})")
 
     # QA1-F6: never cache a result that cannot be right. A mid-animation first
     # frame reads every cell as locked, the scan exits immediately with [], and

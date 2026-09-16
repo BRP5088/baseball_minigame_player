@@ -261,10 +261,23 @@ with Rig() as rig:
     o.read_full_ban_collection(max_presses=6, use_cache=False, trust_roster=True)
 downs = rig.presses.count("move_down")
 ups = rig.presses.count("move_up")
-check(downs == ups,
-      f"scan pressed {downs} move_down but {ups} move_up — the cursor is left "
-      f"{downs - ups} row(s) from the top, and select_bans_and_start_full() "
-      "assumes it starts at (0, 0), so every ban would target the wrong row")
+# ASSERT THE ROW, NOT THE PRESS BALANCE. This used to require downs == ups, which
+# pins the COUNTED unwind -- exactly the thing this scan's own desync branch exists
+# to distrust, and which left the grid parked below row 0 whenever a scroll outran
+# its presses (observed live 2026-09-16: three scans in a row left it at level 3+).
+# The unwind now presses move_up until the SCROLLBAR reads 0.
+#
+# It is also stricter than the old check in the direction that matters. The press
+# balance was over-strict by exactly one: `top_row = max(0, presses_so_far - 1)`,
+# because the first move_down moves the cursor within the visible page without
+# scrolling -- so N downs leave row N-1 and N ups over-press by one (harmlessly, a
+# move_up at row 0 is a no-op). And it was not strict ENOUGH in the other: equal
+# counts say nothing about where the grid actually ended up.
+final_row = max(0, rig.downs - 1)
+check(final_row == 0,
+      f"the scan left the grid at row {final_row} after {downs} move_down / {ups} "
+      "move_up — select_bans_and_start_full() assumes it starts at (0, 0) and does "
+      "not home, so every dead-reckoned ban would target the wrong row")
 
 # --- The PRODUCTION default must be exercised ----------------------------
 # QA2-2: every call above passes trust_roster= explicitly, so flipping
