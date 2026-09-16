@@ -188,6 +188,18 @@ about what is unused or safe to remove** — nothing exercises them until someon
 acts on them, so they rot silently while the rest stays accurate. Verify before
 deleting anything on the strength of a sentence here.
 
+**`armor_venv/` IS A THIRD VENV, 601M, AND THIS FILE DID NOT MENTION IT UNTIL
+2026-09-17.** It arrived 2026-09-09 with the local-OCR bake-off, alongside `models/`.
+Nothing in the project imports from it and no runner shells out to it -- unlike
+`paddle_venv/`, which five runners DO use -- so on today's evidence it is bake-off
+scaffolding rather than a dependency. **That is exactly the claim this file gets wrong**
+(see the paddle_venv paragraph above, where the same sentence nearly caused a deletion),
+so verify before acting on it:
+
+    grep -rn "armor_venv" --include="*.py" --include="*.sh" . | grep -v "^./armor_venv"
+
+Today that returns only `tests/harness/test_no_undefined_names.py`, which SKIPS it.
+
 `.vscode/launch.json` pins `.venv` on both remaining debug profiles (Doctor, Tests).
 
 **`tesserocr` IS a requirement** (`requirements.txt:45`) — pip installs a
@@ -336,9 +348,16 @@ geometries) while being visibly wrong on screen.
 
 Everything ELSE is fixed, measured:
 
-    columns    starts 0.145 0.280 0.415 0.550 0.685    pitch 0.135, all four gaps identical
-               card width 0.130
-    rows       pitch 0.328     card height 0.2995 (= CARD_ASPECT 1.296 x column width x w/h)
+    columns    start 0.1552   pitch 0.1376   card width 0.1155   (fitted, residual +-0.0004)
+    rows       pitch 0.328     card height 0.2995   (= CARD_ASPECT 1.4587 x column width x w/h)
+
+**THE HEIGHT IS THE MEASURED NUMBER AND `CARD_ASPECT` IS DERIVED FROM IT.** 0.2995 is
+validated against a hand-read ruler and has never moved; the aspect says how to REACH it
+from the column width, so it has to be re-derived every time the width is re-measured.
+That has happened twice -- at the loose 0.130 it was 1.296, at 0.108 it was 1.560, at the
+fitted 0.1155 it is 1.4587 (`ban_grid.py:82-98`). This file quoted the 0.130/1.296 pair
+long after the fit replaced it, which is the failure mode of copying a constant into
+prose: the source moves and the copy does not.
     the name banner sits at 0.79-0.93 of card height -- the ONLY dominant horizontal edges
     on a card, 0.98 and 1.00 normalised against everything else under 0.25
 
@@ -970,28 +989,34 @@ moved. It has not. The PS5 streams 1920x1080 and both capture functions return e
 that -- `compass.fast_capture()` and `game_capture.grab()` measured live, both 1920x1080.
 It is `_fast_grab` that asks for something else:
 
-    img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)   # 2000
+    img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)   # 2000 at the time
 
 and its own comment says why: "the logged frames the SETTLE_THRESHOLDS were calibrated
 against were 2000px wide. Mean-absolute-delta is scale-sensitive -- downscaling averages
 noise differently -- so feeding a different resolution silently shifts every threshold."
 
-**So there are TWO CALIBRATION WIDTHS IN THIS CODEBASE AND THEY DISAGREE:**
+**THERE WERE TWO CALIBRATION WIDTHS IN THIS CODEBASE AND THEY DISAGREED. THE CONSTANT
+HAS SINCE MOVED TO 1920 (`orchestrator.py:2231`, commit 27cd4ae) AND THEY NOW AGREE** --
+this file went on quoting 2000 in three separate comment blocks after the change, and a
+sweep on 2026-09-17 took the stale figure from here and nearly re-reported it as current:
 
-    SETTLE_CALIBRATION_WIDTH = 2000     the settle gate; mean-abs-delta is scale-sensitive
+    SETTLE_CALIBRATION_WIDTH = 1920     the settle gate; mean-abs-delta is scale-sensitive
     local_hand.ANCHOR_W      =  979     the hand crop, which a 1920 px frame produces
 
     a 1920 px frame  ->  hand crop  979 px   (= ANCHOR_W, exactly)
-    a 2000 px frame  ->  hand crop 1020 px   (4% too wide)
+    a 2000 px frame  ->  hand crop 1020 px   (4% too wide -- the defect below)
 
 One `_fast_grab` serves both readers, and the hand reader is the one that loses. That is
 also why the diagnostics bundle carried both sizes: `screen_at_stall.png` comes from
 `_fast_grab()` (upscaled) and `after_stall_*.png` from `game_capture.grab()` with no
 width argument (native).
 
-Normalising the HAND CROP to ANCHOR_W reconciles the two rather than picking a side: the
-settle gate keeps its 2000 px frame and its thresholds stay valid, the hand reader gets
-the 979 px crop it was measured on. Neither calibration is broken and no constant moves.
+Normalising the HAND CROP to ANCHOR_W reconciled the two rather than picking a side: the
+settle gate kept its frame and its thresholds stayed valid, the hand reader got the 979 px
+crop it was measured on. **That normalisation is STILL load-bearing now the widths agree**,
+because it is about the CAPTURE geometry and not about this constant: re-measured
+2026-09-17 at 1867x1050, a live geometry this rig does produce, the hand read goes
+0.706 -> 0.978 with it. Do not remove it on the strength of the two widths matching.
 
 **The reader is calibrated at a HAND CROP 979 px wide (`local_hand.ANCHOR_W`). `_fast_grab`
 hands it 1020 px -- 1.042x.** Section 3 has carried "the
@@ -1008,7 +1033,11 @@ The SAME frame, resized:
 Over the match's own frames it is 12 of 20, and the failures are TOTAL (0 of 4) rather
 than partial -- it reads marginally, not never, which is why nothing looked obviously
 broken. All 22 decisions came back `Playing None`, 11 plays were refused for want of a
-cursor (glow 10.4-10.9 against `CURSOR_GLOW_MIN` 15), and not one card was played.
+cursor (glow 10.4-10.9 against `CURSOR_GLOW_MIN`, **15 at the time; it is 10.0 now**,
+`local_hand.py:1198`, fitted between a fixture false max of 8.4 and a live true of 12.4 --
+so the same glows would read today). Not one card was played. Note `ban_grid.py:611` also
+defines a `CURSOR_GLOW_MIN`, at 0.030: a FRACTION of pixels, a different quantity from the
+hand reader's brightness lift, and the two must never be compared.
 
 **NOTHING ON DISK COULD HAVE CAUGHT IT.** Every archived frame is 1920x1080 -- they were
 written by `game_capture.grab()`, which does not upscale -- so the whole corpus sits at
@@ -1018,7 +1047,7 @@ between `_fast_grab` and the reader, and is never written to disk. 10.31's shape
 a population that cannot contain the failing class.
 
 Fixed by normalising the hand crop to ANCHOR_W in `crop_gameplay_regions`, the one place
-every consumer takes it from, so `s = img.width / ANCHOR_W` is 1.0 for all of them at
+every consumer takes it from, so the scale factor `img.width / ANCHOR_W` is exactly one for all of them at
 once. Measured over 40 archived turn frames (156 readable cards):
 
     native 1920x1080     156 as-is   156 normalised     (no-op, as it must be)
@@ -1235,15 +1264,20 @@ are recorded here as unmeasured rather than quietly treated as evidence.
 start" is refuted 1,500 lines away in the same file ("three of five real sequences
 finished at 2/3 with the match starting anyway") and by section 4 here.
 
-### THE SUITE HAS FOUR DIFFERENT `check()` SIGNATURES, AND A REVERSED CALL ALWAYS PASSES
+### THE SUITE HAS NINE DIFFERENT `check()` SIGNATURES, AND A REVERSED CALL ALWAYS PASSES
 
-Written after shipping eight of them in one evening.
+Written after shipping eight of them in one evening. **This file said FOUR, and named four
+files; re-counted 2026-09-17 it is NINE signatures across 163 files**, and the two argument
+ORDERS are close to evenly split, which is what makes the trap live rather than rare:
 
-    tests/minigame/test_readable_hand_gate.py   def check(name, ok, detail="")
-    tests/rig/test_window_drift_guard.py        def check(name, cond)
-    tests/minigame/_run_harness.py              def check(cond, msg)
-    tests/rig/test_no_real_input_under_test_run.py, test_keymap_matches_chiaki.py,
-    test_chiaki_pid.py, test_deal_timing_tool.py   def check(ok, msg)
+    NAME first  80 files   (name, cond) x47   (name, ok, detail="") x12   (label, cond) x11
+                           (label, cond, detail="") x6   (msg, ok) x3   (name, cond, detail="") x1
+    COND first  83 files   (ok, msg) x40   (cond, msg) x29   (c, m) x14
+
+Recount it rather than trusting that table -- it is a copy, and the count has already
+rotted once:
+
+    grep -rh "^def check(" tests/ --include="*.py" | sort | uniq -c | sort -rn
 
 Call a name-first `check` as `check(condition, "message")` and the MESSAGE lands in
 the `ok` slot. A non-empty string is truthy, so it prints `PASS True` and appends
@@ -1612,13 +1646,15 @@ and mutants (`git log -- chain_walk.py`):**
    retry (`TURN_RETRY_MAX` 3). A frame that fits NOTHING is occluded (an NPC
    in the face) or already passed: turn and go on, no retry pushes.
 5. A wide forward search (`WIDE_AHEAD` 60, believed at `STRONG_MIN_INLIERS`
-   120, above the wrong-place p95 of 117) from the FIRST blind push and at
+   120 as first written -- **it ships at 165**, raised by the audit round below
+   to clear the wrong-place MAXIMUM rather than the p95 of 117) from the FIRST blind push and at
    unverified stops. At the office exit the shop facade across the street
    looks the same from the doorway and from halfway across; the loop crossed
    in two pushes and stood at the portraits while the estimate said
    "doorway". A margin over the runner-up was tried first and was wrong: in a
    window of adjacent frames the runner-up is the neighbour.
-6. `LOST_MAX` 9: nine iterations with nothing credible after the budget ends
+6. `LOST_MAX` (9 as first written, **13 as it ships**): that many iterations
+   with nothing credible after the budget ends
    the walk at once (80 s) instead of burning the 400 s cap (trial 3 pushed
    into a wall 312 times).
 
