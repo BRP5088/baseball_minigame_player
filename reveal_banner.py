@@ -24,7 +24,40 @@ import numpy as np
 # The announcement sits in the centre of the table, above the played cards.
 # Generous on purpose: the words are 328-578 px wide and move as they animate.
 BAND = (0.28, 0.40, 0.75, 0.63)      # x0, y0, x1, y1 as fractions
-MIN_FRAME_W = 1200                   # a crop cannot contain a 578 px template
+
+# THE TEMPLATES ARE PIXELS AND THE BAND IS A FRACTION, SO THE TEMPLATES MUST SCALE.
+# BAND scales with the capture; the bank is a fixed uint8 array handed to
+# matchTemplate at native size. A 4% change in width therefore puts the word and
+# the template at different scales and the correlation collapses. Measured on the
+# two fixtures, against BANNER_MIN 0.80:
+#
+#     frame width   HOME RUN!   PLAY BALL!
+#       1920          1.000       1.000     (their own source, so 1.000 proves nothing)
+#       2000          0.517       0.638     <- MISSED
+#       1867          0.679       0.723     <- MISSED
+#       1600          0.328       0.197     <- MISSED
+#
+# 2000 IS NOT HYPOTHETICAL: orchestrator._fast_grab asks game_capture.grab for
+# SETTLE_CALIBRATION_WIDTH = 2000, so the geometry that breaks this reader is the
+# rig's own, on the live path. CLAUDE.md section 3's named family, again: "a new
+# window written in raw pixels works perfectly on the machine it was tuned on and
+# silently lands on the wrong thing everywhere else".
+REF_W = 1920                         # the geometry every template was cut at
+
+# DERIVED, NOT WRITTEN. The floor exists so a CROP cannot be handed in, and it has
+# to be the width at which the widest template still fits the band. It was 1200
+# while BAND spans 0.47 and the widest template is 578 px, i.e. it needs 1230 --
+# so on a frame 1200-1229 px wide the play_ball templates hit the size skip, `out`
+# came back holding only home_run, read_banner's `if not s` guard did NOT fire
+# because the dict was non-empty, and the reader answered about a ballot with a
+# MISSING CLASS (10.31) with nothing in the detail to say so.
+#
+# Now that templates scale with the frame the arithmetic is scale-free, but the
+# floor stays derived rather than written: a wider template added to the bank
+# raises it automatically instead of silently reopening the same hole.
+def _min_frame_w():
+    widest = max(t.shape[1] for _l, t in _bank())
+    return int(-(-widest // (BAND[2] - BAND[0])))      # ceil
 
 # A FRAGMENT IS NOT A WORD, ENFORCED AT MATCH TIME AND NOT ONLY AT BUILD TIME.
 # tools/build_banner_templates.py refuses to CUT anything narrower, but that
@@ -72,22 +105,33 @@ def _bank():
 def scores(full_frame):
     """{label: best correlation} over the band. Raises on too small an input."""
     import cv2
-    if full_frame.width < MIN_FRAME_W:
+    floor = _min_frame_w()
+    if full_frame.width < floor:
         raise ValueError(
             f"reveal_banner needs the WHOLE frame; got {full_frame.width}px wide, "
-            f"under the {MIN_FRAME_W}px floor. A crop cannot hold the templates.")
+            f"under the {floor}px floor. A crop cannot hold the templates.")
     w, h = full_frame.size
     x0, y0, x1, y1 = BAND
     band = np.asarray(full_frame.convert("L").crop(
         (int(w * x0), int(h * y0), int(w * x1), int(h * y1))), dtype=np.uint8)
+    s = full_frame.width / REF_W
     out = {}
     for label, tpl in _bank():
+        if s != 1.0:
+            tpl = cv2.resize(tpl, (max(1, int(round(tpl.shape[1] * s))),
+                                   max(1, int(round(tpl.shape[0] * s)))),
+                             interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
         if tpl.shape[0] > band.shape[0] or tpl.shape[1] > band.shape[1]:
             continue
         # IMMEDIATELY BEFORE THE MATCH, deliberately. Placed earlier it guards
         # what was LOADED rather than what is USED, and a mutant that truncated
         # the template after the check sailed straight through it.
-        if tpl.shape[1] < FRAGMENT_MIN_W:
+        #
+        # AND THE FLOOR SCALES WITH THE TEMPLATE. FRAGMENT_MIN_W is a PIXEL width
+        # measured at REF_W; comparing a scaled template against the raw literal
+        # would reject every legitimate template on a smaller capture and accept
+        # fragments on a larger one.
+        if tpl.shape[1] < FRAGMENT_MIN_W * s:
             continue
         r = cv2.matchTemplate(band, tpl, cv2.TM_CCOEFF_NORMED)
         out[label] = max(out.get(label, -1.0), float(r.max()))

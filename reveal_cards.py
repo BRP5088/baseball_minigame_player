@@ -141,7 +141,17 @@ def _side(img, zone):
 # pad of 8. Widening the band is safe here in a way that widening the zone is
 # not: this search matches four specific WORDS, and a runner's card carries a
 # BATTER/PITCHER banner, not a tactics one.
-BANNER_ZONE_PAD = 45
+# THE REFERENCE GEOMETRY EVERY TEMPLATE AND PIXEL OFFSET BELOW WAS MEASURED AT.
+# The zones are FRACTIONS and scale with the capture; the template bank is a fixed
+# uint8 array handed to matchTemplate at native size, and BANNER_ZONE_PAD is raw
+# pixels. Mixing the two means a 4% change in width puts the banner and its template
+# at different scales and the correlation collapses -- measured on the sibling
+# reveal_banner reader, where HOME RUN! went 1.000 at 1920 to 0.517 at 2000 against
+# a gate of 0.80. 2000 is the width orchestrator._fast_grab actually asks for, so
+# that is the live path, not a hypothetical.
+REF_W = 1920
+
+BANNER_ZONE_PAD = 45                 # px at REF_W; scaled at use
 # THE GATE IS MEASURED, NOT PICKED -- see tools/banner_kind_census.py and the
 # numbers recorded beside it in the test.
 TACTICS_KIND_MIN = 0.75
@@ -170,13 +180,24 @@ def tactics_kind_scores(full_frame, zone):
     import cv2
     import numpy as np
     w, h = full_frame.size
+    s = w / REF_W
+    pad = int(round(BANNER_ZONE_PAD * s))
     x0, y0, x1, y1 = zone
-    box = (max(0, int(w * x0) - BANNER_ZONE_PAD), max(0, int(h * y0) - BANNER_ZONE_PAD),
-           min(w, int(w * x1) + BANNER_ZONE_PAD), min(h, int(h * y1) + BANNER_ZONE_PAD))
+    box = (max(0, int(w * x0) - pad), max(0, int(h * y0) - pad),
+           min(w, int(w * x1) + pad), min(h, int(h * y1) + pad))
     band = np.asarray(full_frame.convert("L").crop(box), dtype=np.uint8)
     out = {}
     for kind, tpl in _tactics_bank():
-        if tpl.shape[1] < FRAGMENT_MIN_W:
+        if s != 1.0:
+            tpl = cv2.resize(tpl, (max(1, int(round(tpl.shape[1] * s))),
+                                   max(1, int(round(tpl.shape[0] * s)))),
+                             interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
+        # THE FRAGMENT FLOOR SCALES WITH THE TEMPLATE. It is a PIXEL width measured
+        # at REF_W, so comparing a scaled template against the raw literal would
+        # reject every legitimate template on a smaller capture and wave fragments
+        # through on a larger one. Kept immediately before the match, deliberately:
+        # placed earlier it guards what was LOADED rather than what is USED.
+        if tpl.shape[1] < FRAGMENT_MIN_W * s:
             continue
         if tpl.shape[0] > band.shape[0] or tpl.shape[1] > band.shape[1]:
             continue
