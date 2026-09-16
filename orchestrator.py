@@ -6260,10 +6260,24 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
         # screens of a process nothing established row 0 at all -- and the
         # dead-reckoned placement path assumes it. The scan is skipped; the homing
         # is not, and it costs nothing when the level already reads 0.
+        # UNPACK AND REPORT, exactly as the copy in the `finally` does. This called
+        # _ban_scroll_to_top() as a bare statement inside a blanket except, and it
+        # returns (reached_top, level) and CAN legitimately fail -- it gives up after
+        # 20 presses and returns (False, lvl). Its twin, added in the same commit,
+        # prints "could not unwind the grid to row 0 ... a later dead-reckoned
+        # placement would start from the wrong row"; this one said nothing. And this
+        # is the branch taken on the SECOND and later ban screens of a process, where
+        # the scan produces no other log at all, feeding select_bans_and_start_full,
+        # whose docstring says "Assumes the caller starts at (0, 0)". There is no
+        # reason for two copies of one guard to differ in whether they speak.
         try:
-            _ban_scroll_to_top()
-        except Exception:
-            pass
+            _ok, _lvl = _ban_scroll_to_top()
+            if not _ok:
+                print(f"  [ban] cache hit, but could NOT home the grid to row 0 "
+                      f"(level reads {_lvl}) — a dead-reckoned placement would start "
+                      "from the wrong row.")
+        except Exception as _exc:
+            print(f"  [ban] cache hit, and homing the grid raised ({_exc})")
         return _cached_ban_collection
 
     # START AT THE TOP, OR SAY THE SCAN IS PARTIAL. See _ban_scroll_to_top.
@@ -7748,9 +7762,40 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         # ($50)" for all 15 polls, refusing to press again, then
                         # stopping. NO RE-DEBIT happens here; only the keystroke
                         # is retried, so the accounting is untouched either way.
+                        # ...AND THAT PROOF MEANS THE FLAG IS STALE, SO CLEAR IT
+                        # RATHER THAN PRESSING PAST IT.
+                        #
+                        # "NO RE-DEBIT happens here; only the keystroke is retried,
+                        # so the accounting is untouched either way" is true ONLY IF
+                        # THIS PROCESS DID THE DEBIT. match_in_progress is loaded
+                        # from disk at startup, so on a FRESH process the flag can be
+                        # a previous run's -- and then this branch presses
+                        # start_match with no debit, no max_spend check, no
+                        # save_progress and the flag still set. The $50 leaves the
+                        # in-game wallet and the record never hears about it, which
+                        # is CLAUDE.md's "A STALE match_in_progress SPENDS AN
+                        # UNTRACKED $50" reached through the branch that proves the
+                        # flag is stale.
+                        #
+                        # The screen has already answered the question CLAUDE.md
+                        # says to ask ("it is often NOT stale -- check the screen
+                        # before clearing it"): the world HUD is never drawn over a
+                        # match, so this IS the dealer prompt and no match is
+                        # running. Clear, persist, and let the NEXT poll take the
+                        # ordinary debit path, which checks the balance and
+                        # max_spend and records the spend.
                         print("  [C5] ...but the dealer's \"Play ($50)\" prompt is "
-                              "on screen, so no match is actually running — "
-                              "retrying the press without re-debiting.")
+                              "on screen, so no match is actually running — the "
+                              "match_in_progress flag is STALE. Clearing it and "
+                              "letting the next poll debit properly, rather than "
+                              "pressing start_match with no accounting.")
+                        match_in_progress = False
+                        bans_done_this_match = False
+                        save_progress(wins, losses, draws, balance, progress_file,
+                                      match_in_progress=False,
+                                      bans_done_this_match=False)
+                        wait_for_screen_to_settle(max_wait=4.0, regions="match_start")
+                        continue
                     reset_hand_memory()  # a new match is a new hand; nothing carries over
                     press("start_match")
                     wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
@@ -7979,6 +8024,22 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     # still reports what actually landed, and C3 already relies on this
                     # flag being checked at the TOP of the branch.
                     bans_done_this_match = True
+                    # PERSIST IT HERE TOO, for the reason the comment above gives.
+                    # The in-memory flag is set BEFORE the first select_card so that a
+                    # partial ban set survives and nothing can un-ban what landed --
+                    # but the DISK copy was written only after navigation, placement,
+                    # the blind fallback and the counter check, seconds to tens of
+                    # seconds later. Any death in that window (Ctrl-C, SIGTERM, OOM, a
+                    # BaseException the `except Exception` below does not catch) left
+                    # the disk saying the bans were NOT done, and the next run
+                    # re-entered with the cached collection and TOGGLED THE SAME CELLS
+                    # BACK OFF -- select_card is a toggle, so two submissions of the
+                    # same three cards is NET ZERO BANS. That is the exact sequence
+                    # this flag was introduced to prevent, surviving in the gap
+                    # between setting it and saving it.
+                    save_progress(wins, losses, draws, balance, progress_file,
+                                  match_in_progress=match_in_progress,
+                                  bans_done_this_match=True)
                     # Did the dead-reckoned fallback run? A list so the on_blind lambda
                     # can set it without a nonlocal.
                     _blind_fired = []

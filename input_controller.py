@@ -1067,11 +1067,18 @@ def _verified_select_and_play(card_index, tactics_index, look):
     The unwind is best-effort and never masks the original error: if the screen
     cannot be read to unwind, the raise still propagates.
     """
-    try:
-        _g0, _ys0, _n0, _before = _look_settled(look)
-        _before = set(_before) if _n0 == MAX_HAND_SIZE else set()
-    except Exception:
-        _before = set()
+    # NO PRE-READ. Computing `before` here called _look_settled -- in production
+    # orchestrator.hand_cursor_look -> _grab_settle_regions, a SETTLE-GATED LIVE
+    # CAPTURE that retries LOOK_RETRIES times on an unreadable frame -- and the body
+    # then calls _look_settled again as its first act. An unreadable hand burnt the
+    # retry budget TWICE, and the extra read landed on every play, not just the
+    # raising ones.
+    #
+    # An empty `before` is the right value anyway: _unwind_selection restricts itself
+    # to `(set(sel) - before) & ours`, so before=set() puts down exactly the slots
+    # THIS call targeted -- which on a raised, half-finished play is precisely what
+    # should come back down, and nothing that belonged to a previous caller.
+    _before = set()
     _targets = {t for t in (card_index, tactics_index) if t is not None}
     try:
         return _verified_select_and_play_inner(card_index, tactics_index, look)

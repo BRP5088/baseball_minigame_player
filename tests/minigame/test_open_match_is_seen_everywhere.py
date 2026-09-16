@@ -71,15 +71,41 @@ try:
 
     print("5. preflight consults it, and BLOCKS rather than warns")
     src = open(os.path.join(_ROOT, "preflight.py")).read()
-    check("open_match_files" in src, "preflight calls open_match_files")
     tree = ast.parse(src)
-    # the call must be followed by bad(), not warn(): a warning does not block a run, which
-    # is the exact mistake this guard was fixed for once already, in 2026-09-04
-    seg = src[src.index("open_match_files"):]
-    seg = seg[:seg.index("print(") if "print(" in seg else len(seg)]
-    check("bad(" in seg and "warn(" not in seg.split("bad(")[0],
-          "and the verdict on an open match is bad(), not warn() — a warning does not "
-          "block, which is the mistake this guard already had once")
+
+    # ASSERT ON THE CODE, NOT ON A SUBSTRING (CLAUDE.md 10.10b). This is the only
+    # thing anywhere pinning preflight to the stale-match_in_progress guard -- the
+    # reason it was escalated from warn() to bad() -- and it was pinned by
+    # `"open_match_files" in src` plus a slice from `src.index("open_match_files")`.
+    # preflight.py names that function TWICE: once at line 168 in a COMMENT and once
+    # at line 172 in the real call. So the membership test had a second supplier, and
+    # index() found the COMMENT, meaning the slice began in the wrong place and the
+    # bad()/warn() check was reading whatever followed a comment. A substring cannot
+    # tell a comment from a call.
+    _loops = []
+    for _n in ast.walk(tree):
+        if not isinstance(_n, ast.For):
+            continue
+        _it = _n.iter
+        _fn = (_it.func.attr if isinstance(_it, ast.Call)
+               and isinstance(_it.func, ast.Attribute)
+               else _it.func.id if isinstance(_it, ast.Call)
+               and isinstance(_it.func, ast.Name) else None)
+        if _fn == "open_match_files":
+            _loops.append(_n)
+
+    check(len(_loops) == 1,
+          f"preflight ITERATES open_match_files exactly once (found {len(_loops)} "
+          "loop(s)) — a comment mentioning it is not a call")
+
+    if _loops:
+        _body = _loops[0].body
+        _calls = {c.func.id for c in ast.walk(ast.Module(body=_body, type_ignores=[]))
+                  if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+        check("bad" in _calls and "warn" not in _calls,
+              f"and the verdict inside that loop is bad(), not warn() — a warning "
+              f"does not block a run, which is the mistake this guard already had "
+              f"once in 2026-09-04 (calls found: {sorted(_calls)})")
 
     print("6. the real tree is scanned by the same call")
     real = o.open_match_files(_ROOT)

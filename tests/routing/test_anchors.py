@@ -28,17 +28,30 @@ for x in a:
         f"anchor t={x['t']}: threshold {x['threshold']:.3f} is outside the "
         f"measured gap ({x['far']:.3f}..{x['near']:.3f})")
 
-# The early anchors are the trustworthy ones. The late ones sit inside a bar
-# full of NPCs who move between runs — Wanda was found at the arrival point
-# despite appearing at t=17.95 in the recording — so their thin margins are not
-# evidence of position. Guard the distinction rather than the numbers.
+# The early anchors are the trustworthy ones, and THE REASON IS THE NPCs, NOT THE
+# MARGINS. The late ones sit inside a bar full of NPCs who move between runs —
+# Wanda was found at the arrival point despite appearing at t=17.95 in the
+# recording — so their margins are not evidence of position whatever size they are.
+#
+# THIS USED TO ALSO ASSERT THAT EVERY LATE GAP IS THINNER THAN EVERY EARLY ONE,
+# WRITTEN AS `... or True`, WHICH CANNOT FAIL ON ANY INPUT. The `or True` was
+# load-bearing, because the claim is FALSE on today's data:
+#
+#     early n=7   gaps 0.0620 .. 0.4380
+#     late  n=3   gaps 0.0700 .. 0.1010
+#     max(late) 0.1010 < min(early) 0.0620  ->  False
+#
+# One EARLY anchor is thinner than every late one. The blanket ordering is not a
+# property of this data and asserting it with an escape hatch stated something
+# untrue while proving nothing. What IS true is pinned immediately below: every
+# late gap is under 0.12. That is the measured fact, and the NPC argument above is
+# the reason they are distrusted.
 early = [x for x in a if x["t"] < 14.0]
 assert len(early) >= 5, f"only {len(early)} early anchors; expected the office/stairs run"
 assert min(x["gap"] for x in early) >= 0.05
 
 late = [x for x in a if x["t"] > 20.0]
 if late:
-    assert max(x["gap"] for x in late) < min(x["gap"] for x in early) or True
     thin = [x["t"] for x in late if x["gap"] < 0.12]
     assert thin, (
         "the late anchors used to have margins under 0.12, which is why they "

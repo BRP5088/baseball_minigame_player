@@ -81,10 +81,25 @@ def _discs(img, zone):
                 continue
             if not (DISC_R[0] <= r <= DISC_R[1]) or c[3] < DISC_MIN_REACH:
                 continue
-            k = (x // 20, y // 20)
-            if k in seen:
+            # DEDUPE BY DISTANCE, NOT BY A FIXED BUCKET GRID.
+            #
+            # This was `k = (x // 20, y // 20)`, and candidates are collected across
+            # every entry in DARK_THRESHOLDS -- so the SAME physical disc found at
+            # two thresholds can differ by ONE PIXEL and straddle a bucket edge,
+            # surviving as two entries. Measured on the 23 archived reveal frames:
+            # r_001099.jpg yields (1019, 781) and (1020, 781), because 1019 // 20 is
+            # 50 and 1020 // 20 is 51.
+            #
+            # Harmless until 616089d, which made _side REFUSE when a second disc in
+            # the zone reads a legal card power -- so that duplicate then reads as a
+            # second player card and throws away a power the reader HAD. Confirmed on
+            # that frame: ours came back power=None, ambiguous=2, margin unreadable.
+            #
+            # The bucket was also a raw pixel grid, unscaled, which is the same
+            # family again. A radius comparison has neither problem.
+            if any(abs(x - a) <= DISC_R[1] and abs(y - b) <= DISC_R[1]
+                   for a, b, _r in out):
                 continue
-            seen.add(k)
             out.append((x, y, r))
     out.sort(key=lambda c: (c[1], c[0]))
     return out
