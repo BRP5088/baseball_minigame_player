@@ -6651,6 +6651,49 @@ def hand_cursor_look():
             len(rows), selected)
 
 
+def spend_and_play(player_idx, tactics_idx=None):
+    """Forget the slots, then play them through the VERIFIED path. (ok, why).
+
+    THE ONE ENTRY POINT ANYTHING OUTSIDE play_one_turn SHOULD USE, because a
+    hand-driven crawl runs one process per action and gets BOTH of the footguns
+    that play_one_turn already handles:
+
+      * FORGETTING THE SPENT SLOTS. The hand memory now persists to disk, so a
+        crawl script that calls select_and_play directly leaves the card it just
+        played on disk for the next process to believe. Observed 2026-09-16:
+        "slot 1: MEMORY WAS WRONG (7/0 remembered, 8/0 read)". The read-audit
+        caught it, which is the safety net doing its job -- and a safety net
+        firing every turn is a design that is wrong, not a design that is safe.
+
+      * THE `look` ARGUMENT. Without it select_and_play takes its BLIND branch,
+        which dead-reckons the cursor and `return True` UNCONDITIONALLY, so a
+        refusal and a success are indistinguishable (10.1). This console drops
+        presses -- measured, three move_rights 0.31 s apart moved the cursor two
+        slots -- so dead reckoning cannot be trusted here at all. A crawl script
+        that omitted it selected slot 0, then DESELECTED slot 0 (select_card is
+        a toggle), committed nothing, and reported True.
+    """
+    import input_controller as _ic
+    forget_hand_slot(player_idx, tactics_idx)
+    ok = _ic.select_and_play(player_idx, tactics_idx, look=hand_cursor_look)
+    if ok is False:
+        return False, "the cursor could not be verified -- NOTHING was committed"
+    return True, None
+
+
+def spend_and_discard(player_idx):
+    """Forget the slot, then discard it through the VERIFIED path. (ok, why).
+
+    Same two footguns as spend_and_play; see its docstring.
+    """
+    import input_controller as _ic
+    forget_hand_slot(player_idx)
+    ok = _ic.select_and_discard(player_idx, look=hand_cursor_look)
+    if ok is False:
+        return False, "the card could not be verified -- nothing thrown"
+    return True, None
+
+
 def play_one_turn(state_json: dict, batters_used: int):
     """
     Execute one turn. `batters_used` is the caller-tracked count of

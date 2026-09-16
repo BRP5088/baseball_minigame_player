@@ -6,6 +6,12 @@ PS5 and streamed to this Mac through a patched chiaki-ng.
 Everything here was learned by getting it wrong first. The cost of re-deriving
 any of it is a wrong conclusion reported confidently, real money, or both.
 
+**THE GAME'S OWN RULES LIVE IN `RULES.md`.** How a match is shaped, what the
+cards are worth, how an at-bat resolves and how long the baserunning takes are
+about the GAME, not about this rig — they are stable, they are what a new
+session needs first, and they were scattered through §4 here. This file stays
+about what is expensive to relearn about the RIG, the readers and the method.
+
 **How to read this file.** Current state is §8. Dead ideas are `GRAVEYARD.md`
 (not loaded automatically — **read it before building any navigation change**).
 Open work is §11. Nothing else here is a status report. Constants quoted here

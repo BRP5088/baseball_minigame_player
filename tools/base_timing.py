@@ -37,6 +37,7 @@ import local_state as ls
 BASES = ("third_base", "second_base", "first_base")
 STRIDE = 12        # pass 1: 5 Hz on 60 fps
 HOLD = 6           # frames a new state must hold to count as a real change
+SCREEN_CHECK_EVERY = 30   # the screen class cannot change inside one animation
 PRE_S, POST_S = 1.0, 12.0    # a full clearing of the bases is the longest animation
 
 
@@ -117,12 +118,28 @@ def time_event(path, centre, fps, outdir=None):
     cap = cv2.VideoCapture(path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, lo)
     seq = []
+    # THE SCREEN-CLASS CHECK IS PERIODIC, NOT PER FRAME. read_ban_counter is OCR
+    # and read_result is a template bank; running both on every one of ~780
+    # frames made a single event take minutes. The screen class cannot change
+    # inside one play animation -- that is the whole premise of the window -- so
+    # it is verified every SCREEN_CHECK_EVERY frames and the rest read the bases
+    # directly. If a check ever fails the window is abandoned rather than
+    # partially trusted.
+    bad_screen = False
     for n in range(lo, hi):
         ok, fr = cap.read()
         if not ok:
             break
-        st = _occ(_crops(fr), Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)))
+        crops = _crops(fr)
+        if (n - lo) % SCREEN_CHECK_EVERY == 0:
+            full = Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB))
+            if _occ(crops, full) is None and _occ(crops) is not None:
+                bad_screen = True      # the screen gate, not the base reader, refused
+                break
+        st = _occ(crops)
         seq.append({"frame": n, "t": round((n - lo) / fps, 3), "occ": st})
+    if bad_screen:
+        seq = []
     cap.release()
     # per-base flip times, taking only changes that HOLD
     flips = []
@@ -132,6 +149,16 @@ def time_event(path, centre, fps, outdir=None):
             if s["occ"] is None:
                 continue
             v = s["occ"][b]
+            # AN ABSTENTION IS NOT AN EMPTY BASE. read_base returns None when it
+            # cannot read, and local_state's own docstring is emphatic that None
+            # "never 0, because 0 would be a distance and this is an absence".
+            # Letting it through made `v != last` fire on None and recorded a
+            # flip TO None, which printed as "base emptied" -- so the first
+            # result showed first base emptying twice in 0.36 s, which is not a
+            # thing that can happen. A frame that did not read is skipped; it is
+            # not evidence either way.
+            if v is None:
+                continue
             if last is None:
                 last = v
                 continue
@@ -139,7 +166,8 @@ def time_event(path, centre, fps, outdir=None):
             # evidence behind it: mid-animation every frame in the hold window
             # read None, the comprehension filtered them all out, and the empty
             # `all` waved it through. The window must contain real observations.
-            window = [x["occ"][b] for x in seq[j:j + HOLD] if x["occ"] is not None]
+            window = [x["occ"][b] for x in seq[j:j + HOLD]
+                      if x["occ"] is not None and x["occ"][b] is not None]
             if v != last and len(window) >= max(2, HOLD // 2) and all(w == v for w in window):
                 flips.append({"base": name, "t": s["t"], "to": v})
                 last = v
@@ -173,7 +201,7 @@ if __name__ == "__main__":
         seq, flips = time_event(path, e["frame"], fps, d)
         span = (flips[-1]["t"] - flips[0]["t"]) if len(flips) > 1 else None
         print(f"  event {k}: {e['before']} -> {e['after']}  flips="
-              + ", ".join(f"{f['base']}{'+' if f['to'] else '-'}@{f['t']:.2f}s" for f in flips)
+              + ", ".join(f"{f['base']}{'ON' if f['to'] else 'OFF'}@{f['t']:.2f}s" for f in flips)
               + (f"   SPAN {span:.2f}s" if span is not None else "   (single flip)"),
               flush=True)
         rows.append({**e, "flips": flips, "span_s": span, "dir": d})
