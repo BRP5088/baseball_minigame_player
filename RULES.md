@@ -141,8 +141,18 @@ different moments.
 **Runners can be lapped**: this game lets base runners pass each other, so
 real-baseball intuitions about ordering are unsafe. They cannot share a base.
 
-**BLACK PITCHER BUFFS SUBTRACT RUNNER MOVEMENT** — that is what FIELDING does,
-and it is why fielding only matters with runners on base.
+**FIELDING SUBTRACTS RUNNER MOVEMENT, BY THE NUMBER SPECIFIED.** A runner
+advances (its SPEED minus the pitcher's total FIELDING) bases, floored at zero.
+Total fielding is the pitcher card's own `secondary` plus any Fielding Play
+bonus attached. *From the user, 2026-09-16.*
+
+**BOTH MEASUREMENTS FIT IT EXACTLY**, two outs differing only in the boost:
+
+    our 8/0 + FIELDING PLAY +1  ->  fielding 1   runner speed 1 - 1 = 0   did NOT move
+    our 9/0, no tactics         ->  fielding 0   runner speed 1 - 0 = 1   moved 1 base
+
+It is why fielding only matters with runners on base, and why the engine holds
+the boost back until there are some.
 
 ### Timing, measured 2026-09-16
 

@@ -906,10 +906,20 @@ def _read_fan(img, strong):
                 # slot, so there is no measured position to report -- and on slot 0 the
                 # constant equals the card's own resting position, so a LOST card read as
                 # a perfectly stable one. That is what hid a selected tactics card moving:
-                # find_tactics stops matching a card once it is selected, the row fell
-                # through to here, and the lift check then compared a constant with itself
-                # and could never fire (CLAUDE.md 10.1). Flagged so a caller that needs a
-                # real position can refuse instead of being handed furniture.
+                # The row fell through to here, so the lift check would have compared a
+                # constant with itself and could never fire (CLAUDE.md 10.1). Flagged so
+                # a caller that needs a real position can refuse instead of being handed
+                # furniture.
+                #
+                # THIS USED TO SAY "find_tactics stops matching a card once it is
+                # selected", and that claim was used on 2026-09-16 to explain a discard
+                # failure. It does not hold: a controlled test that same day pressed
+                # select_card once on a PITCH FOCUS and read it back as
+                # kind='tactics', type='pitch_boost', y measured, rise 43 px against a
+                # 25 px gate -- comfortably visible, not marginal. The discard failure
+                # was a DROPPED PRESS. The claim is removed rather than softened,
+                # because its only recorded use was to explain something it did not
+                # cause.
                 out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "unknown",
                             "digit": None, "score": 0.0, "y_measured": False,
                             "y": int(SLOT_PLAYER[i][1] * s)})

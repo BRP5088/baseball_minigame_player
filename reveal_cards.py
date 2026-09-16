@@ -120,6 +120,90 @@ def _side(img, zone):
     return out
 
 
+# The banner sits BELOW its badge on the card. Measured across both sides and both
+# phases: the text spans about (-85, +6) to (+35, +40) from the badge centre, and
+# the four banners run 115-142 px wide.
+# THE BANNER IS SEARCHED FOR IN THE WHOLE ZONE, NOT AT AN OFFSET FROM A BADGE.
+# Two versions anchored on the tactics badge and both failed, the second silently:
+# _discs does not reliably find a tactics badge at all -- on the HOME side it
+# returned the PLAYER card's power disc at (1008, 789) instead of the badge at
+# ~(1130, 738), so the band landed 120 px away and barely overlapped the word. It
+# still produced a number (0.197) rather than an error, which is 10.1's family,
+# and a spot-check passed only because the badge position was hand-fed.
+#
+# 10.23's rule is the fix: SEARCH FOR THE ASSET. The zone already contains the
+# whole card, matchTemplate finds the best position inside it, and nothing has to
+# be assumed about where the badge sits.
+# THE PAD IS GENEROUS, AND IT HAS TO BE. The zones themselves are deliberately
+# TIGHT so a runner animating through the centre is not read as the played card --
+# but that tightness clips the BANNER: PITCH FOCUS spans to x=1211 while
+# ZONE_MOUND ends at 1190, so pitch_boost matched 0 of 21 held-out frames at a
+# pad of 8. Widening the band is safe here in a way that widening the zone is
+# not: this search matches four specific WORDS, and a runner's card carries a
+# BATTER/PITCHER banner, not a tactics one.
+BANNER_ZONE_PAD = 45
+# THE GATE IS MEASURED, NOT PICKED -- see tools/banner_kind_census.py and the
+# numbers recorded beside it in the test.
+TACTICS_KIND_MIN = 0.75
+FRAGMENT_MIN_W = 100
+
+_TBANK = None
+
+
+def _tactics_bank():
+    global _TBANK
+    if _TBANK is None:
+        import numpy as np
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "reveal_tactics_templates.npz")
+        with np.load(p) as z:
+            _TBANK = [(k.split("__")[0], z[k]) for k in z.files]
+    return _TBANK
+
+
+def tactics_kind_scores(full_frame, zone):
+    """{kind: best correlation} for the tactics banner anywhere in `zone`.
+
+    `zone` is ZONE_HOME or ZONE_MOUND -- the same fractional boxes read_reveal
+    uses, so the caller never has to locate the badge.
+    """
+    import cv2
+    import numpy as np
+    w, h = full_frame.size
+    x0, y0, x1, y1 = zone
+    box = (max(0, int(w * x0) - BANNER_ZONE_PAD), max(0, int(h * y0) - BANNER_ZONE_PAD),
+           min(w, int(w * x1) + BANNER_ZONE_PAD), min(h, int(h * y1) + BANNER_ZONE_PAD))
+    band = np.asarray(full_frame.convert("L").crop(box), dtype=np.uint8)
+    out = {}
+    for kind, tpl in _tactics_bank():
+        if tpl.shape[1] < FRAGMENT_MIN_W:
+            continue
+        if tpl.shape[0] > band.shape[0] or tpl.shape[1] > band.shape[1]:
+            continue
+        r = cv2.matchTemplate(band, tpl, cv2.TM_CCOEFF_NORMED)
+        out[kind] = max(out.get(kind, -1.0), float(r.max()))
+    return out
+
+
+def read_tactics_kind(full_frame, zone):
+    """(kind, detail) for the tactics card in `zone` (ZONE_HOME or ZONE_MOUND).
+
+    None means NOT READ. It never guesses: section 4 says only SWING and PITCH
+    boosts add power, so a wrong kind puts a bonus into a margin that should not
+    be there -- or leaves one out that should.
+    """
+    try:
+        sc = tactics_kind_scores(full_frame, zone)
+    except Exception as exc:
+        return None, f"banner reader could not run ({exc})"
+    if not sc:
+        return None, "no template fitted the band"
+    kind = max(sc, key=sc.get)
+    if sc[kind] < TACTICS_KIND_MIN:
+        return None, f"best {kind} {sc[kind]:.3f} under {TACTICS_KIND_MIN}"
+    return kind, f"{kind} {sc[kind]:.3f}"
+
+
 def read_reveal(full_frame, phase="batting"):
     """{'ours', 'theirs', 'batter', 'pitcher'} from a reveal frame.
 
