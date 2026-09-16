@@ -4386,17 +4386,124 @@ def _retry_local_hand(state):
 HAND_MEMORY_MIN_ART = 0.90
 _hand_memory = {}
 
+# THE MEMORY MUST SURVIVE THE PROCESS BOUNDARY, BECAUSE CRAWL MODE HAS ONE PER TURN.
+#
+# `_hand_memory` is a module-level dict and nothing persisted it, so it was wiped
+# between every action of a hand-driven crawl. DEMONSTRATED, not inferred: reading a
+# hand populates it ({2: ('4', 3), 3: ('5', 2), 4: ('4', 2)}), and a second process
+# starts at {}. Across the 2026-09-15 match it therefore never carried one card
+# forward -- the feature worked perfectly and never once had the chance to fire. The
+# user asked twice why it had not helped and was told about forget_hand_slot, which
+# is true and was NOT the operative cause.
+#
+# THE TWO MODES FALL OUT WITHOUT A FLAG, which is the point of loading only when the
+# dict is EMPTY. A live run's dict is empty exactly once, at match start -- and
+# reset_hand_memory() has just deleted the file there, so it reads nothing and never
+# touches disk again. A crawl process starts empty every time, so it always loads.
+#
+# VALIDATION USES THE CODE'S OWN AUDIT RULE AND INVENTS NO CONSTANT. A timestamp was
+# considered and rejected: match_log.jsonl carries no timestamps, so no staleness
+# bound could be derived, and a picked one is exactly what 10.4 forbids. Instead the
+# file is checked the way a readable card already audits the in-process memory --
+# every slot that reads NOW must agree with what the file claims for it. A file from
+# a different hand disagrees almost immediately; a file that agrees on every visible
+# slot is the same hand. At least one slot must be checkable, so a frame where
+# nothing reads cannot silently accept an arbitrary file.
+HAND_MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "hand_memory.json")
+_hand_memory_loaded = False
+
+
+def _save_hand_memory(phase=None):
+    """Write the memory through on every mutation. Never raises into the turn loop.
+
+    `art` is dropped: it is a numpy vector, it is diagnostics-only by its own comment,
+    and the carry-forward decision is forget_hand_slot(), not similarity.
+    """
+    try:
+        if not _hand_memory:
+            if os.path.exists(HAND_MEMORY_FILE):
+                os.remove(HAND_MEMORY_FILE)
+            return
+        payload = {"phase": phase,
+                   "slots": {str(k): {"power": str(v["power"]),
+                                      "secondary": (None if v.get("secondary") is None
+                                                    else int(v["secondary"]))}
+                             for k, v in _hand_memory.items()}}
+        tmp = HAND_MEMORY_FILE + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(payload, fh)
+        os.replace(tmp, HAND_MEMORY_FILE)     # atomic: a crash cannot leave a half file
+    except Exception:
+        pass
+
+
+def _load_hand_memory(rows, phase=None):
+    """Fill an EMPTY memory from disk, but only if the live hand corroborates it.
+
+    Returns the number of slots adopted. Never raises.
+    """
+    global _hand_memory_loaded
+    if _hand_memory_loaded or _hand_memory:
+        return 0
+    _hand_memory_loaded = True
+    try:
+        with open(HAND_MEMORY_FILE) as fh:
+            payload = json.load(fh)
+    except Exception:
+        return 0
+    # A NEW HALF DEALS A FRESH FIVE (section 4), so a phase mismatch is decisive.
+    if phase is not None and payload.get("phase") not in (None, phase):
+        print(f"  [local] hand memory on disk is from the {payload.get('phase')} half "
+              f"and this is {phase} -- discarding it")
+        return 0
+    slots = payload.get("slots") or {}
+    checked = 0
+    for i, r in enumerate(rows):
+        if r.get("digit") is None:
+            continue
+        got = slots.get(str(i))
+        if got is None:
+            continue
+        checked += 1
+        if str(got.get("power")) != str(r.get("digit")):
+            print(f"  [local] hand memory on disk disagrees at slot {i} "
+                  f"({got.get('power')} on file, {r.get('digit')} on screen) "
+                  f"-- it is a different hand, discarding it")
+            return 0
+    if not checked:
+        # NOTHING CORROBORATED IT. Accepting here would mean trusting an arbitrary
+        # file on a frame where no card reads -- which is precisely the frame the
+        # memory is consulted on, so the error would be invisible.
+        print("  [local] hand memory on disk could not be corroborated by any "
+              "readable card -- not using it")
+        return 0
+    for k, v in slots.items():
+        _hand_memory[int(k)] = {"power": v.get("power"), "secondary": v.get("secondary"),
+                                "art": None}
+    print(f"  [local] hand memory restored from disk: {len(slots)} slot(s), "
+          f"corroborated by {checked} readable card(s)")
+    return len(slots)
+
 
 def forget_hand_slot(*slots):
     """A slot we SPENT. Its card is gone, so nothing about it may be carried forward."""
     for s in slots:
         if s is not None:
             _hand_memory.pop(int(s), None)
+    # WRITE THROUGH IMMEDIATELY. A crash between the spend and the next save would
+    # otherwise leave the played card on disk for the next process to believe.
+    _save_hand_memory()
 
 
 def reset_hand_memory():
     """A new match, or any point where the hand is not the hand we remember."""
+    global _hand_memory_loaded
     _hand_memory.clear()
+    _hand_memory_loaded = False
+    # DELETE THE FILE, not just the dict: a new match in the same phase would
+    # otherwise be handed the previous match's hand.
+    _save_hand_memory()
 
 
 MIN_LOCAL_HAND_CARDS = 3
@@ -4478,7 +4585,7 @@ def _hand_signature(hand_img):
                  for r in rows)
 
 
-def local_hand_cards(hand_img):
+def local_hand_cards(hand_img, phase=None):
     """(cards, None) in the paid schema's shape, or (None, why) when the hand is not
     fully readable.
 
@@ -4499,6 +4606,7 @@ def local_hand_cards(hand_img):
         rows = local_hand.read_hand(hand_img)
     except Exception as exc:
         return None, f"read_hand raised ({exc})"
+    _phase_hint = phase
     # The fan is five slots BY CONSTRUCTION, so its own geometry is the authority --
     # MAX_HAND_SIZE lives in input_controller and is not imported here (a NameError the
     # undefined-name test has already caught once in this file).
@@ -4534,6 +4642,7 @@ def local_hand_cards(hand_img):
                 # THE MEMORY. A slot we did not spend still holds the card it held last
                 # turn, so what was read then is what is there now. Only slots we have
                 # not spent are in here -- forget_hand_slot() removes the ones we play.
+                _load_hand_memory(rows, _phase_hint)
                 remembered = _hand_memory.get(i)
                 # SLOT IDENTITY IS THE RULE, and it is what the console says.
                 # VERIFIED LIVE, twice, with a clean starting state asserted first: play
@@ -4606,6 +4715,7 @@ def local_hand_cards(hand_img):
                 # forget_hand_slot(), not similarity.
                 _hand_memory[i] = {"power": r.get("digit"), "secondary": r.get("secondary"),
                                    "art": r.get("_art")}
+                _save_hand_memory(_phase_hint)
             cards.append({"kind": "player", "name": None, "power": int(digit),
                           "secondary": int(sec), "hand_index": i})
             # and the art bag, for the hail mary when a slot has no memory at all

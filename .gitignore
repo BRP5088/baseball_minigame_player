@@ -1,132 +1,112 @@
-# Secrets — each machine keeps its own; .env.example is the committed template.
-.env
 
-# Virtualenvs are architecture- and path-specific. Never put one in this folder
-# if the folder lives on a NAS: paddle_venv already proved that, its pyvenv.cfg
-# still points at a Homebrew path and a scratchpad directory that is long gone.
-env/
-venv/
-.venv/
-paddle_venv/
-
-# 10Hz frame captures. 1.3G and growing; history, not input.
-screenshot_log/
-
-__pycache__/
-*.pyc
-.DS_Store
-
-# --- added 2026-09-05, when this finally became a git repo ------------------
-#
-# What is versioned: code, config, docs, and the SMALL data the code cannot run
-# without (world_map.json, places/, route*_steps.json). What is not: build
-# trees, recorded media, and anything a run regenerates.
-#
-# The rule for anything borderline: if losing it would only cost time, ignore
-# it. If losing it would cost a MEASUREMENT that cannot be retaken, commit it.
-
-# Its own git checkout, and the artefacts built from it. The patch that matters
-# lives in chiaki-patch/ and is versioned there.
-chiaki-ng-src/
-chiaki-ng-build/
-
-# Recorded media. Large, regenerable, and history rather than input.
-# NOTE: demos/walk3_full_20260828_050731 and demos/walk_20260827_214446 ARE
-# referenced by build_world_map.py, go.py, anchors.py and two tests — they are
-# ignored here because of size, not because they are disposable. Do not delete
-# them from disk.
-demos/
-world_log/
-explore/
-diagnostics/
-route_frames/
-hand_samples/
-Photos to train on/
-Photos of ban screen missing cards/
-
-# test_fixtures/ IS VERSIONED, deliberately, despite being ~180M of images.
-#
-# A test whose data is not committed is a test that cannot be run from a fresh
-# clone, and this suite's entire value is that it runs offline anywhere. 30
-# tests read these. Excluding them for size would mean the repo contains tests
-# that provably do not work — which is worse than a large repo.
-#
-# Images do not delta-compress, so a fixture that CHANGES costs its full size
-# again in history. Fixtures here are captured once and read forever, so that
-# is a bounded cost. Recaptured frames should replace a directory wholesale
-# rather than being appended alongside the old ones.
-
-# Run outputs and hand-made backups, now that history is real.
-overnight/*.log
-overnight/*.json
-overnight/*failframes*/        # frames a run writes; regenerated each time
-overnight/phase1/
-overnight/failframes/
-
-# Machine-local calibration and run state. compass_scale.json and
-# view_bounds.json are keyed on a machine id and rebuilt on first use;
-# progress_testing.json is live run state, not source.
-compass_scale.json
-view_bounds.json
-progress_testing.json
-progress.json
-leg_reliability.json
-*.backup_*
-world_map.json.backup_*
-CLAUDE.md.backup_*
-places_backup_*/
-tests_quarantine/__pycache__/
-
-# Screenshot archives (spaces in the names; no quotes — git takes those
-# literally and the pattern silently matches nothing).
-/Photos*/          # only at the project ROOT, not test_fixtures/gameplay_photos
-
-# Subagent scratch notes — see agent_progress/README.md
-agent_progress/*
 !agent_progress/README.md
-.console_busy
-armor_venv/
-models/
-
+#
+# --- added 2026-09-05, when this finally became a git repo ------------------
 # --- added 2026-09-09: run artefacts that made `git status` cost 26K tokens ---------
-#
+# 10Hz frame captures. 1.3G and growing; history, not input.
 # A bare `git status` printed 101.5 KB because ~44,000 untracked files sat in the working
-# tree. The rule at the top of this file still decides each case: if losing it would only
-# cost TIME, ignore it; if losing it would cost a MEASUREMENT that cannot be retaken,
-# commit it. So the FRAMES are ignored and the FINDINGS beside them are not.
-#
+# A test whose data is not committed is a test that cannot be run from a fresh
+# Census frames. The .json findings in the same directory are the point and stay.
+# Failure frames. CLAUDE.md 10.15 says KEEP A FRAME, and they are kept -- on disk, where
+# Images do not delta-compress, so a fixture that CHANGES costs its full size
+# Its own git checkout, and the artefacts built from it. The patch that matters
+# Machine-local calibration and run state. compass_scale.json and
+# NOTE: demos/walk3_full_20260828_050731 and demos/walk_20260827_214446 ARE
 # Nothing here is deleted from disk. Ignoring a path only stops git tracking it.
-
+# Recorded chains. chains/route_user_1853 IS committed -- it is the route the closed loop
+# Recorded media. Large, regenerable, and history rather than input.
+# Run outputs and hand-made backups, now that history is real.
+# Screenshot archives (spaces in the names; no quotes — git takes those
+# Secrets — each machine keeps its own; .env.example is the committed template.
+# Subagent scratch notes — see agent_progress/README.md
+# The rule for anything borderline: if losing it would only cost time, ignore
+# The stream recordings. overnight/runs/ is 13G, but only in the .mp4 files -- its
+# Virtualenvs are architecture- and path-specific. Never put one in this folder
 # Walk frames from the closed loop. 8.7G in 40,301 jpgs -- 91% of everything untracked,
+# What is versioned: code, config, docs, and the SMALL data the code cannot run
+# actually walks. These are later recordings kept for comparison.
+# again in history. Fixtures here are captured once and read forever, so that
+# and are what make a result attributable to a build. Keep those.
 # and regenerable by walking the route again. The JOURNALS beside them (overnight/
 # chain_journals, 16M of jsonl) are the evidence and stay tracked.
-overnight/chain_frames/
-overnight/cycle_frames/
-
-# The stream recordings. overnight/runs/ is 13G, but only in the .mp4 files -- its
+# clone, and this suite's entire value is that it runs offline anywhere. 30
+# commit it. So the FRAMES are ignored and the FINDINGS beside them are not.
+# cost TIME, ignore it; if losing it would cost a MEASUREMENT that cannot be retaken,
+# if the folder lives on a NAS: paddle_venv already proved that, its pyvenv.cfg
+# ignored here because of size, not because they are disposable. Do not delete
+# is a bounded cost. Recaptured frames should replace a directory wholesale
+# it. If losing it would cost a MEASUREMENT that cannot be retaken, commit it.
+# literally and the pattern silently matches nothing).
+# lives in chiaki-patch/ and is versioned there.
+# progress_testing.json is live run state, not source.
+# rather than being appended alongside the old ones.
+# referenced by build_world_map.py, go.py, anchors.py and two tests — they are
 # run.json, summary.json, events.jsonl and frames.jsonl are the measurement of each run
-# and are what make a result attributable to a build. Keep those.
-overnight/runs/**/*.mp4
-overnight/recordings/
-
-# Census frames. The .json findings in the same directory are the point and stay.
+# still points at a Homebrew path and a scratchpad directory that is long gone.
+# test_fixtures/ IS VERSIONED, deliberately, despite being ~180M of images.
+# tests read these. Excluding them for size would mean the repo contains tests
+# that provably do not work — which is worse than a large repo.
+# the reader that needs them looks. They are photographs of one run's failures, not input
+# them from disk.
+# to any other, and they run to hundreds per batch.
+# tree. The rule at the top of this file still decides each case: if losing it would only
+# trees, recorded media, and anything a run regenerates.
+# view_bounds.json are keyed on a machine id and rebuilt on first use;
+# without (world_map.json, places/, route*_steps.json). What is not: build
+*.backup_*
+*.pyc
+.DS_Store
+.console_busy
+.env
+.venv/
+/Photos*/          # only at the project ROOT, not test_fixtures/gameplay_photos
+CLAUDE.md.backup_*
+Photos of ban screen missing cards/
+Photos to train on/
+__pycache__/
+agent_progress/*
+armor_venv/
+chains/_idle_head_discard_185040/
+chains/route_user_20260907_185336/
+chiaki-ng-build/
+chiaki-ng-src/
+compass_scale.json
+demos/
+diagnostics/
+env/
+explore/
+hand_memory.json
+hand_samples/
+leg_reliability.json
+models/
+overnight/*.json
+overnight/*.log
+overnight/*failframes*/        # frames a run writes; regenerated each time
+overnight/*failframes/
+overnight/_archive/
+overnight/ab_escape_gate_review/
+overnight/ab_fast_extend_frames/
 overnight/census/**/*.jpg
 overnight/census/**/*.png
-
-# Failure frames. CLAUDE.md 10.15 says KEEP A FRAME, and they are kept -- on disk, where
-# the reader that needs them looks. They are photographs of one run's failures, not input
-# to any other, and they run to hundreds per batch.
-overnight/*failframes/
-overnight/resetfail/
-overnight/prompt_zone_frames/
-overnight/door_approach_frames/
+overnight/chain_frames/
 overnight/crawl_frames/
-overnight/ab_fast_extend_frames/
-overnight/ab_escape_gate_review/
+overnight/cycle_frames/
+overnight/door_approach_frames/
+overnight/failframes/
 overnight/map_probe/
-overnight/_archive/
-
-# Recorded chains. chains/route_user_1853 IS committed -- it is the route the closed loop
-# actually walks. These are later recordings kept for comparison.
-chains/route_user_20260907_185336/
-chains/_idle_head_discard_185040/
+overnight/phase1/
+overnight/prompt_zone_frames/
+overnight/recordings/
+overnight/resetfail/
+overnight/runs/**/*.mp4
+paddle_venv/
+places_backup_*/
+progress.json
+progress_testing.json
+route_frames/
+screenshot_log/
+tests_quarantine/__pycache__/
+venv/
+view_bounds.json
+world_log/
+world_map.json.backup_*
