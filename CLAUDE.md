@@ -767,9 +767,12 @@ noted; the rest is the user's reading, not this project's measurement.
   stopped at first was read as "the batter always goes to first", when it was a
   5-v-5 tie. Two data points, one of them a special case, and a rule was written
   from them.
-- **A LOSING AT-BAT CAN STILL ADVANCE RUNNERS.** An out is not "nothing happens".
-  This is the missing explanation for the animation spread: outs have a median
-  reveal of 4.2 s and a MAXIMUM of 14.9 s (n=160), which had been read as noise.
+- **WITHDRAWN 2026-09-16: "A LOSING AT-BAT CAN STILL ADVANCE RUNNERS" IS FALSE.**
+  The user's sources are explicit that only a successful hit moves anyone, and it
+  was confirmed live the same day -- an out with a runner on first moved nothing
+  across 512 samples at 20 Hz. **So the animation spread is UNEXPLAINED again**:
+  outs have a median reveal of 4.2 s and a MAXIMUM of 14.9 s (n=160), and
+  baserunning is no longer available as the reason. See RULES.md.
 - **BLACK PITCHER BUFFS SUBTRACT RUNNER MOVEMENT** — that is what FIELDING does,
   and it is why it only matters with runners on base.
   **This settles `decision_engine.FIELDING_POWER_BUDGET`, whose own comment says

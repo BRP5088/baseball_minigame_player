@@ -81,8 +81,10 @@ Boosts or Fielding Plays were seen attached in any archived reveal.
 
 ## 3. Resolving an at-bat
 
-**A hit needs the batter's power to beat the pitcher's.** Margin does not
-otherwise matter — except:
+**A hit needs the batter's power to beat the pitcher's; anything less is an
+OUT.** *The user's sources: "If the batter's skill is lower than the pitcher's
+skill, the batter misses and is out."* Margin does not otherwise matter —
+except:
 
 **Beating it by 3 or more is an automatic HOME RUN**, which clears every runner
 on base plus the batter. *The rule is absolute*, confirmed by the user against
@@ -95,7 +97,23 @@ the batter's speed. *Confirmed by the user, 2026-09-16*, and it explains an
 at-bat the same day: our 9 against a 9, the batter stopped at first, and the
 runners on second and third did not move at all.
 
-**A losing at-bat can still advance runners.** An out is not "nothing happens".
+**RUNNERS MOVE ONLY ON A SUCCESSFUL HIT.** An out moves nobody -- not the
+batter, not the runners already on base. *From the user's sources, 2026-09-16
+(Steam discussion + a video guide): "Only successful hits allow the batter and
+existing runners to move across the bases based on their speed and card
+values."*
+
+**CONFIRMED HERE THE SAME DAY.** We pitched an 8 with a fielding boost against a
+batter of 4 -- margin -4, an out -- with a runner on first. Over 512 samples at
+20 Hz the diamond did not change once: `FLIPS: none`.
+
+**THIS FILE SAID THE OPPOSITE UNTIL NOW**, as "a losing at-bat can still advance
+runners; an out is not nothing happens". That was carried over from CLAUDE.md,
+where it had been offered as the explanation for outs having a median reveal of
+4.2 s and a MAXIMUM of 14.9 s (n=160). **That explanation is now dead and the
+spread is unexplained again** -- an out animates the pitch, the swing, the out,
+the played card being discarded and the base tracker resetting, and something in
+that list varies by ten seconds.
 
 **Since the maximum effective batter power is 9 + 2 = 11**, a pitcher playing a
 **9 cannot concede a home run** (margin 2) while one playing an **8 can**.
