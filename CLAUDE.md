@@ -1017,8 +1017,33 @@ correctly said NOT MEASURED instead of certifying a detector that never ran.
 
 **And nothing was ever played blind.** Eleven refusals, zero wrong cards.
 
-**`ocr_scoreboard` CANNOT READ A LEGIBLE BOARD.** "JACK PEPPER 3 0 3 / OPPONENT 0 4 4"
-plainly on screen, `{'your': None, 'opponent': None}` returned. Unmeasured rate, open.
+**`ocr_scoreboard` FAILS ON THE RESULT SCREEN AND ON THE OPPONENT ROW, NOT IN
+GENERAL. MEASURED 2026-09-17; this entry said "unmeasured rate, open".** The
+original observation stands -- "JACK PEPPER 3 0 3 / OPPONENT 0 4 4" plainly on
+screen returning `{'your': None, 'opponent': None}` -- but it is not the general
+behaviour, and reading it as one sent a census after the wrong quantity:
+
+    TURN / REVEAL screens (a scoreboard IS drawn)   33 of 33 read BOTH rows  100%
+    RESULT screens                                   4 of  8 read both        50%
+                                                     3 of  8 read ONE row
+                                                     1 of  8 read neither
+
+**AND THE ONE-ROW FAILURES ARE ALL THE OPPONENT ROW**: `[0,2,2] / None`,
+`[0,0,0] / None`, `[5,0,5] / None`. So the defect is SCREEN-SPECIFIC and
+ROW-SPECIFIC, which is a different repair from "the reader is unreliable".
+
+**THE FIRST ATTEMPT AT THIS MEASUREMENT WAS THE WRONG DENOMINATOR, AND IT IS THE
+SAME MISTAKE `read_phase` INVITED THE SAME DAY.** Over 1,400 archived frames it
+read both rows on 17 (1.2%) -- which is not a failure rate, it is the share of the
+archive that is a TURN SCREEN at all. Most frames on disk are navigation shots with
+no scoreboard drawn. A rate needs a population where the thing being read is
+PRESENT; see 10.31.
+
+**NOTHING NEEDS FIXING ON THE LIVE PATH, and the design already anticipated this.**
+10.31 records that `run()` prefers `local_state.read_result`'s named outcome over a
+score comparison precisely because "a wrong score is worse than no score, because
+run() acts on it" -- and the result screen is exactly where the score is unreliable.
+The measurement confirms that choice rather than opening work.
 
 ### THE DEAL-TIMING QUESTION IS ANSWERED, AND THE ANSWER IS "NOT FROM THIS DATA"
 
