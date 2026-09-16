@@ -4413,6 +4413,23 @@ HAND_MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "hand_memory.json")
 _hand_memory_loaded = False
 
+# A LIVE RUN NEVER READS THE FILE, WHICH IS THE USER'S OWN DESIGN: "during a live
+# run, it should be part of the process so it shouldn't need to ever refer to a
+# file on disk for the answer."
+#
+# AND IT CLOSES A HOLE THEY SPOTTED. reset_hand_memory() deletes the file, but it
+# runs only when a match STARTS -- so a run() that RESUMES a match a crawl left
+# open (match_in_progress is exactly that state) reaches local_hand_cards with an
+# empty dict and would adopt the crawl's file. Corroboration makes that usually
+# safe and not always: powers run 4-9 and secondary 0-3, so two or three readable
+# slots CAN agree by chance, and the slot it would then invent is precisely the
+# one nothing can audit.
+#
+# Fail closed instead of relying on that coincidence staying rare. It costs
+# nothing -- run() is one process for the session, so its memory is in-process
+# from its first turn onward regardless.
+MEMORY_IN_PROCESS_ONLY = False
+
 
 def _save_hand_memory(phase=None):
     """Write the memory through on every mutation. Never raises into the turn loop.
@@ -4444,7 +4461,7 @@ def _load_hand_memory(rows, phase=None):
     Returns the number of slots adopted. Never raises.
     """
     global _hand_memory_loaded
-    if _hand_memory_loaded or _hand_memory:
+    if _hand_memory_loaded or _hand_memory or MEMORY_IN_PROCESS_ONLY:
         return 0
     _hand_memory_loaded = True
     try:
@@ -4606,7 +4623,20 @@ def local_hand_cards(hand_img, phase=None):
         rows = local_hand.read_hand(hand_img)
     except Exception as exc:
         return None, f"read_hand raised ({exc})"
+    # THE HALF STAMP HAS TO COME FROM SOMEWHERE, AND NO CALLER PASSES IT. All four
+    # call sites are local_hand_cards(hand_img), so `phase` was always None, every
+    # file was written {"phase": null}, and the load's half check
+    # (`payload.get("phase") not in (None, phase)`) could therefore NEVER REFUSE --
+    # a guard that cannot fire, shipped in the same commit that added it. The hand
+    # strip already answers it (the banners read BATTER or PITCHER) and read_phase
+    # ABSTAINS rather than guess, so a None here stays None and nothing is invented.
     _phase_hint = phase
+    if _phase_hint is None:
+        try:
+            import local_state as _ls
+            _phase_hint = _ls.read_phase(hand_img)[0]
+        except Exception:
+            _phase_hint = None
     # The fan is five slots BY CONSTRUCTION, so its own geometry is the authority --
     # MAX_HAND_SIZE lives in input_controller and is not imported here (a NameError the
     # undefined-name test has already caught once in this file).
@@ -6832,6 +6862,10 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     used) — independent of the real in-game balance, which keeps getting
     tracked accurately either way.
     """
+    # THE MEMORY IS THIS PROCESS'S FROM HERE ON. See MEMORY_IN_PROCESS_ONLY.
+    global MEMORY_IN_PROCESS_ONLY
+    MEMORY_IN_PROCESS_ONLY = True
+    reset_hand_memory()
     begin_cycle_state()   # this run's FIRST state read is the paid orientation one
     if compare_local_reads:
         # C4: verify the PaddleOCR venv ONCE, loudly, at startup. Otherwise a

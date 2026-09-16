@@ -144,17 +144,65 @@ try:
             os.remove(o.HAND_MEMORY_FILE)
         except OSError:
             pass
-        cards, _why = o.local_hand_cards(_Image.open(c).convert("RGB"),
-                                         phase="batting")
+        # NO phase ARGUMENT, DELIBERATELY. Passing one skips the derivation branch
+        # entirely, and a mutant that stopped deriving the phase SURVIVED while this
+        # said phase="batting" -- the test was exercising the argument, not the code.
+        # Every real caller passes nothing, so neither does this.
+        cards, _why = o.local_hand_cards(_Image.open(c).convert("RGB"))
         if cards and any(x.get("kind") == "player" for x in cards):
             drove = True
             break
     want("a real hand was driven through local_hand_cards", drove,
          "no archived crop produced a player card -- check cannot bite")
+    stamp_from_real_hand = "<never written>"
     if drove:
         want("reading a hand through local_hand_cards writes the file",
              os.path.exists(o.HAND_MEMORY_FILE),
              "the memory was populated in-process but never reached disk")
+        # READ IT NOW. Check 12 used to read this file at the END, by which point
+        # check 10 had overwritten it with an explicitly-passed phase -- so it
+        # passed whatever local_hand_cards had actually written, and a mutant that
+        # stopped deriving the phase SURVIVED. The value has to be captured at the
+        # moment the code under test produces it.
+        if os.path.exists(o.HAND_MEMORY_FILE):
+            stamp_from_real_hand = json.load(open(o.HAND_MEMORY_FILE)).get("phase")
+
+    # 10. A LIVE RUN NEVER ADOPTS A CRAWL'S FILE. run() sets this at startup,
+    #     because reset_hand_memory() only fires when a match STARTS -- a resumed
+    #     match (match_in_progress, exactly the state a crawl leaves behind)
+    #     would otherwise reach local_hand_cards with an empty dict and load it.
+    fresh_process()
+    o._hand_memory[2] = {"power": "5", "secondary": 2, "art": None}
+    o._save_hand_memory("batting")
+    fresh_process()
+    o.MEMORY_IN_PROCESS_ONLY = True
+    try:
+        n = o._load_hand_memory(rows((None, None), (None, None), ("5", 2)), "batting")
+    finally:
+        o.MEMORY_IN_PROCESS_ONLY = False
+    want("a live run refuses the file even when it corroborates",
+         n == 0 and not o._hand_memory, f"adopted {n}")
+
+    # 11. run() ACTUALLY SETS IT. Asserting the flag exists is not asserting it is
+    #     wired -- the same gap that let a mutant survive at check 9. Read run()'s
+    #     source and require the assignment before its first statement.
+    import inspect
+    src = inspect.getsource(o.run)
+    body = src[src.index('"""', src.index('"""') + 3) + 3:]
+    first = body.index("begin_cycle_state()")
+    want("run() takes ownership of the memory before it does anything",
+         "MEMORY_IN_PROCESS_ONLY = True" in body[:first]
+         and "reset_hand_memory()" in body[:first],
+         "run() does not claim the memory at startup")
+
+    # 12. THE HALF STAMP IS ACTUALLY WRITTEN. It was not: no caller passes `phase`,
+    #     so every file said {"phase": null} and the half check could never refuse.
+    #     Verified on a real hand rather than on a hand-passed argument.
+    if drove:
+        want("the file carries a half stamp derived from the hand itself",
+             stamp_from_real_hand in ("batting", "pitching"),
+             f"phase written by local_hand_cards was {stamp_from_real_hand!r} — "
+             f"the half guard cannot fire")
 
 finally:
     try:
