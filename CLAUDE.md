@@ -1039,11 +1039,23 @@ archive that is a TURN SCREEN at all. Most frames on disk are navigation shots w
 no scoreboard drawn. A rate needs a population where the thing being read is
 PRESENT; see 10.31.
 
-**NOTHING NEEDS FIXING ON THE LIVE PATH, and the design already anticipated this.**
+**AND THE RESULT-SCREEN HALF IS UNREACHABLE IN PRODUCTION, so it is CLOSED rather
+than open.** The user's point, 2026-09-17: if the result screen is up there is no
+need to read the scoreboard at all. Checked, and the code already agrees --
+`local_game_state` RETURNS at orchestrator.py:4022 on a result screen, before the
+scoreboard read at :4116 is ever reached, and `log_local_read_comparison` is gated on
+`screen in ("turn", "discard_prompt")`. The only remaining call sites are three
+diagnostics in `tools/`. So the 50% is a rate for a question nothing asks.
+
 10.31 records that `run()` prefers `local_state.read_result`'s named outcome over a
 score comparison precisely because "a wrong score is worse than no score, because
-run() acts on it" -- and the result screen is exactly where the score is unreliable.
-The measurement confirms that choice rather than opening work.
+run() acts on it". The measurement confirms that choice rather than opening work.
+
+**THE METHOD MISTAKE IS WORTH MORE THAN THE NUMBER: reachability should have been
+checked BEFORE the census, not after.** A reader's failure rate was measured
+carefully on a screen the live path never hands it -- the same shape as the wrong
+denominator one paragraph up, one level out. Ask what CALLS it before measuring how
+well it works.
 
 ### THE DEAL-TIMING QUESTION IS ANSWERED, AND THE ANSWER IS "NOT FROM THIS DATA"
 
