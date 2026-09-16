@@ -26,6 +26,13 @@ this one should not:
 and `tests/harness/test_claude_md_constants.py` now enforces that, after five of
 them were found stale on 2026-09-17.
 
+**DO NOT ASSERT A CLAIM YOU HAVE NOT CHECKED. Say what you ran or read, or say you
+are guessing.** The user's instruction, 2026-09-17: *"asserting claims without proof
+aren't allowed. they are often wrong and waste time."* Both halves are measured here
+-- §10.32 carries five instances from one session, every one wrong, every one costing
+a correction cycle that the check would have made unnecessary. An unproven claim is
+not cheaper than a verified one; it is the same work plus a retraction.
+
 ---
 
 ## §1 The rig: PS5, chiaki, the stream
@@ -176,6 +183,21 @@ derived from the ACTUAL imports across every module and test.
 
     .venv/bin/python -B tools/doctor.py
     PATH="$PWD/.venv/bin:$PATH" ./run_tests.sh
+
+**`grep` IN THIS SHELL SKIPS EVERY `.gitignore`d PATH. PASS `--no-ignore-files` WHENEVER
+THE ANSWER IS A COUNT OR A "NOTHING USES THIS".** It is a Claude Code shell function that
+runs the bundled ugrep with `--ignore-files`, so it never descends into `agent_progress/`,
+`demos/`, `screenshot_log/` or the venvs -- and reports the truncated answer as a complete
+one. It hid the ONLY functional references to a tree that was about to be deleted, and
+the full mechanism and measurement are in §10.16c. A plain search is fine; a COMPLETENESS
+claim is not:
+
+    grep -rl ArmorOCR --include='*.py' .                      2 files
+    grep -rl --no-ignore-files ArmorOCR --include='*.py' .    8 files
+                                          QUOTE THE GLOB -- zsh expands a bare
+                                          *.py and the command dies with
+                                          "no matches found" (16.16c). This very
+                                          block shipped unquoted for one minute.
 
 **`paddle_venv/` is NOT the project environment — but it IS a live dependency.
 DO NOT DELETE IT.** Both halves matter and the file used to state only the first:
@@ -2360,6 +2382,40 @@ accelerations, same distance. OPEN-3 was cancelled on exactly that re-derivation
 
 ## §10 Methodology learned the hard way
 
+**32. AN UNPROVEN ASSERTION IS NOT A SHORTCUT. IT IS THE SAME WORK PLUS A
+RETRACTION.** The user's rule, 2026-09-17: *"asserting claims without proof aren't
+allowed. they are often wrong and waste time."* Stated first because it is the cheapest
+rule in this file to follow and the most expensive to skip -- almost every other entry
+here exists because someone, usually me, said a thing instead of checking it.
+
+Five from ONE session, each stated confidently, each wrong, each caught by someone else
+asking:
+
+    "grep is wrapped by RTK"              named a plausible cause. `type grep` shows
+                                          it is Claude Code's own ugrep. Asserted
+                                          inside a paragraph ABOUT an instrument that
+                                          silently under-reports (§10.16c)
+    "typhoon: zero references"            grep searches CONTENTS; typhoon_results.json
+                                          was 11.8K on disk
+    "that grep returns only <one file>"   false at the commit that wrote it -- the SAME
+                                          commit created the second file it misses
+    "the places cluster is ~130 dead      load_places, descriptor and frame_heading are
+     lines, safe to delete"               live; deleting on that list breaks the localiser
+    "paddle_venv: nothing uses it"        five production runners shell out to it; a
+                                          deletion was nearly carried out (§2)
+
+**THE TEST, BEFORE THE SENTENCE LEAVES:** what did I actually run or read that shows
+this? If the answer is "it stands to reason" or "that is how it usually works", then
+either run it -- these checks cost seconds, `type grep` settled the first row -- or
+write the claim as a guess and label it. This file already separates ESTABLISHED from
+ASSUMED for sub-agent notes (§10.16); the same discipline applies to every sentence
+said to the user, in a commit message, or written here.
+
+**AND THE COST IS NOT THE WRONG SENTENCE, IT IS WHAT GETS BUILT ON IT.** The paddle_venv
+line sat here for weeks doing nothing until someone acted on it. §10.2's whole subject is
+a mechanism that made sense and measured backwards. A wrong claim is inert right up until
+it is load-bearing, which is why it cannot be left to be corrected later.
+
 **1. The commonest bug here: the code did nothing, and doing nothing looked
 exactly like working.** Every bug found on 2026-09-01 had this shape; each fix
 was two or three lines and finding them took a day. Before theorising about a
@@ -2632,8 +2688,8 @@ does not filter results, it never descends. On this repo that silently removes
 `agent_progress/`, `models/`, `armor_venv/`, `demos/` and `screenshot_log/`, and reports
 the truncated answer as a complete one. Measured on the same pattern and tree:
 
-    grep -rl ArmorOCR --include=*.py .                          2 files
-    grep -rl --no-ignore-files ArmorOCR --include=*.py .        8 files
+    grep -rl ArmorOCR --include='*.py' .                          2 files
+    grep -rl --no-ignore-files ArmorOCR --include='*.py' .        8 files
     find . -name '*.py' -print0 | xargs -0 grep -l ArmorOCR     8 files
 
 **THE FIX IS ONE FLAG, `--no-ignore-files`**, which reproduces `find | xargs` exactly.
