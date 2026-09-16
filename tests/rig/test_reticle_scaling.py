@@ -25,7 +25,11 @@ from PIL import Image
 
 import input_controller as ic
 
-frames = sorted(glob.glob("demos/walk3_full_20260828_050731/f_*.jpg"))[::20]
+# FIXTURES, NOT demos/. demos/ is GITIGNORED, so these frames do not exist on a
+# fresh clone and this file could not run at all for anyone else. The copies in
+# test_fixtures/walk_frames/ ARE the every-20th sample this line used to take,
+# so the stride is gone -- applying it again would leave 2 frames.
+frames = sorted(glob.glob("test_fixtures/walk_frames/f_*.jpg"))
 assert frames, "no walk frames to test against"
 
 # every frame of a walk is gameplay, at every capture width this codebase uses

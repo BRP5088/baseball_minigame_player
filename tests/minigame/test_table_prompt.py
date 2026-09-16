@@ -61,10 +61,11 @@ for i, f in enumerate(POSITIVES):
 # Held-out frames from BOTH recordings. Using one traversal taught the
 # detector a single viewing angle, and it then rejected genuine table frames
 # from the other recording — including one where the prompt is plainly legible.
-_held_out = [f for f in sorted(glob.glob("demos/walk_20260827_214446/f_*.jpg"))
-             if 30.0 <= float(_os.path.basename(f)[2:-4]) <= 80.0][::40]
-_held_out += [f for f in sorted(glob.glob("demos/walk2_pauses_20260828_044514/f_*.jpg"))
-              if 55.0 <= float(_os.path.basename(f)[2:-4]) <= 88.0][::40]
+# FIXTURES, NOT demos/. demos/ is GITIGNORED, so this held-out set did not exist
+# on a fresh clone and the assertion below could not run for anyone else. These ARE
+# the frames the two filters above used to select -- the time windows and the [::40]
+# stride are already applied, so re-applying them would leave almost nothing.
+_held_out = sorted(glob.glob("test_fixtures/table_prompt_heldout/f_*.jpg"))
 assert len(_held_out) >= 4, "not enough held-out frames to check against"
 _ho = [tp.score(Image.open(f)) for f in _held_out]
 assert min(_ho) >= tp.MATCH_MIN, (

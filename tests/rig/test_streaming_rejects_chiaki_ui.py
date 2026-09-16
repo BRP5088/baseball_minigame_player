@@ -116,10 +116,16 @@ finally:
 # --- 4. real streaming frames are NOT rejected ------------------------------
 # Includes screenshot_log, which is match play: ban grids and gameplay, where
 # no compass exists. A compass-shaped discriminator would fail here.
-frames = []
-for pat, cap in (("demos/*/f_*.jpg", 80), ("screenshot_log/*/*.jpg", 80),
-                 ("explore/*/*.jpg", 60), ("overnight/*/*.jpg", 40)):
-    frames += sorted(glob.glob(os.path.join(_ROOT, pat)))[:cap]
+# FIXTURES, NOT four live directories. demos/, screenshot_log/ and explore/ are
+# GITIGNORED and overnight/ is written by live runs -- so this population did not
+# exist on a fresh clone AND it CHANGED under the test. CLAUDE.md records that
+# exact failure: "the 2026-09-06 streak runs appended 165 leg-end frames there and
+# G5's pinned profile went 15 -> 9 with no code change". A false-positive rate is
+# only meaningful against a population that holds still.
+#
+# These are the same 260 frames the caps below used to take, copied with their
+# source directory kept in the filename so provenance survives the flattening.
+frames = sorted(glob.glob(os.path.join(_ROOT, "test_fixtures/streaming_real/*.jpg")))
 check("there are enough real streaming frames to score against",
       len(frames) >= 150)
 

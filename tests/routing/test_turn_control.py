@@ -93,10 +93,15 @@ subprocess.run = _real_run
 # --- in_gameplay: validated against REAL logged frames ---------------------
 # Synthetic frames would only prove the arithmetic. These are the actual game
 # states the check has to separate, which is what it is for.
-gameplay = _frames("demos/walk3_full_20260828_050731/f_*.jpg")
-paused = (_frames("screenshot_log/reset_pause*.jpg")
-          + _frames("screenshot_log/reset_down*.jpg")
-          + _frames("screenshot_log/reset_confirm*.jpg"))
+# FIXTURES, NOT demos/ or screenshot_log/ -- both are GITIGNORED, and
+# screenshot_log/ is pruned oldest-first, so neither exists on a fresh clone.
+# The assertions here only need frames that ARE gameplay and frames that are
+# NOT, so any faithful sample serves; these are copies of the ones this file
+# was reading.
+gameplay = _frames("test_fixtures/walk_frames/f_*.jpg")
+paused = (_frames("test_fixtures/reset_frames/reset_pause*.jpg")
+          + _frames("test_fixtures/reset_frames/reset_down*.jpg")
+          + _frames("test_fixtures/reset_frames/reset_confirm*.jpg"))
 if not gameplay or not paused:
     fails.append("the labelled reference frames are missing — this test cannot "
                  "validate anything without them")
@@ -114,7 +119,7 @@ for f in paused:
 # letter spacing went 293 -> 329 px/90deg. Bearings stayed perfectly readable
 # and were simply WRONG, so eight consecutive turns drove the camera nowhere
 # while reporting plausible numbers. The fix is to measure both off the frame.
-_geo = _frames("screenshot_log/reset_facing_*.jpg")
+_geo = _frames("test_fixtures/reset_frames/reset_facing_*.jpg")
 if not _geo:
     fails.append("no reference frame to test geometry against")
 
