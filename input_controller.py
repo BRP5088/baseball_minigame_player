@@ -1409,6 +1409,18 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                     blind += 1
                     time.sleep(BAN_NAV_SETTLE)
                     continue
+                # A GOOD LOOK RESETS THE BLIND BUDGET, because the constant's own
+                # comment says "consecutive unreadable frames per target" and the
+                # code counted CUMULATIVE ones -- `blind` was initialised once per
+                # target and never reset. ban_cursor_absolute returns None BY DESIGN
+                # whenever the scrollbar is mid-travel, which is exactly what a
+                # scrolling press produces, so blind frames arrive interleaved with
+                # good ones rather than in a run and the budget of 10 was spent
+                # across the whole approach. That is the same failure the separate
+                # move/blind budgets were introduced to fix: a far target silently
+                # skipped, reported as ban_nav_incomplete, and the match played with
+                # 2 of 3 bans.
+                blind = 0
                 if here == want:
                     # WHAT WAS BANNED BEFORE THIS PRESS. `confirm_ban` can only say
                     # whether an X is on the cell we AIMED at, so an X that landed

@@ -4804,6 +4804,17 @@ def local_hand_cards(hand_img, phase=None):
     # believing that is the hand. One missing card is a worse choice; three missing is not
     # a hand at all, and asking the paid model is the honest answer.
     if len(cards) < MIN_LOCAL_HAND_CARDS:
+        # KEEP THE FRAMES FIRST. The `if dropped: save_deal_frames(...)` block sits
+        # BELOW this early return, so the deal's ~40 in-flight frames were written
+        # when the hand MOSTLY read (a slot or two dropped) and thrown away when it
+        # barely read at all -- the worst occlusion, which is the case
+        # save_deal_frames' own docstring says the frames answer a question about.
+        # They live only in _DEAL_FRAMES, which reset_deal_frames clears at the start
+        # of the next deal, so the evidence was gone by the next turn.
+        try:
+            save_deal_frames(f"only {len(cards)} of {len(rows)} card(s) read")
+        except Exception:
+            pass
         return None, (f"only {len(cards)} of {len(rows)} cards read "
                       f"(slots {dropped} unreadable)")
     if dropped:
@@ -5988,6 +5999,11 @@ _cached_ban_collection = None
 # completed. The track is a thin dark line at x~0.858; the THUMB is wider, so
 # sampling just right of the track isolates the thumb from the track.
 BAN_SCROLLBAR_BOX_FRAC = (0.8585, 0.260, 0.8650, 0.970)
+
+# The bottom of the scrollbar's travel. Level 7 is the bottom clamp (see the
+# measurement note above this box), so observing it is what says a scan saw the
+# whole collection rather than a fragment of it.
+BAN_SCROLL_BOTTOM_LEVEL = 7
 BAN_SCROLLBAR_DARK = 110
 
 # Thumb-top as a FRACTION of frame height, not absolute pixels. The old list was
@@ -6221,6 +6237,21 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     # Did this scan ever disagree with the scrollbar? A scan that did may have seen a
     # fraction of the collection, and caching a fraction is worse than re-scanning.
     _saw_desync = False
+    # THE HIGHEST SCROLL LEVEL THIS SCAN ACTUALLY OBSERVED. d0141c9 made the scan
+    # start at the top; nothing made it prove it reached the BOTTOM, and two breaks
+    # end it mid-collection without setting _saw_desync -- a roster gap
+    # (`if not roster_hits: break`) and an all-locked batch
+    # (`new_count == 0 and not expected_positions`). Either one then passes the cache
+    # gate and serves a FRAGMENT to every later ban screen in the process with zero
+    # captures, which turns a one-match problem into a whole-process one.
+    #
+    # The all-locked door is the more reachable one AND the code explicitly believes
+    # it is closed: its comment says the dim-frame hazard is confined to the first
+    # batch because "every later one follows a keypress and is covered by the
+    # scrollbar check". The scrollbar check verifies the SCROLL POSITION.
+    # `expected_positions` comes from detect_ban_grid_locked, about which the
+    # scrollbar says nothing.
+    _max_level = -1
     if trust_roster is None:
         trust_roster = TRUST_ROSTER_ONLY
     if use_cache and _cached_ban_collection is not None:
@@ -6291,6 +6322,8 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                 presses_so_far += 2
                 wait_for_screen_to_settle(max_wait=6.0, regions="ban")
                 continue
+            if _lvl is not None and _lvl > _max_level:
+                _max_level = _lvl
             if _lvl != top_row:
                 _saw_desync = True
                 print(f"  [ban] SCROLL DESYNC: press count says row {top_row}, "
@@ -6389,8 +6422,20 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                           f"{missing[:4]}{'...' if len(missing) > 4 else ''} — "
                           "skipping as ban candidates (trust_roster).")
                 if not roster_hits:
-                    print(f"No roster coverage at rows {top_row}+ — end of the "
-                          "catalogued collection, stopping the scan.")
+                    # A GAP IS NOT AN END. This break is the designed termination
+                    # when the scan has walked PAST the roster's known extent -- but
+                    # it fires identically on a roster GAP mid-collection, and then
+                    # ends the scan with no desync recorded and the fragment cached.
+                    # _max_roster_row() already knows which of the two this is.
+                    _past_roster = top_row > _max_roster_row()
+                    print(f"No roster coverage at rows {top_row}+ — "
+                          + ("end of the catalogued collection, stopping the scan."
+                             if _past_roster else
+                             f"but the roster covers rows up to {_max_roster_row()}, "
+                             "so this is a GAP, not the end. Stopping, but NOT "
+                             "caching a scan that skipped catalogued rows."))
+                    if not _past_roster:
+                        _saw_desync = True
                     break
                 for pos in absolute_positions:
                     if pos in roster_hits and pos not in seen_positions:
@@ -6476,6 +6521,27 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                           f"({consecutive_mismatches}/2 before giving up on this section).")
 
             if new_count == 0 and not expected_positions and presses_so_far > 0:
+                # A FRAGMENT, UNLESS IT REALLY IS THE BOTTOM. This is the
+                # all-locked door: a MID-ANIMATION frame reads every cell as locked
+                # and ends the scan here with no desync recorded, so the cache gate
+                # accepted the fragment and served it to every later ban screen in
+                # the process with zero captures.
+                #
+                # The code explicitly believed this was closed -- its comment says
+                # the dim-frame hazard is confined to the first batch because "every
+                # later one follows a keypress and is covered by the scrollbar
+                # check". The scrollbar check verifies the SCROLL POSITION;
+                # expected_positions comes from detect_ban_grid_locked, about which
+                # the scrollbar says nothing.
+                #
+                # Stopping here is still right; CACHING what it gathered is not,
+                # unless the scrollbar agrees we are at the bottom.
+                if _max_level < BAN_SCROLL_BOTTOM_LEVEL:
+                    print(f"  [ban] all cells read LOCKED at level {_max_level}, "
+                          f"short of the bottom ({BAN_SCROLL_BOTTOM_LEVEL}) — "
+                          "stopping, but NOT caching: a mid-animation frame reads "
+                          "every cell as locked and looks exactly like this.")
+                    _saw_desync = True
                 break  # both visible rows fully locked — reached the bottom
             if consecutive_mismatches >= 2:
                 # Two batches in a row where the contrast-based lock detector
@@ -6541,6 +6607,13 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
     # one: every match after the first bans the best 3 of a stale eighth of the
     # collection, silently. run() never clears it either.
     _short = len(full_collection) < 3
+    # NOT GATED ON REACHING LEVEL 7, DELIBERATELY. That was tried and it is an
+    # INVENTED CONSTANT: a collection short enough to fit the viewport never reaches
+    # the bottom clamp, and nothing here has measured that every real ban screen
+    # does. Both of this file's own test rigs failed it immediately, and their
+    # CONTROLS said why -- "the desync gate is rejecting everything, which reads
+    # exactly like a working gate". The suspect BREAKS are marked at the break
+    # instead, where the reason is known.
     _suspect = bool(_saw_desync)
     if use_cache and not _short and not _suspect:
         _cached_ban_collection = full_collection
