@@ -410,7 +410,7 @@ def seq(fn, *a, **k):
 # position is remembered and the homing is correctly skipped — asserted
 # separately below, and exhaustively in test_cursor_tracking.py.
 ic.invalidate_cursor()
-s0 = seq(ic.select_and_play, 0)
+s0 = seq(ic.select_and_play, 0, allow_blind=True)
 # LITERAL 4, not MAX_HAND_SIZE - 1. Reading the constant under test makes the
 # assertion true for ANY value: MAX_HAND_SIZE = 3 survived the whole suite
 # while homing two presses short of the left edge, so every index landed on
@@ -429,7 +429,7 @@ check("select_card" in s0 and "confirm_play" in s0,
       f"select_and_play(0) sent {s0} — it must select AND confirm")
 
 ic.invalidate_cursor()
-s3 = seq(ic.select_and_play, 3)
+s3 = seq(ic.select_and_play, 3, allow_blind=True)
 check(s3.count("move_right") == 3,
       f"playing card 3 sent {s3.count('move_right')} move_right (expected 3): "
       f"{s3}. Off by one here plays a DIFFERENT CARD than the engine chose.")
@@ -447,10 +447,10 @@ check(s3.index("select_card") > max(i for i, a in enumerate(s3) if a == "move_ri
 # home first logged the right card 4 of 4; those that did not, 0 of 6, Fisher exact
 # p = 0.0048. The saving still exists where nothing re-deals: two navigations inside
 # one turn, pinned in tests/rig/test_cursor_tracking.py.
-_warm = seq(ic.select_and_play, 3)          # the cursor is believed to be at 3
+_warm = seq(ic.select_and_play, 3, allow_blind=True)          # the cursor is believed to be at 3
 check(_warm.count("move_left") == ic.MAX_HAND_SIZE - 1,
       f"a second play must home again, not trust the belief: {_warm}")
-_warm2 = seq(ic.select_and_play, 1)
+_warm2 = seq(ic.select_and_play, 1, allow_blind=True)
 check(_warm2.count("move_left") == ic.MAX_HAND_SIZE - 1 and _warm2.count("move_right") == 1,
       f"a play to index 1 must home ({ic.MAX_HAND_SIZE - 1} left) then step right once: {_warm2}")
 check(ic._cursor_col is None,
@@ -619,7 +619,7 @@ print(f"OK: input starts fast ({ic.ACTION_DELAY}s), first backoff jumps to the "
 # `seq` returns an empty list and every assertion below silently passes.
 ic.press = _recording_press
 ic.invalidate_cursor()
-_tac = seq(ic.select_and_play, 1, 3)          # card 1, tactics 3: two rights
+_tac = seq(ic.select_and_play, 1, 3, allow_blind=True)          # card 1, tactics 3: two rights
 _sel = [i for i, a in enumerate(_tac) if a == "select_card"]
 check(len(_sel) == 2, f"expected two select_card (card then tactics): {_tac}")
 if len(_sel) == 2:
@@ -629,7 +629,7 @@ if len(_sel) == 2:
           "two move_right; inverted, it walks the wrong way and attaches the "
           "wrong card")
 ic.invalidate_cursor()
-_tac2 = seq(ic.select_and_play, 3, 1)         # backwards: two lefts
+_tac2 = seq(ic.select_and_play, 3, 1, allow_blind=True)         # backwards: two lefts
 _sel2 = [i for i, a in enumerate(_tac2) if a == "select_card"]
 if len(_sel2) == 2:
     _b2 = _tac2[_sel2[0] + 1:_sel2[1]]

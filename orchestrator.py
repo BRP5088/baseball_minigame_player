@@ -7836,6 +7836,9 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     # still reports what actually landed, and C3 already relies on this
                     # flag being checked at the TOP of the branch.
                     bans_done_this_match = True
+                    # Did the dead-reckoned fallback run? A list so the on_blind lambda
+                    # can set it without a nonlocal.
+                    _blind_fired = []
                     _cursor = None
                     if input_controller.VERIFY_BAN_NAVIGATION:
                         for _try in range(BAN_CURSOR_PROBE_TRIES):
@@ -7863,16 +7866,28 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                 got=sorted(list(x) for x in got)),
                             before_confirm=_verify_bans,
                             on_blind=lambda: (
+                                _blind_fired.append(True),
                                 record_observation(event="ban_nav_blind_midway"),
                                 select_bans_and_start_full(
                                     grid, banned_positions,
                                     before_confirm=_verify_bans)))
                         if sorted(_placed) != sorted(banned_positions):
                             missed = sorted(set(banned_positions) - set(_placed))
+                            # "NOTHING WAS TOGGLED BLIND" IS ONLY TRUE WHEN THE FALLBACK
+                            # DID NOT RUN. select_bans_verified returns what it VERIFIED
+                            # (it used to return the intent, which made this whole branch
+                            # unreachable); on the on_blind path that is [] while the
+                            # dead-reckoned path has toggled three cards nobody could
+                            # check. Printing the old sentence there asserted the exact
+                            # opposite of what happened.
+                            _how = ("the DEAD-RECKONED fallback ran and its bans are "
+                                    "UNVERIFIED" if _blind_fired
+                                    else "nothing was toggled blind")
                             print(f"  [ban] VERIFIED NAVIGATION placed {sorted(_placed)}; "
-                                  f"could not place {missed}. Nothing was toggled blind.")
+                                  f"could not place {missed}. {_how.capitalize()}.")
                             record_observation(event="ban_nav_incomplete",
-                                               placed=sorted(_placed), missed=missed)
+                                               placed=sorted(_placed), missed=missed,
+                                               blind_fallback=bool(_blind_fired))
                     else:
                         if input_controller.VERIFY_BAN_NAVIGATION:
                             print(f"  [ban] the ban cursor could not be read in "
@@ -8007,6 +8022,40 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print(f"  [hand] phase {last_phase} -> {state_json['phase']}: "
                               "a new half deals a fresh hand — forgetting the old one")
                         reset_hand_memory()
+                        # AND RE-READ, BECAUSE THE HAND WAS BUILT BEFORE THE RESET.
+                        #
+                        # state_json came from read_state_for_turn() at the top of this
+                        # poll, and that call runs local_game_state -> local_hand_cards,
+                        # which is WHERE the memory is consulted. So the hand in hand is
+                        # already carrying whatever the batting half left behind; the
+                        # reset below it protected turns 2-5 of the new half and not the
+                        # one turn that actually needed it -- the first.
+                        #
+                        # The carried card is worst-case by construction: forget_hand_slot
+                        # removed every slot the old half SPENT, so what survives is a card
+                        # the engine passed over -- often the highest power left in the old
+                        # hand -- and best_pitching_play sorts on power, so the phantom slot
+                        # is exactly the one it would select.
+                        #
+                        # One extra read, once per match. It cannot loop: the flip is
+                        # detected against last_phase, which is assigned immediately below
+                        # whether or not the re-read succeeds.
+                        # read_state_for_turn RETURNS A DICT AND RAISES on a local
+                        # gap -- it does not return (state, why). Written as a tuple
+                        # unpack first and caught by reading the function instead of
+                        # assuming its shape.
+                        try:
+                            state_json = read_state_for_turn()
+                            print("  [hand] re-read the hand after the reset")
+                        except Exception as _e:
+                            # Refusing is safe: this poll is abandoned and the loop comes
+                            # back with an empty memory. Playing the stale hand is not.
+                            print(f"  [hand] could not re-read after the half reset "
+                                  f"({_e}) — skipping this poll rather than playing a "
+                                  "hand built before it")
+                            last_phase = state_json["phase"]
+                            time.sleep(1)
+                            continue
                     last_phase = state_json["phase"]
                 try:
                     played, matchup_info = play_one_turn(state_json, turns_this_half)

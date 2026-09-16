@@ -30,7 +30,7 @@ def run(card_index, tactics_index=None, start_col=None):
     ic.press = lambda action, *a, **k: sent.append(action)
     ic._cursor_col = start_col
     try:
-        ic.select_and_play(card_index, tactics_index)
+        ic.select_and_play(card_index, tactics_index, allow_blind=True)
     finally:
         ic.press = real_press
     return sent
@@ -73,10 +73,10 @@ real_press = ic.press
 ic.press = lambda action, *a, **k: calls.append(action)
 ic._cursor_col = None
 try:
-    ic.select_and_play(2)
+    ic.select_and_play(2, allow_blind=True)
     first = list(calls)
     calls.clear()
-    ic.select_and_play(2)
+    ic.select_and_play(2, allow_blind=True)
     second = list(calls)
 finally:
     ic.press = real_press

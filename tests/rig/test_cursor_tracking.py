@@ -28,9 +28,9 @@ ic.press = lambda a, *x, **k: ACTS.append(a)
 N = ic.MAX_HAND_SIZE
 
 
-def emit(fn, *a):
+def emit(fn, *a, **k):
     ACTS.clear()
-    fn(*a)
+    fn(*a, **k)
     return list(ACTS)
 
 
@@ -53,7 +53,7 @@ bad = []
 for true_start in range(N):
     for target in range(N):
         ic.invalidate_cursor()
-        picks = simulate(emit(ic.select_and_play, target), true_start)
+        picks = simulate(emit(ic.select_and_play, target, allow_blind=True), true_start)
         if picks != [target]:
             bad.append(f"COLD true_start={true_start} target={target} -> {picks}")
 
@@ -64,11 +64,11 @@ for true_start in range(N):
     for first in range(N):
         for second in range(N):
             ic.invalidate_cursor()
-            seq1 = emit(ic.select_and_play, first)
+            seq1 = emit(ic.select_and_play, first, allow_blind=True)
             pos_after = simulate(seq1, true_start)
             if pos_after != [first]:
                 continue                      # cold failure already recorded
-            seq2 = emit(ic.select_and_play, second)
+            seq2 = emit(ic.select_and_play, second, allow_blind=True)
             picks = simulate(seq2, first)     # cursor really is at `first`
             if picks != [second]:
                 bad.append(f"WARM at={first} target={second} -> {picks}")
@@ -79,7 +79,7 @@ for card in range(N):
         if tac == card:
             continue
         ic.invalidate_cursor()
-        picks = simulate(emit(ic.select_and_play, card, tac), 0)
+        picks = simulate(emit(ic.select_and_play, card, tac, allow_blind=True), 0)
         if picks != [card, tac]:
             bad.append(f"TACTICS card={card} tac={tac} -> {picks}")
 
@@ -123,7 +123,7 @@ assert ic._cursor_col is None, (
 
 # --- worst case is never worse than the old blind homing -----------------
 ic.invalidate_cursor()
-cold = len(emit(ic.select_and_play, 4))
+cold = len(emit(ic.select_and_play, 4, allow_blind=True))
 # LITERAL 4, not MAX_HAND_SIZE - 1. Computing the expectation from the
 # constant under test makes this true for ANY value: MAX_HAND_SIZE = 3 survived
 # the whole suite while homing two presses short of the left edge, so every
@@ -140,7 +140,7 @@ assert cold == 4 + 4 + 2, (
 # survived a play, the play re-dealt the hand, and the next selection navigated from
 # a position the cursor no longer held. Six of ten play turns in one measured match
 # ran that way and every one played the wrong card.
-warm = len(emit(ic.select_and_play, 4))
+warm = len(emit(ic.select_and_play, 4, allow_blind=True))
 assert warm == cold, (
     f"a second play took {warm} presses against the first's {cold}; a play must "
     "home every time, because it re-deals the hand")

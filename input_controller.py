@@ -700,7 +700,7 @@ def _inject_press(action, hold_seconds):
 
 
 def select_and_play(card_index: int, tactics_index: int = None,
-                    look=None):
+                    look=None, allow_blind: bool = False):
     """
     Navigate from the leftmost hand position to the target player card,
     select it, optionally also select a tactics card, then confirm Play.
@@ -728,8 +728,31 @@ def select_and_play(card_index: int, tactics_index: int = None,
     each, so roughly 7.6 s a match against six turns of wrong cards.
     """
     if look is None:
-        # THE BLIND PATH, unchanged. Kept because a caller that cannot capture the
-        # screen has nothing better available -- not because it is safe.
+        # THE BLIND PATH IS NOW OPT-IN, AND THE OPT-IN IS THE POINT.
+        #
+        # This path dead-reckons the walk, presses select_card, presses confirm_play
+        # and returns True with NOTHING READ. On a console measured to drop presses
+        # (three move_rights 0.31 s apart moved the cursor TWO slots) that is exactly
+        # the state CLAUDE.md records: selected slot 0, then DESELECTED slot 0
+        # (select_card is a TOGGLE), committed nothing, and reported True. 10.1's
+        # canonical shape -- a success path and a no-op path with identical output.
+        #
+        # Every production caller already passes look=. The defect was the SIGNATURE:
+        # `look=None` made the unverified path the DEFAULT, so the one function that
+        # can do the worst thing on this axis was the one whose easiest call was the
+        # blind one. A new caller reached it by forgetting an argument.
+        #
+        # The body is unchanged and the tests that pin its press sequence still reach
+        # it -- they now say so. TRUE HERE MEANS "the presses were sent", NOT "the
+        # card was played"; only the verified path below can tell you that.
+        if not allow_blind:
+            raise ValueError(
+                "select_and_play was called with no look= and no allow_blind=True. "
+                "The blind path cannot tell a landed press from a dropped one, and "
+                "returns True either way -- it once selected a card and then "
+                "deselected it and reported success. Pass look=hand_cursor_look for "
+                "the verified path, or allow_blind=True to state deliberately that "
+                "nothing can read this screen.")
         reset_hand_cursor(force=True)
         _move_cursor_to(card_index)
         press("select_card")
@@ -1350,8 +1373,40 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
         log("  [ban] the cursor answered the probe and then went blind: NOTHING was "
             "toggled. Falling back to the dead-reckoned path rather than pressing PLAY "
             "on a match that is paid for and unbanned.")
+        # HOME THE CURSOR FIRST, BY SATURATION. select_bans_and_start_full's own
+        # docstring says "Assumes the caller starts at (0, 0)" and it does not home.
+        # By the time we get here the navigator may have spent up to BAN_NAV_MAX_STEPS
+        # moves PER TARGET without ever toggling -- `toggled == 0` is a fact about
+        # SELECT presses and says nothing about MOVE presses -- so the cursor can sit
+        # rows and columns away from where the dead-reckoned path believes it is, and
+        # every one of its counted presses then lands on the wrong card. That is
+        # CLAUDE.md's named "worst outcome available": three cards banned, all wrong,
+        # read_ban_counter says 3/3.
+        #
+        # Saturation is the only homing available with a blind cursor: move_up at row 0
+        # and move_left at column 0 are no-ops, so over-pressing costs presses, never
+        # position. It is the same trick reset_hand_cursor(force=True) uses on the hand.
+        for _ in range(BAN_NAV_MAX_STEPS):
+            press("move_up")
+            time.sleep(BAN_NAV_SETTLE)
+        for _ in range(BAN_NAV_MAX_STEPS):     # 14 > any grid width; over-pressing
+            press("move_left")                 # a boundary is a no-op, by design
+            time.sleep(BAN_NAV_SETTLE)
         on_blind()
-        return sorted(banned_positions)
+        # RETURN WHAT WE VERIFIED, WHICH IS NOTHING -- NOT WHAT WE INTENDED.
+        #
+        # This used to `return sorted(banned_positions)`, i.e. the INTENT. run() checks
+        # `sorted(_placed) != sorted(banned_positions)` to decide whether to record
+        # ban_nav_incomplete, so returning the intent made that check False by
+        # construction: a run that placed three WRONG cards printed a clean 3/3 and
+        # recorded nothing. A success path and a failure path with identical output
+        # (10.1), inside the guard added to prevent exactly this.
+        #
+        # `placed` is [] here by definition (toggled == 0). That is the honest answer:
+        # this function verified nothing. The dead-reckoned path may well have placed
+        # all three, and the ban_nav_blind_midway observation its caller records is
+        # what says so -- but it is unverified, and unverified must not read as placed.
+        return placed
     if before_confirm is not None:
         try:
             before_confirm()

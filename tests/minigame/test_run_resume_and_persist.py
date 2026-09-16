@@ -355,7 +355,18 @@ _BAT = {"screen": "turn", "phase": "batting", "your_score": 0, "opp_score": 0,
         "hand": [], "runners": [], "discards_left": 2}
 _PIT = dict(_BAT, phase="pitching")
 orchestrator._hand_memory.clear()
-hm = _MemoryHarness(["match_start_prompt", _BAT, _BAT, _PIT, _PIT],
+# THREE _PIT screens for TWO pitching turns, deliberately. run() now RE-READS the
+# state after the half reset -- the hand it was about to play was built by
+# read_state_for_turn BEFORE the reset, i.e. from the batting half's memory, so
+# resetting and playing it anyway protected turns 2-5 and not the first. The
+# re-read consumes one extra screen from this harness, which hands out one per
+# read_state_for_turn call. See tests/minigame/test_half_boundary_rereads.py.
+#
+# That test and this one guard DIFFERENT things and both are needed: this one
+# observes the MEMORY DICT at play time, which is why it passed for the whole life
+# of the ordering bug -- the dict really was empty by then. The hand built from it
+# one call earlier was not.
+hm = _MemoryHarness(["match_start_prompt", _BAT, _BAT, _PIT, _PIT, _PIT],
                     play_results=[(True, None)] * 4, balance=500)
 hm.run(target_wins=99, max_spend=500)
 _phases = [p for p, _m in hm.memory_at_turn]

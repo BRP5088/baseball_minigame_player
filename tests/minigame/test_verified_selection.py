@@ -354,7 +354,7 @@ old = ic.press
 ic.press = lambda k: sent.append(k)
 try:
     ic.invalidate_cursor()
-    ic.select_and_play(3)
+    ic.select_and_play(3, allow_blind=True)
 finally:
     ic.press = old
 check(sent == ["move_left"] * 4 + ["move_right"] * 3 + ["select_card", "confirm_play"],
