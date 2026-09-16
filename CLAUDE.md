@@ -197,17 +197,35 @@ about what is unused or safe to remove** — nothing exercises them until someon
 acts on them, so they rot silently while the rest stays accurate. Verify before
 deleting anything on the strength of a sentence here.
 
-**`armor_venv/` IS A THIRD VENV, 601M, AND THIS FILE DID NOT MENTION IT UNTIL
-2026-09-17.** It arrived 2026-09-09 with the local-OCR bake-off, alongside `models/`.
-Nothing in the project imports from it and no runner shells out to it -- unlike
-`paddle_venv/`, which five runners DO use -- so on today's evidence it is bake-off
-scaffolding rather than a dependency. **That is exactly the claim this file gets wrong**
-(see the paddle_venv paragraph above, where the same sentence nearly caused a deletion),
-so verify before acting on it:
+**`armor_venv/` AND `models/` WERE DELETED 2026-09-17: 23.6G, at the user's
+instruction.** They arrived 2026-09-09 for the local-OCR bake-off -- a Python 3.11 venv
+(torch, onnxruntime, huggingface) and four model trees (`ArmorOCR` 16G,
+`typhoon-ocr1.5-2b` 4.0G, `surya-ocr-2-gguf` 1.4G, `GOT-OCR-2.0-hf` 1.1G). The user's
+call: *"It was used to test a new OCR method. While it worked really well, it wasn't fast
+enough to use"*, and *"Worst case scenario, we reinstall them."*
 
-    grep -rn "armor_venv" --include="*.py" --include="*.sh" . | grep -v "^./armor_venv"
+**`MODELS_REMOVED.md` IS WHAT MAKES THAT WORST CASE REAL, AND IT NEARLY WAS NOT.** Each
+model's upstream identity and pinned commit lived in exactly one place: inside the tree
+being deleted. Nothing outside `models/` named a single one of them, and one owner
+appeared nowhere on disk at all. ~200KB of pointer stood between 23G and gone-for-good.
+An adversarial reproducibility check found it BEFORE the `rm`; the four SHAs are in that
+file. **The rule this earns: before deleting a downloaded artefact, ask where its
+PROVENANCE lives -- if the answer is "inside it", extract that first and commit it.**
 
-Today that returns only `tests/harness/test_no_undefined_names.py`, which SKIPS it.
+The measurement that retired them survives in `local_hand.py`'s docstring: ArmorOCR read
+the digits WELL and took 9.9 s, against the shipped template reader's 5600/5600 at ~2 ms.
+Accuracy was never the binding constraint; a 9.9 s read cannot serve a 150 ms poll.
+
+**TWO ERRORS OF MINE CAME OUT OF CHECKING THIS, and both are about the instrument.**
+
+**The paragraph this replaces was FALSE THE INSTANT IT WAS COMMITTED.** It said the grep
+"returns only `tests/harness/test_no_undefined_names.py`" -- and commit `3f3769c`, which
+added that sentence, ALSO created `tests/harness/test_claude_md_constants.py`, whose
+SKIP_DIRS contains `armor_venv`. The claim never described its own commit. Run properly
+at that HEAD it returned 14 files.
+
+**And the reason it looked true is that `grep` ON THIS MACHINE IS A SHELL FUNCTION THAT
+RESPECTS `.gitignore`** -- see 16.16c, which this earned.
 
 `.vscode/launch.json` pins `.venv` on both remaining debug profiles (Doctor, Tests).
 
@@ -2598,6 +2616,27 @@ wrong".
 
 There is no `timeout` either (GNU coreutils); use the harness timeout or
 `perl -e 'alarm shift; exec @ARGV'`, which run_tests.sh already does.
+
+**AND `grep` IS A SHELL FUNCTION THAT RESPECTS `.gitignore`, SO EVERY "NOTHING
+REFERENCES IT" SWEEP IS BLIND TO HALF THE TREE (2026-09-17).** `type grep` resolves to
+an RTK wrapper out of `~/.claude/shell-snapshots/`. It silently skips every ignored
+path -- `agent_progress/`, `models/`, `armor_venv/`, `demos/`, `screenshot_log/` -- and
+reports the truncated answer as a complete one. Measured on the same pattern and tree:
+
+    grep -rl ArmorOCR --include=*.py .                          2 files
+    find . -name '*.py' -print0 | xargs -0 grep -l ArmorOCR     8 files
+
+Four of the six missed files are `agent_progress/bakeoff/`, which is where the ONLY
+functional references to the deleted models lived -- the two scripts that load the
+weights. A sweep of mine reported "nothing references it" and had never looked in the
+one directory that did. The finding came from an agent that used `find | xargs` instead.
+
+**This is 16.16c's exact shape and it is the most dangerous instance of it**, because the
+question "does anything use this" is asked immediately before an irreversible delete.
+For any completeness claim, use `find ... -print0 | xargs -0 grep`, `git grep --no-index`,
+or an `os.walk` in Python with an EXPLICIT skip list -- never the bare wrapper. And a
+FILENAME is a reference too: `grep --include="*.json" typhoon` found nothing while
+`typhoon_results.json` sat on disk, because grep searches contents, not names.
 
 **THE RULE THIS EARNS:** a verification command gets the same suspicion as the
 code it verifies. Before believing a check that came back CLEAN, make it fail
