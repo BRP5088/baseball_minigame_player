@@ -983,6 +983,71 @@ def _unwind_selection(before, look, ours):
         return False
 
 
+def _clear_strays(want, look):
+    """Put down every lifted card the engine did not choose. True if safe to commit.
+
+    Factored out of _verified_select_and_play so the DISCARD path can run it too.
+    It had only ever guarded the play path, and that asymmetry is the one that
+    produced the 2026-09-16 incident: the play path was hardened and the discard
+    path kept an unverified irreversible press in the middle of it.
+
+    AN UNMEASURED LIFT IS NOT A CARD THAT IS DOWN. selected_cards() skips a row
+    whose y could not be measured (`if y is None or r.get("y_measured") is False`),
+    which scores an ABSTENTION as the value "this card is not selected". The stray
+    check is computed from that same list, so a card that is really raised but
+    unreadable is not in `extra`, is never put back down, and goes in with the play.
+    The mechanism is local_hand's own, at its comment on the raised-pass rescue: "A
+    RAISED CARD'S DISC SHRINKS OUT OF DISC_MIN_R ... thr 130 r=13 -- under
+    DISC_MIN_R 18, rejected." SELECTING A CARD IS WHAT MAKES IT UNREADABLE, so the
+    unknown state is not rare here -- it is the state the guard exists for.
+
+    So the gate below requires every y to be MEASURED, not merely that the fan was
+    counted. The walk can still tolerate one unreadable card; the COMMIT cannot.
+    """
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE:
+        print("  [cursor] cannot read the fan before committing — refusing. A "
+              "commit whose lifted set was never seen is a blind commit.")
+        invalidate_cursor()
+        return False
+    if any(y is None for y in _ys):
+        print(f"  [cursor] the lift of at least one card could not be MEASURED "
+              f"({_ys}) — refusing. An unmeasured lift reads as 'down' and a raised "
+              "card would go in with the commit.")
+        invalidate_cursor()
+        return False
+    lifted = set(sel)
+    extra = lifted - want
+    if extra:
+        # TRY TO PUT THEM DOWN, with the same walk-and-verify used to raise them.
+        # select_card is a TOGGLE, so this is the documented way to clear one -- but it
+        # is only safe because every step is confirmed against the screen.
+        for slot in sorted(extra):
+            print(f"  [cursor] slot {slot} is lifted and the engine did not choose it "
+                  f"(it chose {sorted(want)}) — putting it back down before committing")
+            ok, _s = _walk_cursor_to(slot, look)
+            if ok:
+                ok, _s = _deselect_verified(slot, look)
+            if not ok:
+                print(f"  [cursor] could not clear slot {slot} — REFUSING to commit. "
+                      "Committing a card the engine did not choose is worse than "
+                      "committing nothing; the caller will re-read and retry.")
+                invalidate_cursor()
+                return False
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE or any(y is None for y in _ys) or set(sel) - want:
+            print(f"  [cursor] after clearing, the lifted set is still {sel} against "
+                  f"{sorted(want)} — refusing to commit")
+            invalidate_cursor()
+            return False
+    if not want <= set(sel):
+        print(f"  [cursor] the engine's cards {sorted(want)} are not all lifted "
+              f"({sel}) — refusing to commit a partial selection")
+        invalidate_cursor()
+        return False
+    return True
+
+
 def _verified_select_and_play(card_index, tactics_index, look):
     """Read, step, verify, select, verify the selection, and only then commit.
 
@@ -1033,40 +1098,7 @@ def _verified_select_and_play(card_index, tactics_index, look):
     # a human probe: "an investigation that leaves state behind poisons the next
     # experiment, and the result still looks like a finding".
     want = {t for t in (card_index, tactics_index) if t is not None}
-    _g, _ys, n, sel = _look_settled(look)
-    if n != MAX_HAND_SIZE:
-        print("  [cursor] cannot read the fan before committing — refusing. A "
-              "confirm_play whose lifted set was never seen is a blind commit.")
-        invalidate_cursor()
-        return False
-    lifted = set(sel)
-    extra = lifted - want
-    if extra:
-        # TRY TO PUT THEM DOWN, with the same walk-and-verify used to raise them.
-        # select_card is a TOGGLE, so this is the documented way to clear one -- but it
-        # is only safe because every step is confirmed against the screen.
-        for slot in sorted(extra):
-            print(f"  [cursor] slot {slot} is lifted and the engine did not choose it "
-                  f"(it chose {sorted(want)}) — putting it back down before committing")
-            ok, _s = _walk_cursor_to(slot, look)
-            if ok:
-                ok, _s = _deselect_verified(slot, look)
-            if not ok:
-                print(f"  [cursor] could not clear slot {slot} — REFUSING to commit. "
-                      "Playing a card the engine did not choose is worse than playing "
-                      "nothing; the caller will re-read and retry.")
-                invalidate_cursor()
-                return False
-        _g, _ys, n, sel = _look_settled(look)
-        if n != MAX_HAND_SIZE or set(sel) - want:
-            print(f"  [cursor] after clearing, the lifted set is still {sel} against "
-                  f"{sorted(want)} — refusing to commit")
-            invalidate_cursor()
-            return False
-    if not want <= set(sel):
-        print(f"  [cursor] the engine's cards {sorted(want)} are not all lifted "
-              f"({sel}) — refusing to commit a partial play")
-        invalidate_cursor()
+    if not _clear_strays(want, look):
         return False
 
     press("confirm_play")
@@ -1162,6 +1194,18 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     ok, _sel = _select_verified(card_index, look)
     if not ok:
         invalidate_cursor()
+        return False
+    # AND CLEAR THE STRAYS, exactly as the play path does. This was the asymmetry:
+    # _verified_select_and_play computed `extra = lifted - want` and walked to every
+    # stray before confirm_play, refusing if it could not; the discard path went
+    # straight from _select_verified to an IRREVERSIBLE press without ever reading
+    # which OTHER cards were up.
+    #
+    # A stray at this point is the NORMAL case, not an exotic one: _unwind_selection
+    # deliberately leaves a wrongly-raised card up ("pressing again compounds it"),
+    # and the clear-at-commit is the play path's answer to that. The discard path
+    # simply did not have one.
+    if not _clear_strays({card_index}, look):
         return False
     # THE DISCARD MUST BE PROVEN BEFORE confirm_play, AND IT WAS NOT.
     #
