@@ -2617,26 +2617,38 @@ wrong".
 There is no `timeout` either (GNU coreutils); use the harness timeout or
 `perl -e 'alarm shift; exec @ARGV'`, which run_tests.sh already does.
 
-**AND `grep` IS A SHELL FUNCTION THAT RESPECTS `.gitignore`, SO EVERY "NOTHING
-REFERENCES IT" SWEEP IS BLIND TO HALF THE TREE (2026-09-17).** `type grep` resolves to
-an RTK wrapper out of `~/.claude/shell-snapshots/`. It silently skips every ignored
-path -- `agent_progress/`, `models/`, `armor_venv/`, `demos/`, `screenshot_log/` -- and
-reports the truncated answer as a complete one. Measured on the same pattern and tree:
+**AND `grep` HERE OBEYS `.gitignore`, SO EVERY "NOTHING REFERENCES IT" SWEEP IS
+BLIND TO WHOLE DIRECTORIES (2026-09-17).** `type grep` resolves to a function in
+`~/.claude/shell-snapshots/`, and the function is **Claude Code's own, not RTK's** -- I
+attributed it to RTK first and was wrong; the snapshot contains zero mentions of rtk. It
+execs the `claude` binary under `ARGV0=ugrep`, i.e. Claude Code ships ugrep inside itself
+and routes `grep` to it:
+
+    ARGV0=ugrep "$_cc_bin" -G --ignore-files --hidden -I --exclude-dir=.git ...
+
+**`--ignore-files` is the whole cause. Its default FILE is `.gitignore`**, and ugrep then
+ignores matching files AND DIRECTORIES in that directory and every subdirectory -- so it
+does not filter results, it never descends. On this repo that silently removes
+`agent_progress/`, `models/`, `armor_venv/`, `demos/` and `screenshot_log/`, and reports
+the truncated answer as a complete one. Measured on the same pattern and tree:
 
     grep -rl ArmorOCR --include=*.py .                          2 files
+    grep -rl --no-ignore-files ArmorOCR --include=*.py .        8 files
     find . -name '*.py' -print0 | xargs -0 grep -l ArmorOCR     8 files
 
-Four of the six missed files are `agent_progress/bakeoff/`, which is where the ONLY
-functional references to the deleted models lived -- the two scripts that load the
-weights. A sweep of mine reported "nothing references it" and had never looked in the
-one directory that did. The finding came from an agent that used `find | xargs` instead.
+**THE FIX IS ONE FLAG, `--no-ignore-files`**, which reproduces `find | xargs` exactly.
+Reach for it on any completeness claim; `git grep --no-index` or an `os.walk` with an
+EXPLICIT skip list work too, but they are not needed for this.
 
-**This is 16.16c's exact shape and it is the most dangerous instance of it**, because the
-question "does anything use this" is asked immediately before an irreversible delete.
-For any completeness claim, use `find ... -print0 | xargs -0 grep`, `git grep --no-index`,
-or an `os.walk` in Python with an EXPLICIT skip list -- never the bare wrapper. And a
-FILENAME is a reference too: `grep --include="*.json" typhoon` found nothing while
-`typhoon_results.json` sat on disk, because grep searches contents, not names.
+Six files were missed and four are `agent_progress/bakeoff/`, which is where the ONLY
+functional references to the deleted OCR models lived -- the two scripts that load the
+weights. A sweep of mine reported "nothing references it" having never looked in the one
+directory that did. An agent using `find | xargs` found them.
+
+**It is the most dangerous instance of 16.16c's shape**, because "does anything use this"
+is the question asked immediately before an irreversible delete. And a FILENAME is a
+reference too: `grep --include="*.json" typhoon` found nothing while `typhoon_results.json`
+sat on disk, because grep searches contents, not names.
 
 **THE RULE THIS EARNS:** a verification command gets the same suspicion as the
 code it verifies. Before believing a check that came back CLEAN, make it fail
