@@ -94,7 +94,7 @@ def _side(img, zone):
     import local_hand as lh
     cs = _discs(img, zone)
     out = {"power": None, "bonus": None, "power_score": 0.0, "bonus_score": 0.0,
-           "discs": len(cs)}
+           "discs": len(cs), "kind": None, "kind_detail": None}
     if not cs:
         return out
     # lowest y = the player card; anything meaningfully above it is the badge
@@ -222,6 +222,21 @@ def read_reveal(full_frame, phase="batting"):
         raise ValueError(f"read_reveal needs the whole frame; got {full_frame.width}px")
     batter = _side(full_frame, ZONE_HOME)
     pitcher = _side(full_frame, ZONE_MOUND)
+    # THE KIND IS ALWAYS READ, NOT ONLY WHERE A BONUS DIGIT WAS FOUND.
+    #
+    # The two signals fail independently and the BANNER is the stronger one: the
+    # bonus digit comes from _side's disc search, which does not reliably locate a
+    # tactics BADGE (on the home side it returns the player card's power disc
+    # instead), while the banner reads on 11-19 of 22 held-out frames per kind at
+    # zero false positives over 258 wrong-kind readings.
+    #
+    # Reading the kind only when a bonus was found made a FIELDING PLAY we had
+    # ourselves just played come back as "no tactics". The margin happened to be
+    # right, because fielding adds no power -- but a SWING boost whose badge went
+    # unread would have understated the margin by 1 or 2, which is the difference
+    # between a hit and an automatic home run.
+    for side, zone in ((batter, ZONE_HOME), (pitcher, ZONE_MOUND)):
+        side["kind"], side["kind_detail"] = read_tactics_kind(full_frame, zone)
     ours, theirs = (batter, pitcher) if phase == "batting" else (pitcher, batter)
     return {"ours": ours, "theirs": theirs, "batter": batter, "pitcher": pitcher}
 
@@ -236,13 +251,43 @@ def margin_from(reveal, phase):
     o, t = reveal["ours"], reveal["theirs"]
     if o["power"] is None or t["power"] is None:
         return None, "a power did not read"
+    # SECTION 4: ONLY SWING AND PITCH BOOSTS ADD POWER. A Speed Boost or a Fielding
+    # Play carries a nonzero bonus that adds NONE, so the KIND has to be known
+    # before a bonus may enter a margin -- putting one in that does not belong
+    # there is the same size of error as leaving one out that does.
+    ADDS_POWER = {"swing_boost", "pitch_boost"}
+
     def eff(side, holder):
+        kind = side.get("kind")
         if side["bonus"] is None:
-            return side["power"], f"{holder} {side['power']} (no tactics read)"
+            # NO BONUS DIGIT. The banner still decides whether that is safe.
+            if kind is None:
+                return side["power"], f"{holder} {side['power']} (no tactics seen)"
+            if kind in ADDS_POWER:
+                # A tactics card IS there and it DOES add power -- we just cannot
+                # say how much (+1 or +2, and Power Swing is the only card that
+                # can be either). Guessing here is the difference between a hit
+                # and an automatic home run.
+                return None, (f"{holder} played a {kind}, which adds power, but its "
+                              f"bonus digit did not read -- could be +1 or +2")
+            return (side["power"],
+                    f"{holder} {side['power']} ({kind} adds no power, bonus unread)")
+        if kind in ADDS_POWER:
+            return (side["power"] + side["bonus"],
+                    f"{holder} {side['power']}+{side['bonus']} ({kind})")
+        if kind is not None:
+            # a speed or fielding boost: real, read, and adds no power
+            return side["power"], f"{holder} {side['power']} ({kind} adds no power)"
         if side["bonus"] == 2:
-            return side["power"] + 2, f"{holder} {side['power']}+2 (a +2 is a Power Swing)"
-        return None, (f"{holder} has a +1 whose KIND is unread -- a swing/pitch boost "
-                      f"adds power and a speed/fielding boost does not")
+            # THE FALLBACK, AND IT IS STILL SOUND. Section 4's census over 299
+            # hand-labelled tactics cards has POWER SWING as the only card ever
+            # above +1, so a +2 resolves its own kind even when the banner did not
+            # read. It is kept BELOW the banner because a read beats an inference.
+            return (side["power"] + 2,
+                    f"{holder} {side['power']}+2 (banner unread; a +2 is a Power Swing)")
+        return None, (f"{holder} has a +{side['bonus']} whose KIND did not read "
+                      f"({side.get('kind_detail')}) -- a swing/pitch boost adds power "
+                      f"and a speed/fielding boost does not")
     a, wa = eff(o, "ours")
     b, wb = eff(t, "theirs")
     if a is None or b is None:

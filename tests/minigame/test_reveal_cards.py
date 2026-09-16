@@ -59,9 +59,16 @@ if os.path.exists(FIX):
     # THE MARGIN ABSTAINS RATHER THAN GUESSING. Section 4: only SWING_BOOST and
     # PITCH_BOOST add power, so a +1 of unknown kind CANNOT enter a margin. This
     # frame has exactly that, and an answer here would be an invention.
-    m, why = rc.margin_from(r, "batting")
+    # A +1 WHOSE KIND DID NOT READ still refuses -- but this frame's banners DO
+    # read now, so the case has to be built rather than taken from the fixture.
+    # (It used to be asserted against the fixture itself, which was correct only
+    # while nothing could name a kind.)
+    _unk = {"ours": {"power": 7, "bonus": 1, "kind": None,
+                     "kind_detail": "best swing_boost 0.4 under 0.75"},
+            "theirs": {"power": 5, "bonus": None, "kind": None}}
+    m, why = rc.margin_from(_unk, "batting")
     want("a +1 of unknown kind refuses to produce a margin", m is None, str(why))
-    want("and it says why", "KIND" in (why or ""), str(why))
+    want("and it says why", "KIND did not read" in (why or ""), str(why))
 
     # A +2 IS ALWAYS A POWER SWING (section 4: the only card ever above +1), so
     # that case resolves for free and MUST produce a number.
@@ -166,6 +173,86 @@ if os.path.exists(PITCH_FIX):
     mp, _ = rc.margin_from(rc.read_reveal(pim, phase="pitching"), "pitching")
     want("the margin does not depend on which side we are on", mb == mp == 1,
          f"batting says {mb}, pitching says {mp} -- one of the two swaps is wrong")
+
+# THE TACTICS KIND, AND WHAT IT LETS THE MARGIN DO. Section 4: only SWING and
+# PITCH boosts add power. A Speed Boost or Fielding Play carries a nonzero bonus
+# that adds NONE, so putting one into a margin is the same size of error as
+# leaving out one that belongs.
+if os.path.exists(FIX):
+    kr = rc.read_reveal(im, phase="batting")
+    want("our POWER SWING is named", kr["ours"]["kind"] == "swing_boost", str(kr["ours"]))
+    want("their PITCH FOCUS is named", kr["theirs"]["kind"] == "pitch_boost", str(kr["theirs"]))
+    km, kw = rc.margin_from(kr, "batting")
+    # GROUND TRUTH: 7 + POWER SWING +2 against 5 + PITCH FOCUS +1 is a margin of
+    # exactly 3, and the game printed HOME RUN! for 4 runs with the bases loaded.
+    want("a +1 of KNOWN power-adding kind now enters the margin", km == 3,
+         f"{km} / {kw} -- expected (7+2)-(5+1)")
+    want("and 3 is the automatic home-run margin", km >= 3)
+
+# A KIND THAT ADDS NO POWER MUST BE EXCLUDED, and this fixture is the case that
+# proves the banner is doing the work: we pitched a FIELDING PLAY and they batted
+# a SPEED BOOST, and NEITHER bonus digit read. Reading the kind only where a bonus
+# was found would report "no tactics" on both -- right here by luck, since neither
+# adds power, and wrong by 1 or 2 the moment it is a swing boost.
+FIELD_FIX = os.path.join(_ROOT, "test_fixtures/reveal_banner/reveal_fielding.jpg")
+want("the fielding fixture is present", os.path.exists(FIELD_FIX), FIELD_FIX)
+if os.path.exists(FIELD_FIX):
+    fim = Image.open(FIELD_FIX)
+    fr = rc.read_reveal(fim, phase="pitching")
+    want("our FIELDING PLAY is named from its banner alone",
+         fr["ours"]["kind"] == "fielding_boost", str(fr["ours"]))
+    want("their SPEED BOOST is named from its banner alone",
+         fr["theirs"]["kind"] == "speed_boost", str(fr["theirs"]))
+    want("neither bonus digit read, which is the point",
+         fr["ours"]["bonus"] is None and fr["theirs"]["bonus"] is None, str(fr))
+    fm, fw = rc.margin_from(fr, "pitching")
+    # GROUND TRUTH: our 6 against their 5. Neither tactics card adds power, so the
+    # margin is -1 -- an out, which is what the diamond showed.
+    want("a no-power kind is excluded from the margin", fm == -1, f"{fm} / {fw}")
+    want("and the reason names the kinds", "adds no power" in (fw or ""), str(fw))
+
+# A POWER-ADDING KIND WITH NO BONUS DIGIT MUST ABSTAIN, not guess. Power Swing is
+# the only card that can be +1 OR +2, so the difference is a hit versus an
+# automatic home run.
+_fake = {"ours": {"power": 7, "bonus": None, "kind": "swing_boost"},
+         "theirs": {"power": 5, "bonus": None, "kind": None}}
+_m, _w = rc.margin_from(_fake, "batting")
+want("a swing boost with an unread bonus refuses to produce a margin", _m is None, str(_m))
+want("...and says the bonus could be +1 or +2", "+1 or +2" in (_w or ""), str(_w))
+
+# THE KIND GATE, PINNED AS LITERALS against the measured populations (10.11 --
+# never assert against the constant you are guarding). Census over 344 held-out
+# readings from frames that supplied no template, tools/banner_kind_census.py:
+#
+#     RIGHT kind   p50 0.961   max 0.997
+#     WRONG kind   p50 0.438   p99 0.703   MAX 0.710
+#
+# NOTE these two checks exist BECAUSE outcome alone cannot catch a loosened gate:
+# on this corpus there is NO frame where a wrong kind outscores the right one
+# between 0.60 and 0.75, so dropping the gate to 0.60 changes no fixture's answer
+# and two mutants survived until the constant itself was pinned.
+want("the kind gate clears the measured wrong-kind MAX",
+     rc.TACTICS_KIND_MIN > 0.710,
+     f"wrong kinds reach 0.710 over 258 held-out readings; got {rc.TACTICS_KIND_MIN}")
+want("...and sits under the right-kind median",
+     rc.TACTICS_KIND_MIN < 0.961,
+     f"right kinds sit at p50 0.961; got {rc.TACTICS_KIND_MIN}")
+
+# AND THE GATE ACTUALLY GATES. Drive a score that sits in the wrong-kind band and
+# require an abstention -- this is what catches the gate being removed outright.
+_real_scores = rc.tactics_kind_scores
+try:
+    rc.tactics_kind_scores = lambda frame, zone: {"swing_boost": 0.70,
+                                                  "speed_boost": 0.41}
+    _k, _d = rc.read_tactics_kind(None, rc.ZONE_HOME)
+    want("a best score inside the wrong-kind band is refused", _k is None,
+         f"named {_k!r} on a 0.70 score, which wrong kinds reach")
+    rc.tactics_kind_scores = lambda frame, zone: {"swing_boost": 0.97,
+                                                  "speed_boost": 0.41}
+    _k, _d = rc.read_tactics_kind(None, rc.ZONE_HOME)
+    want("...but a clear score is accepted", _k == "swing_boost", f"{_k!r} / {_d}")
+finally:
+    rc.tactics_kind_scores = _real_scores
 
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
