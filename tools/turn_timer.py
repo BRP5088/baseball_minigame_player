@@ -63,7 +63,9 @@ if not PLAY:
     print("\n(dry run — pass --play to actually commit)")
     sys.exit(0)
 
-ok = ic.select_and_play(target, None, look=o.hand_cursor_look)
+# spend_and_play, so forget_hand_slot runs -- select_and_play leaves the spent
+# card in _hand_memory for the next unreadable read of that slot to serve.
+ok, _why = o.spend_and_play(target, None)   # (ok, why), not a bare bool
 mark("commit")
 print(f"  -> {'COMMITTED' if ok else 'REFUSED'}")
 

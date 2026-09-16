@@ -197,11 +197,20 @@ def propose(r):
                 tactics.append(TacticsCard(name=c.get("name") or c.get("type") or "?",
                                            bonus=c.get("bonus") or 0, kind=kind))
             else:
-                players.append(PlayerCard(name=c.get("name") or "?",
+                # NAME CARRIES THE SLOT, so the engine's own answer can be mapped
+                # back without searching by power. The engine tie-breaks equal-power
+                # cards on `secondary`, so "the first card of this power" is a
+                # DIFFERENT card from the one it chose whenever two share a power.
+                players.append(PlayerCard(name=str(c.get("hand_index")),
                                           power=c.get("power") or 0,
                                           secondary=c.get("secondary") or 0))
         sc = r.get("scoreboard") or {}
-        st = GameState(half=r.get("phase") or "batting", batters_used=0,
+        # REFUSE AN UNREAD PHASE rather than defaulting to "batting". The default is
+        # a whole STRATEGY: while pitching it runs best_batting_play and proposes the
+        # wrong kind of card. orchestrator.local_game_state refuses for this reason.
+        if r.get("phase") is None:
+            return None, "phase not read -- not proposing a play"
+        st = GameState(half=r["phase"], batters_used=0,
                        your_score=(sc.get("your") or [0])[-1] or 0,
                        opp_score=(sc.get("opponent") or [0])[-1] or 0,
                        runners=[], redraws_left=r.get("discards_left") or 0)
@@ -214,14 +223,16 @@ def propose(r):
         # and production finds it by OBJECT IDENTITY against the list it built. Here the
         # cards are rebuilt, so it is matched on power -- printed beside the card so a
         # mismatch between "the card chosen" and "the position pressed" is visible.
-        slot = None
-        for c in r["hand_cards"]:
-            if c.get("kind") != "tactics" and c.get("power") == d.player_card.power:
-                slot = c.get("hand_index"); break
+        try:
+            slot = int(d.player_card.name)
+        except (TypeError, ValueError):
+            slot = None
         if should_redraw(players, st) and (r.get("discards_left") or 0) > 0:
-            weakest = min(players, key=lambda p: p.power)
+            # (power, secondary), matching orchestrator's discard picker -- power
+            # alone settles a tie by SLOT ORDER and throws the better weak card.
+            weakest = min(players, key=lambda p: (p.power, p.secondary))
             for c in r["hand_cards"]:
-                if c.get("kind") != "tactics" and c.get("power") == weakest.power:
+                if c.get("hand_index") == int(weakest.name):
                     return ("discard", c.get("hand_index")), (
                         f"DISCARD slot {c.get('hand_index')} (power {weakest.power}) -- "
                         f"hand is weak, {r.get('discards_left')} discard(s) left")
@@ -276,14 +287,16 @@ def main():
             _p, _t = (int(x) for x in cmd[1:].split("+", 1))
             acted = f"select_and_play({_p}, tactics={_t})"; pressed = True
             acted += (" -> COMMITTED"
-                      if o.select_and_play(_p, _t, look=o.hand_cursor_look)
+                      if o.spend_and_play(_p, _t)[0]
                       else " -> REFUSED (nothing committed)")
         elif cmd.startswith("p") and cmd[1:].strip().isdigit():
             s = int(cmd[1:]); acted = f"select_and_play({s})"; pressed = True
-            acted += " -> COMMITTED" if o.select_and_play(s, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
+            _ok, _why = o.spend_and_play(s)
+            acted += " -> COMMITTED" if _ok else f" -> REFUSED ({_why})"
         elif cmd.startswith("d") and cmd[1:].strip().isdigit():
             s = int(cmd[1:]); acted = f"select_and_discard({s})"; pressed = True
-            acted += " -> COMMITTED" if o.select_and_discard(s, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
+            _ok, _why = o.spend_and_discard(s)
+            acted += " -> COMMITTED" if _ok else f" -> REFUSED ({_why})"
         elif cmd.startswith("k "):
             key = cmd[2:].strip(); acted = f"press({key})"; pressed = True; o.press(key)
         elif cmd == "" and dec is not None:
@@ -292,10 +305,12 @@ def main():
                 acted = "PROPOSAL HAS NO SLOT -- the chosen card was not found in the hand"
             elif kind == "discard":
                 acted = f"select_and_discard({slot})"; pressed = True
-                acted += " -> COMMITTED" if o.select_and_discard(slot, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
+                _ok, _why = o.spend_and_discard(slot)
+                acted += " -> COMMITTED" if _ok else f" -> REFUSED ({_why})"
             else:
                 acted = f"select_and_play({slot})"; pressed = True
-                acted += " -> COMMITTED" if o.select_and_play(slot, look=o.hand_cursor_look) else " -> REFUSED (nothing committed)"
+                _ok, _why = o.spend_and_play(slot)
+                acted += " -> COMMITTED" if _ok else f" -> REFUSED ({_why})"
         # DID IT LAND? The whole point. Compare the frame before against the frame after,
         # on the SAME measure the deal gate uses, so a press that changed nothing is
         # visible immediately rather than 35 s later. This sits OUTSIDE the branch chain:

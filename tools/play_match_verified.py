@@ -52,7 +52,14 @@ def decide(hand, cards, crops):
                                       secondary=c.get("secondary") or 0))
     if not players:
         return None, None, "no player cards"
-    phase = ls.read_phase(hand)[0] or "batting"
+    # REFUSE, DO NOT DEFAULT. `or "batting"` turns an ABSTENTION into a value, and
+    # the value it picks is a whole strategy: while PITCHING it would run
+    # best_batting_play and propose the wrong kind of card entirely.
+    # orchestrator.local_game_state refuses for exactly this reason ("phase not read
+    # locally"); this tool drives a live match and did not.
+    phase = ls.read_phase(hand)[0]
+    if phase is None:
+        return None, None, "phase not read -- not proposing a play"
     sc = o.ocr_scoreboard(crops["scoreboard"]) or {}
     st = GameState(half=phase, batters_used=0,
                    your_score=(sc.get("your") or [0])[-1] or 0,
@@ -60,10 +67,17 @@ def decide(hand, cards, crops):
                    runners=[], redraws_left=0)
     d = (best_batting_play(players, tactics, st) if phase == "batting"
          else best_pitching_play(players, tactics, st))
+    # THE SLOT IS ALREADY IN THE CARD, so do not search for it by POWER. The engine
+    # tie-breaks equal-power cards on `secondary` (decision_engine), so "the first
+    # card of this power" is a DIFFERENT card from the one it chose whenever two
+    # share a power -- and it then presses that one. PlayerCard.name is set to
+    # str(hand_index) fifteen lines above, so the answer is already carried.
     pi = ti = None
+    try:
+        pi = int(d.player_card.name)
+    except (TypeError, ValueError):
+        pi = None
     for c in cards:
-        if c.get("kind") != "tactics" and c.get("power") == d.player_card.power and pi is None:
-            pi = c.get("hand_index")
         if (d.tactics_card is not None and c.get("kind") == "tactics"
                 and c.get("type") == d.tactics_card.kind.value and ti is None):
             ti = c.get("hand_index")
@@ -100,7 +114,16 @@ for turn in range(1, MAX_TURNS + 1):
     print(f"turn {turn:2d}  {why:34s} -> play {pi}" + (f" + {ti}" if ti is not None else "")
           + f"   (selected {sel})")
 
-    ok = ic.select_and_play(pi, ti, look=o.hand_cursor_look)
+    # spend_and_play, NOT select_and_play: it forgets the spent slots AND takes the
+    # verified path. Calling the raw function leaves _hand_memory holding the card
+    # that was just played, and local_hand_cards then serves it for that slot on the
+    # next turn whenever the slot is unreadable -- which is exactly the slot the
+    # memory is consulted for.
+    # (ok, why), not a bare bool -- a non-empty tuple is always truthy, which
+    # would make every refusal read as a commit.
+    ok, _why = o.spend_and_play(pi, ti)
+    if not ok:
+        print(f"    REFUSED: {_why}")
     t_commit = time.time()
 
     # ---- wait for the hand to come back --------------------------------------
