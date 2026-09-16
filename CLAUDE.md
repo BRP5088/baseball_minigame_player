@@ -3720,6 +3720,40 @@ earlier after the load, so the NPCs have wandered 24s less.
 because the True arm is faster. (d) The recovery fan, ~79s each and ~33% of the
 clock, is OPEN-7's and is not decided here.
 
+**OPEN-24 — THE TACTICS-KIND CENSUS CANNOT BE WIDENED FROM WHAT IS ON DISK, and
+the reason is a retention policy rather than a missing measurement (2026-09-17).**
+
+`reveal_cards.TACTICS_KIND_MIN` (0.75) is measured on 48 frames from TWO matches.
+Re-measured from the protected copy in `test_fixtures/reveal_kind_truth/`: 86
+held-out right-kind readings against 258 wrong-kind, and at the shipped gate **0 of
+258 wrong-kind clear it while 25 of 86 right-kind fall under it** -- never wrong,
+abstains on 29%, which is the right direction for a reader whose output is logged
+and analysed later.
+
+**148 ROWS OF GENUINE GROUND TRUTH EXIST AND HAVE NO FRAMES.** `our_tactics_kind`
+in `match_log.jsonl` is `decision.tactics_card.kind` -- what the engine CHOSE, so
+it is ground truth in the same sense the two reveal sets are, and not circular
+(§10.22). The opponent's field is READ and carries the bonus-of-3 values §4 says
+cannot exist, so only our side counts. 147 carry a timestamp across 2026-08-26 to
+2026-09-10 and would take the census from 2 matches to ~150 turns.
+
+    ground-truth rows with our_tactics_kind     148   (swing 82, pitch 52,
+                                                       fielding 8, speed 6)
+    of those, with an archived frame              0
+    archived runs                                 3, all 2026-08-28, zero
+                                                     tactics plays between them
+
+`SCREENSHOT_KEEP_RUNS = 3`, so the row is append-only and the picture is pruned.
+The overlap is exactly zero.
+
+**WHAT WOULD ANSWER IT, and it is a decision rather than a measurement:** keep ONE
+reveal frame per tactics play, beside the row that names it. ~148 jpegs across two
+weeks of play, `record_local_hand`'s existing never-raises-into-the-turn-loop
+pattern -- and it touches the turn loop, which is the money path, so it is not
+made unilaterally. Until then the gate stands on two matches, and the two RARE
+classes are the ones the existing sets happen to cover best (fielding 25 frames,
+speed 23) while the log's rarest are fielding 8 and speed 6.
+
 **OPEN-9 — Can a recovery REPLACE the reset rather than precede it?** Local
 recovery failed because its cost was ADDITIVE — when the fan failed, the reset
 still happened. The variant that skips the reset on success has not been tried.
