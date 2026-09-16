@@ -789,15 +789,35 @@ noted; the rest is the user's reading, not this project's measurement.
   settled the OTHER way: do NOT zero it. The existing rule already pays the
   premium only when runners are on, which is exactly when the effect exists.
 
-**WHAT THE ENGINE STILL CANNOT SEE.** `best_batting_play` sorts on POWER alone and
-attaches a speed boost only as a fallback, and only when runners are already on
-base. It therefore cannot value a fast batter who wins outright, and has no notion
-of tie risk at all. Neither can `simulate.py` settle it: a hit there is
-`runners.append(batter_card)` with speed never consulted, and its own docstring
-flags speed effects as "not confirmed rules — modeled as the simplest reasonable
-guess". **So the 79% win rate that justifies "always attach a swing boost" was
-measured in a model where a speed boost does nothing by construction.** It shows
-swing-boost beats NOTHING; it has never compared swing against speed.
+**WHAT THE ENGINE STILL CANNOT SEE — and THREE claims that used to sit here are
+WITHDRAWN, because they described code that is gone (corrected 2026-09-16).** The
+paragraph read that `best_batting_play` "sorts on POWER alone and attaches a speed
+boost only as a fallback, and only when runners are already on base", that it
+"cannot value a fast batter who wins outright", and that `simulate.py` consults
+speed never. All three are false at HEAD, and `decision_engine`'s own docstring had
+already said so while this file kept the old version:
+
+    best_batting_play   scores every (batter, tactics) PAIR at
+                        POWER_WEIGHT * power + SPEED_WEIGHT * speed, 99/1, and
+                        takes the best -- so speed is read, and a boost attaches
+                        whenever it costs no power, runners or no runners
+    simulate.py         MODEL_SPEED = True since 2026-09-12; _step reads the
+                        card's secondary and speed_bonus reaches the batter
+
+Caught live on 2026-09-16 the cheapest possible way: the engine attached a speed
+boost with the bases EMPTY, which this file said it could not do. **A doc claim
+about what code cannot do is only worth the day it was written** — nothing fails
+when the code outgrows it, which is 10.1's family pointed at prose.
+
+**What survives, and it is the part that matters.** 99/1 is a TIE-BREAK, not a
+trade: powers are integers, so one point of power is 0.99 against a widest-possible
+speed gap of about 0.06 — speed decides between equal-power plays and nothing else.
+The engine still has **no notion of tie risk at all**, which is a real gap given
+that landing exactly on the pitcher's power is the worst place to be. And the 79%
+win rate that justifies "always attach a swing boost" WAS measured in a model where
+a speed boost does nothing by construction, so it shows swing-boost beats NOTHING
+and has never compared swing against speed. Use the 2026-09-13 role-split figures
+above (+0.614 against +0.131) for that comparison, never the 79%.
 - A match is 5 rounds PER HALF (see the match shape above) and allows 2 discards
   PER HALF, so four across a match (measured 2026-09-16: the batting half ended
   at 0 and the pitching half opened at 2).

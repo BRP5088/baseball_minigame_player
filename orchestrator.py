@@ -6093,6 +6093,49 @@ def ban_x_cells():
     return {(lvl + r, c) for (r, c) in hits}
 
 
+def _ban_scroll_to_top(max_presses: int = 20):
+    """Put the ban grid at scroll level 0. Returns (reached_top, level).
+
+    THE SCAN ASSUMED IT STARTED AT THE TOP AND NOTHING ASSERTED IT. `top_row`
+    is derived as `presses_so_far - 1`, which is only a row number if the grid
+    began at row 0 -- and after any earlier scan, cursor walk or ban placement
+    it does not. Measured live 2026-09-16, three consecutive scans on a grid
+    parked at level 3+ returned 10, 6 and 14 cards of 25, every one of them
+    from rows 3-6, because the rows ABOVE the starting point are never
+    scrolled into view and so are never read at all.
+
+    The scrollbar cross-check below catches the resulting mismatch and
+    correctly refuses to cache -- but it can only fix the LABEL on a row it
+    can see. It cannot conjure a row the viewport never visited, so the scan
+    still returned a fragment, and `choose_bans` then picked the best three of
+    that fragment with no way to tell it apart from the whole collection.
+    That is OPEN-23's mechanism: not a scroll that stops early, a scan that
+    starts late.
+
+    Six move_up presses took a level-3 grid to 0 on the live rig. The cap is
+    20 because a dropped press costs a press, not a row -- the loop is checked
+    against the SCROLLBAR every time, never against the count, for the same
+    reason the scan is.
+    """
+    lvl = None
+    for _ in range(max_presses):
+        try:
+            lvl, _thumb = read_ban_scroll_level(capture_screenshot_image())
+        except Exception:
+            lvl = None
+        if lvl == 0:
+            return True, 0
+        # level=None means mid-animation, NOT "not at the top" -- keep pressing
+        # and let the scrollbar, not this loop's patience, decide.
+        press("move_up")
+        wait_for_screen_to_settle(max_wait=4.0, regions="ban")
+    try:
+        lvl, _thumb = read_ban_scroll_level(capture_screenshot_image())
+    except Exception:
+        lvl = None
+    return lvl == 0, lvl
+
+
 def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                              trust_roster: bool = None):
     """
@@ -6141,6 +6184,17 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
         trust_roster = TRUST_ROSTER_ONLY
     if use_cache and _cached_ban_collection is not None:
         return _cached_ban_collection
+
+    # START AT THE TOP, OR SAY THE SCAN IS PARTIAL. See _ban_scroll_to_top.
+    # A scan that begins mid-grid can never see the rows above it, and a
+    # fragment is indistinguishable from the whole collection downstream.
+    _at_top, _start_lvl = _ban_scroll_to_top()
+    if not _at_top:
+        _saw_desync = True   # never cache a scan that could not reach row 0
+        print(f"  [ban] could NOT scroll to the top of the grid (level reads "
+              f"{_start_lvl}). Every row above it is unreachable, so this scan "
+              "is a FRAGMENT — reading it anyway, but refusing to cache it.")
+        record_observation(event="ban_scan_not_at_top", level=_start_lvl)
 
     seen_positions = set()
     full_collection = []

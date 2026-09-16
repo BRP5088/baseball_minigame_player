@@ -143,8 +143,18 @@ def best_batting_play(hand_players: List[PlayerCard],
       say it had not. Speed IS modelled in simulate.py (MODEL_SPEED, since
       2026-09-12): _step reads the card's secondary, and speed_bonus reaches
       the batter's own advance. Measured there, a SWING boost is worth
-      +0.726 runs/half and a SPEED boost +0.034 -- a factor of 21 -- which is
+      +0.614 runs/half and a SPEED boost +0.131 -- a factor of 4.7 -- which is
       the argument for power, made against a model that can finally see both.
+      THE FIGURES THIS REPLACES (+0.726, +0.034, "a factor of 21") ARE
+      WITHDRAWN and must not be re-cited. They were taken on the SCRAMBLED
+      pool, before cards carried roles: pitchers were dealt as batters with
+      their FIELDING read as SPEED, so a third of "batters" had speed 0 and a
+      speed boost on them bought almost nothing. A speed measurement taken
+      where a third of the batters are pitchers is not a speed measurement.
+      The CONCLUSION survives -- swing still wins decisively, so the
+      preference for power is unchanged -- but any argument that leaned on
+      "21x" to call speed negligible was leaning on an artefact. See CLAUDE.md
+      section 4, which carries the re-measurement.
     - AND THIS FUNCTION NO LONGER SORTS ON POWER ALONE. It scores every
       (batter, tactics) pair at POWER_WEIGHT * power + SPEED_WEIGHT * speed,
       99/1, so speed breaks ties between equal-power plays and decides nothing
