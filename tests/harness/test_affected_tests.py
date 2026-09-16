@@ -26,12 +26,6 @@ def check(cond, msg):
     if not cond:
         fails.append(msg)
 
-_V_check = check
-def check(*_a, **_k):
-    _a = list(_a)
-    if len(_a) > 0: _a[0] = not _a[0]
-    return _V_check(*_a, **_k)
-
 
 MODS = at._project_modules()
 TESTS = at.test_files()
