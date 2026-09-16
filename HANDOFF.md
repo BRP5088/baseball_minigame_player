@@ -1,6 +1,31 @@
-# Handoff — reset & walk-back automation
+# Handoff — reset & walk-back automation  [SUPERSEDED 2026-08-27]
 
-State as of 2026-08-27. Everything below was verified by running it, not inferred.
+> **SUPERSEDED. DO NOT QUOTE A NUMBER FROM THIS FILE.** Every measurement here
+> predates the **2026-09-03 button fix**, and CLAUDE.md §5 states plainly that
+> anything measured while `INJECT_BUTTONS` was on was measuring a broken reset,
+> not routing: `_inject_press` returned True because the WRITE to the pipe
+> succeeded, so every button in the system was silently dead.
+>
+> Two numbers below are contradicted directly by the current file:
+>
+>     this file            current, and where
+>     compass 144ms        31ms      CLAUDE.md §8(h), after tesserocr replaced
+>                                    shelling out (8.4x, verified on 208 crops)
+>     smallest turn ~28°   3.795°    CLAUDE.md §6 -- one GAME FRAME at full stick,
+>                                    a floor no patch removes, measured as an
+>                                    integer step across six identical turns
+>
+> The 28° figure is the load-bearing one: this file concludes from it that aiming
+> is "±28° at best, and that error compounds across a multi-leg route", and a
+> reader acting on that would rebuild a routing strategy around a limit that is
+> 7x too large and no longer exists.
+>
+> **Current state is CLAUDE.md §8. Open work is §11. The live handoff is
+> `HANDOFF_NOW.md`.** This file is kept for the RESET narrative and the shape of
+> the early walk-back work, not for its numbers.
+
+State as of 2026-08-27. Everything below was verified by running it at the time,
+on a build whose buttons did not work.
 
 ## What works
 
