@@ -5477,8 +5477,25 @@ AUTO_HOME_RUN_MARGIN = 3     # "beating it by 3+ is an automatic home run" -- CL
 
 
 def effective_power(power, bonus, kind):
-    """Power after a tactics card, counting ONLY the kinds that add power."""
+    """Power after a tactics card, counting ONLY the kinds that add power.
+
+    None means NOT KNOWN. A KNOWN BONUS OF UNKNOWN KIND IS NOT A BONUS OF ZERO:
+    this read `(bonus or 0) if kind in POWER_TACTICS_KINDS else 0`, so when the
+    KIND reader abstained (`kind is None`) a real, read bonus was silently priced
+    at nothing and a NUMBER came back anyway. That number feeds reveal_margin and
+    then classify_outcome, and a margin of exactly 3 is an automatic HOME RUN --
+    so dropping a +2 turns a home run into a hit in the record.
+
+    _tactics_kind_from_name already refuses on an unrecognised name, and its own
+    docstring says "an unknown name means the row is excluded from the
+    effective-power analysis" -- but this function did not exclude it, it priced
+    it at zero. reveal_cards.margin_from, written later, handles the same case
+    correctly; this is the older one, and it is the one classify_outcome is wired
+    to. Abstention treated as a value, which is 10.1's family.
+    """
     if power is None:
+        return None
+    if kind is None and bonus:
         return None
     return power + ((bonus or 0) if kind in POWER_TACTICS_KINDS else 0)
 

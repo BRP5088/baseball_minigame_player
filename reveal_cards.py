@@ -23,8 +23,15 @@ powers and 0.875/0.950 on the badges at r=11, against MIN_SCORE 0.80.
 
 THE ZONES ARE TIGHT ON PURPOSE. During a home run the runners animate THROUGH
 the centre row, so a generous mound zone picks up a runner's disc as if it were
-the pitcher's card. Home plate has no such problem -- a runner is never there --
-which is why OURS is the more trustworthy half and THEIRS carries the caveat.
+the pitcher's card.
+
+AND HOME PLATE HAS THE SAME PROBLEM. This used to read "a runner is never there
+-- which is why OURS is the more trustworthy half". That is false: a runner
+SCORING stands on the plate, its card renders in ZONE_HOME, and `_side` picks the
+LOWEST disc as the played card -- so a runner's card below the played one wins,
+confidently (0.966), not as an abstention. Neither half is privileged. `_side`
+now REFUSES when more than one disc in a zone reads a legal card power, because
+which of two player cards is the matchup is not knowable from position alone.
 """
 import os
 
@@ -98,20 +105,75 @@ def _side(img, zone):
     if not cs:
         return out
     # lowest y = the player card; anything meaningfully above it is the badge
+    sc = img.width / REF_W          # the offsets below are px measured at REF_W
     player = max(cs, key=lambda c: c[1])
     badge = None
     for c in cs:
         if c is player:
             continue
-        if c[1] < player[1] - 20 and c[0] > player[0] - 20:
-            if badge is None or c[1] < badge[1]:
+        if c[1] < player[1] - 20 * sc and c[0] > player[0] - 20 * sc:
+            # THE NEAREST QUALIFYING DISC, NOT THE HIGHEST. This kept the SMALLEST
+            # y, i.e. the disc furthest ABOVE the player card, while the module's
+            # own measured badge offset is (+114, -55) -- so the nearest qualifying
+            # disc IS the badge and a higher one is an interloper. Every candidate
+            # is already above the player, so the nearest is the LARGEST y.
+            #
+            # LATENT, NOT OBSERVED. No frame on disk picks a different disc under
+            # the two rules: on home_run.jpg the only other disc in the zone is a
+            # runner's card at x=973, and the existing `c[0] > player[0] - 20` test
+            # already excludes it. This is a correctness fix toward the measured
+            # offset, not a repair of a failure anyone has seen, and it is recorded
+            # that way so a later reader does not cite it as evidence of one.
+            if badge is None or c[1] > badge[1]:
                 badge = c
-    d, s = lh.read_digit(img, (player[0], player[1], READ_R, 4.0, 1))
+    d, s = lh.read_digit(img, (player[0], player[1], READ_R * sc, 4.0, 1))
     if d is not None and CARD_POWER_MIN <= int(d) <= CARD_POWER_MAX:
         out["power"] = int(d)
     out["power_score"] = round(float(s), 4)
+
+    # A SECOND PLAYER CARD DOES APPEAR AT HOME PLATE, AND THE RULE HERE IS AN
+    # ASSUMPTION THAT WAS NEVER MEASURED AGAINST ONE.
+    #
+    # The module docstring claimed "a runner is never there". That is false.
+    # Measured on test_fixtures/reveal_banner/home_run.jpg, ZONE_HOME holds THREE
+    # discs where the same at-bat's earlier frame holds two:
+    #
+    #     y=718  digit=5  score 0.967   <- a SECOND player card (a runner)
+    #     y=736  digit=2  score 0.948   <- the tactics badge (+2)
+    #     y=793  digit=7  score 0.983   <- the played card
+    #
+    # BE PRECISE ABOUT WHAT THAT SHOWS, because the first write-up of this finding
+    # was not: the runner rendered ABOVE the played card, so `max(cs, key=y)` picked
+    # correctly on this frame. A runner rendering BELOW the played card is asserted,
+    # NOT observed -- no frame on disk shows it.
+    #
+    # The refusal is not for the unobserved case. It is because "lowest disc = the
+    # played card" is a positional assumption that was designed for a zone holding
+    # ONE player card, and nothing has measured it across a population that holds
+    # two. With two legal card powers in the zone the reader cannot KNOW which is
+    # the matchup; answering would be relying on an untested layout rule, and a
+    # fabricated margin mislabels the row it was invented to describe.
+    #
+    # It is cheap, because the digits are already read, and it costs little: the
+    # frames it refuses are home-run reveals, where reveal_banner names the outcome
+    # outright and the margin is redundant. If a measured layout rule ever arrives,
+    # this is the place to replace the refusal with it.
+    if out["power"] is not None:
+        others = 0
+        for c in cs:
+            if c is player:
+                continue
+            dd, _ss = lh.read_digit(img, (c[0], c[1], READ_R * sc, 4.0, 1))
+            if dd is not None and CARD_POWER_MIN <= int(dd) <= CARD_POWER_MAX:
+                others += 1
+        if others:
+            out["power"] = None
+            out["ambiguous"] = others + 1
+            out["why"] = (f"{others + 1} discs in this zone read a legal card power "
+                          "— a runner on the plate renders here too, and which card "
+                          "is the matchup is not knowable from position alone")
     if badge is not None:
-        d, s = lh.read_digit(img, (badge[0], badge[1], READ_R, 4.0, 1))
+        d, s = lh.read_digit(img, (badge[0], badge[1], READ_R * sc, 4.0, 1))
         # A BONUS OUTSIDE 1-2 IS A MISREAD, NOT A CARD (section 4: a +3 does not
         # exist, and the paid model recorded eleven of them plus one +11).
         if d is not None and BONUS_MIN <= int(d) <= BONUS_MAX:
@@ -283,7 +345,29 @@ def margin_from(reveal, phase):
         if side["bonus"] is None:
             # NO BONUS DIGIT. The banner still decides whether that is safe.
             if kind is None:
-                return side["power"], f"{holder} {side['power']} (no tactics seen)"
+                # "NEITHER READER SAW ANYTHING" IS NOT "NOTHING IS THERE".
+                #
+                # Both readers abstaining is two failures, not evidence of absence
+                # -- and one of them is KNOWN weak here: _discs "does not reliably
+                # find a tactics badge at all" (this module's own comment, after it
+                # returned the PLAYER card's power disc on the home side). This
+                # branch concluded "no tactics seen" and returned a NUMBER that
+                # feeds a margin, while the branch below correctly ABSTAINS on the
+                # STRONGER evidence combination (bonus read, kind not). It answered
+                # on the emptier one and refused on the fuller one.
+                #
+                # THE POSITIVE SIGNAL IS THE DISC COUNT, and _side already carries
+                # it. A played card is one disc; a played card WITH a tactics card
+                # is more. So exactly one disc is real evidence that nothing was
+                # played alongside it, and anything else is unknown.
+                if side.get("discs") == 1:
+                    return (side["power"],
+                            f"{holder} {side['power']} (one disc in the zone: no "
+                            "tactics card is present)")
+                return None, (f"{holder} has {side.get('discs')} discs in its zone "
+                              "and NEITHER the badge nor the banner named a tactics "
+                              "kind -- two readers failing is not evidence that none "
+                              "was played")
             if kind in ADDS_POWER:
                 # A tactics card IS there and it DOES add power -- we just cannot
                 # say how much (+1 or +2, and Power Swing is the only card that
