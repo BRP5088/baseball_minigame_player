@@ -13,6 +13,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
         _os.path.join(_ROOT, "requirements.txt")):
     _ROOT = _os.path.dirname(_ROOT)
 _sys.path.insert(0, _ROOT)
+_os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 import glob
 

@@ -24,6 +24,8 @@ import os
 import tempfile
 
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
+_os.environ.setdefault("BASEBALL_TEST_RUN", "1")   # the suite exports it; this file
+# manipulates the flag itself below, so it must start from the same state standalone.
 import orchestrator
 from decision_engine import TacticsType
 from orchestrator import (_atomic_write_json, extract_json, hand_to_cards,

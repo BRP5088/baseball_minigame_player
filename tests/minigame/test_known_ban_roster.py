@@ -22,6 +22,8 @@ import os
 # nothing like a test failure. That masked a mutation earlier today.
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 
+_os.environ.setdefault("BASEBALL_TEST_RUN", "1")   # the suite exports it; this file
+# manipulates the flag itself below, so it must start from the same state standalone.
 import orchestrator
 from decision_engine import PlayerCard
 from orchestrator import KNOWN_BAN_ROSTER

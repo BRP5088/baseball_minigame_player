@@ -44,6 +44,8 @@ _fake.screenshot = lambda *a, **k: None
 _KEYS = []
 sys.modules["pyautogui"] = _fake
 
+_os.environ.setdefault("BASEBALL_TEST_RUN", "1")   # the suite exports it; this file
+# manipulates the flag itself below, so it must start from the same state standalone.
 import input_controller as ic
 
 # --- guard 1b: this file MEASURES the focus+pyautogui path, against the fake above.

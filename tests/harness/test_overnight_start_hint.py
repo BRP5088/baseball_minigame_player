@@ -37,6 +37,7 @@ import sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
+os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 NAV = {"go_to_node_verified", "follow_verified"}
 RESET = "reset_environment"

@@ -92,6 +92,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
     _ROOT = _os.path.dirname(_ROOT)
 # root, so the root goes on sys.path and _ROOT anchors every fixture path.
 _sys.path.insert(0, _ROOT)
+_os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 import difflib
 import itertools

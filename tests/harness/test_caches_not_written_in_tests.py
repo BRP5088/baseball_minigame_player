@@ -41,6 +41,8 @@ def check(label, cond):
         ok = False
 
 
+os.environ.setdefault("BASEBALL_TEST_RUN", "1")   # the suite exports it; this file
+# manipulates the flag itself below, so it must start from the same state standalone.
 import compass
 import input_controller as ic
 

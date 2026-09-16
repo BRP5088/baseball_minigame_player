@@ -65,6 +65,8 @@ def _fake_key(kind):
 pyautogui.keyDown = _fake_key("down")
 pyautogui.keyUp = _fake_key("up")
 
+_os.environ.setdefault("BASEBALL_TEST_RUN", "1")   # the suite exports it; this file
+# manipulates the flag itself below, so it must start from the same state standalone.
 import input_controller as ic
 
 ic.focus_chiaki_window = lambda force=False: False      # no osascript, no wait

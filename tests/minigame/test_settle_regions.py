@@ -24,6 +24,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
 # project root, so the root goes on sys.path and _ROOT anchors any path
 # that used to be derived from __file__ back when this file lived there.
 _sys.path.insert(0, _ROOT)
+_os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 
 import os

@@ -13,6 +13,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
         _os.path.join(_ROOT, "requirements.txt")):
     _ROOT = _os.path.dirname(_ROOT)
 sys.path.insert(0, _ROOT)
+os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 from orchestrator import repair_misread_cards, validate_game_state
 

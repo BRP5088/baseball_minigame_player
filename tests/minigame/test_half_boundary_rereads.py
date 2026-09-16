@@ -29,6 +29,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
     _ROOT = _os.path.dirname(_ROOT)
 _sys.path.insert(0, _ROOT)
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+_os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 import orchestrator
 # _run_harness.check is (cond, msg) -- COND FIRST, and silent on a pass. CLAUDE.md

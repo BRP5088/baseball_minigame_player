@@ -23,6 +23,7 @@ import types
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
+os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 sys.path.append(os.path.join(_ROOT, "overnight"))
 import _harness
 
