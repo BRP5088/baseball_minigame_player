@@ -47,14 +47,6 @@ PLACES_DIR = "places"
 # through, and the character standing a step to one side.
 W, H = 64, 36
 
-# A match must beat this to be believed at all. From the measurement above:
-# different-place pairs ran 0.297-0.519, same-place 0.586-0.705.
-MIN_SCORE = 0.55
-# ...and must beat the runner-up by this, so a frame that resembles two places
-# equally abstains instead of guessing. Being confidently in the wrong room is
-# worse than not knowing: it is what sends a route walking at a doorway on
-# another floor.
-MIN_MARGIN = 0.06
 
 
 def descriptor(img):
@@ -72,12 +64,6 @@ def descriptor(img):
     return v / n if n else v
 
 
-# How far a reference frame's heading may differ before it is a DIFFERENT VIEW
-# rather than the same one. The camera sees 102 degrees, so two frames more
-# than about half that apart share almost no scene — comparing them is
-# comparing a room's north wall against its east wall and calling the low score
-# evidence about which room it is.
-HEADING_WINDOW_DEG = 55.0
 
 
 def frame_heading(path):
@@ -199,8 +185,27 @@ def identify(img, root=PLACES_DIR):
     by eye, one demo reference per room: edge descriptor 1/5 correct with 4
     abstentions, keypoints 5/5 with none wrong. See identify_orb().
 
-    identify_edges() below is the previous implementation, kept because the
-    thresholds and findings recorded throughout this file were measured with it.
+    identify_edges(), the previous correlation implementation, was DELETED
+    2026-09-17 with zero callers, along with MIN_SCORE (0.55), MIN_MARGIN (0.06)
+    and HEADING_WINDOW_DEG (55.0), which nothing else read. The thresholds and
+    findings recorded throughout this file were measured WITH it, so they are
+    correlation-era numbers on a 0..1 scale and the two live gates are not:
+    MIN_MATCHES is a match COUNT and MIN_RATIO is a RATIO. map_build.py carries
+    what happens when those two scales are confused.
+
+    THE ONE MEASUREMENT THAT DIED WITH IT IS KEPT HERE, because the question
+    recurs the moment anyone adds a heading to the ORB path. Heading was
+    deliberately NOT used to filter references, and filtering was measured
+    2026-09-01, leave-one-out over 17 labelled frames:
+
+        heading ignored   correct 7   abstain 8   WRONG 2
+        heading used      correct 2   abstain 9   WRONG 6
+
+    Worse, and structurally rather than as a tuning problem: filtering strips
+    the true room down to the two or three references facing that way, while
+    any room whose frames carry no heading keeps all of its own. The correct
+    answer is handicapped and its rivals are not. A room already holds views
+    from every angle, so the max over all of them IS the heading-aware answer.
 
     IT ANSWERS A VIEW, NOT A POSITION, and every caller in this tree reads it
     as a position. Measured at one verified pose: turning the camera changes
@@ -220,41 +225,6 @@ def identify(img, root=PLACES_DIR):
     return identify_orb(img, root=root)
 
 
-def identify_edges(img, places=None, root=PLACES_DIR, heading=None):
-    """(room, score, margin) for the best match, or (None, score, margin).
-
-    A room scores as its BEST matching frame, not its average: rooms are
-    photographed from several angles and averaging a match against the angle
-    you are facing with two you are not just buries the signal.
-    """
-    places = load_places(root) if places is None else places
-    if not places:
-        return (None, 0.0, 0.0)
-    v = descriptor(img)
-
-    # HEADING IS DELIBERATELY NOT USED TO FILTER REFERENCES, and `heading` is
-    # accepted only so callers need not care. It seemed obvious that comparing
-    # against frames facing another way was noise. Measured 2026-09-01,
-    # leave-one-out over 17 labelled frames:
-    #
-    #     heading ignored   correct 7   abstain 8   WRONG 2
-    #     heading used      correct 2   abstain 9   WRONG 6
-    #
-    # It is worse, and the reason is structural rather than a tuning problem:
-    # filtering strips the true room down to the two or three references facing
-    # that way, while any room whose frames carry no heading keeps all of its
-    # own. The correct answer is handicapped and its rivals are not.
-    #
-    # The room already holds views from every angle, so the max over all of
-    # them IS the heading-aware answer — the matching frame wins on its own.
-    scored = sorted(((max(float(np.dot(v, u)) for u, _h in vs), room)
-                     for room, vs in places.items()), reverse=True)
-    best, room = scored[0]
-    runner = scored[1][0] if len(scored) > 1 else -1.0
-    margin = best - runner
-    if best < MIN_SCORE or (len(scored) > 1 and margin < MIN_MARGIN):
-        return (None, best, margin)
-    return (room, best, margin)
 
 
 # =========================================================================

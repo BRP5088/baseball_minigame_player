@@ -1566,14 +1566,19 @@ recognition failures.
 - **Do not seed a place from a dark frame.** Seeding `office_door` instantly
   created false positives. `build_world_map.SEED_PLACES` excludes both office
   nodes deliberately; they are reached by walking, not recognition.
-- `identify_edges` (the old correlation path) still exists, has **zero
-  production callers**, and carries the 0.906 dark-frame trap: `descriptor()`
-  divides by the vector norm, so a near-featureless frame becomes mostly the
-  shared vignette and an upstairs office door scored 0.906 against
+- `identify_edges` (the old correlation path) was **deleted 2026-09-17** with
+  zero callers, taking `MIN_SCORE`, `MIN_MARGIN` and `HEADING_WINDOW_DEG` with
+  it. It carried the 0.906 dark-frame trap and the reason is worth keeping:
+  `descriptor()` divides by the vector norm, so a near-featureless frame becomes
+  mostly the shared vignette and an upstairs office door scored 0.906 against
   `beside_dealer_table` — higher than any genuine match. **No score threshold
   fixes that**, which is why the ORB path replaced it. ORB is immune by
   construction: crossCheck matching cannot return more pairs than the smaller
-  descriptor set, so a 10-keypoint frame scores 1.
+  descriptor set, so a 10-keypoint frame scores 1. `descriptor()`, `load_places()`
+  and `frame_heading()` are NOT dead and were not touched — they call each other
+  and `load_places` has a test caller, which a plan of mine listed as deletable.
+  The heading-filter measurement that died with `identify_edges` is preserved in
+  `places.identify()`'s docstring.
 
 ### Admitting a new place
 

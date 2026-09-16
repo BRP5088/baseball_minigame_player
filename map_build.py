@@ -52,7 +52,8 @@ import world_log
 #
 # THESE WERE ON THE WRONG SCALE UNTIL 2026-09-04 AND THE GATE COULD NOT FAIL.
 # They were 0.62 / 0.08, written for the old identify_edges() correlation
-# scores (0..1, MIN_SCORE 0.55). identify() has delegated to identify_orb()
+# scores (0..1, its MIN_SCORE was 0.55; the function and that constant were
+# deleted 2026-09-17). identify() has delegated to identify_orb()
 # since 2026-09-01, so `score` is now a MATCH COUNT (a non-abstaining answer is
 # >= places.MIN_MATCHES, i.e. 140) and `margin` is a RATIO (>= MIN_RATIO, 1.35).
 # Against those, `score >= 0.62` and `margin >= 0.08` are ALWAYS TRUE:

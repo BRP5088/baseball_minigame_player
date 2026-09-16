@@ -900,75 +900,6 @@ def _table_visibility(img):
     return max(places.match_count(d, r) for r in refs)
 
 
-def home_to_table(capture=None, read_heading=None, log=print):
-    """Walk to the table by LOOKING for it, not by replaying a distance.
-
-    The recorded last leg fails for a reason no amount of tuning fixes: it is a
-    fixed distance on a fixed bearing, and the character never arrives at the
-    previous node in quite the same spot, so it ends a metre out — sometimes
-    facing a wall, sometimes with an NPC ("Wanda Fuller [] Talk") standing on
-    the approach. Six consecutive runs failed there identically.
-
-    So: turn all the way round sampling how much of the table is in view, face
-    the best direction, walk a little, and repeat. Keypoint matching is what
-    makes this possible — it recognises the table from angles and distances no
-    global descriptor could, and it is unbothered by whoever is standing in
-    front of it.
-    """
-    import compass
-    import table_prompt as tp
-    import walk_steps as ws
-
-    capture = capture or _default_capture
-    for rnd in range(HOME_ROUNDS):
-        img = capture()
-        if tp.at_table(img):
-            log(f"      at the table after {rnd} homing round(s)")
-            return True
-        # ws.read_heading() RETRIES; compass.read_bearing() does not. A single
-        # unreadable frame ended a homing run that was converging nicely
-        # (keypoint matches 84 -> 125 -> 127, prompt ink 0.0 -> 0.0213 against a
-        # 0.024 threshold) — the compass fails on roughly 6% of world frames and
-        # more in bright rooms, so one raw read is not a decision.
-        base = ws.read_heading()
-        if base is None:
-            log("      no compass reading after retries; cannot sweep")
-            return False
-        best = (-1, None)
-        best_ink = 0.0
-        n = int(360 / HOME_SWEEP_STEP)
-        for k in range(n):
-            target = (base + k * HOME_SWEEP_STEP) % 360.0
-            ws.turn_to(target, read_heading=read_heading, log=lambda *a: None)
-            time.sleep(0.35)
-            img = capture()
-            if tp.at_table(img):
-                log(f"      prompt found while sweeping, at {target:.0f}")
-                return True
-            best_ink = max(best_ink, tp.ink(img))
-            v = _table_visibility(img)
-            if v > best[0]:
-                best = (v, target)
-        if best[1] is None or best[0] <= 0:
-            log("      the table is not visible from anywhere on this circle")
-            return False
-        log(f"      round {rnd + 1}: table strongest at {best[1]:.0f} "
-            f"({best[0]} keypoint matches, prompt ink {best_ink:.4f}) — advancing")
-        ws.turn_to(best[1], read_heading=read_heading, log=lambda *a: None)
-        time.sleep(0.3)
-        ws.walk_forward(0.22, HOME_ADVANCE_SEC)
-        time.sleep(0.4)
-        # CLOSE COUNTS. The prompt shows over a narrow arc, so once its ink is
-        # within reach of the threshold the missing piece is aim, not distance —
-        # measured, a run sat at 0.0213 against 0.024 and one fine sweep would
-        # have tipped it over.
-        if best_ink >= NEARLY_THERE_INK:
-            ok, _ = face_the_table(capture, read_heading, log=log)
-            if ok:
-                log(f"      fine aim found the prompt after round {rnd + 1}")
-                return True
-    img = capture()
-    return bool(tp.at_table(img))
 
 
 # The final leg is walked in SMALL STEPS with a check after each, rather than as
@@ -1084,6 +1015,7 @@ def reach_table(capture=None, read_heading=None, log=print):
     # measurements that killed them are worth not repeating:
     #
     #   home_to_table()  — sweep for the table by keypoint count and walk at it.
+    #     DELETED 2026-09-17 (69 lines, zero callers); the measurement is why.
     #     Measured: it WANDERS. Across six rounds the "strongest" heading jumped
     #     322 -> 350 -> 17 -> 319 -> 354 -> 22 while prompt ink FELL from 0.0224
     #     to 0.0093, because at that distance the table scores 109-129 matches

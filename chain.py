@@ -28,7 +28,8 @@ waypoint k a second and one push ago, so the only physically reachable answers
 are k-1 .. k+window. Comparing against those alone removes the promiscuous
 matches by construction rather than by tuning, which is the trap
 `identify_edges`'s 0.906 dark-frame false positive and the ORB gate's overlap
-both fell into.
+both fell into. (That function was deleted 2026-09-17 with zero callers; the
+trap it names is a property of any normalised global descriptor, not of it.)
 
 The prior is also the risk: if the true position leaves the window the sensor
 cannot say so, it can only report a bad best. `second` (the runner-up's
