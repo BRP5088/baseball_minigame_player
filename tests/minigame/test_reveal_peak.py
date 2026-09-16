@@ -198,8 +198,15 @@ check("stash_hand_baseline(_grab_settle_regions" in _src2, "...which it stashed 
 o.stash_hand_baseline("X")
 check(o.pop_hand_baseline() == "X", "the stash round-trips")
 check(o.pop_hand_baseline() is None, "...and a second pop yields None, so no turn inherits the last one's hand")
-_i_base = _src2.index("stash_hand_baseline(_grab_settle_regions")
-_i_play = _src2.index("select_and_play(player_idx, tactics_idx, look=")
+# SCOPED TO play_one_turn, NOT THE WHOLE FILE. These were `_src2.index(...)` over
+# orchestrator.py, and .index() returns the FIRST match: when spend_and_play landed
+# above play_one_turn carrying the same select_and_play(...) call, the ordering check
+# started comparing a line in a DIFFERENT function and failed on correct code. That is
+# CLAUDE.md 10.10b -- a substring search cannot tell two occurrences apart, so anchor
+# it on the function this rule is actually about.
+_pot = inspect.getsource(o.play_one_turn)
+_i_base = _pot.index("stash_hand_baseline(_grab_settle_regions")
+_i_play = _pot.index("select_and_play(player_idx, tactics_idx, look=")
 check(_i_base < _i_play, "the baseline is captured BEFORE the commit press, not after")
 
 # A GIVEN baseline must be used -- and no capture taken at entry.

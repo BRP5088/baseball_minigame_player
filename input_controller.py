@@ -908,6 +908,54 @@ def _select_verified(target, look):
     return False, sel
 
 
+def _unwind_selection(before, look, ours):
+    """Put back down anything raised since `before`. Best effort; never raises.
+
+    A REFUSAL THAT LEAVES A CARD UP IS NOT A CLEAN REFUSAL. The commit path already
+    clears strays with _deselect_verified, but the two EARLY refusals -- the walk and
+    the select -- returned False with whatever they had already raised still lifted.
+    Observed live 2026-09-16: the engine chose 8/0 + fielding boost, the tactics select
+    could not be verified, the call refused honestly, and the 8/0 was left selected on a
+    board the next caller would read as clean.
+
+    That is CLAUDE.md 10.29 with the production refusal path as the poisoner rather than
+    a human probe -- and the function's own comment already names the consequence: the
+    retry selects its own target and confirm_play commits BOTH.
+
+    ONLY WHAT THIS CALL RAISED, AND ONLY WHAT IT AIMED AT. `ours` is the set of slots
+    this call deliberately targeted. Two exclusions, and both are load-bearing:
+
+      * a card lifted BEFORE we ran belongs to whoever put it there, and clearing it
+        would be the same overreach in the other direction;
+      * a card that went up WITHOUT being aimed at is the "wrong card lifted" case, and
+        _select_verified's own comment is explicit that "pressing again compounds it".
+        test_verified_selection pins exactly one select press on that path -- a first
+        version of this unwind pressed on the stray and took it to three.
+    """
+    try:
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print("  [cursor] cannot read the fan to unwind — leaving the board as is; "
+                  "the next caller must re-read rather than assume it is clean")
+            return False
+        extra = sorted((set(sel) - set(before)) & set(ours))
+        if not extra:
+            return True
+        for slot in extra:
+            print(f"  [cursor] unwinding slot {slot}, raised by this refused attempt")
+            ok, _s = _walk_cursor_to(slot, look)
+            if ok:
+                ok, _s = _deselect_verified(slot, look)
+            if not ok:
+                print(f"  [cursor] could NOT put slot {slot} back down — say so loudly "
+                      "rather than let the next caller find it and commit it")
+                return False
+        return True
+    except Exception as exc:
+        print(f"  [cursor] unwind failed ({type(exc).__name__}: {exc})")
+        return False
+
+
 def _verified_select_and_play(card_index, tactics_index, look):
     """Read, step, verify, select, verify the selection, and only then commit.
 
@@ -915,16 +963,27 @@ def _verified_select_and_play(card_index, tactics_index, look):
     committed and the caller should re-read and retry -- it must never be treated as a
     play, and it must never fall through to the blind path, which would make a refusal
     and a success indistinguishable (CLAUDE.md 10.1).
+
+    A FALSE ALSO LEAVES THE BOARD AS IT FOUND IT, as far as it can. See
+    _unwind_selection: an early refusal used to keep whatever it had already lifted.
     """
+    # THE BOARD AS WE FOUND IT. Anything already up belongs to a previous caller and
+    # is not ours to clear; the commit path below handles a stray that is still there.
+    _g0, _ys0, n0, before_all = _look_settled(look)
+    before_all = set(before_all) if n0 == MAX_HAND_SIZE else set()
+    targets = {t for t in (card_index, tactics_index) if t is not None}
+
     for target in (card_index, tactics_index):
         if target is None:
             continue
         ok, _sel = _walk_cursor_to(target, look)
         if not ok:
+            _unwind_selection(before_all, look, targets)
             invalidate_cursor()
             return False
         ok, _sel = _select_verified(target, look)
         if not ok:
+            _unwind_selection(before_all, look, targets)
             invalidate_cursor()
             return False
 
