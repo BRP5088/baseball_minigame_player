@@ -4542,6 +4542,48 @@ def local_hand_cards(hand_img):
     return cards, None
 
 
+def describe_hand(cards, want=None):
+    """One line per SLOT, always `want` of them, with UNKNOWN where nothing read.
+
+    local_hand_cards DROPS an unreadable card rather than the whole hand (10.28) and
+    keeps `hand_index` on the survivors -- so which slot went missing has always been
+    known and was simply never shown. A four-row printout reads as "a card has not
+    dealt yet", which is exactly what it read as live on 2026-09-15 while the real
+    cause was an OCCLUDED disc under the lifted neighbour. No amount of waiting fills
+    that gap, so the two states must not print the same.
+
+    RENDERING ONLY. The card list is not touched and nothing downstream consumes this
+    -- a placeholder card in `hand` itself would KeyError in hand_to_cards, which
+    indexes c["power"]/c["type"] with [] rather than .get().
+
+    A card with no `hand_index` cannot be placed in a slot, and guessing from list
+    POSITION is 10.22's correspondence trap: the reader can drop one card and the
+    remaining four then render one slot to the left, each confidently wrong. So that
+    case says it cannot place them rather than inventing an alignment.
+    """
+    if want is None:
+        try:
+            import local_hand
+            want = len(local_hand.SLOT_PLAYER)
+        except Exception:
+            want = 5
+    cards = list(cards or [])
+
+    def _one(c):
+        if c.get("kind") == "tactics":
+            return f"{c.get('type')} +{c.get('bonus')}"
+        return f"{c.get('power')}/{c.get('secondary')}"
+
+    if any(c.get("hand_index") is None for c in cards):
+        body = "  ".join(f"?: {_one(c)}" for c in cards)
+        return f"{body}   (slots UNPLACEABLE: a card carries no hand_index)"
+
+    by_slot = {c["hand_index"]: c for c in cards}
+    return "  ".join(
+        f"{i}: {_one(by_slot[i])}" if i in by_slot else f"{i}: UNKNOWN"
+        for i in range(want)
+    )
+
 def on_turn_screen(hand_img):
     """Is this frame a TURN screen -- i.e. are the three base crops actually the DIAMOND?
 
@@ -6382,6 +6424,7 @@ def play_one_turn(state_json: dict, batters_used: int):
         without an extra vision read, so those turns aren't logged).
     """
     players, tactics = hand_to_cards(state_json["hand"])
+    print(f"  [hand] {describe_hand(state_json['hand'])}")
     runners = [PlayerCard(r["name"], r["power"], r["secondary"]) for r in state_json["runners"]]
 
     # Default to 0 (not 2) when the discard counter can't be read, so a
