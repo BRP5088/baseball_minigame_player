@@ -37,7 +37,6 @@ is actually failing.
 """
 import json
 import os
-import signal
 import sys
 import time
 
@@ -48,14 +47,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import _harness   # noqa: E402  (needs the path line above)
 
-# THE SHIPPED VALUE, CAPTURED -- never a literal. This restore used to hardcode
-# what the default was ON THE DAY THE SCRIPT WAS WRITTEN, so it silently rotted
-# into a WRONG value: ab_leg_speed restored {} after leg 1 shipped an override
-# of 3.0, and ab_stall restored 2.5 after STALL_CHANGE became 6.0. A cleanup
-# that reinstates a stale default is worse than no cleanup -- it looks like
-# tidiness and installs an arm.
-import graph_walk as _gw_shipped   # noqa: E402
-_SHIPPED = {"STALL_CHANGE": _gw_shipped.STALL_CHANGE}
+# THERE IS NOTHING TO RESTORE, AND THAT IS THE POINT.
+#
+# This file used to capture gw.STALL_CHANGE at import and put it back in a
+# `finally`. The capture existed because the version before THAT hardcoded what
+# the default was ON THE DAY THE SCRIPT WAS WRITTEN, so it silently rotted into
+# a WRONG value: ab_leg_speed restored {} after leg 1 shipped an override of
+# 3.0, and ab_stall restored 2.5 after STALL_CHANGE became 6.0. A cleanup that
+# reinstates a stale default is worse than no cleanup -- it looks like tidiness
+# and installs an arm.
+#
+# The arm is now set inside the `--one-trial` CHILD, which then exits. Process
+# death is the restore: the parent never holds the flag at all, so the restore
+# cannot be forgotten and cannot be written wrong. That is a second reason to
+# prefer the subprocess pattern, beyond the timeout below being real.
 
 TARGET = "bar_pool_room"
 TRIALS = 10
@@ -81,31 +86,20 @@ def save():
     _harness.save_result(os.path.join(OUT, "ab_stall.json"), res)
 
 
-class _T(Exception):
-    pass
-
-
-def _alarm(s, f):
-    raise _T()
-
-
-def stream_alive(gap=1.0):
-    import compass
-    import numpy as np
-    a = np.asarray(compass.fast_capture().convert("L"), dtype=float)
-    time.sleep(gap)
-    b = np.asarray(compass.fast_capture().convert("L"), dtype=float)
-    h = min(a.shape[0], b.shape[0]); w = min(a.shape[1], b.shape[1])
-    return float(np.abs(a[:h, :w] - b[:h, :w]).mean()) > 0.35
-
-
 def one(arm):
-    """Reset, walk to TARGET, report whether the localiser VERIFIES it."""
+    """Reset, walk to TARGET, report whether the localiser VERIFIES it.
+
+    Runs in the `--one-trial` child, so `gw.STALL_CHANGE = arm` needs no undo.
+    """
     import graph_walk as gw
     import reset_env
     import worldmap as wm
 
-    if not stream_alive():
+    # _harness.alive, not a local copy. This file carried its own byte-identical
+    # stream_alive with the same 0.35 gate; one definition is one place to be
+    # wrong. The AFTER-the-trial check is not here at all -- run_trial does it
+    # once, for every harness, which is the whole reason that module exists.
+    if not _harness.alive():
         raise RuntimeError("stream not updating — refusing to record")
     gw.STALL_CHANGE = arm
     m = wm.WorldMap.load()
@@ -117,25 +111,68 @@ def one(arm):
     return got == TARGET
 
 
+def _one_trial(name):
+    """Run ONE trial and print its result as JSON. Invoked as a subprocess.
+
+    THE ARM ARRIVES AS ITS NAME AND IS LOOKED UP HERE. Across these harnesses an
+    arm's value is a float, a dict, a None or a string, and a dict cannot travel
+    through argv. The child imports this same module, so the name is the one
+    encoding that works for all of them -- and a typo is a loud KeyError on the
+    JSON line rather than a silently different arm.
+    """
+    try:
+        print(json.dumps({"arrived": one(dict(ARMS)[name])}))
+    except Exception as e:
+        print(json.dumps({"error": f"{type(e).__name__}: {e}"}))
+    finally:
+        # Whatever is already in flight still lands, so release the stick before
+        # this process dies. Nothing after the result may print a JSON line:
+        # run_trial takes the LAST line starting with `{`, so a second one would
+        # become the answer. (`ar.send` DOES print a warning under
+        # BASEBALL_TEST_RUN — harmless, it does not start with `{`.)
+        try:
+            import analog_replay as ar
+            ar.send(["clear"])
+        except Exception:
+            pass
+
+
 def main():
-    log(f"arrival at {TARGET}, {TRIALS} interleaved trials per arm\n")
+    log(f"arrival at {TARGET}, {TRIALS} interleaved trials per arm, "
+        f"{TRIAL_TIMEOUT}s ceiling enforced out-of-process\n")
     for t in range(TRIALS):
-        for name, arm in ARMS:
-            signal.signal(signal.SIGALRM, _alarm)
-            signal.alarm(TRIAL_TIMEOUT)
-            try:
-                ok = one(arm)
-            except _T:
-                log(f"  [{name}] trial {t+1}: exceeded {TRIAL_TIMEOUT}s — dropped")
+        for name, _arm in ARMS:
+            # THE CEILING IS ENFORCED FROM OUTSIDE THE PROCESS.
+            #
+            # This used to be an in-process SIGALRM armed to TRIAL_TIMEOUT,
+            # which cannot work here: Python only delivers a signal BETWEEN
+            # bytecode instructions, and a trial spends its time blocked inside
+            # a screen capture. Measured (CLAUDE.md 10.14), a 590s trial sailed
+            # straight past a 260s ceiling -- the run produced nothing and the
+            # ceiling LOOKED like it was working, which is 10.1: the code did
+            # nothing and doing nothing was indistinguishable from doing its
+            # job. run_trial spawns the trial and kills it from out here, so the
+            # kill is real.
+            #
+            # (The old call is described rather than quoted ON PURPOSE.
+            # test_overnight_harness.py's ratchet greps these files for that
+            # call as a bare substring, so quoting it in prose would report this
+            # file as still armed -- CLAUDE.md 10b, prose that quotes code
+            # creates new matches. This comment was written that way first and
+            # the ratchet caught it.)
+            r, secs = _harness.run_trial(__file__, name, TRIAL_TIMEOUT, log=log)
+            # A trial that could not be MEASURED is INVALID, never a miss:
+            # `ok is None` is the same "dropped" the alarm branch recorded.
+            if r is None:
+                log(f"  [{name}] trial {t+1}: no result after {secs}s "
+                    f"(exceeded {TRIAL_TIMEOUT}s, crashed, or the stream died) "
+                    f"— dropped")
                 ok = None
-            except Exception as e:
-                log(f"  [{name}] trial {t+1}: {type(e).__name__}: {e}")
+            elif "error" in r:
+                log(f"  [{name}] trial {t+1}: {r['error']}")
                 ok = None
-            finally:
-                signal.alarm(0)
-            if ok is not None and not stream_alive():
-                log("    stream died during the trial — discarding")
-                ok = None
+            else:
+                ok = r["arrived"]
             log(f"  [{name}] trial {t+1}/{TRIALS}: "
                 f"{'ARRIVED' if ok else ('dropped' if ok is None else 'missed')}")
             res["runs"].append({"arm": name, "trial": t + 1, "arrived": ok})
@@ -143,14 +180,21 @@ def main():
 
 
 if __name__ == "__main__":
+    # Child mode: one trial, one JSON line, then exit. The parent enforces the
+    # timeout from out here because signal.alarm does not interrupt a trial
+    # blocked inside a capture — see the note in main().
+    if len(sys.argv) > 2 and sys.argv[1] == "--one-trial":
+        _one_trial(sys.argv[2])
+        sys.exit(0)
+
     try:
         main()
     finally:
+        # The parent never touches gw.STALL_CHANGE now, so there is no flag to
+        # put back — only the stick, in case a killed child left one deflected.
         try:
             import analog_replay as ar
             ar.send(["clear"])
-            import graph_walk as gw
-            gw.STALL_CHANGE = _SHIPPED["STALL_CHANGE"]
         except Exception:
             pass
         save()

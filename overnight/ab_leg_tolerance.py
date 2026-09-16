@@ -22,7 +22,6 @@ confound the arm with the hour.
 """
 import json
 import os
-import signal
 import sys
 import time
 
@@ -47,7 +46,10 @@ TRIALS = 10                     # per arm, interleaved => 20 route walks.
                                 # 10 is the MINIMUM that can resolve a 1.0-depth
                                 # effect (power 0.94). n=3 has power 0.00 and is
                                 # what every reversed A/B on this project used.
-TRIAL_TIMEOUT = 240             # seconds; a wedged trial is dropped, not waited on
+TRIAL_TIMEOUT = 240             # seconds; a wedged trial is dropped, not waited
+                                # on -- and since the migration below it really
+                                # is dropped: the ceiling is a kill from the
+                                # parent, not a signal this process can miss.
 ARMS = [("baseline_4.0", None), ("tight_1.0", 1.0)]
 OUT = os.path.dirname(os.path.abspath(__file__))
 
@@ -79,14 +81,6 @@ def fingerprint():
     return h.hexdigest()[:16]
 
 
-class _Timeout(Exception):
-    pass
-
-
-def _alarm(signum, frame):
-    raise _Timeout()
-
-
 def stream_alive(gap=1.0):
     """Is the picture actually updating? 0.00 means the console is asleep.
 
@@ -108,9 +102,18 @@ def stream_alive(gap=1.0):
 def one_run(arm, tol):
     """Walk the route from a reset spawn. Returns how many nodes were VERIFIED.
 
+    RUNS IN THE `--one-trial` CHILD. Setting gw.LEG_TURN_TOLERANCE here means
+    process death IS the restore: it cannot be forgotten, and it cannot
+    reinstate a stale literal the way four earlier harnesses did.
+
     Hard-capped: on 2026-09-03 a trial wedged in a retry loop for 25 minutes
     with the console perfectly healthy, and the run lost its last two trials to
-    it. A dropped trial costs one data point; a wedged one costs the night.
+    it. A dropped trial costs one data point; a wedged one costs the night. The
+    cap is now the PARENT's, enforced by killing this process -- see the note in
+    main(); the signal.alarm this file used to arm could not have delivered it.
+
+    A raise here is the loud path and is meant to be: the child dies, prints no
+    JSON, and run_trial scores the trial INVALID. That is never a failed trial.
     """
     import graph_walk as gw
     import reset_env
@@ -144,32 +147,46 @@ def main():
     log(f"code fingerprint {fp}\narms: {[a for a, _ in ARMS]}, "
         f"{TRIALS} interleaved trials each\n")
     for t in range(TRIALS):
-        for arm, tol in ARMS:
+        for arm, _tol in ARMS:
             log(f"  [{arm}] trial {t + 1}/{TRIALS}")
-            signal.signal(signal.SIGALRM, _alarm)
-            signal.alarm(TRIAL_TIMEOUT)
-            try:
-                d = one_run(arm, tol)
-            except _Timeout:
-                log(f"    trial exceeded {TRIAL_TIMEOUT}s — dropped")
-                d = None
-            except Exception as e:
-                log(f"    run raised {type(e).__name__}: {e}")
-                d = None
-            signal.alarm(0)
-            # NULL THE DEPTH BEFORE RECORDING IT, NOT AFTER. This used to append
-            # the row first and then set `d = None`, so the row kept the
+            # THE CEILING IS ENFORCED FROM OUTSIDE THE PROCESS. This used to arm
+            # signal.alarm, and Python can only deliver a signal BETWEEN
+            # bytecode instructions — so an alarm cannot interrupt a trial
+            # blocked inside a C call, which every screen capture is. Measured
+            # 2026-09-03 (CLAUDE.md 10.14): a 590s trial sailed straight past a
+            # 260s alarm, the run produced nothing, and the ceiling LOOKED like
+            # it was working. That is 10.1's whole family — the code did nothing
+            # and doing nothing was indistinguishable from working. run_trial
+            # re-invokes this file as `--one-trial <arm>` and kills the child
+            # from HERE, so the kill is real.
+            #
+            # THE ARM TRAVELS AS ITS NAME, NOT ITS VALUE. The child imports this
+            # same module and looks the value up in ARMS. `None` and `1.0` would
+            # both survive argv, but the sibling harnesses arm a dict and a
+            # string, so passing the name is the one thing that is uniform
+            # across all of them — and a uniform contract is what stops the next
+            # copy-paste reintroducing this.
+            r, secs = _harness.run_trial(__file__, arm, TRIAL_TIMEOUT, log=log)
+            # NULL THE DEPTH BEFORE RECORDING IT, NOT AFTER — which is now
+            # STRUCTURAL rather than a rule to remember. This used to append the
+            # row first and then set `d = None`, so the row kept the
             # contaminated depth while the log said "discarding this depth". The
             # analysis below reads res["runs"], not `d`, so every trial the
             # console slept through was scored as a real result — in the one arm
             # that had been running longest. CLAUDE.md 10.6 exists because a
-            # sleeping console once made BOTH arms degrade together; this is the
-            # same failure with the evidence deleted.
-            if d is not None and not stream_alive():
-                log("    stream died DURING the trial — discarding this depth")
-                d = None
+            # sleeping console once made BOTH arms degrade together; that was
+            # the same failure with the evidence deleted.
+            #
+            # run_trial makes it unwritable. It performs the post-trial stream
+            # check itself (once, in the one function every harness routes
+            # through) and returns None for a dead stream exactly as it does for
+            # a timeout or a crash — INVALID, never a failure. So the depth is
+            # already None before any row exists, and this harness's own
+            # post-trial stream_alive() call is gone as redundant. The PRE-trial
+            # check still runs, inside one_run, in the child.
+            d = None if r is None else r.get("depth")
             res["runs"].append({"arm": arm, "trial": t + 1, "depth": d})
-            log(f"    depth {d} of {len(ROUTE)}")
+            log(f"    depth {d} of {len(ROUTE)} in {secs}s")
             save()
     if fingerprint() != fp:
         res["INVALID"] = "source changed mid-run; discard"
@@ -177,15 +194,39 @@ def main():
     save()
 
 
+def one_trial(name):
+    """ONE trial, run in the child. Prints one JSON object and exits.
+
+    The arm arrives as its NAME and the value is looked up HERE, in the child's
+    own copy of ARMS. A missing name raises KeyError naming it, which the parent
+    forwards from stderr and scores INVALID.
+    """
+    return {"arm": name, "depth": one_run(name, dict(ARMS)[name])}
+
+
 if __name__ == "__main__":
+    # THE CHILD BRANCH MUST NOT REACH save(). It shares this module with the
+    # parent, so a stray save() here would write a child's empty `res` over the
+    # parent's accumulating results file mid-run.
+    if len(sys.argv) > 2 and sys.argv[1] == "--one-trial":
+        print(json.dumps(one_trial(sys.argv[2])), flush=True)
+        sys.exit(0)
     try:
         main()
     finally:
+        # STILL WORTH DOING THOUGH THE TRIALS ARE CHILDREN NOW: a child killed
+        # on the ceiling runs no `finally` of its own, so it can leave the stick
+        # deflected until chiaki's own INJECT_TIMEOUT_MS releases it.
         try:
             import analog_replay as ar
             ar.send(["clear"])
         except Exception:
             pass
+        # The arm is installed in the CHILD, which exits, so this is now a
+        # belt-and-braces rather than the restore. It is kept because it is
+        # taken from the CAPTURE above and so cannot be wrong — a restore that
+        # names a literal is how ab_leg_speed and ab_stall each reinstated a
+        # stale default and silently installed an arm.
         try:
             import graph_walk as gw
             gw.LEG_TURN_TOLERANCE = _SHIPPED["LEG_TURN_TOLERANCE"]

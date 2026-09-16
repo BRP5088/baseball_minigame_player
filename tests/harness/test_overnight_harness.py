@@ -89,21 +89,38 @@ check("TRIALS is the documented minimum of 10", h.TRIALS == 10)
 # would silently bless a sixth. This does neither.
 import glob
 
-KNOWN_ARMED = {
-    "ab_leg_speed.py",
-    "ab_leg_tolerance.py",
-    "ab_local_recovery.py",
-    "ab_reference_pose.py",
-    "ab_stall.py",
-}
+# THE RATCHET IS CLOSED. It was five files, then a list that could only shrink;
+# on 2026-09-17 all four that still armed it were migrated to run_trial and the
+# fifth (ab_local_recovery.py) turned out never to have armed it at all -- it was
+# in the list on the strength of a docstring mentioning the call. So the allowed
+# set is EMPTY and the check is now simply "no harness arms signal.alarm".
+KNOWN_ARMED = set()
 
+# GREP THE CODE HALF, NOT THE WHOLE LINE (CLAUDE.md 10b). Every migrated file
+# explains in a comment what it replaced, and a bare substring test cannot tell a
+# comment from a call -- it reported a correctly-migrated ab_stall.py as STILL
+# ARMED because its new comment quoted the thing it had just deleted. One agent
+# then contorted its prose to dodge this test, which is the test bullying the
+# code. A lesson must be free to name what it is about.
 armed = set()
 for f in sorted(glob.glob(os.path.join(_ROOT, "overnight", "ab_*.py"))):
-    if "signal.alarm(" in open(f).read():
+    code = "\n".join(l.split("#", 1)[0]
+                     for l in open(f, encoding="utf-8").read().splitlines())
+    if "signal.alarm(" in code:
         armed.add(os.path.basename(f))
 
 new = armed - KNOWN_ARMED
-check(f"no NEW script arms signal.alarm (new: {sorted(new) or 'none'})", not new)
+check(f"NO harness arms signal.alarm (armed: {sorted(new) or 'none'})", not new)
+
+# CONTROL: the code-half split must not have blinded the check entirely. A real
+# call still has to be seen, or this passes by looking at nothing.
+_probe = "x = 1\nsignal.alarm(30)  # a real call, with a trailing comment\n"
+_probe_code = "\n".join(l.split("#", 1)[0] for l in _probe.splitlines())
+check("CONTROL: a real signal.alarm call is still detected through the split",
+      "signal.alarm(" in _probe_code)
+check("CONTROL: the same call INSIDE a comment is not",
+      "signal.alarm(" not in "\n".join(
+          l.split("#", 1)[0] for l in "# we used to signal.alarm(30) here\n".splitlines()))
 check("ab_attempts.py is timed out-of-process", "ab_attempts.py" not in armed)
 
 fixed = KNOWN_ARMED - armed

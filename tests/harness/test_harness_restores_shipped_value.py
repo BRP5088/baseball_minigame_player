@@ -137,12 +137,24 @@ for fn, (armed, captured, subproc) in sorted(arming.items()):
                   f"installed when the run ends"),
           not unrestored)
 
-# ANTI-VACUITY for rule 2: if every harness became a subprocess harness, the
-# loop above would exempt them all and prove nothing. Say so rather than
-# passing quietly -- and if that day comes, this rule is genuinely obsolete and
-# should be deleted deliberately, not left looking green.
-check(f"rule 2 actually examined {in_process} in-process harness(es)",
-      in_process >= 1)
+# THAT DAY CAME, 2026-09-17, and the rule is NOT deleted -- it is re-aimed.
+#
+# The floor used to be `in_process >= 1`, on the reasoning that exempting every
+# harness proves nothing. True while in-process harnesses existed; but the last
+# four were migrated to run_trial that day, so ZERO is now the GOAL STATE rather
+# than a blind spot. Failing on it would mean a red suite for having finished the
+# work, and a red suite gets ignored.
+#
+# What the floor was really guarding is that the SCANNER still bites, and the
+# planted positive control below does that directly and unconditionally -- it is
+# the honest version of this check and it does not depend on any real file
+# staying unmigrated. So the count is REPORTED, and the assertion moved.
+print(f"note  rule 2 examined {in_process} in-process harness(es); "
+      f"{len(arming) - in_process} are run_trial children whose restore is "
+      f"process death. Zero in-process is the goal, not a gap -- the planted "
+      f"control below is what proves the scanner can still fire.")
+check("rule 2 still has subjects to reason about (harnesses that arm a flag)",
+      len(arming) >= 1)
 
 # --- the positive control ----------------------------------------------------
 # THE PLANTS ARE DERIVED FROM WHAT SHIPS, NEVER WRITTEN AS LITERALS.
