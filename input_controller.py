@@ -1250,6 +1250,24 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # simply did not have one.
     if not _clear_strays({card_index}, look):
         return False
+    # AND PUT THE CURSOR BACK ON THE CARD. _clear_strays walks to each stray to
+    # deselect it and does not walk back, so adding it here parked the cursor on the
+    # LAST CLEARED STRAY immediately before confirm_discard -- and a stray at this
+    # point is the NORMAL case by that block's own argument. Every earlier version of
+    # this function pressed confirm_discard with the cursor on card_index; the blind
+    # path still does (_move_cursor_to(card_index) two lines before its press).
+    #
+    # Whether Square acts on the SELECTED card or the card under the cursor cannot be
+    # determined offline and the console is asleep, so this restores the invariant
+    # rather than relying on the answer. It costs nothing on the common path: the walk
+    # is a no-op when the cursor is already there.
+    ok, _sel = _walk_cursor_to(card_index, look)
+    if not ok:
+        print(f"  [discard] could not put the cursor back on slot {card_index} after "
+              "clearing strays — REFUSING rather than pressing confirm_discard from "
+              "wherever the clearing left it.")
+        invalidate_cursor()
+        return False
     # THE DISCARD MUST BE PROVEN BEFORE confirm_play, AND IT WAS NOT.
     #
     # This block used to read: press confirm_discard, then "there is nothing left to

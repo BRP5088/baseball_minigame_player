@@ -8577,6 +8577,25 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     break
                 time.sleep(2)
 
+    except BaseException as _exc:
+        # AN UNHANDLED DEATH MUST STILL LEAVE EVIDENCE. Several press() and
+        # wait_for_screen_to_settle() calls sit OUTSIDE their branch's try -- the
+        # close_result press, the start_match press, and two in the reset branch --
+        # and press() can raise on the live rig (focus loss, a failed Quartz post, a
+        # dead pid). The exception escaped run() entirely with stop_reason still
+        # None, so the finally's `if stop_reason is not None` skipped
+        # dump_diagnostics: the run died mid-session with no bundle, no observation
+        # trail and no screen_at_stall.png. Those are exactly the states where the
+        # trail is MOST informative, which is the argument QA1-F8 already made for
+        # guard-suppressed stalls.
+        #
+        # ONE HANDLER, not a wrapper per call site: wrapping each one is how the
+        # next unguarded press gets added without anybody noticing. BaseException so
+        # a KeyboardInterrupt also leaves a bundle -- Ctrl-C mid-match is exactly
+        # when you want to know where it was.
+        stop_reason = stop_reason or f"unhandled_{type(_exc).__name__}"
+        raise
+
     finally:
         stop_reveal_watcher()
         if screenshot_stop is not None:
