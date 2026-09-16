@@ -96,12 +96,30 @@ check(_false_ceiling < lh.CURSOR_GLOW_MIN <= min(_wins),
 # (CLAUDE.md 10.11). It was 6.0-9.0 when the gate was 7.5; that gate rejected 8 CORRECT
 # slot-0 readings, which read 2.7-4.4 against every other slot's 12-18. The band moved
 # because the evidence did, not to accommodate the constant.
-check(12.0 <= lh.CURSOR_GLOW_MIN <= 18.0,
-      f"the gate sits between two MEASURED populations — every other card tops out at 8.4 "
-      f"and the faintest true cursor card reads 20.7, over 74 labelled frames — got "
-      f"{lh.CURSOR_GLOW_MIN}")
-check(lh.CURSOR_GLOW_MIN < 20.7,
-      f"and it admits the faintest true reading on disk (20.7, sweep_f08 slot 4)")
+#
+# 2026-09-15: IT MOVED AGAIN, 12.0-18.0 -> 9.0-12.0, AND AGAIN BECAUSE THE EVIDENCE DID.
+# The band's upper half was built on "the faintest true cursor card reads 20.7" -- true of
+# these 1020 px fixtures, and not of the rig. Live, mid-match, a cursor plainly on a card
+# read 12.4 with every other slot at 0.0-0.1, and the 15.0 gate refused it twice in two
+# matches. So the true floor on record is now 12.4, not 20.7.
+#
+# THE LOWER BOUND IS THE ONE DOING THE WORK, and it is these fixtures' own number: a
+# non-cursor card here reaches 8.4, and a cursorless frame tops out at 7.8. A gate under
+# that NAMES A CARD on a frame with no cursor on it. A first attempt at 5.0 -- set from the
+# 979 px archive census, where the false population tops out at 2.0 over 2,028 readings --
+# was caught by exactly this check. The archive could not see the problem because it
+# contains no such frame (10.31), which is why these user-labelled fixtures stay the
+# stricter authority even though the rig no longer produces their geometry.
+#
+# That leaves (8.4, 12.4) and almost no room. The band is the widest span inside it.
+check(9.0 <= lh.CURSOR_GLOW_MIN <= 12.0,
+      f"the gate sits between two MEASURED populations — a non-cursor card tops out at 8.4 "
+      f"over these 74 labelled frames, and the faintest TRUE reading on record is 12.4 "
+      f"(live, 2026-09-15) — got {lh.CURSOR_GLOW_MIN}")
+check(lh.CURSOR_GLOW_MIN < 12.4,
+      f"and it admits the faintest true reading on record (12.4, live 2026-09-15)")
+check(lh.CURSOR_GLOW_MIN > 8.4,
+      f"and it refuses the loudest false reading on disk (8.4, cursor_on_1 slot 0)")
 # THE WINDOW ITSELF IS PINNED AS LITERALS, because the gate above is only reachable from
 # this geometry: at the old (110,10,70,30) the two populations OVERLAP (8.7 vs 9.7) and no
 # gate exists at all. Changing the window without re-measuring must fail here.

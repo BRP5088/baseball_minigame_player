@@ -1126,7 +1126,66 @@ def _read_ungated(img, strong):
 # AND THE CURATED FIXTURES ARE WHY THE FOLDS ARE HONEST: an earlier pick (80,20,55,40) won
 # all six folds of the 56 blind frames and then read 3.4 on sweep_f00, whose cursor is
 # plainly on slot 2 -- it was in no fold.  CLAUDE.md's at_table lesson exactly.
-CURSOR_GLOW_MIN = 15.0         # BETWEEN two measured populations: 8.4 and 20.7
+# 2026-09-15: RE-MEASURED AT THIS GEOMETRY. The 15.0 was right for a corpus this
+# rig no longer produces, and the number it rested on is the one that moved.
+#
+# THE FAILURE. Mid-match the cursor sat plainly on a card and every action refused:
+#
+#     live glow    [0.0, 0.1, 0.0, 12.4, 0.0]     argmax unambiguous, 100x margin
+#     gate         15.0                            -> REFUSED, twice in two matches
+#
+# THE CENSUS (tools/glow_census.py, tools/glow_zone.py), over 2,535 slot readings
+# from 507 archive frames at the CURRENT 979 px crop -- the recordings come from
+# the frame dump, i.e. the decoded stream, so they carry this rig's geometry:
+#
+#     FALSE (the four unlit slots)  n=2028   p50 0.0   p99 1.2   MAX  2.0
+#     TRUE  (the lit slot)          n= 507   min 20.1  p50 23.9  MAX 53.7
+#     live true, n=1                                        12.4
+#
+# TWO CORPORA, AND THEY DISAGREE ABOUT THE FALSE CEILING. 15.0 was justified as
+# "BETWEEN two measured populations: 8.4 and 20.7" on the 12 curated 1020 px
+# fixtures -- which are USER-LABELLED, the only ground truth here, and on them a
+# non-cursor card reaches 8.4. At 979 px the false population tops out at 2.0
+# over 2,028 readings. The fixtures are the stricter corpus and they are not
+# discarded just because the rig moved: section 3 requires a reader to be checked
+# at BOTH geometries.
+#
+# So the gate must clear 8.4 AND admit 12.4, which leaves (8.4, 12.4) and almost
+# no room. 10.0 is the midpoint, 1.19x above the highest false reading ever
+# labelled and 1.24x below the lowest true one ever observed.
+#
+# A FIRST ATTEMPT AT 5.0 WAS WRONG AND THE SUITE CAUGHT IT. It was set from the
+# 979 px false MAX of 2.0 alone, and test_verified_selection failed it against
+# the fixtures' 8.4 -- a cursorless frame there tops out at 7.8, so 5.0 would
+# have NAMED A CARD on a frame with no cursor on it. The floor is applied to the
+# ARGMAX, so it only bites when the argmax is itself a false reading, and that is
+# exactly the case it exists for. The census that said 2.0 could not see it
+# because that corpus has no such frame.
+#
+# TWO LIMITS, STATED RATHER THAN HIDDEN.
+#
+# (1) THE TRUE FLOOR IS NOT PROPERLY MEASURED. The label here is "one slot beats
+#     every other by 10x", which scores the ABSOLUTE value while labelling by the
+#     RATIO -- different quantities, so the gate is not fitted to its own output
+#     -- but it CANNOT sample a dim true card by construction (10.31's missing
+#     class). Everything below 20 rests on the single live 12.4. A run that logs
+#     the glow vector on every turn is what closes this, and costs nothing.
+#
+# (2) NO GATE PROTECTS AGAINST A MID-ANIMATION FRAME, and the control says so.
+#     Over the 259 frames the confident label EXCLUDED -- which is exactly where
+#     two bright slots would hide -- the RUNNER-UP glow runs p50 7.1, p99 13.6,
+#     MAX 23.1. At a gate of 5.0, 57.9% of those frames have TWO slots clearing
+#     it; even at 15.0, 1.2% do. So the floor was never the thing keeping a
+#     moving hand from naming the wrong card, and raising it back would not make
+#     that safe. What does is reading the cursor on a SETTLED hand -- which is
+#     what the deal gate exists to deliver -- and the ARGMAX plus its margin,
+#     not this floor, staying the load-bearing check.
+#
+# (3) THE MARGIN IS THIN, 1.19x and 1.24x, and that is the honest state rather
+#     than a comfortable one. It is thin because the true side rests on ONE live
+#     reading; logging the glow vector every turn is what widens it, and until
+#     then a true card that reads under 10.0 refuses again.
+CURSOR_GLOW_MIN = 10.0         # between 8.4 (fixture false MAX) and 12.4 (live true)
 GLOW_WHITE = 190               # a grey level, so NOT scaled
 GLOW_XL, GLOW_XR = 80, 0       # the box sits on the card's own top-left RIM, where the
 GLOW_DY0, GLOW_DY1 = 55, 35    # halo shows -- NOT in the backdrop above it
