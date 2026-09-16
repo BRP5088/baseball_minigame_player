@@ -96,6 +96,58 @@ figures CLAUDE.md withdrew as a scrambled-pool artefact — now the re-measured 
 
 ---
 
+## OVERNIGHT QA: TWO ROUNDS, 45 FINDINGS, 41 FIXED
+
+Round 4 (four axes: ban path, reveal readers, turn-loop state, input/selection)
+returned 28 CONFIRMED. Round 5 (regressions in round 4's own fixes, vacuous tests,
+partial-death state, threshold units) returned 17 more, 13 confirmed. All are
+triaged in `agent_progress/qa4-triage/progress.md` and the two workflow journals.
+
+### The four that would have cost real money or a real match
+
+    a stale match_in_progress + the dealer prompt pressed start_match with NO
+      DEBIT, no max_spend check and no save_progress -- on a fresh process the flag
+      comes from DISK, so $50 left the wallet untracked, through the branch whose
+      own comment proves the flag is stale
+    the DISCARD PROOF never ran on the live path: play_one_turn passed look= but
+      not discards_look=, so the whole post-press verification was skipped and the
+      call returned True unconditionally. That proof was built FOR the 2026-09-16
+      incident and was dead on the one path the incident happened on
+    BOTH REVEAL READERS were broken at the width the rig captures. _fast_grab asks
+      for 2000px; HOME RUN! scored 0.517 there against a gate of 0.80. Both banners
+      missed outright, every match. Now 0.995, negatives unmoved
+    the HALF-BOUNDARY RESET fired one call too late, so the first pitching turn was
+      played from a hand built out of the batting half's memory -- and the survivor
+      is a card the engine passed over, often the highest power left, which
+      best_pitching_play then selects
+
+### Three of the best findings were the fixer's own regressions
+
+A comment written BETWEEN forget_hand_slot and the spend (the sibling call site
+warns about that by name); spend_and_play's (ok, why) tuple used as a bare bool,
+making every refusal branch unreachable; and checks appended AFTER a test's
+pass/fail report so they could never fail. Round 5 then found three more, including
+a disc-dedupe bucket artefact that made the NEW reveal refusal throw away a power
+the reader had.
+
+### Two things were REFUTED and left alone, correctly
+
+Round 5's top finding (the half-boundary re-read) came with a reproduction; the
+skeptic showed the repro hand-built a state shape local_game_state never returns,
+and that the confident phase-flip it needs has ZERO runs of length 1 across 449
+confident reads in 64 runs. And a cache gate on "reached scroll level 7" was
+written and then REVERTED as an invented constant -- a short collection never
+reaches the bottom clamp, and both existing rigs' controls said so immediately.
+
+### Still open, deliberately
+
+Round 5's remaining lower-severity findings are unfixed and listed in its journal:
+three ban-navigation constants derived from other constants rather than measured
+(BAN_NAV_SETTLE, BAN_CURSOR_PROBE_TRIES, LOCK_CONFIRM_TRIES), reveal_cards' DISC_R
+still raw pixels, and two test-quality items. None is on the money path. THERE IS
+NO HELD-OUT HOME RUN! FRAME on disk -- the archive holds exactly one and it supplied
+the template -- so harvest one from the next live home run.
+
 ## WHAT IS RUNNING / WHAT HAPPENS NEXT
 
     suite baseline    ALL GREEN, 207 files, JOBS=4, 293s, taken BEFORE the QA round.
