@@ -65,24 +65,53 @@ def _pil(bgr):
     return im
 
 
-def _slots(im):
-    """{slot_index: True/False readable} for one hand crop, plus the row count.
+# The fan's own slot anchors, both banks. A row is assigned to the slot whose
+# anchor it is nearest in x -- NOT to its position in the row list.
+_ANCHOR_X = [(p[0] + t[0]) / 2.0
+             for p, t in zip(local_hand.SLOT_PLAYER, local_hand.SLOT_TACTICS)]
+# Half the tightest gap between neighbouring anchors: past that a row is closer
+# to a different slot, so it is not evidence about this one.
+_SLOT_TOL = min(b - a for a, b in zip(_ANCHOR_X, _ANCHOR_X[1:])) / 2.0
 
-    Slot index is POSITION IN THE FAN left to right, which is what read_hand's x
-    ordering gives and what hand_index means downstream.
+
+def _slots(im):
+    """{slot: readable} keyed on the FAN'S GEOMETRY, plus the row count.
+
+    THE FIRST VERSION KEYED ON POSITION IN THE ROW LIST and it measured the
+    wrong thing. When the hand TURNS OVER -- a card played, the fan re-dealing
+    -- cards[1] is a different physical card from one frame to the next, so
+    "slot 1 went dark" was reporting a position shift as an occlusion. A contact
+    sheet settled it in one glance: a PITCHER 5/0 read at 0.98-0.996 for 1.9 s,
+    then a different card swept through and a 9 arrived at the same index. That
+    is CLAUDE.md 10.22 -- a pipeline whose own output defines the alignment
+    cannot be scored on that alignment -- and it is why this keys on x instead.
+
+    A row further than _SLOT_TOL from every anchor is DROPPED rather than
+    assigned to its nearest: mid-animation a card sits between slots, and
+    forcing it into one manufactures exactly the false transition this is
+    trying to avoid.
     """
     try:
-        got = sorted(local_hand.read_hand(im), key=lambda r: r.get("x", 0))
+        got = local_hand.read_hand(im)
     except Exception:
         return {}, 0
     out = {}
-    for i, r in enumerate(got):
+    for r in got:
+        x = r.get("x")
+        if x is None:
+            continue
+        best = min(range(len(_ANCHOR_X)), key=lambda i: abs(_ANCHOR_X[i] - x))
+        if abs(_ANCHOR_X[best] - x) > _SLOT_TOL:
+            continue
         if r.get("kind") == "player":
-            out[i] = r.get("digit") is not None and r.get("secondary") is not None
+            ok = r.get("digit") is not None and r.get("secondary") is not None
         elif r.get("kind") == "tactics":
-            out[i] = r.get("type") is not None and r.get("bonus") is not None
+            ok = r.get("type") is not None and r.get("bonus") is not None
         else:
-            out[i] = False
+            ok = False
+        # A slot already claimed by a nearer row wins; mid-animation two rows can
+        # land in one slot's basin.
+        out[best] = out.get(best, False) or ok
     return out, len(got)
 
 
@@ -164,6 +193,34 @@ def losses(samples, fps, lookback=LOOKBACK_S):
     return dedup
 
 
+def dark_slots(samples, fps, gap_s=6.0):
+    """Every moment a FULL hand has a slot the reader cannot read.
+
+    WHY THIS EXISTS ALONGSIDE losses(). losses() requires the slot to have been
+    READABLE in an earlier 5 Hz sample. If a card is dealt straight into
+    occlusion and its clear window is shorter than a sample interval, that
+    requirement can never be met -- so "no events" would mean "the instrument
+    cannot fire", which is indistinguishable from "the card was never visible"
+    (CLAUDE.md 10.1). Two recordings came back 0 of 2,496 turn samples on
+    losses() alone, and that is exactly the ambiguity.
+
+    This assumes NOTHING about earlier readability. It finds a five-row hand
+    with a dark slot, and the 60 fps dump around it -- which reads EVERY frame,
+    not every twelfth -- is what answers whether the card was ever visible.
+    """
+    out = []
+    for idx, slots, n in samples:
+        if n != 5:
+            continue
+        dark = [i for i, ok in slots.items() if not ok]
+        if len(dark) != 1:
+            continue
+        if out and (idx - out[-1]["frame"]) / fps < gap_s and out[-1]["slot"] == dark[0]:
+            continue
+        out.append({"frame": idx, "slot": dark[0], "rows": n})
+    return out
+
+
 def dump(path, centre, fps, outdir):
     """Every frame of one burst, with read_hand's answer per frame."""
     os.makedirs(outdir, exist_ok=True)
@@ -188,7 +245,14 @@ def dump(path, centre, fps, outdir):
         # read_hand's gate, not a new one.
         cards = []
         for r in sorted(got, key=lambda r: r.get("x", 0)):
+            _x = r.get("x")
+            _slot = None
+            if _x is not None:
+                _b = min(range(len(_ANCHOR_X)), key=lambda i: abs(_ANCHOR_X[i] - _x))
+                if abs(_ANCHOR_X[_b] - _x) <= _SLOT_TOL:
+                    _slot = _b
             cards.append({
+                "slot": _slot,
                 "x": r.get("x"), "kind": r.get("kind"),
                 "digit": r.get("digit"), "score": r.get("score"),
                 "secondary": r.get("secondary"),
@@ -211,23 +275,45 @@ def main(argv):
     path, outroot = argv[1], argv[2]
     cap = int(argv[3]) if len(argv) > 3 else 6
     samples, fps, total = scan(path)
-    hits = losses(samples, fps)
+    mode = os.environ.get('DEAL_MODE', 'losses')
+    hits = dark_slots(samples, fps) if mode == 'dark' else losses(samples, fps)
     name = os.path.basename(os.path.dirname(path))
     print(f"{name}: {total} frames at {fps:.0f} fps, {len(samples)} turn samples, "
-          f"{len(hits)} READABLE->UNREADABLE events", flush=True)
+          f"{len(hits)} {mode} events", flush=True)
     os.makedirs(outroot, exist_ok=True)
     index = []
     for k, h in enumerate(hits[:cap]):
         outdir = os.path.join(outroot, f"loss_{h['frame']:07d}_slot{h['slot']}")
         rows = dump(path, h["frame"], fps, outdir)
-        good = [r["frame"] for r in rows
-                if len(r["cards"]) > h["slot"] and (
-                    r["cards"][h["slot"]]["digit"] is not None
-                    if r["cards"][h["slot"]]["kind"] == "player"
-                    else r["cards"][h["slot"]]["type"] is not None)]
-        print(f"  event {k}: slot {h['slot']} lost at frame {h['frame']} "
-              f"({h['gap_s']}s after last good) -> {len(rows)} frames dumped, "
-              f"slot readable in {len(good)} of them", flush=True)
+        def _at(r, slot):
+            """The card in THIS slot on this frame, by the fan's geometry.
+
+            Indexing r["cards"] by slot number is what produced a false
+            occlusion: mid-turnover the list is a different set of cards.
+            """
+            for c in r["cards"]:
+                if c.get("slot") == slot:
+                    return c
+            return None
+
+        def _ok(c):
+            if not c:
+                return False
+            return ((c["digit"] is not None and c["secondary"] is not None)
+                    if c["kind"] == "player" else c["type"] is not None)
+
+        good = [r["frame"] for r in rows if _ok(_at(r, h["slot"]))]
+        # THE NUMBER THAT MATTERS: the LONGEST RUN of consecutive 60 fps frames
+        # in which the dark slot reads. A poll every 0.15 s catches a window only
+        # if that window is at least 9 frames long at 60 fps.
+        run = best = 0
+        for r in rows:
+            run = run + 1 if _ok(_at(r, h["slot"])) else 0
+            best = max(best, run)
+        h["longest_visible_run"] = best
+        print(f"  event {k}: slot {h['slot']} dark at frame {h['frame']} -> "
+              f"{len(rows)} frames dumped, slot readable in {len(good)}, "
+              f"LONGEST RUN {best} frames ({best / fps * 1000:.0f} ms)", flush=True)
         index.append({**h, "dir": outdir, "frames": len(rows),
                       "slot_readable_frames": good})
     with open(os.path.join(outroot, "index.json"), "w") as fh:
