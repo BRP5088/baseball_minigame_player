@@ -23,7 +23,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "agent_progress/base-timing/reveal")
+SRC = os.path.join(ROOT, "test_fixtures/reveal_kind_truth/reveal")
 OUT = os.path.join(ROOT, "reveal_banner_templates.npz")
 
 # (label, source frame, bbox) -- measured by locating the letter blobs, not guessed.

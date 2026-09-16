@@ -27,8 +27,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "reveal_tactics_templates.npz")
 
 # (kind, frame, box) -- every box measured by locating the letter blobs, not guessed.
-R6 = "agent_progress/base-timing/reveal6"
-R1 = "agent_progress/base-timing/reveal"
+R6 = "test_fixtures/reveal_kind_truth/reveal6"
+R1 = "test_fixtures/reveal_kind_truth/reveal"
 CUTS = [
     ("fielding_boost", f"{R6}/f_001503.jpg", (1075, 309, 1194, 340)),
     ("fielding_boost", f"{R6}/f_002645.jpg", (1076, 309, 1194, 339)),

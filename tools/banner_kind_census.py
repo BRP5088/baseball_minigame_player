@@ -24,8 +24,8 @@ import reveal_cards as rc
 SOURCES = {"f_001503.jpg", "f_002645.jpg", "f_003571.jpg",
            "r_003660.jpg", "r_006285.jpg"}
 SETS = [
-    ("agent_progress/base-timing/reveal6/f_*.jpg", "fielding_boost", "speed_boost"),
-    ("agent_progress/base-timing/reveal/r_*.jpg", "pitch_boost", "swing_boost"),
+    ("test_fixtures/reveal_kind_truth/reveal6/f_*.jpg", "fielding_boost", "speed_boost"),
+    ("test_fixtures/reveal_kind_truth/reveal/r_*.jpg", "pitch_boost", "swing_boost"),
 ]
 
 
