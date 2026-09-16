@@ -34,7 +34,10 @@ def want(label, cond, detail=""):
 want("the fixture is present", os.path.exists(FIX), FIX)
 if os.path.exists(FIX):
     im = Image.open(FIX)
-    r = rc.read_reveal(im)
+    # PASS THE PHASE EXPLICITLY. This fixture is from the BATTING half, and
+    # reading it on the default proved only that the default happens to be
+    # "batting" -- not that batting is handled.
+    r = rc.read_reveal(im, phase="batting")
 
     # GROUND TRUTH, read off the frame BY EYE: ours is Johnny Drawers, BATTER 7,
     # with a POWER SWING +2. Theirs is Bartholomew Creasley, PITCHER 5, with a
@@ -134,6 +137,35 @@ if os.path.exists(PITCH_FIX):
     br = rc.read_reveal(pim, phase="batting")
     want("reading the same frame as batting swaps ours and theirs",
          br["ours"]["power"] == 8 and br["theirs"]["power"] == 7, str(br))
+
+# THE BATTING HALF, CHECKED THE SAME WAY THE PITCHING HALF IS. The swap was
+# found on a pitching turn, so batting is the side at risk of passing by
+# coincidence -- it is the default, and a reader that ignored `phase` entirely
+# would look perfect here.
+if os.path.exists(FIX):
+    bat = rc.read_reveal(im, phase="batting")
+    want("while batting, OURS is the card at HOME", bat["ours"]["power"] == 7,
+         f"we batted Johnny Drawers 7; got {bat['ours']['power']}")
+    want("while batting, THEIRS is the card at the MOUND", bat["theirs"]["power"] == 5,
+         f"they pitched Creasley 5; got {bat['theirs']['power']}")
+    want("our POWER SWING +2 lands on our side", bat["ours"]["bonus"] == 2, str(bat["ours"]))
+    want("their PITCH FOCUS +1 lands on theirs", bat["theirs"]["bonus"] == 1, str(bat["theirs"]))
+
+    flip = rc.read_reveal(im, phase="pitching")
+    want("the batting frame read as pitching swaps the owners",
+         flip["ours"]["power"] == 5 and flip["theirs"]["power"] == 7, str(flip))
+    want("but the ROLE names do not move",
+         flip["batter"]["power"] == 7 and flip["pitcher"]["power"] == 5, str(flip))
+
+# THE MARGIN IS INVARIANT TO PHASE: it is always the BATTER's power minus the
+# PITCHER's (reveal_margin's own rule). The zone swap and the sign swap cancel
+# exactly, so a frame must give the same number read either way -- and a bug in
+# only ONE of the two swaps shows up here as a sign flip.
+if os.path.exists(PITCH_FIX):
+    mb, _ = rc.margin_from(rc.read_reveal(pim, phase="batting"), "batting")
+    mp, _ = rc.margin_from(rc.read_reveal(pim, phase="pitching"), "pitching")
+    want("the margin does not depend on which side we are on", mb == mp == 1,
+         f"batting says {mb}, pitching says {mp} -- one of the two swaps is wrong")
 
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
