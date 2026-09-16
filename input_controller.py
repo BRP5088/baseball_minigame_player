@@ -1049,6 +1049,42 @@ def _clear_strays(want, look):
 
 
 def _verified_select_and_play(card_index, tactics_index, look):
+    """Commit only what the engine chose, and leave nothing lifted on the way out.
+
+    A WRAPPER, BECAUSE A RAISE USED TO LEAVE A CARD UP. Neither look() nor
+    _look_settled was wrapped, and the look seam in production is
+    orchestrator.hand_cursor_look -> _grab_settle_regions, a LIVE CAPTURE that can
+    raise. A raise after press("select_card") propagated straight out:
+    _unwind_selection never ran (it is only reached on an explicit `not ok`),
+    invalidate_cursor() never ran, and the card stayed lifted.
+
+    The stray it leaves is then the next caller's problem, and CLAUDE.md 10.29 is
+    what that costs -- "an investigation that leaves state behind poisons the next
+    experiment, and the result still looks like a finding". select_bans_verified was
+    wrapped for exactly this shape ("AN EXCEPTION HERE USED TO LEAVE THE SCREEN
+    MID-CHANGE"); the play path was not.
+
+    The unwind is best-effort and never masks the original error: if the screen
+    cannot be read to unwind, the raise still propagates.
+    """
+    try:
+        _g0, _ys0, _n0, _before = _look_settled(look)
+        _before = set(_before) if _n0 == MAX_HAND_SIZE else set()
+    except Exception:
+        _before = set()
+    _targets = {t for t in (card_index, tactics_index) if t is not None}
+    try:
+        return _verified_select_and_play_inner(card_index, tactics_index, look)
+    except Exception:
+        try:
+            _unwind_selection(_before, look, _targets)
+        except Exception:
+            pass
+        invalidate_cursor()
+        raise
+
+
+def _verified_select_and_play_inner(card_index, tactics_index, look):
     """Read, step, verify, select, verify the selection, and only then commit.
 
     Returns True only when confirm_play was actually sent. False means NOTHING was
@@ -1386,6 +1422,27 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                     _after = banned_set() if banned_set is not None else None
                     if _before is not None and _after is not None:
                         _new = _after - _before
+                        # AND THE OTHER DIRECTION. select_card is a TOGGLE, so a press
+                        # that lands on a cell ALREADY banned by an earlier target
+                        # REMOVES that X. `_after - _before` is then empty, this fell
+                        # to the else branch and logged "placed no X anywhere --
+                        # leaving it", on_wrong_ban never fired, and the run finished
+                        # with fewer bans than it believed and no observation saying so.
+                        # A disappearance is a wrong-cell press exactly as much as an
+                        # appearance; only the direction differed.
+                        _gone = _before - _after
+                        if _gone:
+                            log(f"  [ban] UN-BANNED: pressing at {want} REMOVED the X "
+                                f"from {sorted(_gone)} — select_card is a toggle and "
+                                f"the cursor was not where the last look said. NOT "
+                                f"re-pressing.")
+                            if on_wrong_ban is not None:
+                                on_wrong_ban(want, _gone)
+                            # ...and it is no longer placed, whatever an earlier target
+                            # recorded. `placed` must describe the SCREEN.
+                            for _p in _gone:
+                                if _p in placed:
+                                    placed.remove(_p)
                         if _new == {want}:
                             placed.append(want)
                         elif _new:
