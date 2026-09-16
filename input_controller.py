@@ -2693,7 +2693,15 @@ def can_use_background_input(action=None):
     key events without touching anything, but it does not stub pgrep — so this
     function found the REAL running game and the "offline" tests started
     driving it for real. Refusing here keeps the suite exercising the stubbed
-    path, and means a test run can never move the character.
+    path.
+
+    IT DOES NOT MEAN A TEST RUN CANNOT MOVE THE CHARACTER, AND THIS DOCSTRING
+    SAID IT DID. Refusing here only closes the BACKGROUND path; all three callers
+    then fall straight through to pyautogui, which types into whatever window is
+    FRONTMOST. That is how "c" (confirm_play) appeared in the user's own window
+    on 2026-09-13 with a paid match parked on the console. The question is
+    answered AT the damage by focus_input_allowed(), which press(), hold_combo()
+    and walk_at() all call; read that one for the actual guarantee.
     """
     if os.environ.get("BASEBALL_TEST_RUN"):
         return False
@@ -2764,9 +2772,23 @@ def press_background(action, hold_seconds=0.05, post_delay=None):
 def _bg_hold_keys(keys, seconds):
     """Hold raw key names down together for `seconds`, targeted at chiaki.
 
-    Returns True if it handled them. This is the single low-level route every
-    public input function funnels through, so there is exactly one place where
-    "did this go to the game or to the user's work" is decided.
+    Returns True if it handled them. It is the single low-level route for the
+    TARGETED Quartz path, and it does now ask targeted_input_allowed() before
+    posting anything.
+
+    IT IS NOT THE ONE PLACE THAT DECIDES "game or the user's work", AND THIS
+    DOCSTRING CLAIMED IT WAS. There are FIVE emission paths (CLAUDE.md §5) and a
+    public call reaches this one only when the background route is available:
+
+        keyboard        press / hold_combo / walk_at   -> pyautogui
+        targeted        press_background / _bg_hold_keys -> CGEventPostToPid  <- here
+        sticks          analog_replay.send             -> the FIFO
+        recovery keys   ensure_stream._key             -> CGEventPostToPid
+        raw masks       inject_reset.tap / clear       -> the FIFO
+
+    Each needed its own lockout and four of the five were found by looking rather
+    than by a failure. A docstring that claims a chokepoint it does not own is
+    worse than none: it is where the next reader stops looking.
     """
     if not targeted_input_allowed("+".join(keys)):
         return False
