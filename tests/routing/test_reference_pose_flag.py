@@ -43,6 +43,12 @@ try:
               h is not None and gw.HUMAN_REFERENCE_DIR in h)
         # They must also differ in CONTENT — a backup that was overwritten with
         # the same frame would make the flag silently meaningless.
+        # ASSERT THE FILES ARE THERE. This is the only content check in the file --
+        # "a backup that was overwritten with the same frame would make the flag
+        # silently meaningless" -- and behind a bare existence guard it vanishes
+        # with the fixtures while the file still passes.
+        check(f"{node}: both reference frames exist on disk",
+              bool(b) and bool(h) and os.path.exists(b) and os.path.exists(h))
         if b and h and os.path.exists(b) and os.path.exists(h):
             check(f"{node}: the two references differ in content",
                   open(b, "rb").read() != open(h, "rb").read())

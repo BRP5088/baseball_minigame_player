@@ -32,6 +32,11 @@ def want(label, cond, detail=""):
 
 
 want("the fixture is present", os.path.exists(FIX), FIX)
+# THE FIXTURE MUST EXIST. Behind a bare os.path.exists these checks vanish
+# SILENTLY if the frame is pruned, and the file still passes -- while what they
+# guard is the zone-by-ROLE fix, i.e. reading OUR card as THEIRS on a pitching
+# turn. A gone check reads exactly like a passing one (10.1).
+want("the reveal fixture exists", os.path.exists(FIX), FIX)
 if os.path.exists(FIX):
     im = Image.open(FIX)
     # PASS THE PHASE EXPLICITLY. This fixture is from the BATTING half, and
@@ -123,6 +128,7 @@ if os.path.exists(FIX):
 # (pitcher at the mound, batter at home), not by owner.
 PITCH_FIX = os.path.join(_ROOT, "test_fixtures/reveal_banner/reveal_pitching.jpg")
 want("the pitching fixture is present", os.path.exists(PITCH_FIX), PITCH_FIX)
+want("the pitching reveal fixture exists", os.path.exists(PITCH_FIX), PITCH_FIX)
 if os.path.exists(PITCH_FIX):
     pim = Image.open(PITCH_FIX)
     # GROUND TRUTH: we pitched a 7/0 and the opponent batted an 8. It was a hit
@@ -149,6 +155,11 @@ if os.path.exists(PITCH_FIX):
 # found on a pitching turn, so batting is the side at risk of passing by
 # coincidence -- it is the default, and a reader that ignored `phase` entirely
 # would look perfect here.
+# THE FIXTURE MUST EXIST. Behind a bare os.path.exists these checks vanish
+# SILENTLY if the frame is pruned, and the file still passes -- while what they
+# guard is the zone-by-ROLE fix, i.e. reading OUR card as THEIRS on a pitching
+# turn. A gone check reads exactly like a passing one (10.1).
+want("the reveal fixture exists", os.path.exists(FIX), FIX)
 if os.path.exists(FIX):
     bat = rc.read_reveal(im, phase="batting")
     want("while batting, OURS is the card at HOME", bat["ours"]["power"] == 7,
@@ -168,6 +179,7 @@ if os.path.exists(FIX):
 # PITCHER's (reveal_margin's own rule). The zone swap and the sign swap cancel
 # exactly, so a frame must give the same number read either way -- and a bug in
 # only ONE of the two swaps shows up here as a sign flip.
+want("the pitching reveal fixture exists", os.path.exists(PITCH_FIX), PITCH_FIX)
 if os.path.exists(PITCH_FIX):
     mb, _ = rc.margin_from(rc.read_reveal(pim, phase="batting"), "batting")
     mp, _ = rc.margin_from(rc.read_reveal(pim, phase="pitching"), "pitching")
@@ -178,6 +190,11 @@ if os.path.exists(PITCH_FIX):
 # PITCH boosts add power. A Speed Boost or Fielding Play carries a nonzero bonus
 # that adds NONE, so putting one into a margin is the same size of error as
 # leaving out one that belongs.
+# THE FIXTURE MUST EXIST. Behind a bare os.path.exists these checks vanish
+# SILENTLY if the frame is pruned, and the file still passes -- while what they
+# guard is the zone-by-ROLE fix, i.e. reading OUR card as THEIRS on a pitching
+# turn. A gone check reads exactly like a passing one (10.1).
+want("the reveal fixture exists", os.path.exists(FIX), FIX)
 if os.path.exists(FIX):
     kr = rc.read_reveal(im, phase="batting")
     want("our POWER SWING is named", kr["ours"]["kind"] == "swing_boost", str(kr["ours"]))
