@@ -1,0 +1,148 @@
+"""The two cards PLAYED this at-bat, read off the reveal. Local, no paid call.
+
+WHY THIS EXISTS. pick_opponent_card() takes `reveal_cards`, and the ONLY thing
+that ever supplied those was the paid vision model -- which is off. So with the
+shipped defaults nothing reads the opponent's card at all, and on 2026-09-16 a
+hit with runners on second and third could not be attributed: tie, or fielding
+subtraction? The user knew because they were watching. The margin decides the
+outcome, so this is the field the engine is blindest without.
+
+THE LAYOUT, MEASURED off a live reveal (1920x1080):
+
+    OURS    at HOME PLATE, bottom centre    power disc (1015, 793)  badge (1129, 736)
+    THEIRS  at the MOUND,  centre           power disc (1006, 353)  badge (1109, 305)
+
+and the tactics badge sits up-and-right of its player disc by about (+114, -55)
+in both.
+
+THE REVEAL RENDERS SMALLER THAN THE HAND, which is why the hand reader cannot be
+pointed at it: its discs are r=13 against the fan's r=19, under DISC_MIN_R (18)
+and DISC_MIN_REACH (6), so find_circles finds them and local_hand throws them
+away. The DIGIT BANK NEEDS NO CHANGE -- read_digit scores 0.958/0.972 on the
+powers and 0.875/0.950 on the badges at r=11, against MIN_SCORE 0.80.
+
+THE ZONES ARE TIGHT ON PURPOSE. During a home run the runners animate THROUGH
+the centre row, so a generous mound zone picks up a runner's disc as if it were
+the pitcher's card. Home plate has no such problem -- a runner is never there --
+which is why OURS is the more trustworthy half and THEIRS carries the caveat.
+"""
+import os
+
+# x0, y0, x1, y1 as fractions. Both bands hold a player card and, when one was
+# attached, its tactics card up and to the right.
+ZONE_OURS = (0.44, 0.62, 0.68, 0.92)
+ZONE_THEIRS = (0.48, 0.23, 0.62, 0.50)
+
+DISC_R = (9, 17)        # the reveal's discs measure 13; the fan's measure 19
+DISC_MIN_REACH = 3.0    # the fan's gate is 6 and rejects every reveal disc
+READ_R = 11             # the radius read_digit scores best at here
+MIN_FRAME_W = 1200      # a crop cannot contain these absolute zones
+
+CARD_POWER_MIN, CARD_POWER_MAX = 4, 9
+BONUS_MIN, BONUS_MAX = 1, 2      # section 4: a +3 does not exist in this game
+
+
+def _discs(img, zone):
+    """Disc candidates inside `zone`, nearest-first by x. Never raises."""
+    from circle_finder import find_circles
+    import local_hand as lh
+    w, h = img.size
+    x0, y0, x1, y1 = zone
+    lo, hi = int(w * x0), int(w * x1)
+    top, bot = int(h * y0), int(h * y1)
+    seen, out = set(), []
+    for thr in lh.DARK_THRESHOLDS:
+        try:
+            cs = find_circles(img, thr)
+        except Exception:
+            continue
+        for c in cs:
+            x, y, r = c[0], c[1], c[2]
+            if not (lo <= x <= hi and top <= y <= bot):
+                continue
+            if not (DISC_R[0] <= r <= DISC_R[1]) or c[3] < DISC_MIN_REACH:
+                continue
+            k = (x // 20, y // 20)
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append((x, y, r))
+    out.sort(key=lambda c: (c[1], c[0]))
+    return out
+
+
+def _side(img, zone):
+    """{'power', 'bonus', 'power_score', 'bonus_score'} for one side of the reveal.
+
+    The PLAYER disc is the LOWER of the two; the tactics badge rides above and to
+    the right. Every value is None when it did not read -- never a guess, because
+    a fabricated power feeds straight into a margin and mislabels the at-bat it
+    was invented to describe.
+    """
+    import local_hand as lh
+    cs = _discs(img, zone)
+    out = {"power": None, "bonus": None, "power_score": 0.0, "bonus_score": 0.0,
+           "discs": len(cs)}
+    if not cs:
+        return out
+    # lowest y = the player card; anything meaningfully above it is the badge
+    player = max(cs, key=lambda c: c[1])
+    badge = None
+    for c in cs:
+        if c is player:
+            continue
+        if c[1] < player[1] - 20 and c[0] > player[0] - 20:
+            if badge is None or c[1] < badge[1]:
+                badge = c
+    d, s = lh.read_digit(img, (player[0], player[1], READ_R, 4.0, 1))
+    if d is not None and CARD_POWER_MIN <= int(d) <= CARD_POWER_MAX:
+        out["power"] = int(d)
+    out["power_score"] = round(float(s), 4)
+    if badge is not None:
+        d, s = lh.read_digit(img, (badge[0], badge[1], READ_R, 4.0, 1))
+        # A BONUS OUTSIDE 1-2 IS A MISREAD, NOT A CARD (section 4: a +3 does not
+        # exist, and the paid model recorded eleven of them plus one +11).
+        if d is not None and BONUS_MIN <= int(d) <= BONUS_MAX:
+            out["bonus"] = int(d)
+        out["bonus_score"] = round(float(s), 4)
+    return out
+
+
+def read_reveal(full_frame):
+    """{'ours': {...}, 'theirs': {...}} from a reveal frame.
+
+    THE TACTICS KIND IS NOT READ, and that is a stated gap rather than a silent
+    one. Only SWING_BOOST and PITCH_BOOST add power (section 4), so a +1 that is
+    a Speed Boost or a Fielding Play must NOT enter a margin -- and a badge digit
+    alone cannot tell them apart. `margin` is therefore returned only when it can
+    be computed without that ambiguity; see margin_from().
+    """
+    if full_frame.width < MIN_FRAME_W:
+        raise ValueError(f"read_reveal needs the whole frame; got {full_frame.width}px")
+    return {"ours": _side(full_frame, ZONE_OURS),
+            "theirs": _side(full_frame, ZONE_THEIRS)}
+
+
+def margin_from(reveal, phase):
+    """(margin, why). None when it cannot be known -- never a guess.
+
+    A +2 IS ALWAYS A POWER SWING: section 4's census over 299 hand-labelled
+    tactics cards has POWER SWING as the only card ever above +1. So a +2
+    resolves the kind for free, and a +1 does not.
+    """
+    o, t = reveal["ours"], reveal["theirs"]
+    if o["power"] is None or t["power"] is None:
+        return None, "a power did not read"
+    def eff(side, holder):
+        if side["bonus"] is None:
+            return side["power"], f"{holder} {side['power']} (no tactics read)"
+        if side["bonus"] == 2:
+            return side["power"] + 2, f"{holder} {side['power']}+2 (a +2 is a Power Swing)"
+        return None, (f"{holder} has a +1 whose KIND is unread -- a swing/pitch boost "
+                      f"adds power and a speed/fielding boost does not")
+    a, wa = eff(o, "ours")
+    b, wb = eff(t, "theirs")
+    if a is None or b is None:
+        return None, "; ".join(x for x in (None if a else wa, None if b else wb) if x)
+    m = a - b if phase == "batting" else b - a
+    return m, f"{wa} vs {wb}"
