@@ -6834,7 +6834,8 @@ def spend_and_discard(player_idx):
     ok = _ic.select_and_discard(player_idx, look=hand_cursor_look,
                                 discards_look=discards_look)
     if ok is False:
-        return False, "the card could not be verified -- nothing thrown"
+        return False, ("the discard was not confirmed -- it may or may not have been "
+                       "thrown; re-read rather than retry")
     return True, None
 
 
@@ -6959,8 +6960,23 @@ def play_one_turn(state_json: dict, batters_used: int):
         # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND -- test_hand_memory_forgets
         # requires a forget within six lines above it, so prose goes here, never between.
         forget_hand_slot(player_idx)
-        if select_and_discard(player_idx, look=hand_cursor_look) is False:
-            print("  discard REFUSED — the card could not be verified; nothing thrown")
+        # WIRE THE SEAM. `look=` was passed and `discards_look=` was NOT, so
+        # select_and_discard's whole post-press proof was skipped on the LIVE $50
+        # ladder: DISCARD_CONFIRM_TRIES, the retry loop and the refusing branch
+        # never executed, and the function returned True unconditionally. That proof
+        # was built in response to the 2026-09-16 incident -- a swallowed Square
+        # press, the card PLAYED instead of discarded -- and it was dead on the one
+        # path the incident happened on. Only spend_and_discard, the crawl helper,
+        # ever passed it. A guard that cannot fire, guarding the exact failure it
+        # was written for.
+        if select_and_discard(player_idx, look=hand_cursor_look,
+                              discards_look=discards_look) is False:
+            # AND "NOTHING THROWN" IS NOT WHAT False MEANS ANY MORE. It also covers
+            # UNVERIFIED -- the counter never answered -- where the card may well be
+            # gone. Saying "nothing thrown" there invites a retry that spends the
+            # SECOND of only two discards in the half.
+            print("  discard NOT CONFIRMED — it may or may not have been thrown. "
+                  "Re-reading the hand next poll rather than retrying blind.")
         return False, None
     else:
         # THE FALSE BRANCH, LOGGED. The true branch has always announced

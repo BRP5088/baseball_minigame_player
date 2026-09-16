@@ -1236,32 +1236,59 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
         # retrying invents no confidence, it only waits out a counter that is still
         # animating.
         dropped = False
+        answered = False          # did ANY poll come back with a number at all?
         for _ in range(DISCARD_CONFIRM_TRIES):
             time.sleep(ACTION_DELAY)
             try:
                 now = discards_look()
             except Exception:
                 now = None
+            if now is not None:
+                answered = True
             if now is not None and now < before:
                 dropped = True
                 break
-        if not dropped:
-            # WE KNOW THE DISCARD DID NOT REGISTER. Pressing confirm_play here is the
-            # bug: it plays the card. Refusing leaves the card lifted and nothing
-            # committed, which the caller can re-read and recover from.
+        if not dropped and answered:
+            # WE KNOW THE DISCARD DID NOT REGISTER, because the counter ANSWERED and
+            # did not move. Pressing confirm_play here is the bug: it plays the card.
+            # Refusing leaves the card lifted and nothing committed, which the caller
+            # can re-read and recover from.
             print(f"  [discard] confirm_discard did not register — discards_left is "
                   f"still {before}. REFUSING to press confirm_play, because that would "
                   f"PLAY slot {card_index} instead of discarding it.")
             invalidate_cursor()
             return False
+        if not dropped:
+            # NOT THE SAME THING, AND IT USED TO BE. `dropped` was only ever set on
+            # `now is not None and now < before`, so FIVE ABSTENTIONS were
+            # indistinguishable from five readings that said the counter had not
+            # moved. A discard that really landed then exited reporting "did not
+            # register" about a press that was no longer there -- and the caller says
+            # "nothing thrown", after which an operator or a retry spends the SECOND
+            # of only two discards in the half.
+            print(f"  [discard] the counter never answered after the press "
+                  f"({DISCARD_CONFIRM_TRIES} tries) — the discard is UNVERIFIED, not "
+                  f"refused. Slot {card_index} may or may not have been thrown; the "
+                  "caller must re-read rather than retry blind.")
+            invalidate_cursor()
+            return False
     elif discards_look is not None:
-        # THE COUNTER COULD NOT BE READ. Nothing irreversible follows either way now
-        # that confirm_play is gone, so there is no decision to make here -- only a
-        # verdict to report honestly, because an unverified discard must not read
-        # like a checked one (10.1).
-        print("  [discard] discards_left could not be read, so the discard is "
-              "UNVERIFIED — the card may or may not have been thrown. The caller "
-              "should re-read the hand rather than assume.")
+        # THE COUNTER COULD NOT BE READ BEFORE THE PRESS. This used to print exactly
+        # this and then RETURN TRUE, so one abstention on the pre-read disabled the
+        # whole proof and the verdict still read like a checked discard (10.1).
+        print("  [discard] discards_left could not be read before the press, so the "
+              "discard is UNVERIFIED — the card may or may not have been thrown. "
+              "Returning False so the caller re-reads rather than assumes.")
+        invalidate_cursor()
+        return False
+    else:
+        # NO SEAM AT ALL. A caller that passes no discards_look cannot be given a
+        # verified answer, and saying True here is what let the production redraw
+        # path believe a proof that never ran.
+        print("  [discard] no discards_look seam was passed, so nothing verified this "
+              "discard — returning False rather than a True nobody checked.")
+        invalidate_cursor()
+        return False
     # NO confirm_play. A discard does not use the turn, and Triangle here is what
     # played the card on 2026-09-16 when the Square press was swallowed.
     invalidate_cursor()

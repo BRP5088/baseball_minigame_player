@@ -93,9 +93,17 @@ try:
     want("confirm_play is NEVER sent by a discard", "confirm_play" not in g2.sent,
          f"sent={g2.sent} -- Triangle after a discard plays whatever is lifted")
 
-    # 3. AN UNREADABLE COUNTER IS NOT THE SAME AS "IT DID NOT DROP", and the two
-    #    want opposite actions: a landed discard left uncommitted strands the game
-    #    on its own PLAY prompt. So commit, loudly, rather than refuse.
+    # 3. AN UNREADABLE COUNTER IS NOT THE SAME AS "IT DID NOT DROP" -- still true,
+    #    and the RETURN VALUE now says so instead of claiming success.
+    #
+    #    This block used to require `ok is True`, argued as "a landed discard left
+    #    uncommitted strands the game on its own PLAY prompt, so commit loudly rather
+    #    than refuse". THAT ARGUMENT IS STALE: it was about pressing confirm_play,
+    #    and confirm_play was REMOVED from this path after 2026-09-16, when a
+    #    swallowed Square press meant Triangle PLAYED the card instead of discarding
+    #    it. Nothing is committed here any more, so True and False differ in the
+    #    LABEL only -- no press changes either way -- and True was the label that let
+    #    the caller believe a proof which had not run.
     g3 = Game(discard_lands=True, counter_readable=False)
     ic.press = g3.press
     # CAPTURE THE OUTPUT. Committing unverified is the right call here, but it must
@@ -107,18 +115,22 @@ try:
     with contextlib.redirect_stdout(_cap):
         ok = ic.select_and_discard(1, look=g3.look, discards_look=g3.discards_look)
     _out = _cap.getvalue()
-    want("an unreadable counter still returns ok", ok is True, str(ok))
+    want("an unreadable counter reports UNVERIFIED, not success", ok is False, str(ok))
     want("...and confirm_play is still never sent", "confirm_play" not in g3.sent,
          str(g3.sent))
     want("...and it says the discard was UNVERIFIED", "UNVERIFIED" in _out,
          f"nothing warned; the caller cannot tell this from a checked discard: {_out!r}")
 
-    # 4. NO SEAM AT ALL -> the old behaviour, unchanged, so existing callers and the
-    #    blind path are not silently altered.
+    # 4. NO SEAM AT ALL -> also not a success. This used to return True "so existing
+    #    callers and the blind path are not silently altered", and that leniency is
+    #    exactly what let the PRODUCTION redraw path believe a proof that never ran:
+    #    orchestrator's play_one_turn passed look= and not discards_look=, so every
+    #    live discard took this branch and read as verified. A caller that supplies
+    #    no seam cannot be handed a checked answer.
     g4 = Game(discard_lands=False)
     ic.press = g4.press
     ok = ic.select_and_discard(1, look=g4.look)
-    want("with no counter seam it still returns ok", ok is True, str(ok))
+    want("with no counter seam it reports UNVERIFIED, not success", ok is False, str(ok))
     want("...and STILL never presses confirm_play", "confirm_play" not in g4.sent,
          f"sent={g4.sent}")
 

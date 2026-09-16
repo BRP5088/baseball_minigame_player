@@ -395,6 +395,22 @@ for _name, _line, _kw in _calls:
     check("look" in _kw,
           f"{_name} at orchestrator.py:{_line} passes look= so it reads the screen "
           f"instead of counting presses (keywords: {sorted(_kw) or 'none'})")
+    # AND A DISCARD MUST CARRY ITS OWN SEAM, for the reason this scan already
+    # exists. play_one_turn's redraw path passed look= and NOT discards_look=, so
+    # select_and_discard's entire post-press proof -- DISCARD_CONFIRM_TRIES, the
+    # retry loop, the refusing branch -- never executed on the live $50 ladder and
+    # the call returned True unconditionally. That proof was built in response to
+    # the 2026-09-16 incident (a swallowed Square press PLAYED the card instead of
+    # discarding it) and it was dead on the one path the incident happened on.
+    # Only spend_and_discard, the crawl helper, ever passed it.
+    #
+    # The `look` check above could not catch it: the call DID pass look=. A guard
+    # that checks one keyword says nothing about the other.
+    if _name == "select_and_discard":
+        check("discards_look" in _kw,
+              f"select_and_discard at orchestrator.py:{_line} passes discards_look= "
+              f"so its confirm_discard is PROVEN against the counter rather than "
+              f"assumed (keywords: {sorted(_kw) or 'none'})")
 check(not _discarded,
       f"no spend call throws its verdict away — a refusal that nobody reads is a blind "
       f"press with extra steps (bare-statement calls: {_discarded})")
@@ -411,7 +427,13 @@ fs = FakeScreen(0)
 old = ic.press
 ic.press = fs.press
 try:
-    ok = ic.select_and_discard(2, look=fs.look)
+    # A SEAM, because these two checks are about the CURSOR reaching slot 2, not
+    # about the discard proof. select_and_discard now returns False when nothing
+    # verified the discard -- previously it returned True with no seam, which is
+    # what let the production redraw path believe a proof that never ran.
+    _dl = iter([2, 1, 1, 1, 1, 1])
+    ok = ic.select_and_discard(2, look=fs.look,
+                               discards_look=lambda: next(_dl, 1))
 finally:
     ic.press = old
 check(ok is True and fs.cur == 2 and "confirm_discard" in fs.sent,
@@ -421,7 +443,13 @@ fs = FakeScreen(0, drop=(1,))
 old = ic.press
 ic.press = fs.press
 try:
-    ok = ic.select_and_discard(2, look=fs.look)
+    # A SEAM, because these two checks are about the CURSOR reaching slot 2, not
+    # about the discard proof. select_and_discard now returns False when nothing
+    # verified the discard -- previously it returned True with no seam, which is
+    # what let the production redraw path believe a proof that never ran.
+    _dl = iter([2, 1, 1, 1, 1, 1])
+    ok = ic.select_and_discard(2, look=fs.look,
+                               discards_look=lambda: next(_dl, 1))
 finally:
     ic.press = old
 check(ok is True and fs.cur == 2,
