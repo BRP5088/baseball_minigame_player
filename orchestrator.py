@@ -6725,15 +6725,23 @@ def play_one_turn(state_json: dict, batters_used: int):
       - played: True if a normal play was made, False if the redraw
         (discard) branch was taken instead.
 
-        N27: `played=False` means "took the discard branch" — it does NOT
-        mean "no turn was consumed". An earlier version of this docstring
-        claimed a redraw "doesn't use up a turn"; that contradicts
-        input_controller.select_and_discard(), which ends in
-        confirm_play() and whose own comment records that being confirmed
-        live. So `turns_this_half` undercounts on redraw turns. That is
-        inert today because no decision function reads batters_used, but
-        it would be a live bug if that heuristic is ever re-enabled —
-        see HEURISTICS.md §5.
+        N27 IS WITHDRAWN (2026-09-16). It said `played=False` "does NOT
+        mean no turn was consumed", on the grounds that
+        input_controller.select_and_discard() ended in confirm_play().
+        IT NO LONGER DOES, AND THAT PRESS WAS A BUG.
+
+        A DISCARD DOES NOT USE THE TURN. Confirmed by the user, and by the
+        ROUND pips: two discards in a row left them at five of five while
+        the DISCARDS pips went from two lit to none. The same match took 2
+        DISCARDS AND 5 PLAYS in a 5-round half, which is impossible if a
+        discard costs a round.
+
+        The Triangle press that made it look otherwise committed nothing
+        useful and, whenever the Square press was dropped, played whatever
+        was still LIFTED -- it pitched the worst card in a hand at the
+        opponent on 2026-09-16. Removed from both discard paths. So
+        `turns_this_half` does NOT undercount on redraw turns. See
+        RULES.md.
       - matchup_info: dict describing what we played, for match_log.jsonl
         (None on a discard — we don't know the replacement card's stats
         without an extra vision read, so those turns aren't logged).

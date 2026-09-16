@@ -1,3 +1,12 @@
+# STALE 2026-09-16 -- DO NOT APPLY WITHOUT RE-DERIVING.
+# This patch reasons from "input_controller.select_and_discard ends in
+# confirm_play". IT NO LONGER DOES. That Triangle press was REMOVED: a discard
+# does not use the turn, and the press played whatever was still lifted whenever
+# the Square press was dropped -- on 2026-09-16 it pitched the worst card in a
+# hand at the opponent. See RULES.md and input_controller.select_and_discard.
+#
+# (Separately: this file does not parse at HEAD and did not before this banner --
+# there are missing newlines around line 934. It cannot be applied as it stands.)
 """patch62: the discard decision reads the SCOREBOARD's own DISCARDS dots.THE DEFECT, VERIFIED ON FRAMES 2026-09-08. The match loop decides "discard"
 from vision's `discards_left` (orchestrator.play_one_turn), and vision's number
 is not the game's. In the smoke run (overnight/smoke_cycle_20260908_2016.log)

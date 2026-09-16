@@ -1,3 +1,5 @@
+> **CORRECTION 2026-09-16:** anything below about `select_and_discard` ending in `confirm_play` (Triangle) is STALE. That press has been REMOVED -- a discard does not use the turn, and Triangle there played whatever was still lifted whenever the Square press was dropped. See RULES.md and input_controller.select_and_discard.
+
 # QA Findings — Round 6 (closing verification)
 
 Date: 2026-08-25
