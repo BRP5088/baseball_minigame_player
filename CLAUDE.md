@@ -812,8 +812,36 @@ when the code outgrows it, which is 10.1's family pointed at prose.
 **What survives, and it is the part that matters.** 99/1 is a TIE-BREAK, not a
 trade: powers are integers, so one point of power is 0.99 against a widest-possible
 speed gap of about 0.06 — speed decides between equal-power plays and nothing else.
-The engine still has **no notion of tie risk at all**, which is a real gap given
-that landing exactly on the pitcher's power is the worst place to be. And the 79%
+
+**AND "NO NOTION OF TIE RISK" IS NOT A GAP. MEASURED 2026-09-17, and this file
+called it "a real gap" until then.** Ties are common and they are worth something:
+over 100,000 simulated at-bats **17.2% are ties**, and the coin is worth **0.30
+runs/half** of spread -- 1.6362 if every tie were lost against 1.9399 if every one
+were won, on a baseline of 1.7917. So the question was live, not academic.
+
+It is still UNACTIONABLE, and the A/B says so at every weight. Take
+best_batting_play's OWN scorer and subtract `tie_w x P(the defence shows exactly
+this power)` -- one change, nothing else touched, 12,000 halves x 3 seeds:
+
+    tie_w  0.0          1.7903   +0.0000   <- control: must equal shipped, and does
+    tie_w  0.05 .. 10   1.7903   +0.0000   <- ZERO decisions changed at any of them
+    tie_w 25.0          1.6588   -0.1315   <- the first weight that changes anything
+
+**Any weight small enough to preserve power changes no decision; the first weight
+large enough to change one costs 0.13 runs/half.** The mechanism is one sentence: a
+TIE IS A 50% WIN, and the only way off a tie at power P is to play P-1 or lower,
+which converts a coin flip against those same cards into a certain loss. Do not
+rebuild this; it is closed.
+
+**THE FIRST VERSION OF THE EXPERIMENT WAS WRONG AND THE SWEEP CAUGHT IT.** It scored
+plays on power and tie risk alone, measured -0.22 runs/half, and looked like a clean
+refutation. But every weight returned the IDENTICAL number, tie_w = 0 included --
+and a knob that changes nothing is not measuring what its name says. That variant
+had dropped the SPEED term, so it never attached a speed boost: two changes, one
+attribution (10.7). The fix is the control -- tie_w = 0 must reproduce the shipped
+number exactly.
+
+And the 79%
 win rate that justifies "always attach a swing boost" WAS measured in a model where
 a speed boost does nothing by construction, so it shows swing-boost beats NOTHING
 and has never compared swing against speed. Use the 2026-09-13 role-split figures
