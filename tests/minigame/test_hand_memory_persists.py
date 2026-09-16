@@ -42,6 +42,30 @@ o.HAND_MEMORY_FILE = os.path.join(
     os.path.dirname(REAL), f"hand_memory_test_{os.getpid()}.json")
 
 
+_real_save = o._save_hand_memory
+
+
+def _save_ignoring_test_flag(phase=None):
+    """Checks 1-12 are ABOUT the file, so they must be able to write one even
+    though this process is a test. Check 13 restores the real function and
+    asserts the guard.
+
+    IT IS NOT ENOUGH TO CLEAR THE ENV VAR. _running_under_test() also returns
+    True when sys.argv[0] is a test_*.py file, which this is -- so the first
+    version of this wrapper lifted nothing and check 6 died on a missing file.
+    Stub the predicate itself.
+    """
+    real_pred = o._running_under_test
+    o._running_under_test = lambda: False
+    try:
+        return _real_save(phase)
+    finally:
+        o._running_under_test = real_pred
+
+
+o._save_hand_memory = _save_ignoring_test_flag
+
+
 def fresh_process():
     """Simulate a new crawl process: empty dict, load not yet attempted."""
     o._hand_memory.clear()
@@ -203,6 +227,27 @@ try:
              stamp_from_real_hand in ("batting", "pitching"),
              f"phase written by local_hand_cards was {stamp_from_real_hand!r} — "
              f"the half guard cannot fire")
+
+    # 13. AN OFFLINE READ MUST NOT WRITE THE RIG'S FILE. Reproduced for real:
+    #     tools/base_timing.py scanned a 2026-09-09 recording and hand_memory.json
+    #     came back holding that recording's cards, ready for the next crawl to
+    #     load. Same shape as the compass/view caches the offline suite was
+    #     writing until it was stopped.
+    #
+    #     NOTE this whole file runs under BASEBALL_TEST_RUN, so the checks above
+    #     had to write via _save_hand_memory with the guard temporarily lifted.
+    #     That is why this check exists at the bottom rather than being implied.
+    o._save_hand_memory = _real_save          # the guard, unpatched
+    fresh_process()
+    try:
+        os.remove(o.HAND_MEMORY_FILE)
+    except OSError:
+        pass
+    o._hand_memory[1] = {"power": "8", "secondary": 1, "art": None}
+    o._save_hand_memory("batting")
+    want("a test/offline process does not write the memory file",
+         not os.path.exists(o.HAND_MEMORY_FILE),
+         "an offline read wrote the rig's hand_memory.json")
 
 finally:
     try:

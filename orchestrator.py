@@ -4437,6 +4437,20 @@ def _save_hand_memory(phase=None):
     `art` is dropped: it is a numpy vector, it is diagnostics-only by its own comment,
     and the carry-forward decision is forget_hand_slot(), not similarity.
     """
+    # AN OFFLINE READ MUST NOT WRITE THE RIG'S FILE. Demonstrated the hour this
+    # landed: tools/base_timing.py scanned a 2026-09-09 RECORDING, every frame
+    # went through local_hand_cards, and hand_memory.json came back holding that
+    # recording's cards -- ready for the next crawl process to load. It is the
+    # same shape CLAUDE.md records for known_ban_roster_learned.json ("an offline
+    # run could poison the roster for good") and for compass_scale.json /
+    # view_bounds.json, which the offline suite was writing until it was stopped.
+    #
+    # Corroboration would probably have refused it, and "probably" is not the
+    # standard for a file whose whole job is to answer for a card nothing can
+    # see. Reads are unaffected: an analysis tool still gets the in-process
+    # memory it builds itself.
+    if _running_under_test():
+        return
     try:
         if not _hand_memory:
             if os.path.exists(HAND_MEMORY_FILE):

@@ -323,4 +323,10 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # SET INSIDE __main__, NEVER AT IMPORT. tests/harness/test_no_import_time_
+    # test_run_flag.py AST-scans tools/ for exactly that, because an import-time
+    # flag once silently disabled stick injection inside a LIVE harness. Here it
+    # marks this process as offline analysis, so the readers do not write the
+    # rig's hand_memory.json with a recording's cards.
+    os.environ["BASEBALL_TEST_RUN"] = "1"
     raise SystemExit(main(sys.argv))
