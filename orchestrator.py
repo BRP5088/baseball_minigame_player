@@ -4456,6 +4456,21 @@ def _save_hand_memory(phase=None):
             if os.path.exists(HAND_MEMORY_FILE):
                 os.remove(HAND_MEMORY_FILE)
             return
+        # A PHASE-LESS SAVE MUST NOT ERASE THE STAMP THE FILE ALREADY CARRIES.
+        # forget_hand_slot() calls this with no phase on EVERY play and EVERY
+        # discard, so the stamp was rewritten to null the first time a card was
+        # spent -- and the load guard below accepts a null stamp for either half.
+        # One play therefore defeated the half boundary for the rest of the match.
+        # Seen on the live rig 2026-09-16: hand_memory.json on disk read
+        # {"phase": null, "slots": {"0": ..., "3": ...}} after a completed match.
+        # A save that does not KNOW the phase has no business overwriting one that
+        # does; it is destroying information it was never given.
+        if phase is None:
+            try:
+                with open(HAND_MEMORY_FILE) as _fh:
+                    phase = (json.load(_fh) or {}).get("phase")
+            except Exception:
+                phase = None
         payload = {"phase": phase,
                    "slots": {str(k): {"power": str(v["power"]),
                                       "secondary": (None if v.get("secondary") is None
@@ -4484,7 +4499,16 @@ def _load_hand_memory(rows, phase=None):
     except Exception:
         return 0
     # A NEW HALF DEALS A FRESH FIVE (section 4), so a phase mismatch is decisive.
-    if phase is not None and payload.get("phase") not in (None, phase):
+    #
+    # AND AN UNSTAMPED FILE IS NOT A MATCHING ONE. This read `not in (None, phase)`,
+    # so a null stamp was accepted for BOTH halves -- which is precisely the state
+    # forget_hand_slot used to leave the file in after any play. The two defects
+    # composed: one erased the stamp, the other waved the erased stamp through.
+    # Belt and braces on purpose, because they fail independently: the save above
+    # stops the erasure, and this stops the HARM if anything else ever erases it.
+    # A batting slot carrying secondary 3 -- a batter's SPEED, which the role census
+    # says no pitcher has -- served on a pitching turn is the failure being bought off.
+    if phase is not None and payload.get("phase") != phase:
         print(f"  [local] hand memory on disk is from the {payload.get('phase')} half "
               f"and this is {phase} -- discarding it")
         return 0
@@ -6853,7 +6877,18 @@ def play_one_turn(state_json: dict, batters_used: int):
         # Measured over 200k hands. Keeping
         # the old best as a floor makes the new best max(old_best, draw)
         # instead of max(second_best, draw).
-        _weakest = min(players, key=lambda ip: ip[1].power)
+        # TIE-BREAK ON secondary, for the same reason choose_bans does (fdd1737).
+        # `min` on power alone returns the FIRST minimum, and `players` is built in
+        # hand-index order, so a power tie was resolved by SLOT ORDER -- with a 4/3
+        # and a 4/1 in hand it threw whichever sat lower, burning one of the half's
+        # two discards on the BETTER card half the time. Reachable on 2.8% of 285
+        # real hand-labelled hands. The log line "discarding the weakest (power 4)"
+        # is true of BOTH candidates, so nothing on disk distinguished the cases.
+        #
+        # No role plumbing needed: secondary is SPEED on a batter (bases run) and
+        # FIELDING on a pitcher (subtracts runner movement), higher is better in
+        # both, so ascending (power, secondary) is worst-first either way.
+        _weakest = min(players, key=lambda ip: (ip[1].power, ip[1].secondary))
         player_idx = _weakest[0]
         print(f"Decision: best card is weak (power {decision.player_card.power}) and "
               f"{state.redraws_left} discard(s) left — discarding the weakest "
