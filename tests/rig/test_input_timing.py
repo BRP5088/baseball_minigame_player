@@ -470,9 +470,15 @@ check(sd.count("move_right") == 2,
 check(sd.count("confirm_discard") == 1,
       f"select_and_discard sent {sd.count('confirm_discard')} confirm_discard, "
       f"expected exactly 1 — the card is being PLAYED, not discarded: {sd}")
-check(all(sd.index("confirm_discard") < i
-          for i, a in enumerate(sd) if a == "confirm_play"),
-      f"a confirm_play precedes the confirm_discard: {sd}")
+# AND THE HEADER IS NOW LITERALLY TRUE. It has said "must NOT confirm a play"
+# since it was written, and a 2026-08-26 QA pass noted the assertion under it was
+# weaker -- but the press itself stayed for another three weeks. On 2026-09-16 it
+# played the worst card in a pitching hand at the opponent when the Square press
+# was dropped: ROUND pips 4 -> 5 with discards_left stuck at 2. A discard does not
+# use the turn, so Triangle has no business here at all.
+check("confirm_play" not in sd,
+      f"select_and_discard must NEVER send confirm_play -- it plays whatever is "
+      f"lifted whenever confirm_discard is swallowed: {sd}")
 
 # --- select_bans_and_start_full: THE one that bans a physical card -------
 # Grid is (absolute_row, col, card). Column navigation must move RIGHT by `col`

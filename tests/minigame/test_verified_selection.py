@@ -445,9 +445,18 @@ try:
     ic.select_and_discard(3)
 finally:
     ic.press = old
+# THE TRIANGLE PRESS IS GONE, AND THIS CHECK USED TO PIN IT. A discard does NOT
+# use the turn -- confirmed by the user 2026-09-16, and that match's own
+# arithmetic says so: 2 DISCARDS AND 5 PLAYS in a 5-round half. confirm_play
+# after a discard committed nothing useful, and whenever the Square press was
+# dropped it committed whatever was still LIFTED: on 2026-09-16 it pitched the
+# worst card in the hand at the opponent, ROUND pips 4 -> 5 with discards_left
+# stuck at 2.
 check(sent == ["move_left"] * 4 + ["move_right"] * 3
-      + ["select_card", "confirm_discard", "confirm_play"],
-      f"blind discard unchanged: {sent}")
+      + ["select_card", "confirm_discard"],
+      f"blind discard homes, selects, discards -- and does NOT press Triangle: {sent}")
+check("confirm_play" not in sent,
+      f"a discard must never send confirm_play: {sent}")
 
 
 # =========================================================================

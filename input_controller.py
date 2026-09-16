@@ -1085,11 +1085,24 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     """
     Navigate to a card and discard it for a replacement.
 
-    Confirmed live (2026-08-23): discarding isn't a single action — after
-    confirm_discard, the game deals a replacement card and auto-lifts it
-    with its own "PLAY" prompt, which still needs confirm_play to
-    actually commit it as this turn's play. Skipping that second press
-    leaves the game stuck waiting on a discard-and-forget script.
+    A DISCARD DOES NOT USE THE TURN. It swaps one card for a new one and the
+    player still plays normally afterwards. Confirmed by the user 2026-09-16,
+    and the arithmetic of that same match says the same thing: the batting half
+    took 2 DISCARDS AND 5 PLAYS, and a half is only 5 rounds -- so five plays
+    are impossible if a discard costs one.
+
+    THIS FUNCTION THEREFORE NO LONGER PRESSES confirm_play, AND THAT PRESS WAS
+    THE BUG. It was here on a claim dated 2026-08-23 that "the game deals a
+    replacement card and auto-lifts it with its own PLAY prompt, which still
+    needs confirm_play to actually commit it as this turn's play". That claim is
+    withdrawn. Triangle after a discard commits nothing useful and, when the
+    Square press is DROPPED -- which this console does -- it commits the card
+    that is still lifted: on 2026-09-16 it pitched the worst card in the hand
+    (a 5/0) at the opponent, who hit it. The ROUND pips went 4 -> 5 while
+    discards_left sat at 2, which is the whole story in two numbers.
+
+    CLAUDE.md's N27 ("a redraw does not mean no turn was consumed") rested on
+    the same withdrawn claim and is corrected with it.
 
     HOMES FIRST, always. Everywhere else the remembered cursor position is a
     reasonable optimisation, but a discard is irreversible and lands on the
@@ -1105,11 +1118,13 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
         _move_cursor_to(card_index)
         press("select_card")
         press("confirm_discard")
-        # The replacement card is dealt into this slot and auto-lifted, so the
-        # cursor is wherever the game put it — not necessarily where we left it.
-        # Drop the belief rather than guess; the next navigation re-homes.
+        # The replacement card is dealt into this slot, so the cursor is wherever
+        # the game put it — not necessarily where we left it. Drop the belief
+        # rather than guess; the next navigation re-homes.
+        #
+        # NO confirm_play. See the docstring: a discard does not use the turn, and
+        # Triangle here plays whatever is still lifted whenever Square is dropped.
         invalidate_cursor()
-        press("confirm_play")
         return True
 
     # VERIFIED. This function's own docstring records a discard landing on the
@@ -1173,16 +1188,16 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
             invalidate_cursor()
             return False
     elif discards_look is not None:
-        # THE COUNTER COULD NOT BE READ AT ALL. That is NOT the same as "it did not
-        # drop", and the two want opposite actions: a landed discard left without
-        # confirm_play leaves the game stuck on its own PLAY prompt (this function's
-        # original docstring records that). So commit, and say plainly that it was
-        # unverified rather than letting it read as a checked discard.
+        # THE COUNTER COULD NOT BE READ. Nothing irreversible follows either way now
+        # that confirm_play is gone, so there is no decision to make here -- only a
+        # verdict to report honestly, because an unverified discard must not read
+        # like a checked one (10.1).
         print("  [discard] discards_left could not be read, so the discard is "
-              "UNVERIFIED — committing anyway, because a landed discard left "
-              "uncommitted strands the game on its PLAY prompt.")
+              "UNVERIFIED — the card may or may not have been thrown. The caller "
+              "should re-read the hand rather than assume.")
+    # NO confirm_play. A discard does not use the turn, and Triangle here is what
+    # played the card on 2026-09-16 when the Square press was swallowed.
     invalidate_cursor()
-    press("confirm_play")
     return True
 
 

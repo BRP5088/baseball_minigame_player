@@ -798,7 +798,16 @@ flags speed effects as "not confirmed rules — modeled as the simplest reasonab
 guess". **So the 79% win rate that justifies "always attach a swing boost" was
 measured in a model where a speed boost does nothing by construction.** It shows
 swing-boost beats NOTHING; it has never compared swing against speed.
-- A match is 5 rounds PER HALF (see the match shape above) and allows 2 discards.
+- A match is 5 rounds PER HALF (see the match shape above) and allows 2 discards
+  PER HALF, so four across a match (measured 2026-09-16: the batting half ended
+  at 0 and the pitching half opened at 2).
+- **A DISCARD DOES NOT CONSUME A TURN, and N27 said it did.** The user confirmed
+  it 2026-09-16, and that match's own arithmetic says so: 2 DISCARDS AND 5 PLAYS
+  in a 5-round half. N27's claim rested entirely on select_and_discard ending in
+  confirm_play -- a press that is now REMOVED, because it committed nothing
+  useful and, whenever the Square press was dropped, played whatever was still
+  lifted. It pitched the worst card in a hand at the opponent that day. See
+  RULES.md.
 - **You cannot pause an active match.** Mid-match OPTIONS opens a "Give up?"
   dialog (NO = circle, YES = cross), never the pause menu — so Load Last Save
   and the money readout are unreachable until the match ends.

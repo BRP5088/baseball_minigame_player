@@ -84,9 +84,14 @@ try:
     g2 = Game(discard_lands=True)
     ic.press = g2.press
     ok = ic.select_and_discard(1, look=g2.look, discards_look=g2.discards_look)
-    want("a landed discard is committed", ok is True, str(ok))
-    want("confirm_play IS sent", "confirm_play" in g2.sent, str(g2.sent))
+    want("a landed discard is reported ok", ok is True, str(ok))
     want("the counter fell", g2.discards == 1, str(g2.discards))
+    # A DISCARD DOES NOT USE THE TURN (confirmed by the user 2026-09-16, and the
+    # same match took 2 discards + 5 PLAYS in a 5-round half). So Triangle must
+    # never be pressed here at all -- it is what played the card when Square was
+    # swallowed.
+    want("confirm_play is NEVER sent by a discard", "confirm_play" not in g2.sent,
+         f"sent={g2.sent} -- Triangle after a discard plays whatever is lifted")
 
     # 3. AN UNREADABLE COUNTER IS NOT THE SAME AS "IT DID NOT DROP", and the two
     #    want opposite actions: a landed discard left uncommitted strands the game
@@ -102,8 +107,9 @@ try:
     with contextlib.redirect_stdout(_cap):
         ok = ic.select_and_discard(1, look=g3.look, discards_look=g3.discards_look)
     _out = _cap.getvalue()
-    want("an unreadable counter still commits", ok is True, str(ok))
-    want("...and confirm_play is sent", "confirm_play" in g3.sent, str(g3.sent))
+    want("an unreadable counter still returns ok", ok is True, str(ok))
+    want("...and confirm_play is still never sent", "confirm_play" not in g3.sent,
+         str(g3.sent))
     want("...and it says the discard was UNVERIFIED", "UNVERIFIED" in _out,
          f"nothing warned; the caller cannot tell this from a checked discard: {_out!r}")
 
@@ -112,7 +118,19 @@ try:
     g4 = Game(discard_lands=False)
     ic.press = g4.press
     ok = ic.select_and_discard(1, look=g4.look)
-    want("with no counter seam the behaviour is unchanged", ok is True, str(ok))
+    want("with no counter seam it still returns ok", ok is True, str(ok))
+    want("...and STILL never presses confirm_play", "confirm_play" not in g4.sent,
+         f"sent={g4.sent}")
+
+    # 5. THE BLIND PATH MUST NOT PRESS IT EITHER. It is the one a caller with no
+    #    screen reaches, and it carried the same Triangle press.
+    g5 = Game(discard_lands=True)
+    ic.press = g5.press
+    ok = ic.select_and_discard(1)
+    want("the blind path never presses confirm_play either",
+         "confirm_play" not in g5.sent, f"sent={g5.sent}")
+    want("...but it does press confirm_discard", "confirm_discard" in g5.sent,
+         f"sent={g5.sent}")
 finally:
     ic.press = _real_press
     _t.sleep = _real_sleep

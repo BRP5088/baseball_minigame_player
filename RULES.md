@@ -27,6 +27,12 @@ inning one and pitch in inning two; you never bat twice.
 **The scoreboard is `[inning1, inning2, TOTAL]`.** The third box is the total,
 not a third inning. Never sum it; take `[-1]`.
 
+**A DISCARD DOES NOT USE THE TURN.** It swaps one card for a new one and the
+player still plays normally afterwards. *Confirmed by the user, 2026-09-16*, and
+the arithmetic of that match agrees: the batting half took **2 discards AND 5
+plays**, and a half is only 5 rounds -- five plays are impossible if a discard
+costs one.
+
 **Discards are 2 PER HALF, not 2 per match.** *Measured 2026-09-16:* the batting
 half ended with `discards_left` 0 and the pitching half opened at 2. So a match
 carries four discards in total, not two.
