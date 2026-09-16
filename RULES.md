@@ -97,23 +97,28 @@ the batter's speed. *Confirmed by the user, 2026-09-16*, and it explains an
 at-bat the same day: our 9 against a 9, the batter stopped at first, and the
 runners on second and third did not move at all.
 
-**RUNNERS MOVE ONLY ON A SUCCESSFUL HIT.** An out moves nobody -- not the
-batter, not the runners already on base. *From the user's sources, 2026-09-16
-(Steam discussion + a video guide): "Only successful hits allow the batter and
-existing runners to move across the bases based on their speed and card
-values."*
+**A LOSING AT-BAT STILL ADVANCES THE RUNNERS ALREADY ON BASE, AND FIELDING IS
+WHAT STOPS IT.** Measured 2026-09-16 as a two-condition experiment, one at-bat
+each, both OUTS, differing only in whether a fielding boost was attached:
 
-**CONFIRMED HERE THE SAME DAY.** We pitched an 8 with a fielding boost against a
-batter of 4 -- margin -4, an out -- with a runner on first. Over 512 samples at
-20 Hz the diamond did not change once: `FLIPS: none`.
+    our 8 + FIELDING PLAY +1  vs their 4   margin -4  OUT   runner did NOT move
+    our 9, NO tactics         vs their 7   margin -2  OUT   runner first -> second
 
-**THIS FILE SAID THE OPPOSITE UNTIL NOW**, as "a losing at-bat can still advance
-runners; an out is not nothing happens". That was carried over from CLAUDE.md,
-where it had been offered as the explanation for outs having a median reveal of
-4.2 s and a MAXIMUM of 14.9 s (n=160). **That explanation is now dead and the
-spread is unexplained again** -- an out animates the pitch, the swing, the out,
-the played card being discarded and the base tracker resetting, and something in
-that list varies by ten seconds.
+The runner's speed was 1 and it advanced exactly 1 base. The batter reached no
+base in either case (first was empty afterwards), so neither was a hit misread
+as an out.
+
+**A SOURCE SAID THE OPPOSITE AND THE MEASUREMENT BEAT IT.** A Steam discussion
+and a video guide, supplied 2026-09-16, both say "only successful hits allow the
+batter and existing runners to move across the bases". That was written into
+this file and into CLAUDE.md, and the second at-bat above disproved it within
+the hour. The first at-bat had been flagged as unable to separate "runners only
+move on a hit" from "the boost ate the movement" -- and the rule was written
+anyway, before the experiment that separated them had been run. n=1 per arm, so
+the DIRECTION is established and the rate is not.
+
+**WHAT AN OUT DOES NOT DO** is advance the batter: they are out, and no base
+gains an occupant.
 
 **Since the maximum effective batter power is 9 + 2 = 11**, a pitcher playing a
 **9 cannot concede a home run** (margin 2) while one playing an **8 can**.

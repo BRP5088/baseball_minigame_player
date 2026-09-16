@@ -767,12 +767,20 @@ noted; the rest is the user's reading, not this project's measurement.
   stopped at first was read as "the batter always goes to first", when it was a
   5-v-5 tie. Two data points, one of them a special case, and a rule was written
   from them.
-- **WITHDRAWN 2026-09-16: "A LOSING AT-BAT CAN STILL ADVANCE RUNNERS" IS FALSE.**
-  The user's sources are explicit that only a successful hit moves anyone, and it
-  was confirmed live the same day -- an out with a runner on first moved nothing
-  across 512 samples at 20 Hz. **So the animation spread is UNEXPLAINED again**:
-  outs have a median reveal of 4.2 s and a MAXIMUM of 14.9 s (n=160), and
-  baserunning is no longer available as the reason. See RULES.md.
+- **A LOSING AT-BAT CAN STILL ADVANCE RUNNERS, AND FIELDING IS WHAT STOPS IT.**
+  Re-established 2026-09-16 by a two-condition experiment -- two OUTS differing
+  only in an attached fielding boost: with it the runner did not move, without it
+  the runner went first -> second, exactly its speed of 1. So this stays as the
+  explanation for outs having a median reveal of 4.2 s and a MAXIMUM of 14.9 s
+  (n=160).
+
+  **IT WAS WITHDRAWN FOR AN HOUR ON A SOURCE AND THE MEASUREMENT PUT IT BACK.**
+  Two community sources say only a hit moves anyone; the second at-bat disproved
+  that directly. The first at-bat had ALREADY been flagged here as unable to
+  separate the two explanations, and the rule was rewritten anyway before the
+  experiment that separates them had been run. 10.2's shape in a new place: a
+  plausible account is not evidence, and that includes a plausible account with a
+  citation. See RULES.md.
 - **BLACK PITCHER BUFFS SUBTRACT RUNNER MOVEMENT** — that is what FIELDING does,
   and it is why it only matters with runners on base.
   **This settles `decision_engine.FIELDING_POWER_BUDGET`, whose own comment says
