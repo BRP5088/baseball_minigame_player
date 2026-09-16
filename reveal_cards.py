@@ -30,8 +30,20 @@ import os
 
 # x0, y0, x1, y1 as fractions. Both bands hold a player card and, when one was
 # attached, its tactics card up and to the right.
-ZONE_OURS = (0.44, 0.62, 0.68, 0.92)
-ZONE_THEIRS = (0.48, 0.23, 0.62, 0.50)
+# THE POSITIONS ARE FIXED BY ROLE, NOT BY OWNER, AND THAT IS THE WHOLE POINT.
+# The PITCHER is always at the mound and the BATTER always at home plate -- so
+# while we BAT ours is at home, and while we PITCH ours is at the MOUND. The
+# first version hard-coded the batting case and, on the first pitching turn,
+# confidently labelled our own 7 as "theirs" and their 8 as "ours". The numbers
+# were right and the owners were backwards, which is worse than a misread:
+# margin_from would have taken the sign from the wrong side.
+ZONE_HOME = (0.44, 0.62, 0.68, 0.92)     # the BATTER's card, whoever owns it
+ZONE_MOUND = (0.48, 0.23, 0.62, 0.50)    # the PITCHER's card, whoever owns it
+
+# Kept as aliases so nothing that imported the old names breaks silently -- but
+# they are only correct while BATTING, which is why read_reveal takes a phase.
+ZONE_OURS = ZONE_HOME
+ZONE_THEIRS = ZONE_MOUND
 
 DISC_R = (9, 17)        # the reveal's discs measure 13; the fan's measure 19
 DISC_MIN_REACH = 3.0    # the fan's gate is 6 and rejects every reveal disc
@@ -108,8 +120,13 @@ def _side(img, zone):
     return out
 
 
-def read_reveal(full_frame):
-    """{'ours': {...}, 'theirs': {...}} from a reveal frame.
+def read_reveal(full_frame, phase="batting"):
+    """{'ours', 'theirs', 'batter', 'pitcher'} from a reveal frame.
+
+    `phase` is REQUIRED to name the owners, because only the ROLES have fixed
+    positions. `batter` and `pitcher` are the same two dicts under their
+    role names, for a caller that cares which side of the at-bat a card is on
+    rather than who played it.
 
     THE TACTICS KIND IS NOT READ, and that is a stated gap rather than a silent
     one. Only SWING_BOOST and PITCH_BOOST add power (section 4), so a +1 that is
@@ -119,8 +136,10 @@ def read_reveal(full_frame):
     """
     if full_frame.width < MIN_FRAME_W:
         raise ValueError(f"read_reveal needs the whole frame; got {full_frame.width}px")
-    return {"ours": _side(full_frame, ZONE_OURS),
-            "theirs": _side(full_frame, ZONE_THEIRS)}
+    batter = _side(full_frame, ZONE_HOME)
+    pitcher = _side(full_frame, ZONE_MOUND)
+    ours, theirs = (batter, pitcher) if phase == "batting" else (pitcher, batter)
+    return {"ours": ours, "theirs": theirs, "batter": batter, "pitcher": pitcher}
 
 
 def margin_from(reveal, phase):
@@ -144,5 +163,9 @@ def margin_from(reveal, phase):
     b, wb = eff(t, "theirs")
     if a is None or b is None:
         return None, "; ".join(x for x in (None if a else wa, None if b else wb) if x)
+    # THE SIGN IS ALWAYS FROM THE BATTER'S SIDE (reveal_margin's rule). read_reveal
+    # has already resolved ours/theirs by phase, so this is a plain subtraction
+    # in batting terms and must NOT flip again -- doing both was the bug that
+    # made a pitching margin read backwards twice over.
     m = a - b if phase == "batting" else b - a
     return m, f"{wa} vs {wb}"

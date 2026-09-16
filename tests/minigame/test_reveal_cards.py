@@ -106,5 +106,34 @@ if os.path.exists(FIX):
         raised = True
     want("a too-small frame raises rather than answering", raised)
 
+# THE OWNERS SWAP BY PHASE, and getting that wrong is worse than a misread: the
+# numbers come out right and the SIDES come out backwards, so margin_from takes
+# the sign from the wrong card. Live on 2026-09-16, the first pitching turn read
+# our own 7 as "theirs" and their 8 as "ours" -- the positions are fixed by ROLE
+# (pitcher at the mound, batter at home), not by owner.
+PITCH_FIX = os.path.join(_ROOT, "test_fixtures/reveal_banner/reveal_pitching.jpg")
+want("the pitching fixture is present", os.path.exists(PITCH_FIX), PITCH_FIX)
+if os.path.exists(PITCH_FIX):
+    pim = Image.open(PITCH_FIX)
+    # GROUND TRUTH: we pitched a 7/0 and the opponent batted an 8. It was a hit
+    # (margin 1) and their batter reached first -- observed on the diamond.
+    pr = rc.read_reveal(pim, phase="pitching")
+    want("while pitching, OURS is the card at the MOUND", pr["ours"]["power"] == 7,
+         f"we pitched a 7; got {pr['ours']['power']}")
+    want("while pitching, THEIRS is the card at HOME", pr["theirs"]["power"] == 8,
+         f"they batted an 8; got {pr['theirs']['power']}")
+    want("the role names are independent of owner",
+         pr["pitcher"]["power"] == 7 and pr["batter"]["power"] == 8, str(pr))
+    pm, pw = rc.margin_from(pr, "pitching")
+    want("the margin is the batter's, and it is 1 (a hit, not a home run)",
+         pm == 1, f"{pm} / {pw}")
+    want("and 1 is under the automatic home-run margin", pm < 3)
+
+    # THE SAME FRAME READ AS IF WE WERE BATTING MUST SWAP THE OWNERS. Without
+    # this a reader that ignored `phase` entirely would pass everything above.
+    br = rc.read_reveal(pim, phase="batting")
+    want("reading the same frame as batting swaps ours and theirs",
+         br["ours"]["power"] == 8 and br["theirs"]["power"] == 7, str(br))
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
