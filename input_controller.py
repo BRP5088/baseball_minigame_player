@@ -114,6 +114,10 @@ CHIAKI_WINDOW_PROCESS_NAME = "chiaki"  # matches macOS process name, confirmed v
 # the value that ran clean for weeks, rather than crawling up in 0.05 steps.
 ACTION_DELAY = 0.25
 # The fast default, kept so an abandoned backoff can restore it.
+# How many polls the discards counter gets to fall after confirm_discard. Mirrors
+# MONEY_READ_TRIES' reasoning: every attempt is the same conservative reader, so more
+# tries can only turn a refusal into an answer and invent no confidence.
+DISCARD_CONFIRM_TRIES = 5
 DEFAULT_ACTION_DELAY = 0.25
 
 
@@ -1077,7 +1081,7 @@ def _deselect_verified(target, look):
     return False, sel
 
 
-def select_and_discard(card_index: int, look=None):
+def select_and_discard(card_index: int, look=None, discards_look=None):
     """
     Navigate to a card and discard it for a replacement.
 
@@ -1121,10 +1125,62 @@ def select_and_discard(card_index: int, look=None):
     if not ok:
         invalidate_cursor()
         return False
+    # THE DISCARD MUST BE PROVEN BEFORE confirm_play, AND IT WAS NOT.
+    #
+    # This block used to read: press confirm_discard, then "there is nothing left to
+    # verify -- the choice was made at confirm_discard", then press confirm_play.
+    # That is false on this console, which drops presses. If confirm_discard is
+    # swallowed the card is still merely SELECTED, and confirm_play then PLAYS IT.
+    #
+    # Reproduced live 2026-09-16, and the evidence was a counter nothing was reading:
+    # discards_left was 2 before and 2 after, while the ROUND pips went 4 -> 5 and the
+    # diamond changed. The worst card in the hand (a 5/0) was pitched at the opponent
+    # because a Square press went missing. The PLAY path was hardened against exactly
+    # this shape; the discard path kept an unverified irreversible press in the middle.
+    #
+    # `discards_look` is the seam: a callable returning discards_left, or None. It is
+    # injected rather than imported so input_controller never has to import
+    # orchestrator back, and so the offline suite can drive it.
+    before = None
+    if discards_look is not None:
+        try:
+            before = discards_look()
+        except Exception:
+            before = None
     press("confirm_discard")
-    # Past this point the game deals the replacement and auto-lifts it with its own
-    # PLAY prompt; confirm_play commits THAT card as this turn's play. There is
-    # nothing left to verify -- the choice was made at confirm_discard.
+    if discards_look is not None and before is not None:
+        # MORE TRIES CAN ONLY TURN A REFUSAL INTO AN ANSWER -- the same reasoning
+        # MONEY_READ_TRIES carries: every attempt is the same conservative reader, so
+        # retrying invents no confidence, it only waits out a counter that is still
+        # animating.
+        dropped = False
+        for _ in range(DISCARD_CONFIRM_TRIES):
+            time.sleep(ACTION_DELAY)
+            try:
+                now = discards_look()
+            except Exception:
+                now = None
+            if now is not None and now < before:
+                dropped = True
+                break
+        if not dropped:
+            # WE KNOW THE DISCARD DID NOT REGISTER. Pressing confirm_play here is the
+            # bug: it plays the card. Refusing leaves the card lifted and nothing
+            # committed, which the caller can re-read and recover from.
+            print(f"  [discard] confirm_discard did not register — discards_left is "
+                  f"still {before}. REFUSING to press confirm_play, because that would "
+                  f"PLAY slot {card_index} instead of discarding it.")
+            invalidate_cursor()
+            return False
+    elif discards_look is not None:
+        # THE COUNTER COULD NOT BE READ AT ALL. That is NOT the same as "it did not
+        # drop", and the two want opposite actions: a landed discard left without
+        # confirm_play leaves the game stuck on its own PLAY prompt (this function's
+        # original docstring records that). So commit, and say plainly that it was
+        # unverified rather than letting it read as a checked discard.
+        print("  [discard] discards_left could not be read, so the discard is "
+              "UNVERIFIED — committing anyway, because a landed discard left "
+              "uncommitted strands the game on its PLAY prompt.")
     invalidate_cursor()
     press("confirm_play")
     return True

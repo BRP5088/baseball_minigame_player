@@ -43,8 +43,9 @@ def fake_play(card_index, tactics_index=None, look=None):
     return True
 
 
-def fake_discard(card_index, look=None):
-    calls.append({"fn": "discard", "card": card_index, "look": look})
+def fake_discard(card_index, look=None, discards_look=None):
+    calls.append({"fn": "discard", "card": card_index, "look": look,
+                  "discards_look": discards_look})
     return True
 
 
@@ -79,6 +80,11 @@ try:
          str(o._hand_memory))
     want("the discard went through the VERIFIED path",
          calls[-1]["look"] is o.hand_cursor_look, str(calls[-1]))
+    # AND THE COUNTER SEAM IS PASSED. Without it select_and_discard cannot prove the
+    # discard registered, and a swallowed confirm_discard makes confirm_play PLAY the
+    # card -- which happened live on 2026-09-16 and pitched the worst card in the hand.
+    want("the discard is given the counter to prove itself against",
+         calls[-1]["discards_look"] is o.discards_look, str(calls[-1]))
 
     # A REFUSAL MUST NOT READ AS A PLAY. select_and_play returns False when the
     # cursor could not be confirmed, and that means NOTHING was committed.

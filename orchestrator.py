@@ -6651,6 +6651,23 @@ def hand_cursor_look():
             len(rows), selected)
 
 
+def discards_look():
+    """discards_left off a fresh frame, or None. Never raises.
+
+    THE SEAM select_and_discard PROVES ITSELF AGAINST. Its confirm_discard press was
+    unverified, and on this console a dropped press means confirm_play PLAYS the card
+    instead of discarding it -- reproduced live 2026-09-16, with this exact counter
+    sitting at 2 before and 2 after while the ROUND pips advanced. Injected rather
+    than imported so input_controller never has to import orchestrator back.
+    """
+    try:
+        import local_state as _ls
+        sb = dict(crop_gameplay_regions(_fast_grab())).get("scoreboard")
+        return None if sb is None else _ls.read_discards_left(sb)
+    except Exception:
+        return None
+
+
 def spend_and_play(player_idx, tactics_idx=None):
     """Forget the slots, then play them through the VERIFIED path. (ok, why).
 
@@ -6688,7 +6705,8 @@ def spend_and_discard(player_idx):
     """
     import input_controller as _ic
     forget_hand_slot(player_idx)
-    ok = _ic.select_and_discard(player_idx, look=hand_cursor_look)
+    ok = _ic.select_and_discard(player_idx, look=hand_cursor_look,
+                                discards_look=discards_look)
     if ok is False:
         return False, "the card could not be verified -- nothing thrown"
     return True, None
