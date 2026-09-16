@@ -3417,6 +3417,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # An invented seconds-per-base would be the same bug wearing a fix's clothes.
     if predicted_bases is not None:
         print(f"  [deal] predicted {predicted_bases} base(s) to animate")
+    reset_deal_frames()
     _dinputs = pop_deal_inputs()
     _di = deal_inputs_summary(_dinputs)
     _bases_lo, _bases_hi = deal_inputs_bounds(_dinputs)
@@ -3523,9 +3524,18 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         if d >= th:
             seen = True
 
+        # ONE grab, TWO consumers. The settle probe already captured the hand every
+        # poll and threw the pixels away; keeping them costs nothing extra and is
+        # what makes a straight-into-occlusion card answerable at all.
+        try:
+            _hand_now = dict(crop_gameplay_regions(_fast_grab())).get("hand")
+        except Exception:
+            _hand_now = None
+        keep_deal_frame(_hand_now, time.time() - start)
+
         if USE_READABLE_HAND_GATE and probe_at is None:
             try:
-                psig = _hand_signature(dict(crop_gameplay_regions(_fast_grab())).get("hand"))
+                psig = _hand_signature(_hand_now)
                 probe_good = probe_good + 1 if (psig is not None and psig == probe_sig) else 0
                 probe_sig = psig
                 if probe_good >= READABLE_POLLS:
@@ -4223,6 +4233,87 @@ REFUSED_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "overnight", "refused_hands")
 
 
+# THE DEAL'S OWN FRAMES.
+#
+# The hail mary recovers an occluded card ONLY if that card appeared UNOCCLUDED in an
+# EARLIER HAND -- _hail_mary_card's own stated limit. A card dealt STRAIGHT INTO
+# occlusion therefore cannot be recovered at all, and one cost a live turn on
+# 2026-09-15: the incoming 8 landed with its disc under the lifted neighbour, scored
+# 0.593, and the best card in the hand was invisible to the engine for the rest of it.
+# Re-reading the saved still offline reproduced it exactly, so it is not a capture
+# moment -- section 4's "a stable misread cannot be fixed by retrying".
+#
+# But a card in FLIGHT is drawn on top of the fan, and wait_for_hand_deal was already
+# looking straight at it: it grabs the hand region every poll for the whole deal and
+# keeps only a mean-abs-delta number. The pixels that would answer this were captured
+# and discarded, every deal, for the life of the project. This keeps them.
+#
+# BOUNDED AND IN MEMORY. A deal is POST_PLAY_DEAL_MAX_WAIT (20 s) at a ~0.15 s poll, so
+# the cap is sized at that ceiling with headroom rather than guessed; nothing is written
+# to disk unless a hand actually comes back with a gap.
+#
+# WHAT THIS DOES NOT CLAIM. Whether a 0.15 s poll is FAST ENOUGH to catch the card
+# in flight is UNMEASURED here -- the archive's 60 fps recordings answer that, and
+# tools/deal_frames.py asks them. If the visible window turns out to be shorter than a
+# poll, the fix is a faster poll during the burst, and this keep is what makes that
+# finding possible rather than pre-empting it.
+# POST_PLAY_DEAL_MAX_WAIT (20 s) / the 0.15 s poll is 133 polls; 160 is that with
+# headroom, so the cap is sized on the gate's own ceiling rather than picked.
+DEAL_FRAME_KEEP = 160
+DEAL_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "diagnostics", "deal_frames")
+_DEAL_FRAMES = collections.deque(maxlen=DEAL_FRAME_KEEP)
+# ONE DUMP PER DEAL. local_hand_cards runs several times a turn -- the
+# retry path alone calls it LOCAL_HAND_REGRABS times -- and a dump per
+# call would write the same 40 frames repeatedly and read as several
+# separate occlusions in the archive.
+_DEAL_SAVED = set()
+
+
+def reset_deal_frames():
+    """Start a fresh deal. Called by wait_for_hand_deal, never by the turn loop."""
+    _DEAL_FRAMES.clear()
+    _DEAL_SAVED.clear()
+
+
+def keep_deal_frame(hand_img, t):
+    """Record one poll's hand crop. Never raises into the deal gate."""
+    if hand_img is None:
+        return
+    try:
+        _DEAL_FRAMES.append((round(float(t), 3), hand_img.copy()))
+    except Exception:
+        pass
+
+
+def deal_frames():
+    """[(seconds_since_the_gate_started, hand_crop), ...] for the last deal."""
+    return list(_DEAL_FRAMES)
+
+
+def save_deal_frames(why, outdir=None):
+    """Write the kept deal to disk. Returns the directory, or None. Never raises.
+
+    Called when the hand that FOLLOWED the deal came back with an unreadable slot --
+    that is the only case the frames answer a question about, and writing them every
+    deal would be ~40 PNGs a turn for nothing.
+    """
+    frames = deal_frames()
+    if not frames:
+        return None
+    try:
+        outdir = outdir or os.path.join(DEAL_FRAME_DIR, f"deal_{time.time_ns()}")
+        os.makedirs(outdir, exist_ok=True)
+        for t, im in frames:
+            im.save(os.path.join(outdir, f"t{int(t * 1000):06d}.png"))
+        with open(os.path.join(outdir, "why.json"), "w") as fh:
+            json.dump({"why": why, "frames": len(frames),
+                       "span_s": frames[-1][0] - frames[0][0]}, fh, indent=1)
+        print(f"  [deal] kept {len(frames)} frames of this deal -> {outdir}")
+        return outdir
+    except Exception:
+        return None
+
 def _save_refused_hand(img, why):
     """Keep a frame the local reader refused. Never raises into the turn loop."""
     if img is None:
@@ -4538,7 +4629,16 @@ def local_hand_cards(hand_img):
         return None, (f"only {len(cards)} of {len(rows)} cards read "
                       f"(slots {dropped} unreadable)")
     if dropped:
-        return cards, f"played without slots {dropped} (unreadable)"
+        why = f"played without slots {dropped} (unreadable)"
+        # THE DEAL'S OWN FRAMES, WRITTEN ONLY WHEN THEY ANSWER SOMETHING. A slot
+        # came back unreadable, so the frames from while that card was still in
+        # FLIGHT -- before any neighbour could cover it -- are the one record
+        # that can say what it was. Saving every deal would be ~40 PNGs a turn
+        # for nothing; saving none is what made 2026-09-15 unanswerable.
+        if "gap" not in _DEAL_SAVED:
+            _DEAL_SAVED.add("gap")
+            save_deal_frames(why)
+        return cards, why
     return cards, None
 
 
