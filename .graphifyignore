@@ -1,0 +1,58 @@
+# What the knowledge graph is FOR here: the code and the prose that explains it.
+#
+# WHY IMAGES ARE EXCLUDED, and it is not a size preference. graphify gives each
+# image its OWN semantic chunk ("vision needs separate context"), and with no
+# GEMINI_API_KEY set the host agent is the LLM -- so 4,869 frames would mean 4,869
+# subagent dispatches. Those frames are match captures, compass glyphs and walk
+# recordings: they are DATA the readers are measured against, not knowledge about
+# how the system fits together. A graph of them answers no question anyone asks.
+#
+# Counted 2026-09-17 with graphify.detect:
+#   2396  overnight/local_hand      hand crops
+#   1068  overnight/drives          recorded walks
+#    270  overnight/crawl
+#    237  test_fixtures/harvest
+#    209  test_fixtures/compass_glyphs
+#    205  chains/route_user_1853
+#   ----  4869 total, against 717 code files and 64 documents
+#
+# The named fixture directories stay listed individually rather than as *.jpg so a
+# NEW image directory shows up in the next detect as an unexplained count, instead
+# of being silently swallowed by a glob.
+overnight/local_hand/
+overnight/drives/
+overnight/crawl/
+overnight/refused_hands/
+overnight/cycle_frames/
+overnight/chain_frames/
+overnight/*failframes*/
+overnight/prompt_zone_frames/
+overnight/census/
+chains/
+places/
+demos/
+explore/
+screenshot_log/
+hand_samples/
+test_fixtures/
+agent_progress/
+Photos of ban screen missing cards/
+
+# Vendored / build trees: not this project's code.
+chiaki-ng-src/
+chiaki-ng-build/
+paddle_venv/
+.venv/
+_obsolete/
+graphify-out/
+
+# THE LAST 25, ALL SCREENSHOTS TOO. Contact sheets of arrivals, quarantined place
+# references, a probe frame, and world_map.png -- which is a RENDERING of
+# world_map.json, and the json is already in the graph as data. Zero images is the
+# target: a screenshot is evidence a reader was measured against, never a statement
+# about how the code fits together.
+overnight/*.jpg
+overnight/*.png
+places_quarantine/
+probe_where.jpg
+world_map.png

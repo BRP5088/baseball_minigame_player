@@ -126,6 +126,8 @@ run_one() {
     # Written to stderr so that redirecting stdout to a log still shows progress
     # on the terminal, and so it can never be mistaken for a test's own output.
     secs=$(( $(date +%s) - start ))
+    # LONGEST-FIRST NEEDS DURATIONS, so each child records its own.
+    printf '%s %s\n' "$f" "$secs" >> "$OUT/durations"
     n=$(ls "$OUT"/*.status 2>/dev/null | wc -l | tr -d ' ')
     st=$(cat "$OUT/$key.status")
     slow=""
@@ -145,6 +147,11 @@ export OUT TEST_TIMEOUT TIMEOUT_PL TOTAL
 # JSON file. affected_tests.py knows that and selects everything whenever a
 # non-.py file changed. The pre-commit hook still runs the real thing.
 if [ "$1" = "--affected" ]; then
+    # NAMED, because two guards below need to know. Written first as
+    # `[ -z "$AFFECTED" ]` against a variable nothing ever set -- always true, so
+    # both guards were unreachable. Caught before shipping by checking what set it;
+    # it is the same shape as every "guard that cannot fire" in CLAUDE.md.
+    AFFECTED=1
     echo "--- affected-only mode"
     files=$(python3 affected_tests.py)
     sel_rc=$?
@@ -187,6 +194,28 @@ if [ ! -f "$SIDE_EFFECTS" ]; then
     exit 1
 fi
 run_files=$(echo "$files" | grep -v "^${SIDE_EFFECTS}$")
+
+# LONGEST-FIRST DISPATCH. xargs hands files to workers in the order given, so with
+# `find | sort` a slow file late in the alphabet starts late and leaves everyone
+# else idle waiting for it. Measured over this suite: alphabetical at JOBS=4 takes
+# 241s against 188s for longest-first -- 53s, for no extra load. It matters MORE
+# since affected_tests stopped being a 270s outlier: that one file used to dominate
+# and everything packed around it, and with the longest now 139s the packing is the
+# whole game. Raising JOBS is the worse lever: JOBS=8 measured 212s, 49s adrift of
+# its own model, because 8 python processes on 12 cores contend -- and CLAUDE.md's
+# "the suite may run during a live run" was measured at JOBS=4, not above it.
+#
+# Unknown files (new, renamed, never timed) sort FIRST at 99999s: a file of unknown
+# length is safest treated as long, and a wrong guess costs ordering, never
+# correctness. A missing or unreadable durations file falls back to alphabetical.
+DURATIONS="${DURATIONS_FILE:-.test_durations}"
+if [ -s "$DURATIONS" ] && [ -z "$AFFECTED" ]; then
+    run_files=$(echo "$run_files" | grep . | while IFS= read -r f; do
+        d=$(awk -v k="$f" '$1 == k { print $2; found=1 } END { if (!found) print 99999 }' \
+            "$DURATIONS" | tail -1)
+        printf '%s\t%s\n' "$d" "$f"
+    done | sort -rn -k1,1 | cut -f2-)
+fi
 n_run=$(echo "$run_files" | grep -c . )
 
 # The denominator, known before anything runs. Includes the side-effect check,
@@ -259,6 +288,13 @@ done
 # exited 0 — indistinguishable from one where everything passed.
 echo
 took=$(( $(date +%s) - start_all ))
+# PERSIST FOR THE NEXT RUN'S ORDERING. Only on a full run: an --affected run times
+# a subset, and writing that would tell the next full run that the files it skipped
+# take zero seconds. Ordering only, so a stale or absent file costs seconds, never
+# a wrong result.
+if [ -z "$AFFECTED" ] && [ -s "$OUT/durations" ]; then
+    sort -u -k1,1 "$OUT/durations" > "${DURATIONS_FILE:-.test_durations}" 2>/dev/null || true
+fi
 [ $fail -eq 0 ] && echo "--- all green ($ran files, JOBS=$JOBS, ${took}s)" \
                 || echo "--- FAILURES above ($ran files, JOBS=$JOBS, ${took}s)"
 exit $fail

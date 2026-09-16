@@ -15,6 +15,12 @@ score, because run() acts on it").
 THE DENOMINATOR IS THE POINT. A first pass over 1,400 archived frames put it at
 1.2% -- which is not a failure rate, it is the share of the archive that is a turn
 screen at all. A rate needs a population where the thing being read is PRESENT.
+
+FIXTURES LIVE IN test_fixtures/, NEVER IN agent_progress/. This test read its
+corpus from agent_progress/base-timing/reveal/ until 2026-09-17, and CLAUDE.md
+says of that directory: "agent_progress/ is gitignored and safe to delete
+wholesale". A test whose evidence lives somewhere documented as disposable is
+one tidy-up from losing it. See test_fixtures/reveal_frames/README.md.
 """
 import glob
 import os
@@ -48,7 +54,7 @@ def read(path):
     return sc.get("your"), sc.get("opponent")
 
 
-TURN = sorted(glob.glob(os.path.join(_ROOT, "agent_progress/base-timing/reveal/r_*.jpg")))
+TURN = sorted(glob.glob(os.path.join(_ROOT, "test_fixtures/reveal_frames/r_*.jpg")))
 check(len(TURN) >= 20, f"the turn-screen corpus is present ({len(TURN)} frames) — "
                        "an empty glob must not pass")
 

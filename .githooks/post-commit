@@ -1,0 +1,41 @@
+#!/bin/sh
+# Keep graphify-out/ current, so the knowledge graph never answers from a stale tree.
+#
+# POST-commit, not pre-commit, and that is deliberate: a graph rebuild must never
+# stand between you and a commit. The pre-commit hook already runs the affected
+# tests; adding seconds on top of that buys nothing and costs every commit.
+#
+# IT REFUSES TO RUN WHILE A MATCH IS LIVE. CLAUDE.md 10.13: a CPU/IO spike degrades
+# python's sleep() from ~5ms to as much as 242ms, and slow_traverse HOLDS THE STICK
+# and sleeps out each push -- so the leg walks short and the log scores it as a
+# routing failure. match_in_progress is the flag that already answers "is a paid
+# match open", so it is what gates this.
+#
+# EVERYTHING HERE IS BEST-EFFORT. A commit is never failed by this hook: the graph
+# going stale costs a slower question later, a failed commit costs work now.
+
+# Are we mid-match? Any progress file claiming an open match is enough.
+for f in progress*.json; do
+    [ -f "$f" ] || continue
+    if grep -q '"match_in_progress"[[:space:]]*:[[:space:]]*true' "$f" 2>/dev/null; then
+        echo "  [graph] a match is in progress — NOT rebuilding (CLAUDE.md 10.13: the" >&2
+        echo "          IO spike degrades sleep() and walks the leg short). Run" >&2
+        echo "          'graphify . --code-only --update --no-viz' when the match ends." >&2
+        exit 0
+    fi
+done
+
+command -v graphify >/dev/null 2>&1 || exit 0
+[ -f graphify-out/graph.json ] || exit 0    # never build from scratch in a hook
+
+# --code-only: AST, no LLM, no API key, and no per-image subagent. --update: only
+# the files this commit changed. Backgrounded and on the efficiency cores, so it
+# cannot slow whatever you do next.
+LOG=graphify-out/.last_update.log
+if command -v taskpolicy >/dev/null 2>&1; then
+    ( taskpolicy -b graphify . --code-only --update --no-viz >"$LOG" 2>&1 & ) &
+else
+    ( graphify . --code-only --update --no-viz >"$LOG" 2>&1 & ) &
+fi
+echo "  [graph] updating graphify-out in the background (log: $LOG)" >&2
+exit 0

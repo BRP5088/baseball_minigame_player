@@ -110,3 +110,4 @@ venv/
 view_bounds.json
 world_log/
 world_map.json.backup_*
+.test_durations

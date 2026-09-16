@@ -16,6 +16,12 @@
   happens here ... the accounting is untouched either way" is true only if THIS
   process did the debit; match_in_progress is loaded from disk, so on a fresh process
   the $50 leaves the wallet and the record never hears about it.
+
+FIXTURES LIVE IN test_fixtures/, NEVER IN agent_progress/. This test read its
+corpus from agent_progress/base-timing/reveal/ until 2026-09-17, and CLAUDE.md
+says of that directory: "agent_progress/ is gitignored and safe to delete
+wholesale". A test whose evidence lives somewhere documented as disposable is
+one tidy-up from losing it. See test_fixtures/reveal_frames/README.md.
 """
 import os
 import sys
@@ -38,7 +44,7 @@ def check(ok, msg):
 
 
 # --- 1. the duplicate-disc frame reads again --------------------------------
-FRAME = os.path.join(_ROOT, "agent_progress/base-timing/reveal/r_001099.jpg")
+FRAME = os.path.join(_ROOT, "test_fixtures/reveal_frames/r_001099.jpg")
 if os.path.exists(FRAME):
     im = Image.open(FRAME).convert("RGB")
     cs = rc._discs(im, rc.ZONE_HOME)

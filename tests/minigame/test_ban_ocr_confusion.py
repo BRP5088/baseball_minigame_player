@@ -535,10 +535,20 @@ say(f"6. corpus: {correct}/{CELLS} correct, {wrong} wrong, {abstain} abstained "
 # The scan's early stop ("no player names readable AND past the known roster")
 # is built on this. It is asserted over the real frames, not over strings,
 # because the crop geometry is half of the claim.
+# FIXTURES, NOT screenshot_log/. These used to be read straight out of
+# screenshot_log/run_20260828_135528/, which is GITIGNORED and pruned oldest-first
+# by the orchestrator -- so they do not exist on a fresh clone and will not exist
+# here forever. Behind `if TACTICS_FRAMES:` the whole section then simply did not
+# run and this file still exited GREEN: measured by hiding screenshot_log/ and
+# re-running, which PASSED with no corpus at all. A no-op path with the same output
+# as the success path (10.1), guarding the $50 ban path.
 TACTICS_FRAMES = [f for f in
-                  ("screenshot_log/run_20260828_135528/20260828_135528_823.jpg",
-                   "screenshot_log/run_20260828_135528/20260828_135724_164.jpg")
+                  ("test_fixtures/ban_tactics/20260828_135528_823.jpg",
+                   "test_fixtures/ban_tactics/20260828_135724_164.jpg")
                   if os.path.exists(os.path.join(_ROOT, f))]
+check(len(TACTICS_FRAMES) == 2,
+      f"the tactics fixtures exist: expected 2 in test_fixtures/ban_tactics/, found "
+      f"{len(TACTICS_FRAMES)} — this section must not silently disable itself again")
 if TACTICS_FRAMES:
     _resolved_on_tactics = []
     _tjobs, _tcrops = [], []
