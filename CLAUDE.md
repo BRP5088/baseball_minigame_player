@@ -194,10 +194,23 @@ claim is not:
 
     grep -rl ArmorOCR --include='*.py' .                      2 files
     grep -rl --no-ignore-files ArmorOCR --include='*.py' .    8 files
-                                          QUOTE THE GLOB -- zsh expands a bare
-                                          *.py and the command dies with
-                                          "no matches found" (16.16c). This very
-                                          block shipped unquoted for one minute.
+
+**BUT `--no-ignore-files` IS NOT RELIABLE, AND THE PORTABLE FORM IS.** The wrapper
+falls through to BSD `grep` in some invocations -- twice, in compound commands, both
+times dying with "unrecognized option". Isolating the trigger per-argument reproduced
+NOTHING, so the cause is NOT ESTABLISHED and is not guessed at here. What IS
+established: the failure is LOUD, which is the safe direction, and this always works:
+
+    find . -name '*.py' -not -path './.venv/*' -print0 | xargs -0 grep -l PATTERN
+
+**Use the flag for a quick look; use `find | xargs` for anything you will report as a
+count or a "nothing uses this".**
+
+Two zsh traps live in these three lines, both hit while writing them (16.16c):
+QUOTE THE GLOB, because a bare `*.py` is expanded by zsh and the command dies with
+"no matches found" -- this block shipped unquoted for a minute. And **`grep` EXITS 1
+ON ZERO MATCHES**, so `grep ... && echo OK || echo FAILED` reports FAILED for a clean
+search; three "failures" in a test of this very fix were that and nothing else.
 
 **`paddle_venv/` is NOT the project environment — but it IS a live dependency.
 DO NOT DELETE IT.** Both halves matter and the file used to state only the first:
