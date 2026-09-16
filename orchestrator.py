@@ -7032,7 +7032,6 @@ def play_one_turn(state_json: dict, batters_used: int):
         #
         # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND -- test_hand_memory_forgets
         # requires a forget within six lines above it, so prose goes here, never between.
-        forget_hand_slot(player_idx)
         # WIRE THE SEAM. `look=` was passed and `discards_look=` was NOT, so
         # select_and_discard's whole post-press proof was skipped on the LIVE $50
         # ladder: DISCARD_CONFIRM_TRIES, the retry loop and the refusing branch
@@ -7042,6 +7041,13 @@ def play_one_turn(state_json: dict, batters_used: int):
         # path the incident happened on. Only spend_and_discard, the crawl helper,
         # ever passed it. A guard that cannot fire, guarding the exact failure it
         # was written for.
+        #
+        # THE PROSE GOES ABOVE forget_hand_slot, NEVER BETWEEN IT AND THE SPEND.
+        # test_hand_memory_forgets requires a forget within six lines above the
+        # spend, and this comment was written between them on the first attempt --
+        # which is the one thing the existing comment on the sibling call site warns
+        # about by name. The test caught it in the next full suite run.
+        forget_hand_slot(player_idx)
         if select_and_discard(player_idx, look=hand_cursor_look,
                               discards_look=discards_look) is False:
             # AND "NOTHING THROWN" IS NOT WHAT False MEANS ANY MORE. It also covers
