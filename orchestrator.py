@@ -4368,6 +4368,50 @@ def save_deal_frames(why, outdir=None):
     except Exception:
         return None
 
+CRAWL_KEEP_ALL_FRAMES = False
+
+
+def crawl_keep_all_frames():
+    """True when every deal's frames are kept, not only the ones that dropped a slot.
+
+    CRAWL MODE. Stepping a match by hand to answer questions, the expensive thing is
+    not disk -- it is reaching the end of a $50 match and finding the frame that would
+    have answered the question was never written. The default stays OFF because saving
+    every deal is ~40 PNGs a turn and 2.8G of `screenshot_log/` is already what a
+    retention policy had to be invented for (OPEN-24's 148 ground-truth rows have ZERO
+    surviving pictures, which is the other side of the same coin).
+
+    READ AT CALL TIME, never captured in a default (10.18): `leg_reliability` shipped
+    every public function as `def rate(..., path=STORE)` and the natural redirect
+    changed NOTHING, silently. The env var is what a crawl run sets without editing a
+    module that a live process may be importing (10.21).
+    """
+    if CRAWL_KEEP_ALL_FRAMES:
+        return True
+    return os.environ.get("BASEBALL_CRAWL_KEEP_FRAMES") == "1"
+
+
+def _save_dropped_hand(img, why, dropped):
+    """Keep the hand crop a DROPPED-SLOT decision was made on. Never raises.
+
+    Deliberately NOT _save_refused_hand's directory: that corpus is every hand the
+    reader refused OUTRIGHT, it has a contact-sheet tool and a test reading it, and a
+    partially-read hand is a different population. Mixing them would make both
+    unmeasurable -- 10.31's missing-class problem in reverse.
+    """
+    if img is None:
+        return
+    try:
+        d = os.path.join(DEAL_FRAME_DIR, f"dropped_{time.time_ns()}")
+        os.makedirs(d, exist_ok=True)
+        img.save(os.path.join(d, "hand.png"))
+        with open(os.path.join(d, "why.json"), "w") as fh:
+            json.dump({"why": why, "dropped": list(dropped)}, fh, indent=1)
+        print(f"  [local] kept the frame this call was made on -> {d}")
+    except Exception:
+        pass
+
+
 def _save_refused_hand(img, why):
     """Keep a frame the local reader refused. Never raises into the turn loop."""
     if img is None:
@@ -4871,8 +4915,17 @@ def local_hand_cards(hand_img, phase=None):
             pass
         return None, (f"only {len(cards)} of {len(rows)} cards read "
                       f"(slots {dropped} unreadable)")
-    if dropped:
-        why = f"played without slots {dropped} (unreadable)"
+    keep_all = crawl_keep_all_frames()
+    if dropped or keep_all:
+        why = (f"played without slots {dropped} (unreadable)" if dropped
+               else "crawl mode: every deal kept")
+        # KEEP THE FRAME THE DECISION WAS MADE ON. The deal's frames below say what
+        # the card WAS in flight; this says what the reader was looking at when it
+        # gave up, which is the other half and was never kept. Without it the only
+        # record of an occlusion is a slot number, and 10.23's cheapest diagnostic --
+        # build a contact sheet of the cards the reader called unsure and LOOK -- has
+        # nothing to look at. One PNG per deal, guarded by the same once-per-deal set.
+        _save_dropped_hand(hand_img, why, dropped)
         # THE DEAL'S OWN FRAMES, WRITTEN ONLY WHEN THEY ANSWER SOMETHING. A slot
         # came back unreadable, so the frames from while that card was still in
         # FLIGHT -- before any neighbour could cover it -- are the one record
@@ -4881,7 +4934,11 @@ def local_hand_cards(hand_img, phase=None):
         if "gap" not in _DEAL_SAVED:
             _DEAL_SAVED.add("gap")
             save_deal_frames(why)
-        return cards, why
+        # AND THE RETURN VALUE DOES NOT MOVE. `why` is non-None only when a slot was
+        # actually dropped -- callers branch on it, and crawl mode is about keeping
+        # EVIDENCE, not about changing what the turn loop believes. A flag that alters
+        # a decision is not a diagnostic.
+        return cards, (why if dropped else None)
     return cards, None
 
 
@@ -7116,14 +7173,57 @@ def play_one_turn(state_json: dict, batters_used: int):
         # which is the one thing the existing comment on the sibling call site warns
         # about by name. The test caught it in the next full suite run.
         forget_hand_slot(player_idx)
-        if select_and_discard(player_idx, look=hand_cursor_look,
-                              discards_look=discards_look) is False:
+        _thrown = select_and_discard(player_idx, look=hand_cursor_look,
+                                     discards_look=discards_look)
+        if _thrown is False:
             # AND "NOTHING THROWN" IS NOT WHAT False MEANS ANY MORE. It also covers
             # UNVERIFIED -- the counter never answered -- where the card may well be
             # gone. Saying "nothing thrown" there invites a retry that spends the
             # SECOND of only two discards in the half.
             print("  discard NOT CONFIRMED — it may or may not have been thrown. "
                   "Re-reading the hand next poll rather than retrying blind.")
+        # CAPTURE THE REDEAL, BUT ONLY WHEN A SLOT IS ALREADY UNREADABLE.
+        #
+        # A DISCARD IS A DEAL, and this path never treated it as one: wait_for_hand_deal
+        # had exactly ONE live caller, after a PLAY, so reset_deal_frames() never ran here
+        # and the replacement arrived with nothing watching. That matters because of what
+        # save_deal_frames' own comment already claims -- the frames from while a card is
+        # still IN FLIGHT, "before any neighbour could cover it", are the one record that
+        # can say what an occluded card was. A discard re-flows the whole fan, so it moves
+        # the OCCLUDER as well as the discarded card: it is the one moment an ALREADY
+        # present unreadable slot can become visible, and it was the one moment unwatched.
+        #
+        # Gated on a slot actually being unreadable, so a healthy hand pays nothing. The
+        # call is local-only (~40 ms a poll), presses nothing, and returns False on
+        # timeout, so the worst case is a wait -- it cannot throw a card.
+        try:
+            import local_hand as _lh
+            _want = len(_lh.SLOT_PLAYER)
+        except Exception:
+            _want = 5
+        _seen = {c.get("hand_index") for c in state_json.get("hand") or []}
+        _blind = [i for i in range(_want) if i not in _seen]
+        # AND ONLY WHEN SOMETHING WAS ACTUALLY THROWN. Watching unconditionally logs
+        # a DEAL-TIMING ROW for a deal that never happened: the first live run of this
+        # code refused the discard and still appended
+        # {"outcome": "timeout", "waited": 20.02, "biggest": 7.3} to deal_timing.jsonl,
+        # a two-row dataset meant to be FITTED. A sample of "nothing moved for 20 s"
+        # filed as a slow deal is not a slow deal, and nothing in the row says which it
+        # was -- 10.1's shape pointed at a corpus instead of a log.
+        #
+        # `is False` is the refusal, and NOT-confirmed is deliberately treated as
+        # thrown: select_and_discard's own contract is that False also covers
+        # UNVERIFIED, where the card may well be gone, so watching is the safe
+        # direction -- a redeal we watch for nothing costs a wait, one we miss is
+        # unrecoverable.
+        if _blind and _thrown is not False:
+            print(f"  [deal] slot(s) {_blind} unreadable — watching the redeal this "
+                  f"discard causes, which is the one moment they can be seen")
+            wait_for_hand_deal()
+        elif _blind:
+            print(f"  [deal] slot(s) {_blind} unreadable, but the discard was REFUSED — "
+                  "not watching, because there is no deal to watch and a phantom row "
+                  "would go into deal_timing.jsonl")
         return False, None
     else:
         # THE FALSE BRANCH, LOGGED. The true branch has always announced
