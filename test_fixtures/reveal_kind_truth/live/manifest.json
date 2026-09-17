@@ -1,0 +1,32 @@
+{
+ "t1_ours_swing2_theirs_pitch2": {
+  "ours": {
+   "kind": "swing_boost",
+   "bonus": 2,
+   "card": "Austin \"Cur\" Bunz 8/1"
+  },
+  "theirs": {
+   "kind": "pitch_boost",
+   "bonus": 2,
+   "card": "Jenny Jody Gain 6"
+  },
+  "margin_truth": 2,
+  "outcome": "hit, runner to first, no home run",
+  "note": "THE PITCH FOCUS +2 THAT REFUTED 'a +2 is always a Power Swing'."
+ },
+ "t2_ours_swing1_theirs_none": {
+  "ours": {
+   "kind": "swing_boost",
+   "bonus": 1,
+   "card": "Johnny Drawers 7/1"
+  },
+  "theirs": {
+   "kind": null,
+   "bonus": null,
+   "card": "Mickey Brown 5, no tactics"
+  },
+  "margin_truth": 3,
+  "outcome": "automatic home run, 2 runs (scoreboard 0-0 -> 2-0)",
+  "note": "banner PLAINLY legible yet scored 0.563-0.578 against TACTICS_KIND_MIN 0.75"
+ }
+}
