@@ -1,4 +1,15 @@
-"""A CURSOR ON A *RAISED* CARD READS HALF WHAT cursor_slot's CENSUS CLAIMS.
+"""THE CURSOR CANNOT BE READ ON THIS HAND, AND RAISING A CARD IS WHAT SAVES IT.
+
+CORRECTED. This file first claimed a raised card READS HALF what the census says,
+i.e. that raising depressed the number. A controlled deselect by the user -- same
+cursor, same slot, one variable -- showed the opposite:
+
+    slot 4 RAISED       glow[4] = 10.9   cursor -> 4
+    slot 4 not raised   glow[4] =  7.0   cursor -> None
+
+Raising ADDS about 3.9 and is the only reason the reading clears the gate at all.
+The original claim was reasoned from one frame and committed before the control
+existed (CLAUDE.md 10.32).
 
 Ground truth for this frame comes from the user watching the live screen on
 2026-09-17: the cursor is on SLOT 4, and slot 4 is RAISED (selected).
@@ -60,8 +71,23 @@ top = max(glow)
 check(10.0 < top < 14.0,
       f"the true cursor reads {top} -- marginal, not the census's 20.7..36.1")
 check(top < 20.7,
-      f"...and BELOW that census floor ({top} < 20.7), so the census does not "
-      "cover a cursor on a selected card")
+      f"...and BELOW that census floor ({top} < 20.7) -- this HAND reads low, and "
+      "the raise is what lifts it over the gate, not what pushed it down")
+
+# THE CONTROL, and it is why the original claim in this file was withdrawn: the SAME
+# cursor on the SAME slot, deselected by the user, reads LOWER and cannot be read.
+NOT_RAISED = os.path.join(_ROOT, "test_fixtures", "cursor_on_raised_card",
+                          "cursor_slot4_NOT_raised.png")
+_h2 = dict(o.crop_gameplay_regions(Image.open(NOT_RAISED)))["hand"]
+_r2 = lh.read_hand(_h2)
+_b2, glow2, _ = lh.cursor_glow(_h2, _r2)
+check(lh.selected_cards(_r2, _h2.width / lh.ANCHOR_W) == [],
+      f"the control frame has NOTHING selected -> {lh.selected_cards(_r2, _h2.width / lh.ANCHOR_W)}")
+check(glow2[4] < top,
+      f"deselecting LOWERS the same cursor's glow ({glow2[4]} < {top}) -- raising helps")
+check(lh.cursor_slot(glow2, None) is None,
+      f"...and below the gate the cursor cannot be read at all -> "
+      f"{lh.cursor_slot(glow2, None)}. THIS is the live failure.")
 
 # THE GUARD. Anyone raising the gate toward the census band breaks this frame, and
 # with it every turn where the engine's own card is selected under the cursor.
