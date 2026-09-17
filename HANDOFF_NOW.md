@@ -1,183 +1,106 @@
-# HANDOFF — 2026-09-16, overnight
+# HANDOFF — 2026-09-17, overnight
 
 ## READ THIS FIRST: A PAID MATCH IS SUSPENDED, NOT FINISHED
 
-**$50 is spent on a match that is parked mid-turn.** The user put the PS5 to sleep
-with the match open. `match_in_progress` is `true` and **that is CORRECT — do not
-clear it.** CLAUDE.md's own rule: the flag is often NOT stale; check the screen
-before clearing it. Clearing it and re-entering at the dealer prompt spends a
-SECOND $50 for the same match.
+**$50 is spent on a match parked mid-turn, and the PS5 is in REST MODE.** Rest
+mode SUSPENDS the game, so the match survives. `match_in_progress` is `true` and
+**that is CORRECT — do not clear it.** Check the screen before touching it (§2).
 
-    wallet (game)        $146, read locally off the pause menu earlier at $196,
-                         then debited $50 at the Square press. Never re-read after.
-    progress_testing     39W / 10L / 5D, balance 146,
-                         match_in_progress TRUE, bans_done_this_match TRUE
-    console              ASLEEP. User put it to sleep deliberately.
+State when it was put to sleep, read off the frame:
 
-### The exact match state to resume into
+    JACK PEPPER  2 0 2      OPPONENT  0 0 0
+    a runner on HOME PLATE (Donny Mekesz, stranded) and Rube Sharp on a base
+    hand of five, one turn of the BATTING half still unplayed
 
-    match                inning 1, BATTING, score 0-0, bases empty
-    round                turn 1 of 5, 2 discards left
-    bans placed          3/3 VERIFIED at press time, zero wrong-ban callbacks
-                         Joshua Diaz 4/0 (1,3) | Marian Bunz-Twarog 4/1 (4,0)
-                         | Jedediah Wetters 4/2 (4,1)
-    hand on screen       0: speed_boost +1   1: 7/1   2: 4/3   3: 4/3   4: 5/3
-    ENGINE PICK, NOT YET PLAYED AND NOT YET APPROVED:
-                         play slot 1 (7/1) + slot 0 (SPEED BOOST +1)
-                         effective power 7; the boost adds no power, it sends the
-                         batter 2 bases instead of 1 on a hit. should_redraw False.
+**The console was slept deliberately, at the user's instruction, and the walked
+procedure is `console_rest_mode_procedure.md`.** Confirm the state before any
+press with the three tells in §1 — capture size, `looks_like_ui()`, `streaming()`.
 
-**THE PLAY WAS NEVER APPROVED.** The user's standing rule is "do not make plays
-without my approval". Ask before pressing anything.
+## NOTHING WAS CHANGED ON THE $50 PATH
 
-`hand_memory.json` was deleted on purpose at handoff. The hand reads all five
-slots, so the memory can only ever serve a stale slot; let the reader re-read.
+No reader, no input path, no engine code was modified tonight. `local_hand.py`,
+`input_controller.py`, `orchestrator.py` and `decision_engine.py` are untouched
+(`git diff 2e54dcd..HEAD --stat` names only docs, fixtures and one new tool).
 
-### Deferred, queued by the user for THIS match
+The user's standing rules were in force all night and still are:
 
-**The fielding test** — "we will do the field test in the next match". It needs us
-PITCHING with runners on base, i.e. the inning-2 half. n=1 on that arm today.
+    do not make plays without my approval
+    the paid vision model stays OFF
+    play the engine's pick; if it is wrong, fix the ENGINE
 
----
+## WHAT WAS DONE, AND THE HEADLINE IS A NEGATIVE
 
-## WHAT LANDED TODAY (three commits, all local, nothing pushed)
+The task: *"figure out exactly where the cards are so you more accurately read
+the cursor no matter the drift or weird scenarios."*
 
-    67e8c82  margin_from reads the tactics KIND, so a +1 can finally count
-    fdd1737  choose_bans breaks a power tie on secondary
-    d0141c9  the ban scan starts at the top; three doc claims withdrawn
+**The cards ARE locatable exactly, and the reader already has the locator.**
+Tophat (k=9, >30) strips the card art; the disc-to-corner offset is constant to
+±2-5 px on clean slots. The power disc IS an exact locator; nothing to build.
 
-### fdd1737 — choose_bans was banning the wrong cards, every match
+**Four ways to exploit that were measured and ALL FAILED — and three would have
+shipped on their TRUE numbers alone.** Full table and the mechanism are in
+CLAUDE.md §10.35. One line: the window works BECAUSE it is pinned to the narrow
+dark strip outside the card, the cards are white art, and every degree of freedom
+added moves the box onto the card and destroys the discrimination.
 
-`sorted(collection, key=lambda c: c.power)[:3]` left ties to SCAN ORDER. On today's
-live collection that banned two 4/3 cards and KEPT a 4/1 and a 4/2 — strictly worse
-cards, kept, invisibly, because the picks always looked like "three 4s".
+**The binding constraint is the corpus, not the reader.** 4,183 five-row turn
+frames exist and **4,142 are one run**, at 10 Hz. A "finding" — slot 4 blind 71%
+of the time — dissolved into ONE fade burst sampled ten times (§10.8).
 
-The tie-break needs no role plumbing: `secondary` is SPEED on a batter (bases run)
-and FIELDING on a pitcher (subtracts runner movement), and higher is better in BOTH,
-so ascending `(power, secondary)` is worst-first either way. 3 mutants, 3 caught.
+## THE UNLOCK, AND IT IS THE THING TO USE NEXT
 
-### d0141c9 — OPEN-23's mechanism, and it is not what the ticket guessed
+`tools/cursor_labels_from_lifts.py <run_dir>` produces the first labels for
+`cursor_slot` that the reader cannot influence: a card that RISES above its fan
+anchor was selected, and selecting requires the cursor to be on it, so the frame
+before it rises has a known cursor slot. Geometry, not brightness (§10.22).
 
-**It is not a scroll that stops early. It is a scan that starts late.** `top_row` is
-derived from the PRESS COUNT as `presses_so_far - 1`, which is a row number only if
-the grid began at row 0, and nothing asserted that.
+    raw lift transitions 29 -> persisted 4   (86% dropped as deal-frame artefacts)
+    shipped reader on the 4:  4 correct, 0 blind, 0 wrong
 
-Measured live: three consecutive scans on a grid parked at level 3+ returned **10, 6
-and 14 cards of 25**, every one from rows 3-6. The scrollbar cross-check correctly
-refused to cache all three, but it can only relabel a row it can SEE — it cannot
-conjure a row the viewport never visited. Six `move_up` presses to level 0 and the
-next scan returned all 25.
+**~4 labels per recorded run. Point it at every future run** and the corpus
+accumulates with no console time and no live change. That is what a threshold on
+this path needs and does not have.
 
-`_ban_scroll_to_top()` now runs first; a scan that cannot reach row 0 says so and is
-never cached. 5 mutants, 5 caught.
+## WHAT IS WRITTEN AND DELIBERATELY NOT APPLIED
 
-**MY OWN TEST WAS THE INTERESTING BUG, and a mutant is what said so.** The first
-cache check could not fail: it passed `use_cache=False` (so the cache was never
-written on any path) AND returned 0 cards (which trips the independent `len < 3`
-floor). Two reasons to pass, neither the one under test. It now runs the real scan
-twice, varying only whether the top was reached, with a control proving the
-top-reached arm actually caches.
+A **vertical bound** for the glow box — it is bounded horizontally by neighbour
+midpoints and not bounded above, so on an unsettled hand it samples the card
+ABOVE and returns a confident wrong answer. The patch is written, vectorised
+(0.11 ms a slot, verified 300/300 against the loop it replaces) and **NOT
+applied**, because its instrument fails its own control: on the one unambiguous
+cursor in the archive, disc-to-backdrop reads 37-38 while NOT the cursor and
+49-50 while it IS. **It rises with the halo it would police.** A gate would also
+zero a plausibly-genuine reading of 142 mid-play, on the $50 path.
 
-### Three doc claims withdrawn, all found by reading source, not by a failure
+Evidence kept: `test_fixtures/card_above_box/` (3 frames + a README that states
+what is and is not established). Scratchpad scripts are session-local and gone
+on reboot; the tool and the fixtures are committed.
 
-CLAUDE.md §4 said `best_batting_play` "sorts on POWER alone and attaches a speed
-boost only as a fallback, and only when runners are already on base", that it cannot
-value a fast batter, and that `simulate.py` never consults speed. **All three describe
-code that is gone.** The function scores every (batter, tactics) PAIR at
-`99*power + 1*speed`; `MODEL_SPEED` has been True since 2026-09-12.
+## THREE CORRECTIONS TO MY OWN WORK TONIGHT
 
-Caught the cheapest way there is: the engine attached a speed boost with the bases
-EMPTY, which the file said it could not do.
+Recorded because each read as a finding before it was checked:
 
-What SURVIVES and is restated: 99/1 is a TIE-BREAK not a trade; the engine still has
-**no notion of tie risk**; and the 79% figure really was measured in a speed-blind
-model. `decision_engine`'s docstring was also still citing +0.726/+0.034/"21x" — the
-figures CLAUDE.md withdrew as a scrambled-pool artefact — now the re-measured 4.7x.
+    the phantom-card explanation for slot 2    killed by its own failed prediction:
+                                               blanking the home-plate strip made the
+                                               reading MORE extreme (-67 -> -77)
+    "slot 4 is structurally weak"              an archived frame reads 28.2 at slot 4;
+                                               the claim holds for THAT HAND only
+    the vertical-bound guard                   its instrument is not independent of
+                                               what it polices (above)
 
----
+## SUITE
 
-## OVERNIGHT QA: TWO ROUNDS, 45 FINDINGS, 41 FIXED
+233 files, **5 failures, all confirmed PRE-EXISTING** at `2e54dcd` by running
+them in a worktree at that commit: `test_run_resume_and_persist`,
+`test_paid_reads_no_cards`, `test_reveal_kind_capture`, `test_post_play_timing`,
+`test_local_retry_not_paid`. Not caused by tonight's work and not investigated.
 
-Round 4 (four axes: ban path, reveal readers, turn-loop state, input/selection)
-returned 28 CONFIRMED. Round 5 (regressions in round 4's own fixes, vacuous tests,
-partial-death state, threshold units) returned 17 more, 13 confirmed. All are
-triaged in `agent_progress/qa4-triage/progress.md` and the two workflow journals.
+## SUGGESTED NEXT STEP, THE USER'S CALL
 
-### The four that would have cost real money or a real match
-
-    a stale match_in_progress + the dealer prompt pressed start_match with NO
-      DEBIT, no max_spend check and no save_progress -- on a fresh process the flag
-      comes from DISK, so $50 left the wallet untracked, through the branch whose
-      own comment proves the flag is stale
-    the DISCARD PROOF never ran on the live path: play_one_turn passed look= but
-      not discards_look=, so the whole post-press verification was skipped and the
-      call returned True unconditionally. That proof was built FOR the 2026-09-16
-      incident and was dead on the one path the incident happened on
-    BOTH REVEAL READERS were broken at the width the rig captures. _fast_grab asks
-      for 2000px; HOME RUN! scored 0.517 there against a gate of 0.80. Both banners
-      missed outright, every match. Now 0.995, negatives unmoved
-    the HALF-BOUNDARY RESET fired one call too late, so the first pitching turn was
-      played from a hand built out of the batting half's memory -- and the survivor
-      is a card the engine passed over, often the highest power left, which
-      best_pitching_play then selects
-
-### Three of the best findings were the fixer's own regressions
-
-A comment written BETWEEN forget_hand_slot and the spend (the sibling call site
-warns about that by name); spend_and_play's (ok, why) tuple used as a bare bool,
-making every refusal branch unreachable; and checks appended AFTER a test's
-pass/fail report so they could never fail. Round 5 then found three more, including
-a disc-dedupe bucket artefact that made the NEW reveal refusal throw away a power
-the reader had.
-
-### Two things were REFUTED and left alone, correctly
-
-Round 5's top finding (the half-boundary re-read) came with a reproduction; the
-skeptic showed the repro hand-built a state shape local_game_state never returns,
-and that the confident phase-flip it needs has ZERO runs of length 1 across 449
-confident reads in 64 runs. And a cache gate on "reached scroll level 7" was
-written and then REVERTED as an invented constant -- a short collection never
-reaches the bottom clamp, and both existing rigs' controls said so immediately.
-
-### Still open, deliberately
-
-Round 5's remaining lower-severity findings are unfixed and listed in its journal:
-three ban-navigation constants derived from other constants rather than measured
-(BAN_NAV_SETTLE, BAN_CURSOR_PROBE_TRIES, LOCK_CONFIRM_TRIES), reveal_cards' DISC_R
-still raw pixels, and two test-quality items. None is on the money path. THERE IS
-NO HELD-OUT HOME RUN! FRAME on disk -- the archive holds exactly one and it supplied
-the template -- so harvest one from the next live home run.
-
-## WHAT IS RUNNING / WHAT HAPPENS NEXT
-
-    suite baseline    ALL GREEN, 207 files, JOBS=4, 293s, taken BEFORE the QA round.
-                      Anything red afterwards is the round's doing, not pre-existing.
-
-    QA round 4        launched as a background workflow, run id wf_3a60802d-ebb.
-                      Four READ-ONLY finders on disjoint axes, then one adversarial
-                      skeptic per confirmed finding:
-                        A ban-path        (after fdd1737 + d0141c9)
-                        B reveal readers  (thresholds, missing classes, abstention)
-                        C turn-loop state (half boundary, counters, hand memory)
-                        D input/selection (the path that played a card told to discard)
-                      Notes land in agent_progress/qa4-*/progress.md.
-                      Finders may NOT touch the console or any project file.
-
-### The order for whoever picks this up
-
-1. Read the QA round's findings. Fix only CONFIRMED ones, each with a test that
-   provably bites, each mutation-tested. Run the full suite against the 207-green
-   baseline above.
-2. **Do NOT touch the console without the user.** The match is suspended mid-turn
-   and the pending play is unapproved.
-3. When the user is back: wake the console, confirm the match is still on turn 1
-   with the same hand, and ASK before playing slot 1 + slot 0.
-
-### Rules in force
-
-- **The paid vision model is OFF** (`orchestrator.PAID_MODEL_ENABLED = False`,
-  raises `PaidModelDisabled`). Do not re-enable without the user saying so.
-- **No plays without the user's approval.** Stop after every console action.
-- Play the engine's pick; if it picks wrong, FIX THE ENGINE, never hand-override.
-- Snoopy is a labelling aid and is never wired into the live ladder.
-- Commit locally as much as you like; ask before pushing or posting.
+1. Finish the batting half's last turn when the user is present (the engine's
+   pick was slot 0 + a speed boost; a home run is arithmetically impossible).
+2. Run `tools/cursor_labels_from_lifts.py` against every run the rig records
+   from now on, and revisit the cursor gate once the label count is in the
+   dozens rather than 4.
+3. Leave the glow window alone until then — §10.35 is four nights' worth of
+   reasons not to touch it without a FALSE column.
