@@ -63,6 +63,11 @@ class GameState:
     target_score: Optional[int] = None       # known only while pitching (your final batting score)
     runners: List[PlayerCard] = field(default_factory=list)  # baserunners, in base order
     redraws_left: int = 2
+    # A SLOT IS HIDDEN BY A RUNNER ON HOME PLATE, and no discard can reveal it.
+    # A batter the pitcher's FIELDING pinned to zero base-movements strands on home
+    # plate and his CARD lies inside the hand crop, so read_hand counts it as a sixth
+    # card and the slot beneath is dropped. Set by local_game_state; see should_redraw.
+    hidden_by_homeplate_runner: bool = False
 
 
 @dataclass
@@ -342,6 +347,22 @@ def should_redraw(hand_players: List[PlayerCard], state: GameState) -> bool:
     must move together — see test_decisions.py.
     """
     if state.redraws_left <= 0:
+        return False
+    # AN INCOMPLETE HAND HAS NO KNOWN MAXIMUM, so the threshold cannot be applied to
+    # it. When a runner stranded on home plate hides a slot, `hand_players` is the
+    # cards that SURVIVED and max() over them is not the hand's max -- exactly the
+    # shape orchestrator's discard branch already records for a misread power: "a true
+    # hand [9,5,4,4,5] read as [1,5,4,4,5] puts max power at 5, so should_redraw fires
+    # and the engine discards THE REAL 9". Measured live 2026-09-17: the hidden slot
+    # WAS the best card, an 8 against a threshold of 6, and a discard was spent on a
+    # hand that was never weak.
+    #
+    # AND NO DISCARD CAN FIX IT. The occluder is not a hand card -- it is a runner on
+    # the diamond -- so unlike CLAUDE.md 10.34's case, throwing the covered slot's
+    # neighbour reveals nothing. Refusing to redraw is the only honest answer: the
+    # hand may be strong, and spending one of two discards to find out is a cost with
+    # no information attached.
+    if getattr(state, "hidden_by_homeplate_runner", False):
         return False
     return max(c.power for c in hand_players) <= REDRAW_POWER_THRESHOLD
 

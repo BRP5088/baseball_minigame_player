@@ -1757,6 +1757,12 @@ GAMEPLAY_REGIONS_FRAC = {
     # against ground truth: hands parsed exactly right 6/13 -> 9/13,
     # false negatives 13 -> 3. See LOCAL_VISION_EXPERIMENTS.md §21.
     "hand": (0.250, 0.716, 0.760, 1.000),
+    # HOME PLATE, ADDED 2026-09-17. Nothing read it before, and a card can sit there:
+    # a batter the pitcher's FIELDING pinned to zero base-movements STRANDS on the
+    # plate, and his card's lower half falls inside the "hand" box above (which starts
+    # at y 0.716), where read_hand counts it as a sixth card. Fitted to put that card's
+    # power disc inside; see homeplate_runner_present.
+    "home_plate": (0.43, 0.60, 0.56, 0.78),
     # MEASURED 2026-09-09 from recorded frames, not from the crops: a base CARD sits at
     # y 0.299..0.494 while these boxes started at 0.320, so the card's top -- its banner
     # and its power disc -- fell OUTSIDE and 0.038 of the box was bare table below. The
@@ -4221,7 +4227,8 @@ def local_game_state():
     hand_img = crops.get("hand")
     if hand_img is None:
         return None, "no hand crop"
-    cards, why = local_hand_cards(hand_img)
+    _hpr = homeplate_runner_present(crops)
+    cards, why = local_hand_cards(hand_img, homeplate_runner=_hpr)
     if cards is None:
         # NAME THE SCREEN, NOT THE HAND. Every screen that is not a result, a ban grid or a
         # turn arrives here, and reporting it as a hand failure is the same shape as
@@ -4256,7 +4263,10 @@ def local_game_state():
                       f"(no N/3 counter), and the hand reader says: {why}")
 
     st = {"screen": "turn", "hand": cards, "batters_used": None, "result_won": None,
-          "collection": []}
+          "collection": [], "homeplate_runner": _hpr}
+    if _hpr:
+        print("  [hand] a runner is on HOME PLATE — its card covers a hand slot, and "
+              "no discard can reveal it (the occluder is not a hand card)")
 
     sb = crops.get("scoreboard")
     if sb is not None:
@@ -4538,10 +4548,12 @@ def _retry_local_hand(state):
     for i in range(LOCAL_HAND_REGRABS):
         try:
             time.sleep(LOCAL_HAND_REGRAB_SLEEP)
-            hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
+            _rc = dict(crop_gameplay_regions(_fast_grab()))
+            hand_img = _rc.get("hand")
             if hand_img is None:
                 continue
-            cards, why = local_hand_cards(hand_img)
+            cards, why = local_hand_cards(
+                hand_img, homeplate_runner=homeplate_runner_present(_rc))
         except Exception:
             continue
         if cards is not None:
@@ -4838,7 +4850,61 @@ def _hand_signature(hand_img):
                  for r in rows)
 
 
-def local_hand_cards(hand_img, phase=None):
+HOMEPLATE_STRIP = (0.439, 0.490)   # of the hand crop's width: 430..480 at ANCHOR_W 979
+
+
+def homeplate_runner_present(crops):
+    """True when a card is sitting on HOME PLATE. Never raises.
+
+    A power disc in the home-plate box, found with the same base_discs the three
+    bases already use. Measured over 20 live frames of a stranded batter: 20/20.
+
+    ITS FALSE-POSITIVE RATE IS NOT MEASURED, AND THAT IS STATED RATHER THAN HIDDEN.
+    There is no negative population on disk: screenshot_log's 15,832 frames are
+    2000x1292 (aspect 1.548), a geometry production never produces and which section
+    11 records as breaking fractional readers outright. The next ordinary hand IS the
+    negative test -- a false positive shows up immediately as slot 2 permanently
+    UNKNOWN in the log, costs one slot rather than a match, and is recoverable. That
+    is the trade the user chose knowingly, against leaving 21% of hand reads broken.
+    """
+    img = (crops or {}).get("home_plate")
+    if img is None:
+        return False
+    try:
+        import numpy as _np
+        import local_state as _ls
+        g = _np.asarray(img.convert("L"), dtype=_np.float32)
+        return len(_ls.base_discs(g, img.width / 220.0)) > 0
+    except Exception:
+        return False
+
+
+def _blank_homeplate_strip(hand_img):
+    """The hand crop with the stranded card's column blanked. Never raises.
+
+    SLOT 2 IS HARDCODED, DELIBERATELY. The fan's five slots are fixed and home plate
+    is centred, so the card lands between slot 1 (x 383) and slot 2 (x 548) every
+    time it was observed -- at x 453, with a second at 570 in one frame. Computing
+    which slot it overlaps from n=1 would be inventing a rule; naming the slot is
+    honest about the sample.
+
+    Measured over 76 live frames: the row count goes 60/76 five-row to 76/76, and the
+    digits the reader returns are IDENTICAL either way -- only the COUNT was unstable,
+    and _look_settled rejects anything that is not exactly five.
+    """
+    try:
+        import numpy as _np
+        from PIL import Image as _Image
+        a = _np.asarray(hand_img.convert("L")).copy()
+        lo = int(a.shape[1] * HOMEPLATE_STRIP[0])
+        hi = int(a.shape[1] * HOMEPLATE_STRIP[1])
+        a[:, lo:hi] = 0
+        return _Image.fromarray(a)
+    except Exception:
+        return hand_img
+
+
+def local_hand_cards(hand_img, phase=None, homeplate_runner=False):
     """(cards, None) in the paid schema's shape, or (None, why) when the hand is not
     fully readable.
 
@@ -4855,6 +4921,10 @@ def local_hand_cards(hand_img, phase=None):
         import local_hand
     except Exception as exc:
         return None, f"local_hand unavailable ({exc})"
+    if homeplate_runner:
+        # The stranded card's column, blanked, so read_hand stops counting it as a
+        # sixth card and _look_settled's exactly-five gate can pass.
+        hand_img = _blank_homeplate_strip(hand_img)
     try:
         rows = local_hand.read_hand(hand_img)
     except Exception as exc:
@@ -7119,7 +7189,15 @@ def hand_cursor_look():
     so input_controller, which orchestrator imports, never has to import back.
     """
     import local_hand
-    hand = _grab_settle_regions(("hand",))["hand"]
+    _regions = _grab_settle_regions(("hand", "home_plate"))
+    hand = _regions["hand"]
+    # THE SAME BLANK THE CARD READER GETS. This is the seam select_and_play presses
+    # against, and it did its OWN grab -- so fixing local_hand_cards alone left the
+    # cursor path still reading a stranded runner's card as a sixth hand card. Live,
+    # the hand then parsed cleanly 20 times out of 20 while cursor_slot answered None
+    # 20 times out of 20, which is a fix that looks finished and is not.
+    if homeplate_runner_present(_regions):
+        hand = _blank_homeplate_strip(hand)
     _idx, glow, rows = local_hand.cursor_glow(hand)
     selected = local_hand.selected_cards(rows, hand.width / local_hand.ANCHOR_W)
     # THE WHOLE PROFILE, not one answer. A SELECTED card keeps glowing, so once anything
@@ -7253,6 +7331,10 @@ def play_one_turn(state_json: dict, batters_used: int):
         target_score=state_json["your_score"] if state_json["phase"] == "pitching" else None,
         runners=runners,
         redraws_left=discards_left,
+        # NO DISCARD CAN REVEAL A SLOT A HOME-PLATE RUNNER IS COVERING, and max() over
+        # the slots that survived is not the hand's maximum. should_redraw abstains on
+        # it rather than spending one of two discards on a hand that may be strong.
+        hidden_by_homeplate_runner=bool(state_json.get("homeplate_runner")),
     )
 
     player_only = [p for _, p in players]
