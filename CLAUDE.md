@@ -111,6 +111,45 @@ Center route; verify it the first time by reading `State:` on the host list.
   capture fractions onto screen coordinates; use key presses or the
   accessibility API.
 
+### `ensure_live()` RETURNING TRUE MEANS THE STREAM IS UP, NOT THAT THE GAME WILL TAKE INPUT
+
+**The user's rule, 2026-09-17: *"when the PS5 goes to sleep or the stream is cut, it can
+have the PS5 overlay on, so sending button presses like you're in the game isn't correct.
+You should have checked the state before assuming it was back in the game and ready for
+you."*** Exactly right, and it had already cost a wrong diagnosis an hour earlier.
+
+After waking a sleeping console, `ensure_live()` returns True as soon as frames arrive --
+and it says so in its own log on the way past: *"compass unreadable and no pause menu --
+dismissing the PS5 overlay"*. That line is the tell. An overlay WAS up, a `ps_button` was
+sent to clear it, and the game needs a moment to come forward. Presses fired into that gap
+reach chiaki, reach the console, and change nothing, because the thing on screen is not
+the game.
+
+**WHAT IT COST.** A press-delivery experiment was started immediately after a reconnect.
+All 8 presses moved the cursor 0 cells, and the instrumented chiaki logged nothing, so the
+reading was "every press dies before chiaki" -- a confident, wrong, and quite exciting
+conclusion about a bug that did not exist. Six presses a minute later moved the cursor four
+cells and chiaki logged all of them. The only difference was that the overlay had cleared.
+
+**THE CHECK, and it is one line.** Do not press until a reader that only answers ON THE
+SCREEN YOU WANT says yes:
+
+    a ban screen     orchestrator.read_ban_counter(img) is not None
+    a turn screen    local_hand.read_hand(...) returns its rows
+    the dealer       table_prompt.at_table(img)
+
+`streaming()` and a 1920x1080 capture are NOT that check -- both are true while the PS5
+overlay sits on top of the game. This is 10.29 ("assert the starting state rather than
+assume it") applied to the reconnect, which is the one place it had not been written down.
+
+**AND THE LOG THAT WOULD HAVE CAUGHT IT IS BLOCK-BUFFERED.** `/tmp/chiaki_run.log` is
+chiaki's stdout redirected to a file, so it flushes in 4 KB blocks and its last line is
+routinely cut off mid-word. Measured: 3 seconds and 6 presses produced ZERO bytes of
+growth, and the missing lines appeared 38 s later when the buffer filled. **Absence of a
+log line is not absence of the event** (10.1) -- when reading that log to decide anything,
+either wait for growth past a recorded offset or accept that the last few seconds are
+invisible.
+
 ### A frozen picture is almost never a dead stream
 
 Every real cause SITS ON TOP of a healthy stream, and a restart fixes none of
@@ -974,6 +1013,65 @@ measured while buttons were dead was measuring a broken reset, not routing.
 - Stick injection is HARD OFF under `BASEBALL_TEST_RUN` — it sits ABOVE
   `can_use_background_input()`, so it needs its own lockout or the offline suite
   drives the live console. It did, briefly.
+
+### THE GAME IGNORES ONE PRESS IN SIX, AND NOTHING WE SEND IS LOST (2026-09-17)
+
+**Measured over 1000 presses on a live ban screen, every press confirmed against
+chiaki's own instrumented log BEFORE being scored**, so "ignored" always means
+delivered-and-declined and never "we failed to send":
+
+    ignored                       152 / 1000 = 15.20%
+    never reached chiaki            0
+    P(ignore | previous IGNORED)    0.250        <- they CLUSTER
+    P(ignore | previous moved)      0.135
+    longest consecutive-ignore run  4
+
+**FOUR HYPOTHESES DIED TO GET THAT NUMBER, each killed by a measurement rather than an
+argument, and every one of them was mine:**
+
+    stale frames fool the cursor reader    40/40 double-reads agreed, and agreed with
+                                           reality -- there is no stale-frame problem
+    chiaki's isAutoRepeat discards         ZERO discards in ~150 presses
+    chiaki's edge-collapse dedup           keys accepted == edges transmitted, exactly
+    a null CGEventSource costs delivery    100% on None / HID / Private, interleaved
+
+The press ARRIVES. The console has it. The game declines to act on it. So no delay, no
+event source and no faster retry can prevent this -- **the only remedy is to LOOK, and
+press again if it did not take.** Waiting longer does not help either: the gap since the
+previous move is the same for ignored presses as for accepted ones.
+
+**IT TOOK AN INSTRUMENTED CHIAKI, AND THE INSTRUMENT IS NOW PART OF THE PATCH.**
+`[btnkey]` in `StreamSession::HandleKeyboardEvent` logs every key its Qt handler accepts
+or discards and WHY; `[btnedge]` in `feedbacksender.c` logs every button edge actually
+transmitted. Together they split a lost press three ways -- never reached chiaki, chiaki
+discarded it, chiaki sent it and the game ignored it -- which no amount of black-box
+measurement from the Python side can do. `lib/src/feedbacksender.c` is the FIRST patched
+file outside `gui/`; it and the other two are in `chiaki-patch/` and covered by
+`tests/cpp/test_injectinput_cpp.py`'s byte-for-byte list.
+
+**AND `main.cpp` NOW LINE-BUFFERS STDOUT, WHICH IS WHY ANY OF THIS CAN BE BELIEVED.** The
+log is chiaki's stdout redirected to a file, so libc block-buffered it: 3 seconds and 6
+presses produced ZERO bytes of growth and the tail sat cut off mid-word. TWO measurements
+were thrown away to that before it was fixed -- one of them read the silence as "every
+press dies before chiaki", which is a confident wrong conclusion about a bug that does not
+exist. `setvbuf(stdout, NULL, _IOLBF, 0)`; a press's lines now land in 0.31 s.
+
+**TWO CONSTANTS WERE DERIVED FROM IT, AND BOTH WERE WRONG BEFORE.**
+
+`BAN_NAV_MAX_STEPS` was 14, justified as "12 moves of travel plus 2 slack". But `moves`
+counts EVERY press, landed or not, so it is a budget of PRESSES. Markov simulation over
+200,000 trials, P(reaching a 12-move target): **budget 14 = 64.36%** -- a far ban silently
+missing one time in three, reported as `ban_nav_incomplete`, which is a symptom this file
+already recorded and believed fixed. It is now **22** (99.92%). It is not raised further
+because the budget is also the bail-out for a cursor that is genuinely stuck on a paid
+match.
+
+`PRESS_VERIFY_TRIES` was first written as 3 on `0.167**3 = 0.47%`. **That assumed
+independence and the clustering above refutes it**: each retry is conditioned on the press
+before it having failed, so the real tail is `0.152 * 0.25**(n-1)` -- 0.95% at three tries,
+twice as bad as claimed. It is now **5** (0.059%), which also covers the longest run
+actually observed. **n=60 could not have shown this** -- ten ignores cannot separate 0.25
+from 0.135 -- and the argument for the bigger sample was never precision.
 
 ### THE TEST-RUN LOCKOUT ONLY EVER COVERED THE TARGETED PATH (2026-09-13)
 

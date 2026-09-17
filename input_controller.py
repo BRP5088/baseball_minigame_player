@@ -1389,7 +1389,30 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
 # With nothing dropped both are correct, so this is not the happy path -- it is the failure
 # path, which is the one that bans a card nobody chose in a match that costs $50.
 VERIFY_BAN_NAVIGATION = True
-BAN_NAV_MAX_STEPS = 14             # per target; a grid is 5 wide and ~8 deep
+# DERIVED FROM THE MEASURED IGNORE RATE, NOT FROM THE GRID'S SIZE. It was 14 --
+# "12 moves of travel plus 2 slack" -- which is right only if every press lands.
+# It does not: measured 2026-09-17 over 1000 presses on a live ban screen, each one
+# confirmed against chiaki's own instrumented log before being scored, the console
+# receives about one press in six and the GAME declines to act on it. Nothing we send
+# is lost (undelivered: 0 of 1000).
+#
+#     ignored 152 / 1000 = 15.20%
+#     P(ignore | previous IGNORED) = 0.250      <- they CLUSTER
+#     P(ignore | previous moved)   = 0.135
+#     longest consecutive-ignore run: 4
+#
+# `moves` counts EVERY press, landed or not, so this is a budget of presses and not of
+# travel. Markov simulation over 200,000 trials, P(reaching a 12-move target):
+#
+#     budget 14  64.36%   <- what shipped: a far ban silently missing 1 time in 3
+#     budget 18  97.55%
+#     budget 20  99.52%
+#     budget 22  99.92%   <- chosen
+#
+# It cannot simply be raised to infinity: the budget is also the bail-out for a cursor
+# that is genuinely stuck, on a match that has been paid for. 22 buys 99.9% of reachable
+# targets while still giving up in about 22 seconds on one that is not.
+BAN_NAV_MAX_STEPS = 22
 # UNMEASURED, AND SAID SO HERE RATHER THAN LEFT TO READ LIKE EVIDENCE.
 #
 # CLAUDE.md already names this and BAN_CURSOR_PROBE_TRIES as invented; a QA sweep
@@ -2742,6 +2765,100 @@ def targeted_input_allowed(what):
               "console until you unset it.")
         return False
     return True
+
+
+# THE GAME IGNORES ABOUT ONE PRESS IN SIX, AND NOTHING WE SEND IS LOST.
+# Measured 2026-09-17 on a live ban screen, every press confirmed against chiaki's own
+# instrumented log before being scored (n=60):
+#
+#     moved                50
+#     IGNORED by the game  10   (16.7%)
+#     never reached chiaki  0
+#
+# Four hypotheses died to get that number, each killed by a measurement rather than an
+# argument: stale frames fooling the cursor reader (40/40 double-reads agreed), chiaki's
+# isAutoRepeat discarding (zero discards in ~150 presses), its edge-collapse dedup (keys
+# == edges exactly), and a null CGEventSource costing deliveries (100% on all three
+# sources, interleaved). The press ARRIVES and the game declines to act on it.
+#
+# So no delay, no event-source change and no faster retry can prevent this -- the only
+# thing that works is to LOOK, and press again if it did not take. Waiting longer does
+# not help either: the gap since the previous move is the same for ignored presses as for
+# accepted ones.
+# AND THE FIRST VERSION OF THIS NUMBER WAS WRONG BECAUSE IT ASSUMED INDEPENDENCE.
+# It was 3, justified as 0.167**3 = 0.47%. That arithmetic treats each press as its own
+# coin flip, and the n=1000 run above refutes it: after an ignored press the next one is
+# ignored 25.0% of the time against 13.5% after a good one. Ignores come in runs, and the
+# longest observed was 4. A retry budget is exactly where that matters, because every
+# retry is conditioned on the press before it having failed.
+#
+#     tries=3   0.950%   <- the independence assumption claimed 0.47%
+#     tries=4   0.237%
+#     tries=5   0.059%   <- chosen; also covers the longest run actually observed
+#
+# n=60 could not have shown this -- 10 ignores cannot separate 0.25 from 0.135. It took
+# 152. That is the argument for the bigger sample, and it was not precision.
+PRESS_VERIFY_TRIES = 5
+PRESS_VERIFY_SETTLE = 0.45      # time for the UI to show the change before re-reading
+
+
+def press_verified(action, observe, tries=None, settle=None, log=None):
+    """Press `action` until `observe()` proves it landed. Returns (ok, presses_sent).
+
+    `observe` returns any comparable value that CHANGES when this press takes effect --
+    the ban cursor's cell, a counter, a selected slot. It returns None when it cannot
+    tell, and that distinction is the whole safety of this function.
+
+    IT NEVER PRESSES WHILE BLIND, AND THAT IS THE POINT. Many of these actions are
+    TOGGLES: select_card bans a card and pressing it again UN-bans it. So a retry issued
+    because we could not see is strictly worse than no retry at all -- it can undo the
+    thing that actually worked. When `observe()` returns None this re-READS, and if it
+    is still None it gives up with ok=False rather than pressing into the dark. A caller
+    that gets ok=False knows nothing was committed on the last attempt.
+
+    It also refuses to start blind: with no baseline there is nothing to compare against,
+    and "it changed" would be unanswerable.
+    """
+    tries = PRESS_VERIFY_TRIES if tries is None else tries
+    settle = PRESS_VERIFY_SETTLE if settle is None else settle
+    sent = 0
+
+    def _look(attempts=6):
+        for _ in range(attempts):
+            v = observe()
+            if v is not None:
+                return v
+            time.sleep(0.15)
+        return None
+
+    before = _look()
+    if before is None:
+        if log:
+            log(f"    [verify] {action}: cannot see the starting state — NOT pressing")
+        return False, 0
+
+    for attempt in range(1, tries + 1):
+        press(action)
+        sent += 1
+        time.sleep(settle)
+        after = _look()
+        if after is None:
+            # Blind AFTER a press. The press may or may not have taken, so pressing
+            # again could double-toggle. Stop and say so.
+            if log:
+                log(f"    [verify] {action}: blind after press {attempt} — "
+                    f"stopping rather than risking a double-toggle")
+            return False, sent
+        if after != before:
+            if log and attempt > 1:
+                log(f"    [verify] {action}: took on attempt {attempt}/{tries}")
+            return True, sent
+        if log:
+            log(f"    [verify] {action}: no change after attempt {attempt}/{tries} "
+                f"(state still {before!r}) — the game ignored it, retrying")
+    if log:
+        log(f"    [verify] {action}: FAILED after {tries} attempts, state never left {before!r}")
+    return False, sent
 
 
 def press_background(action, hold_seconds=0.05, post_delay=None):
