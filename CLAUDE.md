@@ -502,6 +502,32 @@ Nothing is lost by it. The local ladder covers every field:
 
     the hand (power, kind, tactics type/bonus)   local_hand.read_hand
     which card the cursor is on / is selected    local_hand.cursor_slot / selected_cards
+
+**AND `cursor_slot` CAN NOW BE SCORED WITHOUT ASKING IT ANYTHING**, which it never
+could before -- every earlier census used the reader's own answer (10.22) or a
+human reading a contact sheet. `selected_cards` reports which card has RISEN above
+its fan anchor, which is GEOMETRY the glow reader cannot influence, and selecting
+requires the cursor to be on that card. So the frame BEFORE a slot newly rises has
+a KNOWN cursor slot. `tools/cursor_labels_from_lifts.py <run_dir>` extracts them
+from frames already on disk -- no console, no live change, no paid call.
+
+**The filter is doing most of the work and the tool says so.** A lift on ONE frame
+is not a selection: mid-deal the fan's anchors shift and a card reads as risen with
+nothing selected. Over 14,437 frames of `run_20260828_140236`:
+
+    raw lift transitions                29
+    still lifted 3 frames later          4     <- real selections
+    dropped as transient                25
+
+and the raw set is dominated by that artefact -- **19 of its 20 "the reader went
+blind" cases were slot 0**, i.e. deal frames with no cursor on screen, where None
+is the RIGHT answer. Against the 4 survivors the shipped reader is 4/4, which
+proves the METHOD and nothing about the reader at that n (10.8).
+
+**Yield is ~4 labels per recorded run, so point it at every future run** and the
+corpus accumulates for free. That matters because the archive cannot currently
+support a threshold on this path at all: 4,183 five-row turn frames exist and
+**4,142 are one run**, at 10 Hz.
     batting or pitching                          local_state.read_phase
     runners: occupancy, power, and SPEED         local_state.read_runners
     the result screen (WINNER/LOSER/DRAW)        local_state.read_result
