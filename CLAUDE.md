@@ -2719,10 +2719,42 @@ is the question asked immediately before an irreversible delete. And a FILENAME 
 reference too: `grep --include="*.json" typhoon` found nothing while `typhoon_results.json`
 sat on disk, because grep searches contents, not names.
 
+**AND THE SAME TRAP LIVES IN A WAIT CONDITION, WHERE IT COSTS AN HOUR INSTEAD OF A
+WRONG ANSWER (2026-09-17).** Two background waiters of mine spun until the user asked
+"tasks are still running" -- long after the work they were waiting on had finished.
+Neither condition could EVER have become true:
+
+    until [ "$(ps aux | grep -c '[g]raphify')" -le 1 ]; do sleep 10; done
+        echo "graphify done"                     <- and there is the bug
+
+    the [g]raphify bracket keeps the PATTERN from matching itself. It does not
+    protect the REST of the command line: `echo "graphify done"` sits in the same
+    argv, `ps aux` prints it, and the count never drops below 2. The loop was
+    watching for its own echo.
+
+    until [ "$(grep -c '"type":"completed"' "$J")" -ge 4 ]; do sleep 10; done
+
+    the journal writes `"type":"result"`. I waited on a key that does not exist,
+    which is the `typhoon_results.json` mistake again -- grepping for the wrong
+    thing and reading the silence as "not yet".
+
+Both are 10.1's "a loop bound that cannot be reached", and both are SILENT by
+construction: a wait that will never end is indistinguishable from work that is
+taking a while, which is exactly why they ran for an hour.
+
+**THE RULE, and it is one command:** before arming a wait, RUN ITS CONDITION ONCE BY
+HAND and confirm the number is what you think. `ps aux | grep -c '[g]raphify'`
+returning 2 with no graphify running answers it instantly. For a self-match, count a
+field rather than the line -- `pgrep -c -x graphify`, which matches the executable
+NAME and cannot see your own argv. And prefer a wait that is BOUNDED, so a wrong
+condition costs one timeout instead of the session.
+
 **THE RULE THIS EARNS:** a verification command gets the same suspicion as the
 code it verifies. Before believing a check that came back CLEAN, make it fail
 on purpose once -- the same discipline section 10.9 demands of a test. A check
 that cannot fire is worse than no check, because it is reported as evidence.
+**That applies to a WAIT as much as to a grep**: "still running" is a claim, and an
+unbounded loop asserts it forever without ever checking.
 
 **16b. IN A FAN-OUT, EVERY DEFAULT IS A COLLISION, AND OMITTING A SETTING IS
 NOT NEUTRAL.** Written 2026-09-13 after breaking BOTH halves of the rule above
