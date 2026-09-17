@@ -21,6 +21,10 @@ this one should not:
     CLOSED.md      answered tickets and the closed loop's batch-by-batch history,
                    in full. §11 keeps a pointer and what transferred; the evidence
                    is there, because evidence is what makes a question stay closed.
+    console_rest_mode_procedure.md
+                   putting the PS5 to sleep and waking it, step by step, with the
+                   press-drop numbers that make a blind sequence unsafe. OPEN IT
+                   BEFORE SENDING A SINGLE PRESS AT THE PS5 OVERLAY.
 
 **Constants quoted here are COPIES; the source `file:line` is the authority** --
 and `tests/harness/test_claude_md_constants.py` now enforces that, after five of
@@ -78,68 +82,43 @@ is a Qt modal, so it only takes input with chiaki FRONTMOST (section 1's ladder
 rule) -- `_key()` posting to the pid will not touch it.
 
 **THE WAY TO ACTUALLY PUT IT TO SLEEP, when it is awake. WALKED END TO END
-2026-09-17, with a paid match on screen, and it works.** The user's recipe,
-2026-09-13 -- *"press the playstation button, scroll all the way to the right.
-should be a power symbol select sleep"* -- is correct. This entry used to say
-"RECORDED FROM THE USER, NOT EXECUTED HERE"; it has now been executed, and the
-four things that cost time are all navigation facts the recipe cannot carry.
+2026-09-17 with a paid match on screen -- the full procedure is
+`console_rest_mode_procedure.md`, and it is worth opening rather than
+remembering.** The user's recipe, 2026-09-13 (*"press the playstation button,
+scroll all the way to the right. should be a power symbol select sleep"*) is
+correct; what it cannot carry is the navigation.
 
-    ic.press('ps_button')        ONCE (it is a TOGGLE). Control Center opens
-                                 with focus on a CARD TILE, not the icon bar
-    ic.press('dpad_down')        ONCE -- this is the step that is easy to miss.
-                                 It moves focus from the tiles DOWN to the icon
-                                 bar, and the bar's LABEL then appears above the
-                                 focused icon ("Home")
-    ic.press('dpad_right') x N   walk to the last icon. The bar is 11 icons:
-                                 home, the game, notifications, friends, music,
-                                 downloads, sound, mic, accessories, profile,
-                                 POWER. From Home that is 10 moves
-    ic.press('cross')            opens the Power menu
-    ic.press('cross')            takes "Enter Rest Mode", which is PRE-SELECTED
-                                 at the top ("suspend your games")
+    ic.press('ps_button')        ONCE (a TOGGLE). Focus opens on a CARD TILE
+    ic.press('dpad_down')        ONCE -- the step that is easy to miss; it drops
+                                 focus to the icon bar, and only then does the
+                                 focused icon show its NAME above the strip
+    ic.press('dpad_right') x N   to the last of 11 icons, POWER (10 from Home)
+    ic.press('cross') x2         open the menu, then take "Enter Rest Mode",
+                                 which is pre-selected at the top
 
-**READ THE POSITION FROM THE LABEL, NEVER BY DEAD RECKONING, because the drop
-rate bites hardest here.** Section 5 measures the game ignoring 15.20% of
-presses; on this overlay the same night: **10 rights moved 6 icons, the next 4
-rights moved 2, and the FIRST cross on Power was dropped entirely** (the menu did
-not open; a second cross opened it). Counting presses would have put the cursor
-three icons past where it was. The focused icon shows a white circle AND its name
-above the bar -- "Home", "Sound", "Accessories", "Power" -- so every batch ends
-with a capture and a read of that word.
+**THE WHOLE THING IS STEP AND LOOK, AND THE DROP RATE IS WHY.** Section 5
+measures the console ignoring 15.20% of presses, clustered. On this overlay:
+**10 rights moved 6 icons, the next 4 moved 2, and the first cross on Power was
+dropped outright.** Counting presses puts the cursor three icons from where it
+believes it is. Read the position from the LABEL after every batch -- and do not
+crop tight to the icons, because the focus ring does not survive the stream at
+that scale while the label, which sits ABOVE the strip, does.
 
-**AND THE HIGHLIGHT IS INVISIBLE IF YOU CROP TO THE BAR.** Two zoomed 2x crops of
-the icon strip, one with focus on the bar and one without, were indistinguishable
-here -- the ring does not survive the stream's compression at that scale. The
-LABEL is the readable signal, and it sits ABOVE the strip, so a crop tight to the
-icons throws away the only thing that answers the question.
+**THE OVERLAY SILENTLY LOSES FOCUS AND STAYS FULLY DRAWN (10.1).** Every press is
+then ignored, indistinguishable from a dropped one -- 14 rights, an up and a down
+changed zero pixels. The tell is the GAME SCENE BEHIND IT: with focus the overlay
+dims it; without, the scene is at normal brightness while the cards and bar
+remain. Recover by toggling `ps_button` off and on, not by pressing harder.
 
-**THE OVERLAY SILENTLY LOSES FOCUS, AND THAT LOOKS EXACTLY LIKE A DEAD PRESS
-(10.1).** Fumbling the first navigation left the Control Center still fully
-DRAWN -- cards, icon bar, everything -- while every subsequent press did nothing:
-14 rights, an up and a down all changed zero pixels. The tell is the GAME SCENE
-BEHIND IT: with focus, the Control Center dims the game; without, the scene is at
-normal brightness while the overlay's furniture stays on screen. Recover by
-toggling `ps_button` off and on rather than pressing harder.
+**Section 3's warning applies to every press here: X is SUBMIT and takes whatever
+the cursor sits on.** From a fresh Control Center that can be the PS5 HOME
+SCREEN. And in the Power menu **"Turn Off PS5" sits directly under "Enter Rest
+Mode"**, so a blind double-X after a dropped press is one row from powering the
+console off mid-match. Capture and read the menu before the second cross.
 
-**Section 3's warning still applies to every press: X is SUBMIT and takes
-whatever the cursor sits on.** Two specific hazards on this path. From a fresh
-Control Center it can reach the PS5 HOME SCREEN, out of the match. And in the
-Power menu **"Turn Off PS5" sits directly under "Enter Rest Mode"** -- so a blind
-double-X after a dropped press is one row away from powering the console off with
-a $50 match open. Capture and read the menu before the second cross.
-
-**CONFIRM IT WITH THE THREE TELLS AT THE TOP OF THIS SECTION, not by the absence
-of an error.** Measured immediately after, and they are unanimous:
-
-    game_capture.grab()             (1867, 1050)   <- the chiaki WINDOW, not
-                                                      the game's 1920x1080
-    ensure_stream.looks_like_ui()   True
-    ensure_stream.streaming()       False
-
-**Rest mode SUSPENDS the game, so an open match survives it** -- the menu entry
-says so itself. `match_in_progress` stays set, correctly: the match really is
-still in progress, and section 2's rule holds (it is often NOT stale -- check the
-screen before clearing it).
+Confirm with the three tells at the top of this section, never with the absence
+of an error. Rest mode SUSPENDS the game, so an open match survives and
+`match_in_progress` stays set, correctly.
 
 **CHIAKI'S OWN SLEEP PATH EXISTS AND IS UNREACHABLE ON macOS. DO NOT SPEND
 TIME ON IT (walked 2026-09-17).** This entry used to read "Worth trying before
