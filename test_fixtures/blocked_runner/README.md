@@ -21,5 +21,7 @@ TWO THINGS THIS FRAME PINS, and both are in RULES.md:
 
   * a hit can produce ZERO base-movements -- the shortest animation the game has,
     against ten for a home run with the bases loaded
-  * the played card on home plate OCCLUDES the hand slot beneath it, which is a
-    TRANSIENT occlusion and not CLAUDE.md 10.28's permanent fan-neighbour one
+  * the played card on home plate OCCLUDES the hand slot beneath it. A STRANDED
+    BATTER IS A PERSISTENT DISPLAY: watched 18s with no input, the card stayed and
+    the slot stayed unreadable in 10 of 10 samples. An earlier line here called it
+    transient; that was reasoned, not observed.

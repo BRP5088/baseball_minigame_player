@@ -186,10 +186,19 @@ always meant to carry.
 **A SECOND OCCLUSION MECHANISM, VISIBLE IN THE SAME FRAME.** The played card
 resting on home plate covers the hand slot beneath it, so a card can be
 unreadable for reasons that have nothing to do with its neighbours in the fan.
-Unlike the fan-neighbour occlusion in CLAUDE.md 10.28 -- which no amount of
-waiting or input clears -- **this one is TRANSIENT and clears when the at-bat
-resolves.** Do not treat the two the same: one is a permanent hole in the hand,
-the other is a reason to look again in a moment.
+**CORRECTION, SAME EVENING: IT IS NOT TRANSIENT, AND THE FIRST VERSION OF THIS
+PARAGRAPH SAID IT WAS.** "Transient, clears when the at-bat resolves" was
+REASONED, not observed, and it was committed that way. Watched for 18 s with no
+input: frame deltas 1.3-3.7 (idle-animation level -- standing still measures
+0.91-6.41), slot 2 unreadable in 10 of 10 samples, and the batter still on the
+plate. The at-bat HAD resolved -- the turn screen was up and the engine was
+taking decisions against it.
+
+A STRANDED BATTER IS A PERSISTENT DISPLAY. He stays on home plate until something
+moves him, so the slot beneath him is covered for the rest of the half. In effect
+it is as permanent as 10.28's fan-neighbour occlusion; what differs is only the
+OCCLUDER (a played card rather than a hand card), and that difference buys nothing
+if you are waiting for it to clear.
 
 **WHAT AN OUT DOES NOT DO** is advance the batter: they are out, and no base
 gains an occupant.
