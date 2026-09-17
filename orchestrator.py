@@ -3002,6 +3002,86 @@ def reveal_mark():
     return w.mark() if w is not None else time.time()
 
 
+REVEAL_SETTLE_MAX_SEC = 2.5    # between a 0.94s worst prefix and a 5.64s shortest window
+REVEAL_SETTLE_POLL = 0.15
+
+
+def reveal_frame_readable(img):
+    """True when BOTH sides' power discs read in `img`. Never raises.
+
+    `phase` only decides which side is called OURS; `batter` and `pitcher` are
+    ROLE-based and phase-independent, so this gate is correct in both halves.
+    """
+    if img is None:
+        return False
+    try:
+        import reveal_cards as _rc
+        r = _rc.read_reveal(img, phase="batting")
+        return (r["batter"].get("power") is not None
+                and r["pitcher"].get("power") is not None)
+    except Exception:
+        return False
+
+
+def settled_reveal_frame(t_mark, timeout=None):
+    """The watcher's frame if the cards have LANDED in it, else a fresh one.
+
+    THE WATCHER HANDS BACK THE PEAK OF A POSSIBLY-OPEN EPISODE, and Episode's own
+    docstring justifies that with "at the peak the cards are fully drawn". Measured
+    2026-09-17, that is false early in an episode: read 1.3s in, the peak frame had
+    both discs at y 0.543/0.547 -- clumped in the GAP between ZONE_MOUND (<=0.50)
+    and ZONE_HOME (>=0.62) -- with the pitcher's disc not detectable anywhere in the
+    frame. The cards fly IN FROM THE SIDES (x 0.403 and 0.642) and converge to
+    x 0.52-0.59, so a frame caught in transit has them nowhere near their zones.
+
+    CENSUS OVER 403 REVEAL FRAMES, 12 CORPORA: both zones read on 258; of the 116
+    where neither does, 106 hold fewer than two discs at all (nothing to read); the
+    10 that remain are every one an OPENING frame. So the zones are right and the
+    FRAME is wrong -- which is why this widens no box. Widening one would span the
+    gap and read cards mid-flight, and mid-flight their positions do not correspond
+    to their final sides: it could name the wrong card the pitcher and produce a
+    CONFIDENT WRONG MARGIN where the honest answer is None (10.23).
+
+    THE BUDGET SITS BETWEEN TWO MEASURED POPULATIONS (10.4). Over the two live
+    bursts the longest UNUSABLE PREFIX is 0.94s (turn1; turn2 0.88s) and the
+    shortest READABLE WINDOW is 5.64s (turn1 t+0.94..6.58; turn2 t+0.88..12.80).
+    2.5s clears the prefix by 2.7x and spends under half the shortest window.
+
+    It can only improve on what it replaces: when nothing readable turns up it
+    returns the watcher's own frame, which is exactly what the caller had before.
+    """
+    img = reveal_frame_for(t_mark, timeout=timeout)
+    if reveal_frame_readable(img):
+        return img
+    why = "the watcher had no frame" if img is None else "the cards were still in flight"
+    t0 = time.time()
+    tries = 0
+    while time.time() - t0 < REVEAL_SETTLE_MAX_SEC:
+        # _fast_grab, NOT game_capture.grab: orchestrator does not import
+        # game_capture at module level, so the name would have raised NameError --
+        # and the bare `except: break` below would have SWALLOWED it, leaving a
+        # fallback that never re-grabs and never says so. 10.1 exactly, introduced
+        # and caught within the hour by a test that stubbed the camera.
+        #
+        # The catch stays (a raise here would kill the turn) but it PRINTS, because
+        # a silent break is indistinguishable from "nothing settled".
+        try:
+            fresh = _fast_grab()
+        except Exception as _e:
+            print(f"  [reveal] could not re-grab while waiting for a settled "
+                  f"frame ({type(_e).__name__}: {_e}) -- using the watcher's")
+            break
+        tries += 1
+        if reveal_frame_readable(fresh):
+            print(f"  [reveal] {why}; a settled frame arrived {time.time() - t0:.2f}s "
+                  f"later after {tries} re-grab(s)")
+            return fresh
+        time.sleep(REVEAL_SETTLE_POLL)
+    print(f"  [reveal] {why}, and no settled frame in {REVEAL_SETTLE_MAX_SEC:.1f}s "
+          f"({tries} re-grabs) -- using the watcher's frame, as before this existed")
+    return img
+
+
 def reveal_frame_for(t_mark, timeout=None):
     """The frame to read this turn's reveal from, or None to capture fresh.
 
@@ -8474,7 +8554,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # which is the state of every offline test and of
                             # any run without the patched chiaki.
                             _reveal_mark = matchup_info.pop("reveal_mark", None)
-                            reveal_img = reveal_frame_for(_reveal_mark)
+                            reveal_img = settled_reveal_frame(_reveal_mark)
                             # OPEN-24: keep this frame when WE played a tactics
                             # card. The label is the engine's own choice, the
                             # frame is already in memory, and the corpus that

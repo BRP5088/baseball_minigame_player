@@ -2527,6 +2527,61 @@ line sat here for weeks doing nothing until someone acted on it. §10.2's whole 
 a mechanism that made sense and measured backwards. A wrong claim is inert right up until
 it is load-bearing, which is why it cannot be left to be corrected later.
 
+**33. THE USER IS USUALLY RIGHT, AND THE RECORD SAYS SO. TEST THEIR IDEA BEFORE
+ARGUING WITH IT.** Their own framing, 2026-09-17: *"I tend to be right about most
+things. I'm not bragging, I've just spent a LOT of time debugging this and know it
+pretty well."* That is not flattery to be humoured -- it is a calibration fact with
+a mechanism (they have watched this game far longer than any session has) and it is
+cheaper to act on than to relearn.
+
+The cost of the opposite is already written all over this file. §8's closed loop
+opens with *"the user had asked for this design earlier and an earlier session built
+dead reckoning instead; that cost days."* §3 records the coin misread THREE times
+against their correction, and the PS5 overlay taking X where this file insisted on
+Square. §4's "+3 does not exist" was their call against 11 recorded values. §10.29's
+wrong diagnosis was stopped by them. In one evening, 2026-09-17:
+
+    "both players have separate decks, so they        refuted a census this project
+     can have different cards than us"                 had treated as a game rule
+    "capture the hand as the obstructing card          the ONLY way the occluded
+     animates away"                                    card was ever identified
+    "stop doing 'the card is on screen right now'      found a deadlock that would
+     -- you aren't letting us tune the engine"         have killed every unattended run
+
+**THE RULE:** when they propose something, the next move is a MEASUREMENT, not a
+counter-argument. Say what would confirm or refute it and go and get that. Where
+they are wrong the measurement says so quickly and cheaply -- and that has also
+happened, which is why this is calibration rather than deference.
+
+**34. AN OCCLUDED CARD CAN ONLY BE REVEALED BY REMOVING WHAT COVERS IT, SO
+DISCARDING A JUNK OCCLUDER HAS INFORMATION VALUE THE ENGINE DOES NOT MODEL.**
+Measured live 2026-09-17. Slot 1's power disc sat under slot 2's card; §10.28
+already records that no amount of re-reading, cursor movement or selection uncovers
+it. Slot 2 was discarded (on its own merits -- a 4 in a hand whose readable maximum
+was 5), and slot 1 read **8/1 at 163 ms and in 20 of 20 deal frames, score
+0.986-0.993**. Not a narrow window: the instant the occluder lifts, the card is
+legible and stays legible.
+
+**AND THE HAND WAS NEVER WEAK.** The hidden card was the BEST one, so the true
+maximum was 8 against `REDRAW_POWER_THRESHOLD` 6 and `should_redraw` should not have
+fired at all. It fired because it takes `max()` over the slots that SURVIVED and has
+no idea its input is incomplete -- the same shape the discard branch's own comment
+describes for a misread power ("a true hand [9,5,4,4,5] read as [1,5,4,4,5] ...
+discards THE REAL 9").
+
+**THE USER'S READING OF THAT IS THE RIGHT ONE, AND IT IS NOT "THE DISCARD WAS
+WASTED":** *"I wouldn't be super worried about using the discard since it allowed us
+to see a better card and the card was bad."* Both halves are true at once -- the
+decision was taken on wrong information, and its outcome was positive (junk thrown,
+an 8 revealed, a POWER SWING +2 drawn). What follows is not "stop discarding" but
+that a discard which REMOVES AN OCCLUDER buys information, and nothing in
+`should_redraw` prices that. Do NOT throw a card merely to read its neighbour; do
+recognise that when the occluder is already the weakest card, the two reasons agree.
+
+The unmodelled gap, stated so it can be measured rather than guessed: an occluded
+card in a hand the engine does NOT want to discard stays unknown for the whole half,
+and every decision that half is taken over an incomplete hand silently.
+
 **1. The commonest bug here: the code did nothing, and doing nothing looked
 exactly like working.** Every bug found on 2026-09-01 had this shape; each fix
 was two or three lines and finding them took a day. Before theorising about a

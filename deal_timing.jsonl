@@ -1,1 +1,2 @@
 {"ts": "2026-09-15T23:47:23", "outcome": "error", "predicted_bases": null, "waited": 0.16, "settled_at": null, "floor": 3.0, "threshold": 15.0, "biggest": 0.0, "edge_seen": false, "bases_lo": null, "bases_hi": null, "play_seq": null, "at_the_play": null}
+{"ts": "2026-09-17T01:12:03", "outcome": "stable", "predicted_bases": null, "waited": 3.56, "settled_at": 1.2, "floor": 3.0, "threshold": 15.0, "biggest": 26.1, "edge_seen": true, "bases_lo": null, "bases_hi": null, "play_seq": null, "at_the_play": null}
