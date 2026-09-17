@@ -413,12 +413,33 @@ _INFO = {"phase": "batting", "our_card_name": "Johnny Drawers", "our_power": 7,
 
 def _Reveal(revealed):
     return Harness(["turn"] + ["other"] * 20, revealed=revealed,
+                   opp_local=_local(revealed),
                    play_results=[(True, dict(_INFO))])
 
 
 # our_power in _INFO is 7, so this is the card we played...
 _OURS = {"kind": "player", "name": "Johnny Drawers", "power": 7, "secondary": 1}
 _THEIRS = {"kind": "player", "name": "Rube Sharp", "power": 4, "secondary": 2}
+# WHAT THE OPPONENT READ ACTUALLY RETURNS NOW, and without it these cases drive a
+# branch production no longer takes. `revealed` feeds read_matchup_reveal -- the
+# PAID model -- and run() wraps that in `if paid_model_allowed() else []`, False
+# by default since 2026-09-12. So reveal_cards was [] here no matter what
+# `revealed` said, and every one of these turns took the no-opponent branch.
+# opponent_from_reveal() is the local rung that replaced it; this is its answer
+# for the _THEIRS faceoff above (power 4, no tactics card).
+_OPP_LOCAL = {"opp_power": 4, "opp_tactics_bonus": 0, "opp_tactics_kind": None}
+
+
+def _local(revealed):
+    """What opponent_from_reveal() returns for a given faceoff.
+
+    `_ours_power_seen` is OUR side of the reveal, which read_reveal() returns and
+    the caller uses to tell a clean turn from a MISFIRE: the row carries the power
+    we INTENDED, so if the screen shows a different one the row would pair an
+    intended card with someone else's outcome. Index 0 of `revealed` is our side
+    in every case below, which is why a _WRONG faceoff models the misfire for free.
+    """
+    return dict(_OPP_LOCAL, _ours_power_seen=(revealed[0] or {}).get("power"))
 # ...and this is a DIFFERENT power, i.e. a card we did not play.
 _WRONG = {"kind": "player", "name": "Zachary Lee", "power": 6, "secondary": 2}
 
@@ -487,9 +508,16 @@ _clean = []
 if os.path.exists(_mlog):
     with open(_mlog) as _f:
         _clean = [json.loads(_l) for _l in _f if _l.strip()]
-check(len(_clean) >= 1 and _clean[0].get("opp_card_name") == "Rube Sharp",
+# PINNED ON THE POWER, NOT THE NAME. The name came from the PAID reveal's
+# `opponent_card.get("name")`, and that reader has been off since 2026-09-12;
+# opponent_from_reveal() reads the opponent's DISC, so a local row legitimately
+# carries opp_power with opp_card_name None. Section 3 is explicit that a card
+# cannot be matched by name anyway -- "Hand cards do not display a name ...
+# match on POWER" -- so asserting the name here was pinning the one field the
+# shipped path cannot produce. The power is what every analysis actually uses.
+check(len(_clean) >= 1 and _clean[0].get("opp_power") == 4,
       f"a CLEAN turn logged {len(_clean)} row(s) "
-      f"({[r.get('opp_card_name') for r in _clean]}) — the misfire guard is "
+      f"({[r.get('opp_power') for r in _clean]}) — the misfire guard is "
       "suppressing good data too")
 
 # --- SELF-DIAGNOSING EXIT ------------------------------------------------
@@ -564,6 +592,7 @@ def _rows_after(fail_polls):
     orchestrator.log_matchup = lambda row: rows.append(row)
     try:
         h = _FlakyAfterPlay(["turn"], revealed=[_OURS, _THEIRS],
+                            opp_local=_local([_OURS, _THEIRS]),
                             play_results=[(True, dict(_INFO))])
         h.fail_polls = fail_polls
         h.run(target_wins=99)
@@ -622,6 +651,7 @@ def _rows_with_runner_on_base():
                     revealed=[dict(_OURS), dict(_THEIRS),
                               {"kind": "player", "name": "Joel Blunt",
                                "power": 9, "secondary": 1}],
+                    opp_local=_local([_OURS, _THEIRS]),
                     play_results=[(True, dict(_INFO, runners_before=1))])
         h.run(target_wins=99)
     finally:

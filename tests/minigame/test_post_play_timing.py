@@ -1,7 +1,7 @@
 """patch63: the post-play deal wait -- threshold between two measured populations,
 a hard floor, ON by default and read at call time. Pins LITERALS (10.11).
 """
-import os, sys, time as _t
+import os, re, sys, time as _t
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 os.environ.setdefault("BASEBALL_TEST_RUN", "1")
@@ -50,8 +50,34 @@ check(_o.post_play_wait_for_deal({}) is True, "deal wait is ON with the env unse
 check(_o.post_play_wait_for_deal({"BASEBALL_DEAL_WAIT": "0"}) is False, "BASEBALL_DEAL_WAIT=0 turns it off")
 check(_o.post_play_wait_for_deal({"BASEBALL_DEAL_WAIT": "1"}) is True, "BASEBALL_DEAL_WAIT=1 keeps it on")
 src = open(os.path.join(_ROOT, "orchestrator.py")).read()
-check("if post_play_wait_for_deal():\n                    wait_for_hand_deal(baseline=pop_hand_baseline())" in src,
-      "the turn loop asks post_play_wait_for_deal() at CALL time")
+# THE PROPERTY IS "ASKED AT CALL TIME", NOT THE ARGUMENT LIST. This pinned the
+# exact two-line call and broke when `margin=_dm` was added -- wiring a
+# predicted_bases parameter that had been dead, i.e. the check failed on a
+# STRICTLY BETTER call site while the property it names held throughout. The
+# regex keeps the two things that matter (the call-time question, and the deal
+# wait taking the popped baseline) and stops caring what else is passed.
+# CHECKED BY BLOCK STRUCTURE, not by adjacency. The first version pinned the exact
+# two-line text and broke when `margin=_dm` was added; the regex that replaced it
+# assumed the call was on the NEXT line and broke again when a try/except moved in
+# between. Both times the property held and only the spelling changed. What this
+# actually asserts: the loop asks the QUESTION at call time, and the deal wait --
+# taking the popped baseline -- happens INSIDE the block that question guards.
+_lines = src.splitlines()
+_hit = [n for n, ln in enumerate(_lines)
+        if ln.strip() == "if post_play_wait_for_deal():"]
+check(len(_hit) == 1, f"exactly one call-time gate in the turn loop (found {len(_hit)})")
+_inside = False
+if _hit:
+    _n = _hit[0]
+    _ind = len(_lines[_n]) - len(_lines[_n].lstrip())
+    for _ln in _lines[_n + 1:]:
+        if _ln.strip() and (len(_ln) - len(_ln.lstrip())) <= _ind:
+            break                      # the block ended
+        if "wait_for_hand_deal(baseline=pop_hand_baseline()" in _ln:
+            _inside = True
+            break
+check(_inside,
+      "the turn loop asks post_play_wait_for_deal() at CALL time and waits inside it")
 check("if POST_PLAY_WAIT_FOR_DEAL:\n" not in src, "the loop no longer reads the import-time constant")
 
 # wait_for_hand_deal: the floor holds even when the edge comes early; the edge is

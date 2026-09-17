@@ -5832,9 +5832,20 @@ def opponent_from_reveal(img, phase):
     theirs = r.get("theirs") or {}
     if theirs.get("power") is None:
         return None
+    # OUR OWN SIDE COMES BACK TOO, and the caller needs it. The MISFIRE check in
+    # run() asks "does any revealed card carry the power we played" -- and it asks
+    # it of `reveal_cards`, the PAID reader's output, which is [] whenever the paid
+    # model is off. So that guard has been dead exactly as long as the log has, for
+    # the same reason. `read_reveal` already returns `ours`; discarding it here is
+    # what left the caller with no local way to tell a clean turn from a misfire.
+    _ours_seen = (r.get("ours") or {}).get("power")
     return {"opp_power": theirs.get("power"),
             "opp_tactics_bonus": theirs.get("bonus"),
-            "opp_tactics_kind": theirs.get("kind")}
+            "opp_tactics_kind": theirs.get("kind"),
+            # NOT an `opp_` field, and deliberately not merged into matchup_info as
+            # one: it describes OUR card, and a row is corrupt if it silently
+            # records the intended power when a different card was played.
+            "_ours_power_seen": _ours_seen}
 
 
 def reveal_margin(row):
@@ -8726,6 +8737,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             _opp_local = opponent_from_reveal(
                                 reveal_img, matchup_info.get("phase"))
                             if _opp_local is not None:
+                                _ours_seen = _opp_local.pop("_ours_power_seen", None)
                                 matchup_info.update(_opp_local)
                                 print(f"  [reveal] opponent read locally: "
                                       f"power {_opp_local['opp_power']}, "
@@ -8932,12 +8944,66 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                 # 27 decisions -> ~3 rows in that run.
                                 _seen_names = [c.get("name") for c in reveal_cards
                                                if c.get("kind") == "player"]
-                                print(f"  [reveal] no OPPONENT card identified "
-                                      f"(ours={_ours!r}, revealed players="
-                                      f"{_seen_names}) — turn not logged.")
-                                record_observation(event="reveal_no_opponent",
-                                                   ours=_ours,
-                                                   revealed=_seen_names)
+                                # THE LOCAL READ IS ALSO A READ, AND WITHOUT THIS
+                                # BRANCH THE LOG IS DEAD. `opponent_card` comes from
+                                # the PAID reveal, and `reveal_cards` is [] whenever
+                                # paid_model_allowed() is False -- the shipped default
+                                # since 2026-09-12. So pick_opponent_card returned None
+                                # on EVERY turn, this else ran on EVERY turn, and
+                                # `pending_matchup = matchup_info` above is the ONLY
+                                # assignment in the file -- which makes log_matchup()
+                                # at the outcome step unreachable. Not one row could be
+                                # written.
+                                #
+                                # `opponent_from_reveal` (added the same night, to fix
+                                # exactly this) DID populate opp_power/opp_tactics_* on
+                                # matchup_info -- and nothing consulted it here, so the
+                                # fix never reached the decision it was written for.
+                                # 10.1: the new reader passed its own unit test while
+                                # the behaviour it existed to restore stayed broken.
+                                #
+                                # The NAME is what could not be matched; the POWER is
+                                # what the row needs. Log on the power, and keep the
+                                # observation for the turns that genuinely have neither.
+                                # AND OUR OWN CARD MUST BE CONFIRMED, not assumed.
+                                # `our_power` in this row is what we INTENDED to
+                                # play. On a dropped keystroke the game plays a
+                                # different card, and a row that pairs the intended
+                                # power with the actual outcome is worse than no
+                                # row -- it is indistinguishable from real data.
+                                # The paid misfire guard below cannot catch that any
+                                # more (it reads `reveal_cards`, always [] with the
+                                # model off), so the local read has to carry it: log
+                                # only when the reveal's OUR side matches what we
+                                # played, bare or boosted.
+                                _ours_ok = (_ours_seen is not None and
+                                            _ours_seen in (_ours_power,
+                                                           (_ours_power or 0) + (_bonus or 0)))
+                                if matchup_info.get("opp_power") is not None and _ours_ok:
+                                    pending_matchup = matchup_info
+                                    print(f"  [reveal] no opponent NAME "
+                                          f"(ours={_ours!r}, revealed players="
+                                          f"{_seen_names}) — logging on the LOCAL "
+                                          f"read (ours {_ours_seen}, theirs "
+                                          f"{matchup_info['opp_power']}).")
+                                elif matchup_info.get("opp_power") is not None:
+                                    # Their card read, ours did not match: this is
+                                    # what a misfire looks like from the local side.
+                                    print(f"  [MISFIRE?] the reveal shows our power "
+                                          f"as {_ours_seen}, we played {_ours_power} "
+                                          f"(+{_bonus}) — not logging this turn.")
+                                    record_observation(event="suspected_misfire",
+                                                       intended_power=_ours_power,
+                                                       revealed=[("local", _ours_seen)])
+                                    matchup_info["misfire_suspected"] = True
+                                    misfires += 1
+                                else:
+                                    print(f"  [reveal] no OPPONENT card identified "
+                                          f"(ours={_ours!r}, revealed players="
+                                          f"{_seen_names}) — turn not logged.")
+                                    record_observation(event="reveal_no_opponent",
+                                                       ours=_ours,
+                                                       revealed=_seen_names)
                         except Exception as _e:
                             # Was `pass`. A bare pass here meant a malformed
                             # reveal, a bad key, or an OCR crash all looked

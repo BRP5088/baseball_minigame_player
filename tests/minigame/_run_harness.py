@@ -129,7 +129,7 @@ class Harness:
 
     def __init__(self, screens, play_results=None, balance=500,
                  wins=0, losses=0, draws=0, logger_stop=None, motion=None,
-                 revealed=None, frozen=False, ban_counter=3,
+                 revealed=None, opp_local=None, frozen=False, ban_counter=3,
                  ban_collection=None, ban_cursor=None):
         self.screens = list(screens)
         self.idx = 0
@@ -162,6 +162,9 @@ class Harness:
         # What read_matchup_reveal() returns. None = reveal never fires, which
         # is the default for tests that don't care about the matchup path.
         self.revealed = revealed
+        # What opponent_from_reveal() returns: {opp_power, opp_tactics_bonus,
+        # opp_tactics_kind} or None. See the stub table below for why it exists.
+        self.opp_local = opp_local
         # Frozen stream: every captured frame byte-identical, which is what a
         # stalled Chiaki stream / sleeping PS5 looks like to the loop.
         self.frozen = frozen
@@ -272,6 +275,16 @@ class Harness:
             "wait_for_screen_to_settle": lambda *a, **k: True,
             "wait_for_reveal_cards": lambda *a, **k: self.revealed is not None,
             "read_matchup_reveal": lambda *a, **k: list(self.revealed or []),
+            # THE PAID STUB ABOVE IS NEVER CALLED, and that is not a harness bug.
+            # run() wraps it in `if paid_model_allowed() else []`, and the paid
+            # model has been OFF since 2026-09-12 -- so every test here has been
+            # driving a branch production no longer takes. The opponent now comes
+            # from opponent_from_reveal(), read LOCALLY off the reveal frame.
+            #
+            # Defaults to None, which is what the real function returns on the
+            # harness's blank frame, so this stub changes NOTHING for a test that
+            # does not set `opp_local`. A test that wants a loggable turn sets it.
+            "opponent_from_reveal": lambda *a, **k: self.opp_local,
             "play_one_turn": self._play_one_turn,
             "read_full_ban_collection": lambda *a, **k: (
                 list(self.ban_collection) if self.ban_collection is not None

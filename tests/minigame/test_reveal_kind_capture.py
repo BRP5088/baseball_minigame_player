@@ -26,6 +26,7 @@ this corpus scores, and carries the bonus-of-3 values RULES.md says cannot exist
 Ours is chosen. Only ours is written.
 """
 import os
+import re
 import sys
 import tempfile
 
@@ -123,7 +124,16 @@ check(_code.count("record_reveal_kind(reveal_img, matchup_info)") == 1,
 # should have failed -- same root cause, opposite sign. The full call, with the
 # closing paren after matchup_info, cannot match the def (which has out_dir next).
 _CALL = "record_reveal_kind(reveal_img, matchup_info)"
-_i = _code.find("reveal_img = reveal_frame_for")
+# MATCHED BY SHAPE, NOT BY THE CALLEE'S NAME. This read
+# `_code.find("reveal_img = reveal_frame_for")` and went to -1 the moment that call
+# site was renamed to settled_reveal_frame() -- a real fix (the reveal was being read
+# while the cards were still flying in), reported here as a failure of the ordering
+# property, which had not changed at all. The property is WHERE the frame is bound
+# relative to the two uses below it; which function produces it is not this test's
+# business. A dead anchor is -1, and -1 < _j is TRUE, so the `-1 < _i` term below is
+# what keeps this from passing vacuously once the name stops matching.
+_m = re.search(r"^\s*reveal_img\s*=\s*\w+\(", _code, re.M)
+_i = _m.start() if _m else -1
 _j = _code.find(_CALL)
 _k = _code.find("read_matchup_reveal(img=reveal_img)")
 check(-1 < _i < _j < _k,

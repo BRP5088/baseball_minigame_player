@@ -68,7 +68,19 @@ def drive(succeed_on):
     Returns (state, number of re-grabs made)."""
     calls = {"n": 0}
 
-    def cards(img):
+    # **kw OR THIS STUB RAISES ON EVERY CALL AND THE FILE STILL LOOKS LIKE A
+    # CLEAN FAILURE. _retry_local_hand calls
+    # `local_hand_cards(hand_img, homeplate_runner=...)`, and a one-argument stub
+    # raises TypeError into that function's own `except Exception: continue` --
+    # so the re-grab loop reports "never succeeded, 0 re-grabs", which is exactly
+    # what a genuinely failing read looks like. Every check here passed for the
+    # wrong reason from the day the kwarg landed.
+    #
+    # The swallow is in PRODUCTION, not just here: `except Exception: continue`
+    # cannot tell a signature error from a failed capture, so a real mismatch
+    # would disable the retry just as silently. Flagged, not changed -- that is a
+    # live-path decision.
+    def cards(img, **kw):
         calls["n"] += 1
         return ({"kind": "player"} if calls["n"] >= succeed_on else None), "slot 1: kind unknown"
 
