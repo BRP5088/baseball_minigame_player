@@ -115,6 +115,30 @@ CASES = [
     ("a slot the fan could not name",    3, {"kind": "unknown"}),
 ]
 
+# ...AND reset_hand_memory() CANNOT DO IT ALONE OFFLINE, WHICH SILENTLY DISABLED
+# THREE CHECKS BELOW. It clears the dict and then calls _save_hand_memory() to
+# DELETE the file -- but that write is deliberately suppressed off the rig ("AN
+# OFFLINE READ MUST NOT WRITE THE RIG'S FILE", orchestrator.py), so hand_memory.json
+# survives, `_hand_memory_loaded = False` invites the next read, and the carry-forward
+# re-loads the LAST LIVE MATCH's cards from disk.
+#
+# Measured 2026-09-17, same commit, same code:
+#
+#     in a git worktree (no hand_memory.json)   30 PASS   0 FAIL
+#     in the checkout after a live match         26 PASS   3 FAIL
+#
+# and the file held exactly that match's hand ({"0": 5, "1": 4, "4": 4}), so the
+# three "a powerless card is dropped" checks reported got [0, 1, 2, 3, 4] -- memory
+# had supplied the very power the case removes. The suite's answer depended on
+# whether anyone had played recently, which is CLAUDE.md 10.1's family: the reset
+# did nothing, and doing nothing looked exactly like working.
+#
+# MEMORY_IN_PROCESS_ONLY makes _load_hand_memory return before it touches the file.
+# Deleting the file instead would be wrong TWICE: it is the rig's live state (a
+# suspended match's hand was in it tonight), and section 2 forbids a test writing
+# what a live run owns.
+orchestrator.MEMORY_IN_PROCESS_ONLY = True
+
 _real = local_hand.read_hand
 try:
     # the control first: the stub itself must build, or every case below passes vacuously
