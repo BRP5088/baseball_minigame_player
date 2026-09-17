@@ -1,0 +1,51 @@
+{
+ "glow": [
+  0.1,
+  0.1,
+  3.1,
+  0.0,
+  10.9
+ ],
+ "selected": [
+  4
+ ],
+ "cursor_slot_says": 4,
+ "CURSOR_GLOW_MIN": 10.0,
+ "per_slot": [
+  {
+   "slot": 0,
+   "kind": "player",
+   "digit": "5",
+   "y": 196,
+   "glow": 0.1
+  },
+  {
+   "slot": 1,
+   "kind": "player",
+   "digit": "4",
+   "y": 162,
+   "glow": 0.1
+  },
+  {
+   "slot": 2,
+   "kind": "player",
+   "digit": null,
+   "y": 208,
+   "glow": 3.1
+  },
+  {
+   "slot": 3,
+   "kind": "tactics",
+   "digit": null,
+   "y": 150,
+   "glow": 0.0
+  },
+  {
+   "slot": 4,
+   "kind": "player",
+   "digit": "4",
+   "y": 173,
+   "glow": 10.9
+  }
+ ]
+}
