@@ -104,6 +104,23 @@ PATCH_FILES = [
     # is the one place a decoded frame can be copied without taking it away
     # from the renderer -- streamsession.cpp only emits a signal.
     ("gui/src/qmlbackend.cpp", "gui/src/qmlbackend.cpp"),
+    # THE PRESS INSTRUMENTATION (2026-09-17), and it is a MEASURING TOOL rather
+    # than a feature -- it is what proved the console receives about one press in
+    # six and declines to act on it, while NOTHING we send is lost. Four
+    # hypotheses died to that log: stale frames fooling the cursor reader,
+    # chiaki's isAutoRepeat, its edge-collapse dedup, and a null CGEventSource.
+    #
+    # feedbacksender.c is the FIRST file patched outside gui/. It logs every
+    # button EDGE chiaki actually transmits; streamsession.cpp logs every key its
+    # Qt handler accepts or discards, and the pair localises a lost press to a
+    # boundary instead of leaving it a mystery.
+    #
+    # main.cpp's setvbuf is the reason any of it can be believed. The log is
+    # chiaki's stdout redirected to a file, so libc block-buffered it: 3 seconds
+    # and 6 presses once produced ZERO bytes, and a run read that silence as "no
+    # input reached chiaki" -- a confident wrong conclusion about a bug that did
+    # not exist. Two measurements were thrown away to that before it was fixed.
+    ("lib/src/feedbacksender.c", "lib/src/feedbacksender.c"),
 ]
 
 PATCH_DIR = os.path.join(_ROOT, "chiaki-patch")

@@ -941,12 +941,23 @@ void StreamSession::HandleMouseMoveEvent(QMouseEvent *event, qreal width, qreal 
 void StreamSession::HandleKeyboardEvent(QKeyEvent *event)
 {
 	if(!keyboard_controller_enabled)
+	{
+		CHIAKI_LOGI(GetChiakiLog(), "[btnkey] key=0x%x DISCARDED: keyboard controller disabled", event->key());
 		return;
+	}
 	if(key_map.contains(Qt::Key(event->key())) == false)
+	{
+		CHIAKI_LOGI(GetChiakiLog(), "[btnkey] key=0x%x DISCARDED: not in key_map", event->key());
 		return;
+	}
 
 	if(event->isAutoRepeat())
+	{
+		CHIAKI_LOGI(GetChiakiLog(), "[btnkey] key=0x%x DISCARDED: isAutoRepeat", event->key());
 		return;
+	}
+	CHIAKI_LOGI(GetChiakiLog(), "[btnkey] key=0x%x %s accepted", event->key(),
+			event->type() == QEvent::Type::KeyPress ? "DOWN" : "UP");
 
 	int button = key_map[Qt::Key(event->key())];
 	bool press_event = event->type() == QEvent::Type::KeyPress;

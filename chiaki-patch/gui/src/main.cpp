@@ -118,6 +118,14 @@ int real_main(int argc, char *argv[])
 	// set, so a normal launch is unaffected. Without this call the whole
 	// injection path is dead while every symbol still links — which is how a
 	// rebuild can look successful and reach the console with nothing.
+	// LINE-BUFFER STDOUT. The log is chiaki's stdout redirected to a file, so libc
+	// block-buffers it in 4KB chunks: 3 seconds and 6 presses once produced ZERO bytes
+	// of growth, the tail sat cut off mid-word, and a diagnostic run read the silence as
+	// "no input reached chiaki" -- a confident wrong conclusion about a bug that did not
+	// exist (CLAUDE.md 10.1). Without this, anything timed against this log is guesswork.
+	setvbuf(stdout, NULL, _IOLBF, 0);
+	setvbuf(stderr, NULL, _IOLBF, 0);
+
 	InjectInputStart();
 
 	// Open the decoded-frame mapping. No-op unless CHIAKI_FRAME_DUMP is set.
