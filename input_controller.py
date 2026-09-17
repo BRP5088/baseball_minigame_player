@@ -787,7 +787,35 @@ CURSOR_MAX_STEPS = 8
 MOVE_SETTLE_SEC = 0.40
 SELECT_SETTLE_SEC = 0.60
 
-SELECT_ATTEMPTS = 2            # 1 swallowed select in 5 measured; the selection confirms each
+SELECT_ATTEMPTS = 5            # 0.059% residual; covers the longest observed run of 4
+# DERIVED FROM THE n=1000 PRESS CENSUS (2026-09-17, commit d07c0bb), NOT FROM THE n=5 THIS
+# LINE USED TO CITE. That census measured, with every press confirmed against chiaki's own
+# instrumented log before being scored: the game IGNORES 15.20% of presses it demonstrably
+# receives, and they CLUSTER -- P(ignore | previous ignored) = 0.250 against 0.135 after a
+# press that moved, longest consecutive run 4. So the residual is 0.152 * 0.25**(n-1), NOT
+# the independent 0.2**n the old figure assumed:
+#
+#     attempts 2   3.80%    <- shipped until now, and it FIRED on a live $50 match
+#     attempts 3   0.95%
+#     attempts 4   0.238%
+#     attempts 5   0.059%   <- and 5 covers the longest run actually observed
+#
+# A turn makes TWO selections (batter + tactics), so at 2 attempts roughly one turn in
+# thirteen loses a play to a refusal -- which is most matches. Observed live 2026-09-17:
+# selecting the tactics card refused after 2 attempts, unwound correctly, and the identical
+# retry landed, which is what proves the reader CAN see that lift and the presses were
+# ignored rather than unseen. That distinction is what makes retrying safe here: a press
+# that LANDED but could not be SEEN would be un-toggled by the next press, and this loop
+# guards that by re-reading between attempts and refusing the moment a card it did not
+# expect goes up.
+#
+# The same census set PRESS_VERIFY_TRIES = 5 and BAN_NAV_MAX_STEPS = 22 the same night.
+# This constant sits on the same axis and was missed; it is on the money path, where the
+# cost of the miss is a refused play rather than a wrong one.
+#
+# Extra attempts are paid ONLY when a press is actually ignored, so the expected added
+# cost is 0.152 * (SELECT_SETTLE_SEC + SELECT_RETRY_CONFIRM_SEC) per selection, not a
+# fixed tax on every turn.
 
 # BEFORE PRESSING AGAIN, WAIT LONGER THAN THE ANIMATION -- because a press can be LATE
 # rather than lost, and the two look identical at 0.6 s. Measured 2026-09-10: the lift and

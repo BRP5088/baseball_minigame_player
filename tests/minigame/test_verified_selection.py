@@ -300,9 +300,14 @@ finally:
 check(ok is False and "confirm_play" not in fs.sent,
       f"select_card swallowed EVERY time (the 35s stall) -> refused={ok is False}, "
       f"no commit={'confirm_play' not in fs.sent}")
-check(fs.sent.count("select_card") == ic.SELECT_ATTEMPTS,
-      f"and it tried {fs.sent.count('select_card')} times, not once "
-      f"(SELECT_ATTEMPTS={ic.SELECT_ATTEMPTS})")
+# PIN THE LITERAL (10.11). This read `== ic.SELECT_ATTEMPTS`, which is the constant the
+# check exists to guard -- so it passed at 1, at 2 and at any value anyone ever set, and
+# it would have reported a budget of ONE as correct. The literal is the measurement.
+check(ic.SELECT_ATTEMPTS == 5,
+      f"SELECT_ATTEMPTS is the n=1000-derived 5, not {ic.SELECT_ATTEMPTS} "
+      "(0.152 * 0.25**4 = 0.059% residual; longest observed ignore run 4)")
+check(fs.sent.count("select_card") == 5,
+      f"and it tried {fs.sent.count('select_card')} times, not once")
 
 
 # A SWALLOWED SELECT THAT LANDS ON THE RETRY. Measured live: 1 select press in 5 never
