@@ -121,8 +121,21 @@ import glob
 import tempfile
 from PIL import Image
 
+# THE GUARD BLOCKS BY DEFAULT, and this is the control: without it the check
+# below would pass just as well with the guard missing entirely.
+_b0 = set(glob.glob(os.path.join(o.DEAL_FRAME_DIR, "dropped_*")))
+o._save_dropped_hand(Image.new("RGB", (40, 20)), "guard control", [1])
+check(set(glob.glob(os.path.join(o.DEAL_FRAME_DIR, "dropped_*"))) == _b0,
+      "CONTROL: under BASEBALL_TEST_RUN the frame is NOT written without the opt-in")
+
+# ...and this test drives that path ON PURPOSE, so it opts in and restores.
 before = set(glob.glob(os.path.join(o.DEAL_FRAME_DIR, "dropped_*")))
-o._save_dropped_hand(Image.new("RGB", (40, 20)), "test: slots [1] unreadable", [1])
+_saved_flag = o.DEAL_FRAMES_IN_TESTS
+o.DEAL_FRAMES_IN_TESTS = True
+try:
+    o._save_dropped_hand(Image.new("RGB", (40, 20)), "test: slots [1] unreadable", [1])
+finally:
+    o.DEAL_FRAMES_IN_TESTS = _saved_flag
 after = set(glob.glob(os.path.join(o.DEAL_FRAME_DIR, "dropped_*")))
 new = after - before
 check(len(new) == 1, f"_save_dropped_hand keeps the frame ({len(new)} dir written)")

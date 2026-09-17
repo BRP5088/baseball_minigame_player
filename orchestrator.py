@@ -4426,6 +4426,23 @@ REFUSED_HAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 DEAL_FRAME_KEEP = 160
 DEAL_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "diagnostics", "deal_frames")
+# THE OFFLINE SUITE WAS WRITING INTO THAT DIRECTORY, ~16 DIRS A RUN. Measured
+# 2026-09-17: the tree was cleaned to 107 entries, two full `./run_tests.sh` runs
+# followed, and 32 new `dropped_*` directories appeared. DEAL_FRAME_DIR anchors on
+# __file__, so it always points INSIDE the repo, and it sits one level below an
+# already-tracked directory, which is how it escaped
+# tests/harness/test_no_side_effects.py's snapshot.
+#
+# Same family as the caches section 10 records: the suite once wrote a demo-archive
+# geometry key into compass_scale.json, which the RIG reads back. This one only
+# litters -- but a test that GLOBS this directory then races every other test that
+# writes to it under JOBS=4, which is section 2's "a test must never glob a
+# directory a live run writes to" with the roles reversed.
+#
+# The opt-in follows FOCUS_PRESS_IN_TESTS (section 5): a test that drives this path
+# ON PURPOSE sets the flag and restores it; a test that forgets writes NOTHING and
+# its assertion fails, which is the safe direction to be wrong in.
+DEAL_FRAMES_IN_TESTS = False
 _DEAL_FRAMES = collections.deque(maxlen=DEAL_FRAME_KEEP)
 # ONE DUMP PER DEAL. local_hand_cards runs several times a turn -- the
 # retry path alone calls it LOCAL_HAND_REGRABS times -- and a dump per
@@ -4510,6 +4527,10 @@ def _save_dropped_hand(img, why, dropped):
     unmeasurable -- 10.31's missing-class problem in reverse.
     """
     if img is None:
+        return
+    # See DEAL_FRAMES_IN_TESTS. Read at CALL time, never captured in a default
+    # (10.18) -- a test sets it around the one call it means to make.
+    if _running_under_test() and not DEAL_FRAMES_IN_TESTS:
         return
     try:
         d = os.path.join(DEAL_FRAME_DIR, f"dropped_{time.time_ns()}")
