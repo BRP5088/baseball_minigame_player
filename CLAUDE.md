@@ -4225,6 +4225,51 @@ made unilaterally. Until then the gate stands on two matches, and the two RARE
 classes are the ones the existing sets happen to cover best (fielding 25 frames,
 speed 23) while the log's rarest are fielding 8 and speed 6.
 
+**OPEN-25 — A STALE `match_in_progress` STILL REACHES `start_match` WITH NO
+DEBIT, AND IT IS REPRODUCED. PREFLIGHT IS THE ONLY THING STOPPING IT (2026-09-17).**
+
+The branch at `orchestrator.py` ~8176-8223 exists to stop exactly this: it proves
+the flag is stale (the dealer's prompt is on screen, and the world HUD is never
+drawn over a match), clears it, persists, and says it is *"letting the NEXT poll
+take the ordinary debit path"*. **That next poll cannot reach the debit path.**
+`acted_screen` is cleared only when the SCREEN CHANGES -- and never by `"other"`
+(`orchestrator.py:7985`) -- so after the `continue` the prompt is still up, the C2
+guard at the top of the branch is still armed, and the poll falls through to the
+recovery press instead: `start_match` with no debit, no `max_spend` check and no
+`save_progress`.
+
+REPRODUCED with the run harness, same screens and the same real dealer prompt,
+differing ONLY in the seeded flag:
+
+    match_in_progress False (control)   11 start_match presses   balance 500 -> 450
+    match_in_progress True  (stale)     10 start_match presses   balance 500 -> 500
+
+**WHAT SAVES IT TODAY IS `preflight.py`, and nothing else.** It reports every
+`progress*.json` claiming an open match and escalated from `warn` to `bad`, so a
+run cannot START in the dangerous state -- verified against the live file this
+morning. The harmful case therefore needs a FRESH process carrying a previous
+run's flag with preflight bypassed. Within one process the flag being set implies
+this process debited, and retrying the KEYSTROKE without re-debiting is correct
+and deliberate (`tests/minigame/test_run_debit_and_scoring.py` pins it: *"the
+retry must send the KEYSTROKE only"*).
+
+**THE OBVIOUS FIX IS WRONG AND WAS MEASURED WRONG.** Clearing `acted_screen`
+alongside the flag -- which is what the comment's own promise implies -- releases
+the C2 double-debit guard, and the same harness then gives:
+
+    flag False (control)   balance 500 -> 200      SIX debits
+    flag True  (stale)     balance 500 -> 250
+
+i.e. it converts an under-charge into the over-charge C2 exists to prevent, and
+that test's own warning ("12 polls would have taken $600 of a $500 wallet") is
+the failure it reproduces. Reverted, sha-verified, not shipped.
+
+**What a real fix needs:** something that distinguishes "THIS PROCESS debited"
+from "a previous run left the flag", which the single boolean cannot express --
+a process-local `debited_this_process`, or re-deriving the flag from the screen
+rather than trusting disk. That is a design change on the money path and is the
+user's call.
+
 **OPEN-9 — Can a recovery REPLACE the reset rather than precede it?** Local
 recovery failed because its cost was ADDITIVE — when the fan failed, the reset
 still happened. The variant that skips the reset on success has not been tried.
