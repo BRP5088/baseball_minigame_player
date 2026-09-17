@@ -861,6 +861,45 @@ def _look_settled(look):
     return glow, ys, 0, []
 
 
+CURSOR_BLIND_MAX = 1           # a stranded batter covers exactly ONE slot
+
+
+def _find_blind_cursor(look):
+    """Where the cursor is when it cannot be SEEN. (slot, sel) or (None, sel).
+
+    THE USER'S PROCEDURE, 2026-09-17, and it needs no new reader: step once and look.
+    Landing anywhere READABLE tells you where you are, which is all a walk needs -- the
+    slot you came FROM is only interesting to a human.
+
+    IT COSTS AT MOST TWO PRESSES AND BOTH ARE REVERSIBLE. move_right first; if that is
+    still blind, move_left twice -- one to undo it, one to land on the other side. A
+    press into the wall at slot 0 or 4 moves nothing, which is why both directions are
+    tried rather than trusting either.
+
+    Verified live before it was written. The cursor sat on slot 2 under a stranded
+    batter's card and read NOTHING above the gate; move_right lit slot 3 at 22.4 and
+    move_left lit slot 1 at 28.2, against CURSOR_GLOW_MIN 10.0 -- so the blind slot was
+    2 by elimination, and a true halo is 2-3x the gate even on the frames either side of
+    an unreadable one.
+    """
+    import local_hand
+    for key in ("move_right", "move_left", "move_left"):
+        press(key)
+        time.sleep(MOVE_SETTLE_SEC)
+        glow, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print(f"  [cursor] the fan stopped reading while locating a blind cursor "
+                  f"(rows={n}) — refusing")
+            return None, sel
+        cur = local_hand.cursor_slot(glow, sel)
+        if cur is not None:
+            print(f"  [cursor] the cursor could not be seen; stepped {key} and found it "
+                  f"on slot {cur} (glow={glow})")
+            return cur, sel
+    print(f"  [cursor] stepped both ways and the cursor is still invisible — refusing")
+    return None, sel
+
+
 def _walk_cursor_to(target, look):
     """Press toward `target`, LOOKING after every single press.
 
@@ -872,26 +911,84 @@ def _walk_cursor_to(target, look):
     import local_hand
     glow, ys, n, sel = _look_settled(look)
     cur = local_hand.cursor_slot(glow, sel)
-    if n != MAX_HAND_SIZE or cur is None:
-        print(f"  [cursor] cannot see the cursor (rows={n}, glow={glow}) — refusing")
+    if n != MAX_HAND_SIZE:
+        print(f"  [cursor] cannot read the fan (rows={n}, glow={glow}) — refusing")
         return False, sel
+    if cur is None:
+        # A CARD CAN COVER A SLOT'S HALO WITHOUT COVERING THE FAN. A batter who is
+        # stranded on home plate -- a hit the pitcher's FIELDING pinned to zero
+        # base-movements -- leaves his card lying over the hand, and the glow window
+        # for the slot beneath reads his NAME BANNER instead of a halo: 3.6-5.0 where
+        # the gate is 10.0 and a real cursor is 22-28. Refusing here blocked a live
+        # $50 turn twice with nothing wrong but the view.
+        cur, sel = _find_blind_cursor(look)
+        if cur is None:
+            return False, sel
     steps = 0
+    blind = 0
     while cur != target:
         if steps >= CURSOR_MAX_STEPS:
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
-        press("move_right" if cur < target else "move_left")
+        step = 1 if cur < target else -1
+        press("move_right" if step > 0 else "move_left")
         steps += 1
         time.sleep(MOVE_SETTLE_SEC)
         glow, ys, n, sel = _look_settled(look)
         if n != MAX_HAND_SIZE:
             print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) — refusing")
             return False, sel
-        cur = local_hand.cursor_slot(glow, sel)
-        if cur is None:
-            print(f"  [cursor] lost the cursor after {steps} press(es) "
-                  f"(glow={glow}) — refusing")
-            return False, sel
+        got = local_hand.cursor_slot(glow, sel)
+        if got is None:
+            # CROSSING A BLIND SLOT IS NOT LOSING THE CURSOR, AND THE INFERENCE IS THE
+            # WHOLE SAFETY ARGUMENT: we pressed FROM a slot we could SEE, so if the
+            # press had been ignored we would still be on that visible slot and this
+            # read would not be blind. A blind read therefore PROVES the press landed,
+            # and one step of dead reckoning is exact rather than hopeful.
+            #
+            # IT IS EXACTLY ONE STEP. From here we can no longer tell "ignored" from
+            # "moved" -- both look blind -- so a second consecutive blind read refuses.
+            # The game ignores 15.2% of presses (section 5), so crossing costs a refusal
+            # about one time in seven, and a refusal is the safe direction: the caller
+            # re-reads and retries, where a wrong belief selects the wrong card.
+            blind += 1
+            if blind > CURSOR_BLIND_MAX:
+                print(f"  [cursor] blind for {blind} presses in a row — refusing rather "
+                      f"than dead-reckon further (glow={glow})")
+                return False, sel
+            nxt = cur + step
+            if not (0 <= nxt < MAX_HAND_SIZE):
+                print(f"  [cursor] a blind read would put the cursor at {nxt}, off the "
+                      f"fan — refusing")
+                return False, sel
+            # `cur` IS DELIBERATELY NOT ADVANCED, and that was established by a
+            # SURVIVING MUTANT rather than by design. Replacing the assignment changed
+            # no outcome in any case that could be constructed: where a readable slot
+            # follows, its reading overwrites the belief anyway, and where one does not,
+            # both versions refuse -- one through the `blind` bound, the other through
+            # CURSOR_MAX_STEPS. A line that cannot change an answer does not belong on
+            # the selection path pretending to.
+            #
+            # `nxt` still earns its keep one line above: it is what proves the next step
+            # would not walk off the fan.
+            print(f"  [cursor] slot {nxt} shows no halo (glow={glow}) — a covered slot, "
+                  f"not a lost cursor; stepping on and proving it on the next one")
+            continue
+        blind = 0
+        cur = got
+    if blind:
+        # ARRIVING BLIND IS NOT ARRIVING. The loop exits when `cur == target`, and after
+        # a dead-reckoned step `cur` is a BELIEF, not a reading -- so a target that is
+        # itself covered would exit here and print "verified" for a slot never seen.
+        # Found by a surviving mutant: replacing the dead-reckoning assignment changed
+        # nothing in any test, because every other path has a readable slot after it
+        # that overwrites the belief. This is the one path that does not.
+        #
+        # The caller commits a card on this answer, so an unverified arrival must read
+        # as a refusal, not as a quiet success.
+        print(f"  [cursor] reached {target} only by dead reckoning across a covered "
+              f"slot — it cannot be SEEN there, so this is not a verified arrival")
+        return False, sel
     if steps:
         print(f"  [cursor] verified on {target} after {steps} press(es)")
     return True, sel
