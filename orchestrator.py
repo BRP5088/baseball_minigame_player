@@ -5702,6 +5702,51 @@ def effective_power(power, bonus, kind):
     return power + ((bonus or 0) if kind in POWER_TACTICS_KINDS else 0)
 
 
+def opponent_from_reveal(img, phase):
+    """The OPPONENT's card, read LOCALLY. {opp_*} or None. Never raises.
+
+    WIRED 2026-09-17, AND THE MATCH LOG HAD BEEN DEAD FOR FIVE DAYS WITHOUT IT.
+    read_matchup_reveal is the PAID model, PAID_MODEL_ENABLED went False on
+    2026-09-12, and the reveal block is wrapped in a try whose own comment says
+    "any failure here is swallowed and this turn just doesn't get logged". So
+    every at-bat since raised PaidModelDisabled before reaching
+    `pending_matchup = matchup_info` and was dropped entirely -- not mislabelled,
+    NOT LOGGED. Checked rather than reasoned: match_log.jsonl's last row is
+    2026-09-10 and today's three plays added none.
+
+    Section 3 says "Nothing is lost by it. The local ladder covers every field"
+    and lists a local reader for each. That was true of every field except this
+    one: `reveal_cards` was imported by four TESTS and three TOOLS and by no
+    production module, so the ladder had a rung missing and nothing failed loudly
+    enough to say so. 10.1's family, pointed at a corpus.
+
+    OURS DOES NOT COME FROM HERE, DELIBERATELY. matchup_info already carries our
+    power, bonus and KIND from the engine's own decision -- ground truth, not a
+    reading -- so only theirs needs the screen, and the tactics-kind reader's 29%
+    abstention can only cost the opponent's half.
+
+    effective_power's conservatism is what keeps it honest: a bonus whose KIND did
+    not read returns None rather than pricing it at zero, so an opponent with a
+    tactics card we cannot identify yields NO margin instead of a wrong one.
+    """
+    if img is None:
+        return None
+    try:
+        # ALIASED. The turn loop binds a LOCAL named `reveal_cards` to the paid
+        # reader's output a few lines below its own import point, so importing the
+        # module under its own name there would shadow or be shadowed silently.
+        import reveal_cards as _rc
+        r = _rc.read_reveal(img, phase=phase or "batting")
+    except Exception:
+        return None
+    theirs = r.get("theirs") or {}
+    if theirs.get("power") is None:
+        return None
+    return {"opp_power": theirs.get("power"),
+            "opp_tactics_bonus": theirs.get("bonus"),
+            "opp_tactics_kind": theirs.get("kind")}
+
+
 def reveal_margin(row):
     """OUR margin over theirs at the reveal, or None if either card is unknown.
 
@@ -8560,7 +8605,25 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # frame is already in memory, and the corpus that
                             # gates the kind reader stands on TWO matches.
                             record_reveal_kind(reveal_img, matchup_info)
-                            reveal_cards = read_matchup_reveal(img=reveal_img)
+                            # THE OPPONENT'S CARD, LOCALLY, BEFORE THE PAID PATH.
+                            # This is the rung section 3's ladder was missing --
+                            # without it every at-bat since 2026-09-12 raised and
+                            # was dropped unlogged. See opponent_from_reveal.
+                            _opp_local = opponent_from_reveal(
+                                reveal_img, matchup_info.get("phase"))
+                            if _opp_local is not None:
+                                matchup_info.update(_opp_local)
+                                print(f"  [reveal] opponent read locally: "
+                                      f"power {_opp_local['opp_power']}, "
+                                      f"tactics {_opp_local['opp_tactics_kind']} "
+                                      f"+{_opp_local['opp_tactics_bonus']}")
+                            # AND THE PAID CALL ONLY WHEN IT IS ALLOWED. Calling it
+                            # regardless is what raised into the swallowing except
+                            # and cost the log; an empty list is what the block
+                            # below already handles (pick_opponent_card returns
+                            # None and its `if opponent_card is not None` skips).
+                            reveal_cards = (read_matchup_reveal(img=reveal_img)
+                                            if paid_model_allowed() else [])
                             # Known accepted limitation (QA, 2026-08-23): if our
                             # card and the opponent's happen to share a name
                             # (plausible from a shared card pool), both get
