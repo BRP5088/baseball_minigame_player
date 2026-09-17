@@ -88,12 +88,31 @@ Recorded because each read as a finding before it was checked:
     the vertical-bound guard                   its instrument is not independent of
                                                what it polices (above)
 
-## SUITE
+## SUITE — one of the five was a REAL defect and is fixed
 
-233 files, **5 failures, all confirmed PRE-EXISTING** at `2e54dcd` by running
-them in a worktree at that commit: `test_run_resume_and_persist`,
-`test_paid_reads_no_cards`, `test_reveal_kind_capture`, `test_post_play_timing`,
-`test_local_retry_not_paid`. Not caused by tonight's work and not investigated.
+233 files, 5 failures, none caused by tonight's work. **One turned out to be
+worth the detour and is now fixed; four are left alone.**
+
+**`test_paid_reads_no_cards` had three checks silently disabled, and the suite's
+answer depended on whether anyone had played recently.** Same commit, same code:
+
+    in a git worktree (no hand_memory.json)   30 PASS   0 FAIL
+    in the checkout after a live match        26 PASS   3 FAIL
+
+`reset_hand_memory()` clears the dict and calls `_save_hand_memory()` to DELETE
+the file — and that write is deliberately suppressed off the rig, so
+`hand_memory.json` survives and the carry-forward reloads the LAST LIVE MATCH's
+cards. The file held exactly tonight's hand (`{"0": 5, "1": 4, "4": 4}`), so the
+three "a powerless card is dropped" checks were reading memory, not the drop
+rule. 10.1's family: the reset did nothing, and doing nothing looked like working.
+
+Fixed on the TEST side (`MEMORY_IN_PROCESS_ONLY`); production untouched, and the
+file was NOT deleted — it is the suspended match's live state. Mutation-tested:
+with the drop turned into a no-op the file FAILS, restored, sha verified.
+
+**Still failing, pre-existing, NOT investigated** — four separate questions:
+`test_run_resume_and_persist`, `test_reveal_kind_capture`, `test_post_play_timing`,
+`test_local_retry_not_paid`. Setting the memory flag changes none of them.
 
 ## SUGGESTED NEXT STEP, THE USER'S CALL
 
@@ -101,6 +120,8 @@ them in a worktree at that commit: `test_run_resume_and_persist`,
    pick was slot 0 + a speed boost; a home run is arithmetically impossible).
 2. Run `tools/cursor_labels_from_lifts.py` against every run the rig records
    from now on, and revisit the cursor gate once the label count is in the
-   dozens rather than 4.
+   dozens rather than 4. **The whole archive yields 4** — the other two runs
+   (`run_20260828_135528`, `run_20260828_150622`) contain no selections at all,
+   and the tool says "NOTHING TO SCORE" rather than reporting a vacuous 0%.
 3. Leave the glow window alone until then — §10.35 is four nights' worth of
    reasons not to touch it without a FALSE column.
