@@ -77,25 +77,136 @@ those activate whichever button holds focus, and Yes is the left one. The dialog
 is a Qt modal, so it only takes input with chiaki FRONTMOST (section 1's ladder
 rule) -- `_key()` posting to the pid will not touch it.
 
-**THE WAY TO ACTUALLY PUT IT TO SLEEP, when it is awake.** The user's recipe,
-2026-09-13: *"press the playstation button, scroll all the way to the right.
-should be a power symbol select sleep."* That is the PS5 Control Center path.
-**RECORDED FROM THE USER, NOT EXECUTED HERE** — the console was already in
-standby, so none of it was walked. Treat it as instructions, not as measurement,
-and note that section 3's warning applies to every press on that overlay: X is
-SUBMIT and takes whatever the cursor sits on, which from a fresh Control Center
-can be the PS5 HOME SCREEN.
+**THE WAY TO ACTUALLY PUT IT TO SLEEP, when it is awake. WALKED END TO END
+2026-09-17, with a paid match on screen, and it works.** The user's recipe,
+2026-09-13 -- *"press the playstation button, scroll all the way to the right.
+should be a power symbol select sleep"* -- is correct. This entry used to say
+"RECORDED FROM THE USER, NOT EXECUTED HERE"; it has now been executed, and the
+four things that cost time are all navigation facts the recipe cannot carry.
 
-**CHIAKI CAN ALSO DO IT, and that path avoids the overlay entirely.** Read from
-`chiaki-ng-src`, also NOT executed here: `StreamSession::GoToBed()` is the
-console-sleep call, reached from `QmlBackend::goToSleep()` and from the session
-stop path. The UI exposes it as a **"Sleep" button** on the dialog
-`StreamView.qml:944` ("Do you want the Console to go into sleep mode?"), and
-Settings has a disconnect action with **"Do Nothing / Enter Sleep Mode / Ask"**
-(`SettingsDialog.qml:475`, backed by `DisconnectAction::AlwaysSleep`). So
-setting that preference once makes stopping a session sleep the console, with no
-blind navigation of the PS5 overlay at all. Worth trying before the Control
-Center route; verify it the first time by reading `State:` on the host list.
+    ic.press('ps_button')        ONCE (it is a TOGGLE). Control Center opens
+                                 with focus on a CARD TILE, not the icon bar
+    ic.press('dpad_down')        ONCE -- this is the step that is easy to miss.
+                                 It moves focus from the tiles DOWN to the icon
+                                 bar, and the bar's LABEL then appears above the
+                                 focused icon ("Home")
+    ic.press('dpad_right') x N   walk to the last icon. The bar is 11 icons:
+                                 home, the game, notifications, friends, music,
+                                 downloads, sound, mic, accessories, profile,
+                                 POWER. From Home that is 10 moves
+    ic.press('cross')            opens the Power menu
+    ic.press('cross')            takes "Enter Rest Mode", which is PRE-SELECTED
+                                 at the top ("suspend your games")
+
+**READ THE POSITION FROM THE LABEL, NEVER BY DEAD RECKONING, because the drop
+rate bites hardest here.** Section 5 measures the game ignoring 15.20% of
+presses; on this overlay the same night: **10 rights moved 6 icons, the next 4
+rights moved 2, and the FIRST cross on Power was dropped entirely** (the menu did
+not open; a second cross opened it). Counting presses would have put the cursor
+three icons past where it was. The focused icon shows a white circle AND its name
+above the bar -- "Home", "Sound", "Accessories", "Power" -- so every batch ends
+with a capture and a read of that word.
+
+**AND THE HIGHLIGHT IS INVISIBLE IF YOU CROP TO THE BAR.** Two zoomed 2x crops of
+the icon strip, one with focus on the bar and one without, were indistinguishable
+here -- the ring does not survive the stream's compression at that scale. The
+LABEL is the readable signal, and it sits ABOVE the strip, so a crop tight to the
+icons throws away the only thing that answers the question.
+
+**THE OVERLAY SILENTLY LOSES FOCUS, AND THAT LOOKS EXACTLY LIKE A DEAD PRESS
+(10.1).** Fumbling the first navigation left the Control Center still fully
+DRAWN -- cards, icon bar, everything -- while every subsequent press did nothing:
+14 rights, an up and a down all changed zero pixels. The tell is the GAME SCENE
+BEHIND IT: with focus, the Control Center dims the game; without, the scene is at
+normal brightness while the overlay's furniture stays on screen. Recover by
+toggling `ps_button` off and on rather than pressing harder.
+
+**Section 3's warning still applies to every press: X is SUBMIT and takes
+whatever the cursor sits on.** Two specific hazards on this path. From a fresh
+Control Center it can reach the PS5 HOME SCREEN, out of the match. And in the
+Power menu **"Turn Off PS5" sits directly under "Enter Rest Mode"** -- so a blind
+double-X after a dropped press is one row away from powering the console off with
+a $50 match open. Capture and read the menu before the second cross.
+
+**CONFIRM IT WITH THE THREE TELLS AT THE TOP OF THIS SECTION, not by the absence
+of an error.** Measured immediately after, and they are unanimous:
+
+    game_capture.grab()             (1867, 1050)   <- the chiaki WINDOW, not
+                                                      the game's 1920x1080
+    ensure_stream.looks_like_ui()   True
+    ensure_stream.streaming()       False
+
+**Rest mode SUSPENDS the game, so an open match survives it** -- the menu entry
+says so itself. `match_in_progress` stays set, correctly: the match really is
+still in progress, and section 2's rule holds (it is often NOT stale -- check the
+screen before clearing it).
+
+**CHIAKI'S OWN SLEEP PATH EXISTS AND IS UNREACHABLE ON macOS. DO NOT SPEND
+TIME ON IT (walked 2026-09-17).** This entry used to read "Worth trying before
+the Control Center route". It is not; nothing on this Mac can reach it, and the
+attempt is the dangerous kind of experiment because every candidate keystroke is
+one bind away from killing chiaki with a paid match on screen.
+
+THE CHAIN IS REAL, and reading it is what makes the dead end certain rather than
+assumed (`chiaki-ng-src`, all verified by reading):
+
+    QEvent::Close on the main window    qmlmainwindow.cpp:7487 -> backend->closeRequested()
+    DisconnectAction::Ask (the DEFAULT) qmlbackend.cpp:1275 -> emit sessionStopDialogRequested()
+                                        and returns FALSE, so the window does NOT close
+    the popup                           StreamView.qml:1257 opens sessionStopDialog
+                                        (or separateSessionStopWindow; identical behaviour)
+    focus                               onVisibleChanged -> view.grabInput(sleepButton)
+    RETURN                              Keys.onReturnPressed -> closeAction = 1
+                                        -> Chiaki.stopSession(true) -> GoToBed() + Stop()
+    ESCAPE                              closeAction stays 0 -- a harmless abort
+
+**AND THE ONLY KEYBOARD ROUTE INTO IT IS COMPILED OUT HERE.**
+`qmlmainwindow.cpp:7412` is
+
+    case Qt::Key_Q:
+    #ifndef Q_OS_MACOS
+        close();
+    #endif
+        return true;          // swallowed on macOS, does nothing
+
+Qt maps its `ControlModifier` to COMMAND on macOS, so chiaki's own Cmd+Q is that
+`#ifndef` and is a no-op. **Cmd+W is not bound at all** -- sent live at the
+frontmost chiaki with a match on screen: no dialog, window still open, the match
+frame byte-for-byte the same scene before and after. And the window is
+FULLSCREEN with **zero AX buttons**, so there is no close control to press
+either. Setting `DisconnectAction` to `AlwaysSleep` changes nothing, because
+nothing can end the session to trigger it.
+
+**THE USER'S CALL ON THAT ATTEMPT, 2026-09-17: *"Don't do cmd+w. That's dumb and
+dangerous."*** Correct, and the reason generalises past this key: the dialog's
+whole safety argument is that Sleep is focused and Escape aborts -- but that only
+holds IF THE DIALOG OPENS. If the keystroke is bound to plain window close
+instead, the same press quits chiaki mid-match. Do not probe an app's keymap by
+pressing keys at it while a paid match is live.
+
+**SO THE TWO ROUTES THAT REMAIN ARE THE OVERLAY RECIPE ABOVE, AND DOING
+NOTHING.** Doing nothing is not a joke: this section's own opening paragraph
+records that the console auto-sleeps when nothing reaches it, reliably enough to
+have killed an overnight run four minutes in. If the goal is "asleep by morning"
+rather than "asleep now", stop sending input and let it.
+
+**TWO INSTRUMENT TRAPS FOUND WHILE CHECKING THIS, both of which made a
+verification look like it had verified something (10.1's family).**
+
+    chiaki runs on the SECOND display    the LG ULTRAWIDE, window at (-2560, 0)
+                                         2560x1080, while the Mac's built-in is
+                                         3456x2234
+    screencapture -x one.png             captures the BUILT-IN display only. The
+                                         "before" shot of chiaki was a picture of
+                                         the Claude app. Use
+                                         `screencapture -x a.png b.png` -- one
+                                         path per display, in order
+    frontmost_app() == "chiaki"          says which APP has focus. It says nothing
+                                         about which MONITOR that app is on, so it
+                                         cannot corroborate a screenshot
+
+The user spotted the first one instantly (*"Wrong monitor"*) from a screenshot
+that had already been accepted here as evidence.
 
 - The stream needs the **patched** build in `chiaki-ng-build/`.
   `/Applications/chiaki-ng.app` is stock: no injection, every input silently
