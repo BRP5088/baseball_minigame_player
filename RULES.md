@@ -152,6 +152,45 @@ move on a hit" from "the boost ate the movement" -- and the rule was written
 anyway, before the experiment that separated them had been run. n=1 per arm, so
 the DIRECTION is established and the rate is not.
 
+**AND THE CONVERSE IS ALSO TRUE: A WINNING AT-BAT CAN ADVANCE NOBODY, AND THE
+BATTER IS LEFT STANDING ON HOME PLATE.** Seen live 2026-09-17, spotted by the
+user watching the stream and captured in
+`test_fixtures/blocked_runner/` --
+
+    ours Donny Mekesz 5/3 + POWER SWING +1 = 6   vs   theirs 5
+    margin +1, so a HIT by the game's own rule
+
+...and nothing moved. Rube Sharp (8/1) stayed on FIRST where he had been since
+the turn before, the score stayed 2-0, and our batter sat on HOME PLATE with his
+card overlapping the hand. **Two players cannot occupy the same base**, so with
+the runner pinned the batter had nowhere to go.
+
+The mechanism is fielding, already recorded above: the PITCHER'S FIELDING
+SUBTRACTS RUNNER MOVEMENT, and it can subtract all of it. `bases_to_travel`'s own
+tests have pinned the arithmetic all along -- *"fielding 2 pins them all; only the
+batter moves"*, and `bases_to_travel(bases(first=3), 1, -2, 3) == 0`. What was not
+known is that the pin can cascade: pin the runner and you pin the BATTER behind
+him, so a hit produces ZERO base-movements.
+
+**WHAT IT COSTS ELSEWHERE.** `classify_outcome` returned plain `"hit"` here --
+true, and indistinguishable from a bases-clearing one. It now returns
+`hit_no_advance`, but ONLY when both runner counts were actually read: `rose` is
+False both when nothing moved and when the runner reader abstained, and those two
+must not collapse into one label.
+
+**AND IT IS THE CHEAPEST CASE FOR THE DEAL GATE**, which is why it matters beyond
+the record: zero base-movements is the shortest animation the game has, against a
+home run with the bases loaded at ten. That spread is what `predicted_bases` was
+always meant to carry.
+
+**A SECOND OCCLUSION MECHANISM, VISIBLE IN THE SAME FRAME.** The played card
+resting on home plate covers the hand slot beneath it, so a card can be
+unreadable for reasons that have nothing to do with its neighbours in the fan.
+Unlike the fan-neighbour occlusion in CLAUDE.md 10.28 -- which no amount of
+waiting or input clears -- **this one is TRANSIENT and clears when the at-bat
+resolves.** Do not treat the two the same: one is a permanent hole in the hand,
+the other is a reason to look again in a moment.
+
 **WHAT AN OUT DOES NOT DO** is advance the batter: they are out, and no base
 gains an occupant.
 

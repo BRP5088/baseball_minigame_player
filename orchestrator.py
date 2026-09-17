@@ -3533,7 +3533,7 @@ def pop_hand_baseline():
 
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                        poll_interval: float = 0.15, baseline=None,
-                       predicted_bases=None) -> bool:
+                       predicted_bases=None, margin=None) -> bool:
     """Block until the replacement card has visibly landed in the hand.
 
     Returns True if the deal was seen, False on timeout. Rising-edge trigger on
@@ -3553,6 +3553,26 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         print(f"  [deal] predicted {predicted_bases} base(s) to animate")
     reset_deal_frames()
     _dinputs = pop_deal_inputs()
+    # PREDICTED BASES, AT LAST. bases_to_travel has existed and been tested all along --
+    # "fielding 2 pins them all; only the batter moves" is one of its own checks -- and
+    # this function has taken a `predicted_bases` argument that NOTHING IN PRODUCTION
+    # EVER PASSED, so every row carried None and tools/deal_timing.py would have refused
+    # with "0 usable rows" however many matches were played (deal_inputs_bounds' own
+    # docstring says so). The pipeline was wired, exercised, green, and collected nothing.
+    #
+    # WHAT UNBLOCKED IT WAS THE REVEAL. bases_to_travel needs the MARGIN, and the margin
+    # needs the opponent's card -- which nothing read locally until opponent_from_reveal
+    # landed the same day. The caller passes it because only the caller has it.
+    #
+    # Computed from the SAME popped inputs the bounds use, so the diamond is never read
+    # twice and the two numbers cannot disagree.
+    if predicted_bases is None and margin is not None and _dinputs:
+        try:
+            predicted_bases = bases_to_travel(
+                _dinputs.get("bases"), _dinputs.get("batter_speed"),
+                margin, _dinputs.get("fielding", 0))
+        except Exception:
+            predicted_bases = None
     _di = deal_inputs_summary(_dinputs)
     _bases_lo, _bases_hi = deal_inputs_bounds(_dinputs)
     if _di:
@@ -5777,6 +5797,18 @@ def classify_outcome(margin, runs, runners_before, runners_after):
     if margin >= AUTO_HOME_RUN_MARGIN:
         return "home_run", "margin"
     if margin > 0:
+        # A WINNING AT-BAT CAN ADVANCE NOBODY, and until 2026-09-17 nothing could say
+        # so. The pitcher's FIELDING subtracts runner movement (section 4), and it can
+        # subtract all of it: seen live, our 5+POWER SWING+1 = 6 beat their 5, and the
+        # runner on first did not move -- so the batter had nowhere to go and stood on
+        # HOME PLATE. Score unchanged, bases unchanged, and the row said plain "hit"
+        # exactly like a bases-clearing one.
+        #
+        # ONLY WHEN BOTH COUNTS WERE ACTUALLY READ. `rose` is False both when nothing
+        # moved and when the runner reader ABSTAINED, and those must not collapse into
+        # one label -- an unread base is not a base nobody reached (10.1).
+        if (runners_after is not None and runners_before is not None and not rose):
+            return "hit_no_advance", "margin"
         return "hit", "margin"
     if margin == 0:
         # A tie is a coin flip capped at first base, so the screen is the only witness.
@@ -8859,7 +8891,14 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # the source of the empty-hand / power-0 reads that pushed
                 # should_redraw() into discarding a hand that was actually fine.
                 if post_play_wait_for_deal():
-                    wait_for_hand_deal(baseline=pop_hand_baseline())
+                    # THE MARGIN IS THE X-AXIS. Passed here and nowhere else because
+                    # this is the only point that has both the diamond (stashed at the
+                    # play) and the reveal (read just above).
+                    try:
+                        _dm = reveal_margin(pending_matchup) if pending_matchup else None
+                    except Exception:
+                        _dm = None
+                    wait_for_hand_deal(baseline=pop_hand_baseline(), margin=_dm)
                 wait_for_screen_to_settle(max_wait=8.0, regions="turn")
                 time.sleep(0.4)  # small buffer past "settled" before the next read
 
