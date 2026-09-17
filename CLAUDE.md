@@ -2672,6 +2672,56 @@ The unmodelled gap, stated so it can be measured rather than guessed: an occlude
 card in a hand the engine does NOT want to discard stays unknown for the whole half,
 and every decision that half is taken over an incomplete hand silently.
 
+**35. WHEN A WINDOW'S DISCRIMINATION COMES FROM WHERE IT SITS, EVERY DEGREE OF
+FREEDOM YOU GIVE IT DESTROYS THAT DISCRIMINATION -- AND EACH ATTEMPT LOOKS LIKE
+AN IMPROVEMENT RIGHT UP TO THE CONTROL.** Four attempts in one night, 2026-09-17,
+on the cursor-glow window. All four raised the TRUE reading. All four raised the
+FALSE reading at least as much, and only the control showed it.
+
+The window is 80x20 at a fixed offset from the power disc, and it works because it
+is pinned to the narrow strip of dark backdrop JUST OUTSIDE the card, where a
+hovered card's halo is the only bright thing. The cards are white cartoon art, so
+**any box placed ON a card reads 60-88% bright whether or not the cursor is
+there.** Every "improvement" below moves the box further onto the card:
+
+    1D sweep, 0-120 px along the box's       slot 4 never exceeds 11.0 at ANY
+    own axis                                 offset, while slots 0-3 read 26-28
+                                             at the shipped position
+    2D sweep, dx +-140 dy +-90, take the     TRUE reaches 87.6 -- and FALSE
+    brightest placement found                controls reach 70-79. One population
+                                             (10.4), no threshold exists
+    a band FOLLOWING the card's fitted rim   fixes the weak slot (7.0/11.0 ->
+    instead of an axis-aligned box           25.0/26.5, in line with the others)
+                                             and FALSE rises to 38.3, because
+                                             EVERY card has a bright edge
+    the SAME box, ROTATED to the card's      5/12 against the shipped 8/12 -- and
+    tilt (size and offset untouched)         the angle estimate RAILED at its own
+                                             search bounds (+14, -4) on most
+                                             slots, so it was never an angle
+
+**THE FIRST THREE WOULD HAVE SHIPPED ON THE TRUE NUMBERS ALONE.** "The weak slot
+went from 7.0 to 25.0, in line with every other slot" is a real sentence about a
+real measurement, and it is worthless without the FALSE column beside it. This is
+10.4 with a specific cause worth naming: optimising a window's placement optimises
+it toward whatever is brightest, and whatever is brightest is usually the class you
+are trying to reject.
+
+**THE TELL, BEFORE SPENDING THE NIGHT:** ask what supplies the CONTRAST. If the
+answer is "the background it happens to sit on" rather than "the object itself",
+the placement is load-bearing and is not a free parameter. A reader that searches
+for its asset (10.23) is the opposite case and the freedom is correct there --
+what distinguishes them is whether the thing being measured has its own signature
+or is only bright relative to its surroundings.
+
+**AND THE ONE THAT DID NOT FAIL WAS NEVER TRIED, BECAUSE IT NEEDS LABELS THIS
+PROJECT HAS NEVER HAD.** `local_hand.selected_cards` measures which card has RISEN
+above its fan anchor -- pure geometry, no brightness. Selecting requires the cursor
+to be on that card, so **the frame before a slot newly rises is a frame whose
+cursor slot is known**, from a signal the glow reader cannot influence. Every
+earlier census of `cursor_slot` used the reader's own answer (10.22) or a human
+reading a contact sheet. It needs no live change and runs on frames already on
+disk.
+
 **1. The commonest bug here: the code did nothing, and doing nothing looked
 exactly like working.** Every bug found on 2026-09-01 had this shape; each fix
 was two or three lines and finding them took a day. Before theorising about a
