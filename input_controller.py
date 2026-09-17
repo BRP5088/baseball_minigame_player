@@ -1011,7 +1011,7 @@ def _unwind_selection(before, look, ours):
         return False
 
 
-def _clear_strays(want, look):
+def _clear_strays(want, look, blind_before=frozenset()):
     """Put down every lifted card the engine did not choose. True if safe to commit.
 
     Factored out of _verified_select_and_play so the DISCARD path can run it too.
@@ -1038,12 +1038,41 @@ def _clear_strays(want, look):
               "commit whose lifted set was never seen is a blind commit.")
         invalidate_cursor()
         return False
-    if any(y is None for y in _ys):
-        print(f"  [cursor] the lift of at least one card could not be MEASURED "
-              f"({_ys}) — refusing. An unmeasured lift reads as 'down' and a raised "
-              "card would go in with the commit.")
+    # AN UNMEASURABLE LIFT IS DANGEROUS ONLY IF WE COULD HAVE CAUSED IT.
+    #
+    # This refused whenever ANY y was None, and that deadlocked a live match on
+    # 2026-09-17: slot 1's disc sat under its neighbour for the whole hand, so its
+    # lift was unmeasurable FOREVER. The hand then read weak (the occluded card is
+    # dropped, 10.28), should_redraw fired, the discard reached this guard, and it
+    # refused -- leaving the state identical, so the next poll decided the same thing
+    # and refused again. Neither a play nor a discard could ever commit: both call
+    # this. Unattended that burns all 15 stuck attempts and ends the match with $50
+    # spent and three rounds unplayed.
+    #
+    # The guard is still RIGHT about the hazard it was built for, and that hazard has
+    # a direction: SELECTING a card is what makes it unreadable (the disc shrinks out
+    # of DISC_MIN_R), so the dangerous case is a slot that WAS measurable and has
+    # gone blind since -- something we did. A slot already blind in `blind_before`,
+    # read before this operation pressed anything, cannot have been raised by us.
+    #
+    # This is the same line the stray check already draws: `extra` is computed
+    # against `before`, so cards already up when we arrived are deliberately not
+    # treated as ours. Extending that to "already unreadable" is consistent, not new
+    # licence -- and it is NARROW, because a slot that goes blind mid-operation still
+    # refuses exactly as before.
+    _blind_now = {i for i, y in enumerate(_ys) if y is None}
+    _new_blind = _blind_now - set(blind_before)
+    if _new_blind:
+        print(f"  [cursor] slot(s) {sorted(_new_blind)} went unreadable DURING this "
+              f"operation ({_ys}) — refusing. They were measurable when it started, so "
+              "something we pressed lifted them, and a raised card would go in with "
+              "the commit.")
         invalidate_cursor()
         return False
+    if _blind_now:
+        print(f"  [cursor] slot(s) {sorted(_blind_now)} were ALREADY unreadable before "
+              "this operation began — proceeding. We cannot have raised them, and "
+              "refusing forever is how a hand with one occluded card deadlocks.")
     lifted = set(sel)
     extra = lifted - want
     if extra:
@@ -1169,7 +1198,10 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # a human probe: "an investigation that leaves state behind poisons the next
     # experiment, and the result still looks like a finding".
     want = {t for t in (card_index, tactics_index) if t is not None}
-    if not _clear_strays(want, look):
+    # THE BASELINE IS THE PRE-PRESS READ AT THE TOP OF THIS FUNCTION, so a slot that
+    # was never readable is told apart from one this call lifted.
+    _blind0 = {i for i, y in enumerate(_ys0) if y is None}
+    if not _clear_strays(want, look, blind_before=_blind0):
         return False
 
     press("confirm_play")
@@ -1258,6 +1290,12 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # card was thrown), and homing was the cheap mitigation available then. Reading
     # the screen is the real one: the same walk-and-verify the play path uses, and
     # the lift must name THIS card before anything irreversible is pressed.
+    #
+    # READ THE FAN BEFORE TOUCHING IT. The play path already had this (`_ys0`) and the
+    # discard path did not, so it had no way to tell a slot it had just lifted from one
+    # that was unreadable all along -- see _clear_strays. One look, ~40 ms.
+    _g0, _ys0, _n0, _before0 = _look_settled(look)
+    _blind0 = {i for i, y in enumerate(_ys0) if y is None} if _n0 == MAX_HAND_SIZE else frozenset()
     ok, _sel = _walk_cursor_to(card_index, look)
     if not ok:
         invalidate_cursor()
@@ -1276,7 +1314,7 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # deliberately leaves a wrongly-raised card up ("pressing again compounds it"),
     # and the clear-at-commit is the play path's answer to that. The discard path
     # simply did not have one.
-    if not _clear_strays({card_index}, look):
+    if not _clear_strays({card_index}, look, blind_before=_blind0):
         return False
     # AND PUT THE CURSOR BACK ON THE CARD. _clear_strays walks to each stray to
     # deselect it and does not walk back, so adding it here parked the cursor on the
