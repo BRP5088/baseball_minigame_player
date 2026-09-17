@@ -60,13 +60,42 @@ across 540 hand crops on many days produced zero novel (power, secondary) pairs.
 
 ### Tactics cards
 
-    POWER SWING     +1 60%   +2 40%      the ONLY card ever above +1
+    POWER SWING     +1 60%   +2 40%
     SPEED BOOST     +1 100%
     PITCH FOCUS     +1 100%
     FIELDING PLAY   +1 100%
 
-*Measured over 299 hand-labelled tactics cards.* **A +3 does not exist.** Any
-record showing one is a misread.
+*Measured over 299 hand-labelled tactics cards **FROM OUR OWN HAND**.* **A +3
+does not exist.** Any record showing one is a misread.
+
+**THAT TABLE DESCRIBES OUR DECK. IT IS NOT A STATEMENT ABOUT THE GAME, BECAUSE
+THE TWO PLAYERS HOLD SEPARATE DECKS AND DO NOT SHARE CARDS.** The user's point,
+2026-09-17, and it is the right way round: *"since both players have separate
+decks, one should conclude they can have different cards than us. we don't
+share."* So nothing measured from our hand is evidence about what the opponent
+can play, and the table above must never be used to resolve one of their cards.
+
+**THE LINE THIS REPLACES SAID "POWER SWING ... the ONLY card ever above +1", AND
+A LEGIBLE FRAME REFUTED IT (2026-09-17).** Turn 1 of a live match, read off the
+reveal and confirmed by eye: our Austin "Cur" Bunz 8 + **POWER SWING +2** = 10
+against their Jenny Jody Gain 6 + **PITCH FOCUS +2** = 8, margin 2 -- a hit, no
+home run, runner to first, exactly as the screen then showed. **A PITCH FOCUS +2
+exists.**
+
+The provenance is what makes this predictable rather than unlucky: every key in
+`hand_labels*.json` is a `hand_*.jpg` fan crop, so the opponent's played cards
+were never in the sampled population at all. A census cannot discover a class it
+never sampled (CLAUDE.md 10.31), and the separate decks mean our sample could
+never have covered theirs however large it grew. **n=35 PITCH FOCUS all at +1 is
+a fact about our deck; at 40% it would be a 1-in-10^8 coincidence, so this is
+most likely a card we simply do not own.**
+
+**WHERE IT IS LOAD-BEARING:** `reveal_cards.margin_from` infers "a +2 must be a
+Power Swing, which adds power" whenever the banner does not read -- and the
+banner abstains often (both sides abstained on the turn above). The margin came
+out right only because Power Swing and Pitch Focus BOTH add power. A **FIELDING
+PLAY +2** on their mound would be credited 2 power it does not have, which is
+the difference between a logged hit and a logged out.
 
 **Only SWING and PITCH boosts add power.** Speed and fielding boosts carry a
 nonzero bonus that adds NONE, so the tactics KIND has to be known before a bonus

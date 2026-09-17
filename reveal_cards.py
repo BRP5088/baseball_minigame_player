@@ -359,9 +359,30 @@ def read_reveal(full_frame, phase="batting"):
 def margin_from(reveal, phase):
     """(margin, why). None when it cannot be known -- never a guess.
 
-    A +2 IS ALWAYS A POWER SWING: section 4's census over 299 hand-labelled
-    tactics cards has POWER SWING as the only card ever above +1. So a +2
-    resolves the kind for free, and a +1 does not.
+    THE "+2 RESOLVES ITS OWN KIND" PREMISE IS REFUTED, AND THE FALLBACK BELOW
+    STILL USES IT -- deliberately, pending a decision, and flagged here so it is
+    not mistaken for sound.
+
+    It read: "A +2 IS ALWAYS A POWER SWING: section 4's census over 299
+    hand-labelled tactics cards has POWER SWING as the only card ever above +1."
+    That census is taken ENTIRELY FROM OUR OWN HAND -- every key in
+    `hand_labels*.json` is a `hand_*.jpg` fan crop -- and **the two players hold
+    SEPARATE DECKS and do not share cards**, so it was never evidence about what
+    the opponent can play. A **PITCH FOCUS +2** was read off the opponent's mound
+    on 2026-09-17, legible in the frame, with the batter's POWER SWING +2 beside
+    it. See RULES.md.
+
+    WHY THE MARGIN WAS STILL RIGHT THAT TURN, and why that is not reassuring:
+    Power Swing and Pitch Focus BOTH add power, so 6+2 either way. The error this
+    opens is a **FIELDING PLAY +2** on their side -- credited 2 power it does not
+    have, understating our margin by 2, which is exactly the hit/home-run
+    boundary this function's own comments say it exists to protect.
+
+    The safe change is to abstain on the THEIRS side when the banner did not
+    read, keeping the inference for OURS where the census actually applies. It is
+    not made here because it trades margin coverage for honesty on the money
+    path, and the coverage depends on OPEN-24 lifting the kind reader's 29%
+    abstention first.
     """
     o, t = reveal["ours"], reveal["theirs"]
     if o["power"] is None or t["power"] is None:
@@ -415,13 +436,30 @@ def margin_from(reveal, phase):
         if kind is not None:
             # a speed or fielding boost: real, read, and adds no power
             return side["power"], f"{holder} {side['power']} ({kind} adds no power)"
-        if side["bonus"] == 2:
-            # THE FALLBACK, AND IT IS STILL SOUND. Section 4's census over 299
-            # hand-labelled tactics cards has POWER SWING as the only card ever
-            # above +1, so a +2 resolves its own kind even when the banner did not
-            # read. It is kept BELOW the banner because a read beats an inference.
+        if side["bonus"] == 2 and holder == "ours":
+            # THE FALLBACK, NOW LIMITED TO **OUR** SIDE -- WHICH IS THE ONLY SIDE
+            # ITS EVIDENCE EVER COVERED.
+            # It rested on section 4's census having POWER SWING as the only card
+            # above +1 -- a census taken entirely from OUR OWN HAND, against an
+            # opponent holding a SEPARATE DECK. A PITCH FOCUS +2 was read off
+            # their mound 2026-09-17. See this function's docstring and RULES.md.
+            # `holder` is "ours"/"theirs", already resolved by phase in read_reveal,
+            # so this is the whole fix: 299 hand-labelled cards FROM OUR OWN HAND
+            # say a +2 of ours is a Power Swing, and say nothing whatever about a
+            # deck we do not share. A +2 of THEIRS now falls through to the abstain
+            # below. Measured cost of that abstention is in the docstring.
+            # It is kept BELOW the banner because a read beats an inference.
             return (side["power"] + 2,
-                    f"{holder} {side['power']}+2 (banner unread; a +2 is a Power Swing)")
+                    f"{holder} {side['power']}+2 (banner unread; a +2 of OURS is a "
+                    "Power Swing -- our own deck's census)")
+        if side["bonus"] == 2:
+            # A +2 OF THEIRS. This is the case the old fallback answered and should
+            # not have: separate decks, so our census is not evidence about it, and
+            # a FIELDING PLAY +2 would be credited power it does not add.
+            return None, (f"{holder} has a +2 whose KIND did not read "
+                          f"({side.get('kind_detail')}) -- their deck is SEPARATE "
+                          "from ours, so our census cannot resolve it (a PITCH FOCUS "
+                          "+2 was read off their mound 2026-09-17)")
         return None, (f"{holder} has a +{side['bonus']} whose KIND did not read "
                       f"({side.get('kind_detail')}) -- a swing/pitch boost adds power "
                       f"and a speed/fielding boost does not")

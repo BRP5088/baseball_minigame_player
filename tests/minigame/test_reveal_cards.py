@@ -271,5 +271,44 @@ try:
 finally:
     rc.tactics_kind_scores = _real_scores
 
+# THE TWO PLAYERS HOLD SEPARATE DECKS, SO OUR CENSUS RESOLVES ONLY OUR OWN CARD.
+#
+# margin_from used to read "a +2 IS ALWAYS a Power Swing" from section 4's census
+# over 299 hand-labelled tactics cards -- a census taken entirely from OUR OWN HAND
+# (`hand_labels*.json`, every key a `hand_*.jpg` fan crop). On 2026-09-17 a
+# PITCH FOCUS +2 was read off the OPPONENT'S mound, legible in the frame, which
+# refutes the premise for their side and only their side.
+#
+# The margin that day came out right by luck -- Power Swing and Pitch Focus both add
+# power. The error it leaves open is a FIELDING PLAY +2 of theirs, credited 2 power
+# it does not add: the hit/home-run boundary this function exists to protect.
+_ours2 = {"ours":   {"power": 7, "bonus": 2, "kind": None},
+          "theirs": {"power": 5, "bonus": None, "kind": None, "discs": 1}}
+_m, _w = rc.margin_from(_ours2, "batting")
+want("a +2 of OURS with an unread banner still resolves (our own deck's census)",
+     _m == 4, f"{_m} / {_w}")
+
+_theirs2 = {"ours":   {"power": 7, "bonus": None, "kind": None, "discs": 1},
+            "theirs": {"power": 5, "bonus": 2, "kind": None}}
+_m2, _w2 = rc.margin_from(_theirs2, "batting")
+want("a +2 of THEIRS with an unread banner ABSTAINS, never guesses",
+     _m2 is None, f"{_m2} / {_w2}")
+want("...and the reason names the separate decks",
+     "SEPARATE" in (_w2 or "").upper(), str(_w2))
+
+# CONTROL 1: the abstention is about the UNREAD BANNER, not about their side. A read
+# banner still beats the inference, so their +2 counts when it is actually seen.
+_theirs_read = {"ours":   {"power": 7, "bonus": None, "kind": None, "discs": 1},
+                "theirs": {"power": 5, "bonus": 2, "kind": "pitch_boost"}}
+_m3, _w3 = rc.margin_from(_theirs_read, "batting")
+want("a +2 of theirs that the BANNER read is still counted", _m3 == 0, f"{_m3} / {_w3}")
+
+# CONTROL 2: and the failure the fix exists for -- a read FIELDING PLAY +2 of theirs
+# adds no power, so it must not enter the margin at all.
+_theirs_field = {"ours":   {"power": 7, "bonus": None, "kind": None, "discs": 1},
+                 "theirs": {"power": 5, "bonus": 2, "kind": "fielding_play"}}
+_m4, _w4 = rc.margin_from(_theirs_field, "batting")
+want("a FIELDING PLAY +2 of theirs adds no power to the margin", _m4 == 2, f"{_m4} / {_w4}")
+
 print(f"\n{len(fails)} failure(s)")
 sys.exit(1 if fails else 0)
