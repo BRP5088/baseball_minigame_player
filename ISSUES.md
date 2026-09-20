@@ -73,7 +73,10 @@ its helper is now `_discard_hand_identity` (orchestrator.py:7358), and
 `tests/harness/test_no_shadowed_module_defs.py` AST-scans every module for a duplicate
 top-level def with a positive control (456 modules, one pre-existing duplicate found and
 renamed in `test_simulate_rules.py`). Verified here: `grep -c "^def _hand_signature"` is 1.
-Still open: the offline replay of the three run-c deals (Verify step 2).
+COMMITTED to main in de5a79b. Still open: the offline replay of the three run-c deals
+(Verify step 2), and `deal_timing.jsonl` rows 37-39 are ARTEFACTS of this bug (a delta
+five times the threshold logged as a timeout) and must be flagged before anyone fits
+that file; the other session left them unedited on purpose.
 
 ### I-02  Slot 4 cannot be played or discarded                                     P0  input
 
@@ -229,7 +232,8 @@ Control: seed no match, assert nothing is written.
 **Agent brief.** Sonnet. May touch `reset_env.py`, `run_cycles.py`, `orchestrator.save_progress`.
 Done when the test passes and the row appears on the next real abandonment.
 
-**Status.** Open.
+**Status.** MERGED to main 2026-09-20 (b60f839). Smaller than the brief: only `reset_env.py`
+changed, because `_clear_match_flags` already owned the progress file; two mutants caught.
 
 ### I-07  The motion gate cap is below the game's measured animation ceiling        P1  loop
 
@@ -247,12 +251,13 @@ with the RULES.md figure as the citation. Confirm on the next loaded home run's 
 
 **Agent brief.** Haiku. One constant, one test line.
 
-**Status.** Open.
+**Status.** MERGED to main 2026-09-20 (028e78f): 18.0, literal pinned in
+`test_run_motion_gate.py`, mutant caught.
 
 ### I-08  The paused branch escaped every bound                                    P0  loop
 
-**Status.** SHIPPED by the other agent (DIRTY tree, `orchestrator.py` ~8025:
-`polls_without_progress` now counts paused polls). Recorded so it is not re-reported.
+**Status.** SHIPPED by the other agent, committed in de5a79b (`polls_without_progress`
+now counts paused polls). Recorded so it is not re-reported.
 I-05's overlay check is the live verification it still needs.
 
 ---
@@ -282,7 +287,9 @@ refused play must write NO row (the discard path's own rule, `:7555-7561`).
 
 **Agent brief.** Sonnet. May touch `wait_for_hand_deal` and its call at `:9216`.
 
-**Status.** Open. Do after I-01.
+**Status.** MERGED to main 2026-09-20 (028e78f): the post-play gate runs only when `played`;
+timeout messages split by `seen`; rows carry `reason` in {capture_error, edge_released,
+stable, no_edge, edge_no_stable}; three mutants caught.
 
 ### I-10  Hand incompleteness is flagged for one occluder only                       P1  engine
 
@@ -305,7 +312,10 @@ flag False → redraw True; flag True → False. Mutant: remove the flag assignm
 **Agent brief.** Sonnet. May touch `decision_engine.should_redraw`, `GameState`, and the
 flag's setter in `orchestrator.local_game_state`.
 
-**Status.** Open.
+**Status.** MERGED to main 2026-09-20 (86437f4). Smaller than the brief: `local_hand_cards`
+already returned the drop signal (`why`) and `local_game_state` discarded it; now
+`state_json["hand_incomplete"]` reaches `GameState`. Three mutants caught. The two paid-path
+call sites of `local_hand_cards` are not wired (paid model is off).
 
 ### I-11  Three presses on the match path are blind                                 P1  input
 
@@ -352,7 +362,8 @@ called once. Control: matching powers → not called.
 
 **Agent brief.** Sonnet. Small.
 
-**Status.** Open.
+**Status.** MERGED to main 2026-09-20 (6390fdc): the local `[MISFIRE?]` branch calls
+`report_misfire()`; the summary says MEASURED (local reveal) once a local read ran. Mutant caught.
 
 ---
 
@@ -492,9 +503,12 @@ columns, plus a total. Every fix above reports before/after on that table.
 (run b: 8 refused plays, 3 refused discards; run c: 3 plays, 3 deal timeouts with edge,
 stop `unreadable_screens`).
 
-**Agent brief.** Haiku.
+**Agent brief.** Haiku (overflowed on CLAUDE.md; ran on Sonnet).
 
-**Status.** Open. Do first; it is the scorecard for everything else.
+**Status.** MERGED to main 2026-09-20 (f25f5f0): `tools/run_census.py`, pinned by
+`tests/harness/test_run_census.py` on the three 2026-09-20 logs. Unclassified lines it
+reports: `slot(s) [N] were ALREADY unreadable`, `Decision: Playing` with no reveal episode
+(3 in run a), `MEMORY WAS WRONG`.
 
 ### I-20  Coverage gaps on the match loop                                          P1  evidence
 
