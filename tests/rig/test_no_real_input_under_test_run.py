@@ -108,6 +108,35 @@ try:
           f"_bg_hold_keys() posted to {_posted} and returned {_r} under the flag — its "
           "own docstring calls it the single route every public input funnels through")
 
+    # --- _release_keycodes: THE ONE SITE HERE THAT MUST NOT HAVE A LOCKOUT ---
+    # It posts key-UP for keys an earlier line already pressed, from a finally,
+    # so that a raise or a Ctrl-C between DOWN and UP cannot leave a key HELD
+    # DOWN at chiaki (tests/rig/test_background_keys_always_release.py).
+    #
+    # A BASEBALL_TEST_RUN refusal here would be a REGRESSION WEARING A GUARD'S
+    # CLOTHES: refusing to release is how the key stays down. Releasing is the
+    # safe direction, always.
+    #
+    # What makes that safe is an invariant, not a flag: it can only ever
+    # release what was pressed, and under the flag targeted_input_allowed()
+    # refuses BEFORE any DOWN, so the list it is handed is empty. That is what
+    # is checked -- the two calls above posted nothing, so nothing was held,
+    # so nothing is released.
+    _posted.clear()
+    check(ic._release_keycodes(sys.modules["Quartz"], 12345, []) is True
+          and not _posted,
+          f"_release_keycodes() posted {_posted} with nothing held — under the flag "
+          "its callers refuse before any key-DOWN, so this is the only state it "
+          "can be reached in")
+    # CONTROL: it is not a no-op. Handed a key that IS down it must release it,
+    # or the check above passes on a function that could never release anything
+    # -- which is this project's signature defect pointed at its own guard.
+    _posted.clear()
+    check(ic._release_keycodes(sys.modules["Quartz"], 12345, [7]) is True
+          and _posted == [12345],
+          f"CONTROL _release_keycodes(): a held key must still be released, got "
+          f"{_posted} — if this fails the check above proves nothing")
+
     # ...and the control: with the opt-in set, the path is REACHABLE. Without this the
     # four checks above would pass just as well on a press() that did nothing at all.
     # CONTROLS, one per guarded function. With only press() controlled, mutants that
@@ -243,6 +272,10 @@ EXPECTED = {
     ("input_controller.py", "walk_at"),
     ("input_controller.py", "_bg_hold_keys"),
     ("input_controller.py", "press_background"),
+    # Posts key-UP only, from a finally, for keys the two entries above already
+    # pressed. DELIBERATELY has no BASEBALL_TEST_RUN refusal -- see the
+    # behavioural check and its control above. Releasing is the safe direction.
+    ("input_controller.py", "_release_keycodes"),
     ("ensure_stream.py", "_key"),
 }
 EMITTERS = {

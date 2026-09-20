@@ -2927,6 +2927,47 @@ def press_verified(action, observe, tries=None, settle=None, log=None):
     return False, sent
 
 
+def _release_keycodes(Quartz, pid, codes):
+    """Post key-UP for every keycode that got a key-DOWN, from a finally.
+
+    Returns True when every key was released, so the callers keep their
+    ORIGINAL contract: any failure across DOWN / sleep / UP still answers
+    False, and press()'s announced fallback still fires. The release is the
+    only thing this adds.
+
+    A DOWN with no UP is a key HELD DOWN at chiaki, and therefore at the
+    console -- the keyboard twin of the dropped release packet section 5 calls
+    "the lurking catastrophe" on the stick path. Both callers used to post
+    DOWN, sleep, then post UP inside one try/except with no finally, so:
+
+        raise on the UP post        key held, and the function returns False
+        raise on a later DOWN       the earlier keys held, returns False
+        KeyboardInterrupt in sleep  key held, and `except Exception` cannot
+                                    catch a BaseException, so it propagates
+                                    without even reaching the return
+
+    All six cases reproduced offline with a stubbed Quartz by
+    agent_progress/qa3-bghold/probe_stuck_key.py. The exposure is not exotic:
+    press() routes EVERY button press through _bg_hold_keys, and
+    reset_env._probe_transports holds look_right for 0.3 s at a time.
+
+    It never raises -- there is nothing else to try, and raising from a finally
+    would replace the original exception with this one. It is LOUD instead,
+    because a release that silently failed is section 10.1's exact shape on the
+    one path that reaches the console.
+    """
+    released = True
+    for c in reversed(codes):
+        try:
+            Quartz.CGEventPostToPid(
+                pid, Quartz.CGEventCreateKeyboardEvent(None, c, False))
+        except Exception as exc:
+            released = False
+            print(f"  [input] COULD NOT RELEASE keycode {c} at pid {pid}: "
+                  f"{exc!r} -- that key may STILL BE HELD DOWN at the console.")
+    return released
+
+
 def press_background(action, hold_seconds=0.05, post_delay=None):
     """Send one action straight to chiaki's process. Returns True if sent.
 
@@ -2941,13 +2982,17 @@ def press_background(action, hold_seconds=0.05, post_delay=None):
     pid = chiaki_pid()
     if code is None or pid is None:
         return False
+    posted, ok = [], True
     try:
-        for down in (True, False):
-            Quartz.CGEventPostToPid(
-                pid, Quartz.CGEventCreateKeyboardEvent(None, code, down))
-            if down:
-                time.sleep(hold_seconds)
+        Quartz.CGEventPostToPid(
+            pid, Quartz.CGEventCreateKeyboardEvent(None, code, True))
+        posted.append(code)
+        time.sleep(hold_seconds)
     except Exception:
+        ok = False
+    finally:
+        released = _release_keycodes(Quartz, pid, posted)
+    if not (ok and released):
         return False
     time.sleep(ACTION_DELAY if post_delay is None else post_delay)
     return True
@@ -2982,14 +3027,15 @@ def _bg_hold_keys(keys, seconds):
     codes = [_KEYCODES.get(k) for k in keys]
     if any(c is None for c in codes):
         return False
+    posted, ok = [], True
     try:
         for c in codes:
             Quartz.CGEventPostToPid(
                 pid, Quartz.CGEventCreateKeyboardEvent(None, c, True))
+            posted.append(c)
         time.sleep(seconds)
-        for c in reversed(codes):
-            Quartz.CGEventPostToPid(
-                pid, Quartz.CGEventCreateKeyboardEvent(None, c, False))
     except Exception:
-        return False
-    return True
+        ok = False
+    finally:
+        released = _release_keycodes(Quartz, pid, posted)
+    return ok and released

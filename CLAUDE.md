@@ -1610,6 +1610,53 @@ So the count is: keyboard (`press`/`hold_combo`/`walk_at`), targeted Quartz
 them needed its own lockout, and four of the five were found by looking rather than
 by a failure.**
 
+### AND THE KEYBOARD HAD THE SAME DROPPED-RELEASE HAZARD AS THE STICKS (2026-09-20)
+
+This section already calls a lost release packet "the lurking catastrophe" on the
+FIFO path. The TARGETED path had it too, and unlike the FIFO one it was not
+hypothetical -- it is reproducible offline in a second.
+
+`press_background` and `_bg_hold_keys` posted key-DOWN, slept, then posted key-UP
+inside ONE `try/except Exception: return False` with **no `finally`**. So anything
+that raised in between left the key PHYSICALLY HELD at chiaki -- and therefore at
+the console -- while the function reported False. Reproduced with a stubbed Quartz
+(`agent_progress/qa3-bghold/probe_stuck_key.py`, inert, posts nothing anywhere):
+
+    raise on the UP post            the key stays down, returns False
+    raise on a later DOWN           the earlier keys of a combo stay down
+    KeyboardInterrupt in the sleep  the key stays down AND the interrupt
+                                    PROPAGATES -- `except Exception` cannot
+                                    catch a BaseException, so not even the
+                                    `return False` ran
+
+**THE INTERRUPT CASE IS THE REACHABLE ONE, AND IT IS ON EVERY PRESS.** Every hold
+sleeps with the key down, `press()` routes EVERY button press through
+`_bg_hold_keys`, and `reset_env._probe_transports` holds `look_right` for 0.3 s at
+a time. A Ctrl-C or an externally-enforced timeout (10.14 says enforce them from
+outside the process) lands in that window. A held Return is a held CROSS, which is
+the button that answers YES on "Give up?".
+
+Fixed by moving the release into a `finally` that posts UP for every key that got
+a DOWN, in `_release_keycodes`. The callers keep their ORIGINAL contract -- any
+failure across DOWN / sleep / UP still answers False, so press()'s announced
+fallback still fires. **What it does NOT do is conjure a release when the UP post
+is itself what failed**; there is nothing left to try, and it says so loudly
+instead of silently, which is the whole of 10.1 on this path.
+
+**AND IT MUST NOT HAVE A `BASEBALL_TEST_RUN` LOCKOUT.** The emission census failed
+on the new function and demanded one -- correctly, by its own rule. But refusing to
+release is HOW THE KEY STAYS DOWN: a lockout there is the bug wearing a guard's
+clothes. Releasing is the safe direction, always. What makes it safe is an
+invariant rather than a flag -- it can only release what was pressed, and under the
+flag `targeted_input_allowed()` refuses before any DOWN, so the list it is handed
+is empty. That is what the census now checks, with a control proving it is not a
+no-op. Pinned by `tests/rig/test_background_keys_always_release.py`, four mutants,
+each caught by a different assertion.
+
+**The census earning its keep is the other half of this.** It was written so a NEW
+emission site fails a test instead of reaching someone's keyboard, and the first
+new site since it was rewritten was mine, found in the suite run rather than live.
+
 **THE CENSUS THAT WAS SUPPOSED TO CATCH THE NEXT ONE MISSED SEVEN OF EIGHT FORMS.**
 Each was planted as a working emitter and `test_no_real_input_under_test_run.py`
 still exited 0: `pyautogui.press` (not in its EMITTERS list -- the most idiomatic
