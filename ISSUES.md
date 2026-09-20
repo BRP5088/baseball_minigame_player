@@ -379,7 +379,17 @@ the batting half), and "ban the three cards most often played when losing" from 
 
 **Verify.** The no-ban arm reproduces the shipped baseline run/half; report each arm
 with sigma. **Agent brief.** Opus (strategy). May touch `simulate.py` and add a test that
-pins the winner. **Status.** Open.
+pins the winner.
+
+**RESULT 2026-09-20 (agent_progress/issues/I-13/, 20,000 matches x 3 seeds an arm; the
+no-ban control reproduces the shipped baseline match for match).** Win rate: no bans
+39.56%, weakest-3 (shipped) 45.27% (+5.7 points, 20 sigma), weakest-3 batters 45.95%,
+role split 45.36%. Against shipped, the batters arm is +2.35 sigma pooled and REVERSES in
+one seed (-0.36); nothing clears 3 sigma. **CLOSED: the shipped rule stands.** Two facts
+worth keeping: banning at all is worth +5.7 points and had never been measured; and the
+three weakest cards of this 33-card collection are all pitchers, so the shipped rule is a
+pitching-only rule by accident (bit-identical to "weakest-3 pitchers"). Banning batters
+instead buys offence (1.79 -> 2.07 runs/match) at the same win rate. **Status.** Closed.
 
 ### I-14  Tactics timing is "always attach", measured only against "never attach"    P2  engine
 
@@ -395,7 +405,15 @@ outs against 7s and 8s (opp batter powers in the log: 4 x56, 5 x41, 6 x27, 7 x13
 modelled opponent distribution, else hold it for the next card. Control: weight 0
 reproduces shipped.
 
-**Verify / brief / status.** As for I-13. Open.
+**RESULT 2026-09-20 (agent_progress/issues/I-14/, 20,000 halves x 3 seeds an arm; w=0
+reproduces the shipped per-half scores element-wise).** Every w from 0 to 0.20 changes
+zero decisions; the first w that changes one (0.30) is worse in BOTH halves (batting
+-0.019 runs/half, pitching +0.123 conceded, 16 sigma) and it only gets worse from there.
+**CLOSED: always-attach stands**, the tie_w shape exactly. **AND THE PREMISE ABOVE WAS
+WRONG:** a pitch boost on a 9 is NOT outcome-free. `simulate.resolve`: batter 9 vs
+pitcher 9 is a TIE (a 50% hit) but vs 10 is an OUT; batter 10 vs 9 is a hit but vs 10 a
+tie. P(change) for a 9 is 0.22, the lowest cell, not zero. The claim holds only against a
+batter at 11. **Status.** Closed.
 
 ### I-15  Card sequencing is greedy; the round number is plumbed and never read       P2  engine
 
