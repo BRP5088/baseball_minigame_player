@@ -1419,7 +1419,13 @@ original observation stands -- "JACK PEPPER 3 0 3 / OPPONENT 0 4 4" plainly on
 screen returning `{'your': None, 'opponent': None}` -- but it is not the general
 behaviour, and reading it as one sent a census after the wrong quantity:
 
-    TURN / REVEAL screens (a scoreboard IS drawn)   33 of 33 read BOTH rows  100%
+    TURN / REVEAL screens (a scoreboard IS drawn)   23 of 23 read BOTH rows  100%
+                                                   (re-derivable: run
+                                                   tests/minigame/test_scoreboard_populations.py,
+                                                   which globs the 23-frame corpus and prints it.
+                                                   This line said 33 until 2026-09-20; the census
+                                                   shipped in the same commit only ever globbed 23,
+                                                   so the prose and the script never agreed.)
     RESULT screens                                   4 of  8 read both        50%
                                                      3 of  8 read ONE row
                                                      1 of  8 read neither
@@ -2897,6 +2903,59 @@ cursor slot is known**, from a signal the glow reader cannot influence. Every
 earlier census of `cursor_slot` used the reader's own answer (10.22) or a human
 reading a contact sheet. It needs no live change and runs on frames already on
 disk.
+
+**37. BEFORE REPORTING THAT A FUNCTION IS BROKEN, CHECK THE ARGUMENT SHAPE IT
+WANTS. FIVE TIMES IN ONE SESSION THE CODE WAS RIGHT AND THE CALL WAS WRONG.**
+2026-09-20, all mine, each one looking exactly like a defect in working code:
+
+    read_phase(full_frame)          wants the HAND STRIP; its own first docstring
+                                    line says "for a hand strip". Returned
+                                    (None, {'cards': 0}) -- reported as "the engine
+                                    cannot tell which half it is in". Given the
+                                    strip: ('pitching', votes {pitcher: 3})
+    homeplate_runner_present(list)  wants the DICT. crop_gameplay_regions returns a
+                                    LIST of (label, image); all three production
+                                    sites wrap it in dict(). Raised AttributeError
+                                    -- reported as "a real bug on the live path"
+    read_hand(...)[i]["power"]      there is no "power" key; it is "digit". Every
+                                    row read None, and a whole false diagnosis
+                                    ("the reader cannot read a visible card") was
+                                    built on it before the docstring was read
+    GameState(runners=int)          declared List[PlayerCard]. best_pitching_play
+                                    does len() and raised; best_batting_play never
+                                    reads it and accepted the int SILENTLY
+    ocr_scoreboard(full_frame)      the parameter is literally named
+                                    scoreboard_img. Passing the whole screen gave
+                                    None/None and two confident misreads; given
+                                    crops["scoreboard"] it is 12/12 exact, live and
+                                    saved. THIS ONE COST A TEN-AGENT INVESTIGATION
+                                    INTO A NON-BUG.
+
+**THE TELL IS THAT THE FAILURE LOOKS LIKE THE BUG YOU EXPECTED.** Four of the five
+produced None or an abstention -- exactly what a broken reader produces -- so the
+wrong call confirmed the hypothesis that prompted it. The check costs one command:
+`inspect.signature`, the first docstring line, and one production call site.
+
+**AND A DEFAULT-TOLERANT SIGNATURE HIDES IT.** `GameState.runners` is annotated
+`List[PlayerCard]`; one consumer calls len() and raises, the other never reads it
+and takes an int without complaint. A field that one path validates and another
+silently tolerates will be passed wrong eventually, and only one of the two will
+say so.
+
+**38. AN AGENT'S CONFIDENT EMPIRICAL CLAIM IS STILL A CLAIM. RE-RUN IT.** The same
+session, a refuter reported that ocr_scoreboard returned {'your': [2,0,2],
+'opponent': [0,0,0]} on 6 of 6 reads of a named PNG, and built a detailed
+correction on it ("the reader is not broken on this screen"). Run against that
+exact file -- hashed, 12 reads, 3 separate processes -- it returns None/None every
+time. The claim did not reproduce. It was directionally right by accident: the
+reader IS fine, but only when handed the crop, which is not what that agent said
+it did.
+
+The same round also had a refuter call a census script non-existent because a
+listing was CUT AT 200 ROWS by the tool and it read the truncation as the whole
+answer -- 10.16c's shape in a new instrument. **Pipe a listing to `wc -l` before
+believing it is complete**, and treat "I ran it and got X" from a sub-agent as a
+hypothesis to reproduce, not as a measurement.
 
 **36. "IS THIS DEAD" NEEDS THREE INSTRUMENTS, AND EACH ONE IS WRONG ALONE.**
 2026-09-20, deleting 385 lines. All three failures below were caught by an

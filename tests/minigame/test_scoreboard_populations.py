@@ -3,7 +3,7 @@
 CLAUDE.md carried this as "CANNOT READ A LEGIBLE BOARD ... unmeasured rate, open".
 Measured 2026-09-17, and the shape is narrower than the entry implied:
 
-    turn / reveal screens   33 of 33 read BOTH rows   100%
+    turn / reveal screens   23 of 23 read BOTH rows   100%   (this file prints it)
     result screens           4 of  8 read both         50%, and every one-row
                              failure is the OPPONENT row
 
