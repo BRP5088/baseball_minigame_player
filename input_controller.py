@@ -867,6 +867,86 @@ def _look_settled(look):
 # drops. It is a bound on a RECOVERY, not a threshold on a measured quantity.
 CURSOR_BLIND_NUDGES = 8
 
+# How many times the PROBE-SELECT itself may be pressed before refusing. The probe
+# is a single select_card press, and section 5's press-drop rate is 15.20%,
+# CLUSTERED (P(ignore | previous ignored) = 0.250) -- so it can be dropped exactly
+# like any other press. One retry (2 total) absorbs a lone drop without turning a
+# genuinely dead slot into an unbounded press loop; it is not derived from
+# SELECT_ATTEMPTS (5) because that number bounds a SELECTION the caller already
+# knows is reachable, while this one bounds a PROBE whose whole purpose is to find
+# out whether the target is reachable at all.
+PROBE_SELECT_MAX = 2
+
+
+def _probe_select_blind_target(target, ys, before_sel, look):
+    """The cursor went blind one step from `target` -- find out where it really is
+    by pressing select_card and reading the SELECTION lift, never the glow window.
+
+    THE GAP THIS CLOSES (I-02): CURSOR_GLOW_MIN is a hover-brightness gate, and
+    slot 4 is structurally under it (CLAUDE.md 10.35: "slot 4 never exceeds 11.0
+    at ANY offset, while slots 0-3 read 26-28"). A walk that presses toward slot 4
+    and then loses the cursor there had no way to confirm arrival, so slot 4 could
+    never be a play or discard TARGET. The lift geometry `selected_cards` reads is
+    a different signal the glow window cannot corrupt: a SELECTED card rises ~44px
+    (`SELECTED_MIN_RISE`), and hovering alone moves nothing (measured in
+    agent_progress/cursor-lift-refutation/: hover-lift is dead at every slot,
+    slot 4 reads -10.0 hovered or not; only selection lifts).
+
+    Returns (ok, cur, sel):
+      ok=True,  cur=target        target lifted -- the cursor was on it. `sel`
+                                   still names target selected, so the caller's own
+                                   _select_verified sees "already selected" on its
+                                   next look and presses nothing further.
+      ok=True,  cur=<other slot>  a DIFFERENT slot lifted -- that names where the
+                                   cursor actually is. It has been UNTOGGLED back
+                                   down (verified, not assumed) and the walk should
+                                   continue toward `target` from there.
+      ok=False, cur=None          refuse: `target`'s row is unreadable to the lift
+                                   reader, nothing lifted after PROBE_SELECT_MAX
+                                   tries, or the untoggle could not be verified.
+    """
+    # CAUTION 2 FROM THE REFUTATION: selected_cards SKIPS a row whose y is a
+    # fallback (it abstains on exactly the cards whose disc is unreadable), so
+    # "nothing lifted" from a slot the reader cannot see is not evidence of
+    # anything. `ys` here is orchestrator.hand_cursor_look's already-gated column
+    # (None on a fallback y, same rule _select_verified uses at :983), so this is
+    # that same check without a second look.
+    if not (0 <= target < len(ys)) or ys[target] is None:
+        print(f"  [cursor] slot {target} is not seen by the lift reader — refusing "
+              "the probe rather than trusting a 'nothing lifted' it cannot answer")
+        return False, None, before_sel
+    before = set(before_sel)
+    sel = before_sel
+    for attempt in range(1, PROBE_SELECT_MAX + 1):
+        press("select_card")
+        time.sleep(SELECT_SETTLE_SEC)
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print(f"  [cursor] cannot read the fan after the probe select (rows={n}) "
+                  "— refusing")
+            return False, None, sel
+        new = [i for i in sel if i not in before]
+        if target in new:
+            print(f"  [cursor] probe-select: {target} lifted — the cursor was there")
+            return True, target, sel
+        if new:
+            other = new[0]
+            print(f"  [cursor] probe-select raised {other}, not {target} — the "
+                  "cursor is there; putting it back down")
+            ok2, sel2 = _deselect_verified(other, look)
+            if not ok2:
+                print(f"  [cursor] could not untoggle probe slot {other} — refusing "
+                      "rather than continuing with a stray card lifted")
+                return False, None, sel2
+            return True, other, sel2
+        if attempt < PROBE_SELECT_MAX:
+            print(f"  [cursor] probe-select raised nothing (attempt {attempt}/"
+                  f"{PROBE_SELECT_MAX}) — retrying once; a dropped press is routine "
+                  "at this console's 15.20% ignore rate")
+    print(f"  [cursor] probe-select raised nothing after {PROBE_SELECT_MAX} attempts "
+          "— refusing")
+    return False, None, sel
+
 
 def _walk_cursor_to(target, look):
     """Press toward `target`, LOOKING after every single press.
@@ -928,6 +1008,7 @@ def _walk_cursor_to(target, look):
         if steps >= CURSOR_MAX_STEPS:
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
+        prev = cur
         press("move_right" if cur < target else "move_left")
         steps += 1
         time.sleep(MOVE_SETTLE_SEC)
@@ -937,6 +1018,18 @@ def _walk_cursor_to(target, look):
             return False, sel
         cur = local_hand.cursor_slot(glow, sel)
         if cur is None:
+            # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
+            # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
+            # structurally blind at some slots (e.g. slot 4, CLAUDE.md 10.35), so
+            # arriving there reads exactly like a dropped press. PROBE with
+            # select_card instead of refusing outright -- see
+            # _probe_select_blind_target for the mechanism and its two cautions.
+            if abs(prev - target) == 1:
+                ok, new_cur, sel = _probe_select_blind_target(target, ys, sel, look)
+                if not ok:
+                    return False, sel
+                cur = new_cur
+                continue
             print(f"  [cursor] lost the cursor after {steps} press(es) "
                   f"(glow={glow}) — refusing")
             return False, sel
