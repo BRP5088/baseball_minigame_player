@@ -930,8 +930,13 @@ def _read_fan(img, strong):
             if _present < TACTICS_PRESENT_MIN:
                 kind = "player"
         digit, sc = read_digit(img, circle) if circle else (None, 0.0)
+        # y_from SAYS WHICH ASSET THE Y CAME FROM. It used to be implicit, and
+        # selected_cards compares y against the DISC anchor -- so a y taken from
+        # anywhere else produced a confident "not selected" rather than an
+        # abstention. A caller can now tell the two apart.
         row = {"x": x, "kind": kind, "digit": digit, "score": round(sc, 3),
-               "y": int(cy), "y_measured": True, "_slot_i": i}
+               "y": int(cy), "y_measured": True, "_slot_i": i,
+               "y_from": "disc" if circle else "fallback"}
         if kind == "player":
             # hand_to_cards() requires `secondary` on every player card, so this
             # is read here rather than left for the caller to ask the API for.
@@ -964,28 +969,52 @@ def _read_fan(img, strong):
     # it gained 3 digits, LOST 1, and pushed one hand off the fan fit entirely into the
     # ungated path. So it runs per-slot, only where a digit is missing AND the card is
     # raised -- it can add a reading and cannot change one.
-    _raise_gate = SELECTED_MIN_RISE * s
+    # ...AND THAT GATE COULD NOT FIRE (fixed 2026-09-20). It asked whether the row
+    # was ALREADY raised, using row["y"] -- which, when the disc is the thing that
+    # was missed, is the SHIELD's y, about 66 px BELOW the anchor. The apparent rise
+    # is then NEGATIVE, the gate reads "not raised", and the pass is skipped in
+    # exactly the state it was written for. Measured live on a selected slot 0:
+    #
+    #     row y = 261 (shield)   apparent rise -66 px against a 25 px gate -> skipped
+    #     true disc y = 154      true rise      +41 px                     -> would run
+    #     over 25 static frames  disc found 0/25 shipped, 25/25 at RAISED_DARK_MAX
+    #     selected_cards()       said "nothing selected" on 17 of those 25 frames
+    #
+    # The row's own y cannot decide this, because the disc position is what is being
+    # established. So the pass now runs whenever a PLAYER slot has no digit, and
+    # searches that slot's x column for a disc AT OR ABOVE the anchor -- a raised
+    # card rises, so nothing below the anchor can be one.
+    #
+    # EVERY SAFETY PROPERTY ABOVE SURVIVES. Per-slot, only where a digit is missing,
+    # still gated by DISC_MIN_R / DISC_MIN_REACH and by read_digit, so it can add a
+    # reading and cannot change one. The shield does not survive those gates
+    # (measured r=16, reach=4.0 against 18 and 6) and card art does not survive
+    # read_digit (0.43-0.47 against a real disc's 0.99). DARK_THRESHOLDS is NOT
+    # touched -- see the paragraph above for why raising it globally was rejected.
+    from circle_finder import find_circles as _find_circles
     for r in out:
         if r.get("kind") != "player" or r.get("digit") is not None:
             continue
-        x, y = r.get("x"), r.get("y")
-        if x is None or y is None or r.get("y_measured") is False:
-            continue
+        x = r.get("x")
         i = r.get("_slot_i")
-        if i is None or not (0 <= i < len(SLOT_PLAYER)):
+        if x is None or i is None or not (0 <= i < len(SLOT_PLAYER)):
             continue
-        if (SLOT_PLAYER[i][1] * s) - y < _raise_gate:
-            continue                      # not raised: nothing to explain the miss
-        from circle_finder import find_circles
-        for c in find_circles(img, RAISED_DARK_MAX):
-            if abs(c[0] - x) > 25 * s or abs(c[1] - y) > 25 * s:
+        _anchor_y = SLOT_PLAYER[i][1] * s
+        for c in _find_circles(img, RAISED_DARK_MAX):
+            if abs(c[0] - x) > 25 * s:
                 continue
+            if c[1] > _anchor_y + 25 * s:
+                continue              # below the anchor: a raised card cannot be there
             if c[2] < DISC_MIN_R or c[3] < DISC_MIN_REACH:
                 continue
             d, sc2 = read_digit(img, (c[0], c[1], c[2]))
             if d is not None:
                 r["digit"], r["score"] = d, round(sc2, 3)
                 r["digit_from_raised_pass"] = True
+                # THE Y NOW MEANS THE DISC, which is what selected_cards compares
+                # against. Without this the digit was recovered and the row still
+                # reported the shield's position, so the card read as NOT selected.
+                r["y"], r["y_from"] = int(c[1]), "disc"
             break
 
     return out
@@ -1312,6 +1341,13 @@ def selected_cards(rows, scale):
             break
         y = r.get("y")
         if y is None or r.get("y_measured") is False:
+            continue
+        # A PLAYER ROW WHOSE Y DID NOT COME FROM THE DISC CANNOT ANSWER THIS, and
+        # saying "not selected" is a wrong answer rather than a missing one. When the
+        # disc is missed the y is the SHIELD's, ~66 px BELOW the disc anchor, so the
+        # comparison below reports a SELECTED card as unselected every time --
+        # measured 17 of 25 static frames before the raised pass was repaired.
+        if r.get("kind") != "tactics" and r.get("y_from") == "fallback":
             continue
         table = SLOT_TACTICS if r.get("kind") == "tactics" else SLOT_PLAYER
         if (table[i][1] * scale) - y >= SELECTED_MIN_RISE * scale:
