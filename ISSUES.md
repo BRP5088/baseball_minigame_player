@@ -501,7 +501,15 @@ read the right kind with the wrong-kind max still under the gate.
 
 **Agent brief.** Haiku for (a), Sonnet for (c). (b) waits for the user.
 
-**Status.** Open.
+**Status.** (a) and (c) MERGED 2026-09-20 (8c99313). (a): `analyze_match_log.py` and
+`tactics_effect.py` exclude rows with no `outcome_basis` KEY (it is absent on legacy rows,
+not null) from outcome statistics, say how many, and take `--include-legacy`; the
+power-only margin analysis keeps them. Two pre-existing crashes in analyze_match_log fixed
+on the way. (c): live fixtures read 2/5 -> 4/5 after two native-size templates cut from
+the pitch and speed fixtures; the held-out 48-frame corpus's wrong-kind max is 0.741,
+still under the 0.75 gate. NOT fixed: the fielding_boost fixture renders in ZONE_HOME and
+its banner sits above the padded band the reader searches, a zone/pad geometry gap in
+`reveal_cards.py`, open. (b) still waits for the user's yes.
 
 ### I-19  There is no run census tool                                              P1  evidence
 
