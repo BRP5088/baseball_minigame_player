@@ -149,7 +149,7 @@ def _grey(img):
     return np.asarray(img.convert("L"), dtype=float)
 
 
-def _clear_match_flags(progress_file, log=print):
+def _clear_match_flags(progress_file, log=print, gave_up=False, reason=None):
     """Clear match_in_progress/bans_done_this_match after a confirmed reload.
 
     Money fields are NEVER touched — the wallet is whatever the save holds, and
@@ -157,30 +157,56 @@ def _clear_match_flags(progress_file, log=print):
     successful reset into an exception, so it logs and moves on: the reset
     really did happen, and losing the bookkeeping is strictly better than
     raising ResetError at a caller that has already reloaded the game.
+
+    `gave_up` — this reset answered the "Give up?" dialog YES, i.e. abandoned a
+    paid match rather than only clearing a stale flag (I-06: a stall a cycle
+    away from an unattended run used to vanish with no record). When True this
+    also appends one row to match_log.jsonl through orchestrator.log_matchup —
+    the SAME helper the reveal path uses, so the test-run stamp that keeps
+    synthetic rows out of the real log applies here too — and bumps an
+    `abandoned` counter alongside wins/losses/draws in this same file. `reason`
+    names why the caller was resetting, defaulting to "reset". When `gave_up`
+    is False neither happens, and behaviour is exactly as before.
     """
+    if gave_up:
+        try:
+            import orchestrator as o
+            o.log_matchup({"outcome": "abandoned",
+                          "reason": reason or "reset",
+                          "_classifier": "abandon"})
+        except Exception as e:
+            log(f"  WARNING: could not log the abandoned match "
+                f"({type(e).__name__}: {e}) — the reset still succeeded")
     try:
         import json
         with open(progress_file) as fh:
             rec = json.load(fh)
-        if not (rec.get("match_in_progress") or rec.get("bans_done_this_match")):
+        changed = False
+        if rec.get("match_in_progress") or rec.get("bans_done_this_match"):
+            rec["match_in_progress"] = False
+            rec["bans_done_this_match"] = False
+            changed = True
+        if gave_up:
+            rec["abandoned"] = rec.get("abandoned", 0) + 1
+            changed = True
+        if not changed:
             return
-        rec["match_in_progress"] = False
-        rec["bans_done_this_match"] = False
         tmp = progress_file + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(rec, fh, indent=2)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, progress_file)
-        log(f"  cleared match_in_progress in {progress_file} — the reload "
-            f"discarded any match, so the record was stale")
+        log(f"  cleared match_in_progress in {progress_file}"
+            + (f", abandoned count now {rec['abandoned']}" if gave_up else "")
+            + " — the reload discarded any match, so the record was stale")
     except Exception as e:
         log(f"  WARNING: could not clear match_in_progress in "
             f"{progress_file} ({type(e).__name__}: {e}) — a stale flag can "
             f"make the next run spend an UNTRACKED $50")
 
 
-def reset_environment(log=print, progress_file=None):
+def reset_environment(log=print, progress_file=None, reason=None):
     """Reload the last save. Returns the spawn bearing in degrees.
 
     Raises ResetError rather than pressing on when a step cannot be confirmed.
@@ -188,6 +214,10 @@ def reset_environment(log=print, progress_file=None):
     unattended caller has no way to recover from that — better to stop loudly.
 
     `progress_file` — CLEAR THE MATCH FLAGS when the reset succeeds.
+
+    `reason` — why the caller is resetting (e.g. "stall", "route_failure"), used
+    only if the "Give up?" dialog is answered along the way (I-06): the
+    abandoned-match row records it, defaulting to "reset" when not given.
 
     A successful return here PROVES no match is running: this function answers
     "Give up?" if one was, reloads the save, and waits for the world. So this is
@@ -461,7 +491,8 @@ def reset_environment(log=print, progress_file=None):
             log(f"  world back after {time.time() - t0:.1f}s, "
                 f"spawn bearing {compass.describe(bearing)}")
             if progress_file:
-                _clear_match_flags(progress_file, log)
+                _clear_match_flags(progress_file, log,
+                                   gave_up=give_up_tries > 0, reason=reason)
             return bearing
     raise ResetError(f"compass never reappeared within {LOAD_TIMEOUT_SEC:.0f}s "
                      "— the load may have failed, or the game is on a screen "
