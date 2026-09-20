@@ -1306,10 +1306,14 @@ def _verified_select_and_play(card_index, tactics_index, look):
 def _verified_select_and_play_inner(card_index, tactics_index, look):
     """Read, step, verify, select, verify the selection, and only then commit.
 
-    Returns True only when confirm_play was actually sent. False means NOTHING was
-    committed and the caller should re-read and retry -- it must never be treated as a
-    play, and it must never fall through to the blind path, which would make a refusal
-    and a success indistinguishable (CLAUDE.md 10.1).
+    Returns True only when confirm_play was actually sent AND the fan was seen to
+    change (I-11). False means NOTHING was committed and the caller should re-read and
+    retry -- it must never be treated as a play, and it must never fall through to the
+    blind path, which would make a refusal and a success indistinguishable
+    (CLAUDE.md 10.1). False now also covers "we pressed up to PRESS_VERIFY_TRIES times
+    and the chosen cards are STILL sitting lifted in a full fan", which is the game
+    declining the press rather than us refusing to send it -- the same answer either
+    way, because in both cases no card left the hand.
 
     A FALSE ALSO LEAVES THE BOARD AS IT FOUND IT, as far as it can. See
     _unwind_selection: an early refusal used to keep whatever it had already lifted.
@@ -1359,9 +1363,37 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     if not _clear_strays(want, look, blind_before=_blind0):
         return False
 
-    press("confirm_play")
+    # LOOK AFTER THE COMMIT TOO (I-11). Every other press in this function is
+    # confirmed against the screen and this one was not -- it was verified only
+    # by the next poll, which shares its stuck_count with unrecognised screens.
+    # RULES.md §1 records confirm_play ignored TWICE IN A ROW live on
+    # 2026-09-20, and §5 measures the game declining 15.20% of presses.
+    #
+    # THE OBSERVE IS THE FAN, from the look() seam already in hand. The reveal
+    # watcher would be the other candidate and is NOT available here:
+    # hand_cursor_look's docstring records that input_controller must never
+    # import back into orchestrator, which is where the reveal episode lives.
+    #
+    # A GONE FAN IS A SENTINEL, NOT None, and that direction is deliberate.
+    # A landed confirm_play takes the card out of the fan, so _look_settled
+    # stops returning MAX_HAND_SIZE rows -- mapping that to None would make
+    # press_verified call every SUCCESSFUL play "blind after press" and answer
+    # False, and this function's False means "nothing was committed", so the
+    # caller would re-read and play a SECOND card. The sentinel makes the
+    # failure direction "report success and let run()'s own re-read catch it",
+    # which is exactly what this line did before any verification existed.
+    #
+    # The baseline is safe because _clear_strays has just proved a settled
+    # MAX_HAND_SIZE fan with exactly `want` lifted, and _look_settled retries
+    # LOOK_RETRIES times, so a single bad frame cannot make the baseline the
+    # sentinel and turn a landed press into a retry.
+    def _fan_state():
+        _g, _ys, n, sel = _look_settled(look)
+        return tuple(sorted(sel)) if n == MAX_HAND_SIZE else ("fan-gone",)
+
+    ok, _sent = press_verified("confirm_play", _fan_state, log=print)
     invalidate_cursor()
-    return True
+    return ok
 
 
 def _deselect_verified(target, look):
