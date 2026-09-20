@@ -199,7 +199,7 @@ def attempt(log=print, shots=None):
         # NUDGE FIRST EITHER WAY, then fall through to _back_off below.
         #
         # This used to branch on `ahead` and log "retracing first" — but inside
-        # that else, `ahead < DEALER_AHEAD` is necessarily true, so the ternary
+        # that else, `ahead < 0.41` is necessarily true, so the ternary
         # always picked _nudge and _back_off was unreachable. The message was
         # describing something the code never did.
         #
@@ -330,7 +330,6 @@ WANDA_GOAROUNDS = 3
 TABLE_BEARING = 86.0
 # Above this the dealer is genuinely somewhere in front. Measured: a known
 # success scores 0.439 against her and a known overshoot 0.378.
-DEALER_AHEAD = 0.41
 
 
 def centre_on(template_dir, tries=CENTRE_TRIES, log=print):
@@ -521,9 +520,6 @@ def _nudge(shots=None, log=print):
 
 TARGET_STREAK = 25
 
-
-RECOVER_SWEEP = 30.0
-RECOVER_IN_VIEW = 0.42
 RECOVER_STEPS = 8
 
 
@@ -583,32 +579,6 @@ def _back_off(shots=None, log=print):
             stuck = 0
     return compass.fast_capture()
 
-
-def _recover(shots=None, log=print):
-    """Look around for the dealer's table, then close on it. Bounded."""
-    h0 = compass.read_bearing(compass.fast_capture())
-    if h0 is None:
-        return compass.fast_capture()
-    best = (-2.0, None)
-    for i in range(int(round(360.0 / RECOVER_SWEEP))):
-        target = (h0 + i * RECOVER_SWEEP) % 360
-        ws.turn_to(target, log=lambda m: None)
-        time.sleep(0.30)
-        score, x, _ = jukebox.find(compass.fast_capture(), DEALER)
-        if score > best[0]:
-            best = (score, target)
-    if best[0] < RECOVER_IN_VIEW:
-        ws.turn_to(h0, log=lambda m: None)
-        return compass.fast_capture()
-    ws.turn_to(best[1], log=lambda m: None)
-    for i in range(RECOVER_STEPS):
-        img = compass.fast_capture()
-        if tp.at_table(img):
-            return img
-        centre_on(DEALER_AIM, log=log)
-        _step_forward(log)
-        time.sleep(0.22)
-    return compass.fast_capture()
 
 
 def main(n=1, log=print, shot_root="/tmp/go_shots", stop_on_fail=True):

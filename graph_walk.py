@@ -866,38 +866,7 @@ def face_the_table(capture=None, read_heading=None, log=print):
     return False, best[1]
 
 
-# How far to crab sideways when something is standing on the last few feet of
-# the route, and how many times to try. Measured 2026-09-01: six consecutive
-# runs reached the table area and failed identically, and the frame showed an
-# NPC ("Wanda Fuller [] Talk") filling the screen. She stands ON the approach,
-# so no amount of re-aiming finds the prompt — the character has to step around
-# her. go.py carries the same idea as WANDA_GOAROUNDS.
-GOAROUND_STRAFE = 0.35
-GOAROUND_SEC = 0.55
-GOAROUNDS = 3
 
-
-# A full turn, sampled. The dealer table is a fixed object, so the question
-# "which way is it from here" has an answer at every position — unlike dead
-# reckoning, which only works from the exact spot the recording started at.
-HOME_SWEEP_STEP = 30.0
-HOME_ADVANCE_SEC = 0.9
-HOME_ROUNDS = 6
-# Prompt ink this close to table_prompt's threshold means the table is right
-# there and only the aim is off.
-NEARLY_THERE_INK = 0.018
-
-
-def _table_visibility(img):
-    """How strongly the dealer table is in view: ORB matches against its refs."""
-    import places
-    refs = places.load_keypoints().get(GOAL, [])
-    if not refs:
-        return 0
-    _, d = places.keypoints(img)
-    if d is None:
-        return 0
-    return max(places.match_count(d, r) for r in refs)
 
 
 
@@ -1002,8 +971,9 @@ def reach_table(capture=None, read_heading=None, log=print):
     """Aim for the dealer prompt, stepping around whatever is in the way.
 
     The last leg puts the character AT the table; what varies is the aim and
-    whether an NPC is standing on the spot. So: sweep for the prompt, and if it
-    is nowhere on the arc, crab sideways and sweep again.
+    whether an NPC is standing on the spot. So: sweep the arc for the prompt,
+    and if it is nowhere on the arc, GIVE UP RATHER THAN MOVE -- see the comment
+    below for the two measurements that killed both recoveries.
     """
     import walk_steps as ws
 
@@ -1021,27 +991,18 @@ def reach_table(capture=None, read_heading=None, log=print):
     #     to 0.0093, because at that distance the table scores 109-129 matches
     #     and pure negatives already reach 114. It is reading noise.
     #
-    #   crabbing (below) — step sideways past whatever is in the way.
-    #     Measured: it walked the character off the spot and into a wall,
-    #     ending with no table in view at all (ink 0.0).
+    #   crabbing — step sideways past whatever is in the way. DELETED
+    #     2026-09-20 with its three constants (GOAROUND_STRAFE/SEC/GOAROUNDS),
+    #     which nothing else read; it sat after this `return` and CPython never
+    #     emitted it. Measured: it walked the character off the spot and into a
+    #     wall, ending with no table in view at all (ink 0.0). The NPC that
+    #     motivated it is real -- six runs reached the table and failed
+    #     identically with "Wanda Fuller [] Talk" filling the screen -- and
+    #     go.py still carries that idea as WANDA_GOAROUNDS, so it is not lost.
     #
     # Both MOVE the character, and moving on a bad signal is worse than standing
     # still: the aim sweep alone at least leaves the position that the leg
     # earned. Re-enable either only with a signal that separates.
-    return False
-    for i in range(GOAROUNDS):
-        # Alternate sides, widening: whatever is in the way could be on either.
-        strafe = GOAROUND_STRAFE * (1 if i % 2 == 0 else -1) * (1 + i // 2)
-        log(f"      prompt not on the arc — stepping around "
-            f"({'right' if strafe > 0 else 'left'}, attempt {i + 1}/{GOAROUNDS})")
-        ws.walk_forward(0.0, GOAROUND_SEC, strafe=strafe)
-        time.sleep(0.35)
-        ws.walk_forward(0.20, 0.35)          # and forward a little
-        time.sleep(0.35)
-        ok, aim = face_the_table(capture, read_heading, log=log)
-        if ok:
-            log(f"      reached the prompt after {i + 1} go-around(s)")
-            return True
     return False
 
 

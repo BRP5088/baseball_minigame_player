@@ -176,9 +176,6 @@ def score_against(img, ref_dir):
     return max(float((a * r).sum()) for r in refs)
 
 
-def at_landmark(img, ref_dir, threshold=MATCH_MIN):
-    return score_against(img, ref_dir) >= threshold
-
 
 def score(img, exclude=None):
     """How much this frame's prompt text looks like the Baseball Cards prompt.
@@ -321,9 +318,6 @@ def ocr_words(img):
         best = max(best, hits)
     return best
 
-
-def ocr_says_prompt(img):
-    return ocr_words(img) >= OCR_MIN_WORDS
 
 
 # THE FEE TOKEN, "$50" / "(50)", IS THE SAFEST ADDITION ON RECORD (2026-09-08).

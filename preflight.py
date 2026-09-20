@@ -202,12 +202,20 @@ except Exception as e:
 
 try:
     import hand_digit_reader
-    if hand_digit_reader.check_paddle_venv():
-        ok("PaddleOCR venv reachable (hand-digit reader)")
-    else:
-        warn("PaddleOCR venv not reachable — hand digits fall back to vision")
+    # check_paddle_venv() RAISES or returns True -- it never returns a falsy
+    # value, so the `else` that used to sit here could not execute, and the
+    # message it carried ("hand digits fall back to vision") never printed. It
+    # was wrong twice over anyway: the paid vision model is off, and the
+    # hand-digit pipeline was deleted 2026-09-20 for having no callers.
+    #
+    # THE CHECK ITSELF STAYS, because the venv is LIVE -- result_ocr.py spawns
+    # it to read the WINNER/LOSER/DRAW banner (orchestrator.py:4113 ->
+    # result_ocr.start()). Only the consumer named in the old message was wrong.
+    hand_digit_reader.check_paddle_venv()
+    ok("PaddleOCR venv reachable (result_ocr reads the result banner with it)")
 except Exception as e:
-    warn(f"could not check the PaddleOCR venv ({e})")
+    warn(f"PaddleOCR venv not reachable ({e}) — result_ocr cannot read the "
+         "result banner; local_state.read_result still can")
 
 print("\n--- 4. Code health ----------------------------------------------")
 try:

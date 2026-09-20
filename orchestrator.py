@@ -3976,9 +3976,11 @@ def validate_game_state(state: dict) -> None:
             #               unsettled frame — the validator never stopped it.
             #   power -5  -> played.
             #   power 999 -> played.
-            # The ban path already filters `c["power"] > 0` and
-            # hand_digit_reader defines MIN_POWER/MAX_POWER; this brings the
-            # per-turn path in line with both.
+            # The ban path already filters `c["power"] > 0`.
+            # hand_digit_reader used to define MIN_POWER/MAX_POWER and was cited
+            # here as the second precedent; its whole read pipeline was deleted
+            # 2026-09-20 (zero callers since 211c6bf), so CARD_POWER_MIN/MAX
+            # below are now the only definition of the range.
             if not (CARD_POWER_MIN <= power <= CARD_POWER_MAX):
                 raise ValueError(
                     f"player card power {power} outside the possible range "

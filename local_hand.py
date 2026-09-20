@@ -467,20 +467,6 @@ def _type_templates():
     return _type_cache
 
 
-def tactics_banner_vector(img, slot, cx=None, cy=None):
-    """The normalised banner patch, or None when it falls off the crop.
-
-    `cx`/`cy` are the card's FOUND position. Pass them whenever they are known: the
-    slot anchor is only a fallback, and cropping at it costs more than half the
-    coverage, because the cursor lifts a card and its banner rides with it.
-    """
-    if cx is None or cy is None:
-        if not (0 <= slot < len(SLOT_TACTICS)):
-            return None
-        sc = img.width / ANCHOR_W
-        cx, cy = SLOT_TACTICS[slot][0] * sc, SLOT_TACTICS[slot][1] * sc
-    return _banner_at(img, cx, cy, 0, 0)
-
 
 def _banner_at(img, cx, cy, ox, oy):
     sc = img.width / ANCHOR_W

@@ -48,8 +48,14 @@ def _default_path():
     suite, which is the worst way for a test to fail. Keeping it out of the
     project tree also keeps test_no_side_effects.py honest.
 
-    BASEBALL_CONSOLE_LOCK overrides both, so a test can point two "processes" at
-    one file deliberately and exercise the contention this exists for.
+    BASEBALL_CONSOLE_LOCK overrides both. NOTHING SETS IT, and this docstring
+    used to claim a test did (checked 2026-09-20). It is kept as an escape hatch
+    rather than deleted, because the contention it describes IS covered by a
+    different route: tests/harness/test_console_exclusive.py writes a live
+    foreign-holder record into the lock FILE at console_lock.PATH, and
+    _harness.run_trial checks the lock IN THE PARENT before spawning, so the
+    two-real-pids case the variable would set up does not arise. Delete it if a
+    multi-process test is never written; do not believe it is exercised.
     """
     env = os.environ.get("BASEBALL_CONSOLE_LOCK")
     if env:

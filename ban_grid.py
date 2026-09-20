@@ -431,11 +431,6 @@ def power_box(img, rows, rel_row, col, cols=None):
     return _sub(img, rows, rel_row, col, cols, POWER_DISC_BOX)
 
 
-def shield_box(img, rows, rel_row, col, cols=None):
-    """Pixel box of the shield badge (speed on a batter, fielding on a pitcher)."""
-    return _sub(img, rows, rel_row, col, cols, SHIELD_BOX)
-
-
 def tactics_type_box(img, rows, rel_row, col, cols=None):
     """Pixel box of a TACTICS card's label. A different band from the player ribbon."""
     return _sub(img, rows, rel_row, col, cols, TACTICS_TYPE_BOX)
