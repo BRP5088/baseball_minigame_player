@@ -125,8 +125,15 @@ counter read.
 `input_controller._walk_cursor_to`, `_select_verified`. Must not touch `local_hand`'s
 glow constants. Done when both verifications pass.
 
-**Status.** Open. Unblocked: the refutation is on disk (above) and the other agent
-confirms its nudge cannot walk ONTO slot 4, so the gap stands.
+**Status.** OFFLINE HALF MERGED 2026-09-20 (b886b35): `_walk_cursor_to` probes by
+selection when the cursor goes blind one step from the target (`PROBE_SELECT_MAX` 2); a
+wrong lift is untoggled through `_deselect_verified` and the untoggle is VERIFIED; a target
+row the lift reader cannot see is refused without a press. Three mutants caught, one of
+them only after the test was rewritten to spy on the untoggle primitive rather than the
+fake screen (progress.md records why). **LIVE CHECK STILL OPEN**, recipe in
+`agent_progress/issues/I-02/progress.md` ("The live check a supervised session should
+run next"): a hand whose weakest card is in slot 4, watch for `probe-select: 4 lifted`,
+confirm no further press and `discards_left` decrements.
 
 ### I-03  A refused PLAY ends the run instead of playing another card             P0  loop
 
