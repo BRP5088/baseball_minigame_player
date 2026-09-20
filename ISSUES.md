@@ -156,7 +156,10 @@ exclusion so the same slot is retried.
 **Agent brief.** Sonnet. May touch `play_one_turn` and the `else` at `:9188`. Must not
 touch the debit path. Done when the test and mutants pass.
 
-**Status.** Open.
+**Status.** MERGED to main 2026-09-20 (b02b178): `PLAY_STALL_MAX` 3 keyed on the same hand
+identity as the discard breaker; a slot refused 3x is excluded and the next-best card is
+played; run() stops with `play_refused`, distinct from `redraw_never_played`. Two mutants
+caught.
 
 ### I-04  The result CARD reader has one confirmed word                             P0  reader
 
