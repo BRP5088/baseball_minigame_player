@@ -7656,6 +7656,14 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # those branches. Without it, one screen that fails to dismiss gets acted
     # on once per poll forever.
     acted_screen = None
+    # DID *THIS PROCESS* PAY? match_in_progress is loaded from DISK, so the flag
+    # being set does not mean this run debited -- it can be a previous run's.
+    # Every "retry the keystroke, the money is already spent" rule below is
+    # correct ONLY for a match this process paid for, and OPEN-25 is what
+    # happens when that is assumed instead of checked. A boolean on disk cannot
+    # express it; a process-local latch can, and it cannot loop because the
+    # debit is what sets it.
+    debited_this_process = False
     # "No action needed" bookkeeping: when the current run of motion began (None
     # when the screen is still), and how many polls it has absorbed.
     motion_wait_started = None
@@ -8173,7 +8181,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                               "pressing start_match either — just waiting.")
                         wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
                         continue
-                    if match_in_progress:
+                    if match_in_progress and not debited_this_process:
                         # ...UNLESS THE DEALER PROMPT IS ON SCREEN. The guard above
                         # exists because a match_start_prompt read DURING a live
                         # match is a misread of a ROUND transition overlay, and
@@ -8219,6 +8227,34 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         save_progress(wins, losses, draws, balance, progress_file,
                                       match_in_progress=False,
                                       bans_done_this_match=False)
+                        wait_for_screen_to_settle(max_wait=4.0, regions="match_start")
+                        continue
+                    # OPEN-25: THIS IS THE PRESS THAT SPENT AN UNTRACKED $50.
+                    # Retrying the keystroke without re-debiting is right for a
+                    # DROPPED PRESS -- this process paid, the game did not take
+                    # the key, so only the key is owed (pinned by
+                    # tests/minigame/test_run_debit_and_scoring.py: "the retry
+                    # must send the KEYSTROKE only"). It is wrong when this
+                    # process never paid at all, and the branch could not tell
+                    # the difference: match_in_progress comes off DISK.
+                    #
+                    # Measured, 12 polls at a real dealer prompt with a previous
+                    # run's flag seeded: TEN start_match presses and $0 debited,
+                    # with max_spend never consulted.
+                    #
+                    # Hand it back to the ordinary debit path, which checks the
+                    # balance, honours max_spend and records the spend. Clearing
+                    # acted_screen is safe HERE and was not safe beside the
+                    # stale-flag clear (that measured SIX debits, 500 -> 200,
+                    # because every poll re-opened C2): this branch can fire at
+                    # most once per process, since the debit it hands off to
+                    # sets debited_this_process.
+                    if not debited_this_process:
+                        print("  [C2] ...and this process never debited for it, so "
+                              "NOT pressing start_match unpaid — handing back to the "
+                              "ordinary debit path, which checks max_spend and "
+                              "records the spend.")
+                        acted_screen = None
                         wait_for_screen_to_settle(max_wait=4.0, regions="match_start")
                         continue
                     reset_hand_memory()  # a new match is a new hand; nothing carries over
@@ -8271,6 +8307,8 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     break
                 balance -= 50
                 spent += 50
+                debited_this_process = True   # OPEN-25: only now may the
+                # keystroke be retried without paying again.
                 match_in_progress = True
                 plays_this_match = 0
                 unconfirmed_result_reads = 0

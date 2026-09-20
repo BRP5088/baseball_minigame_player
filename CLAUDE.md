@@ -4311,11 +4311,36 @@ i.e. it converts an under-charge into the over-charge C2 exists to prevent, and
 that test's own warning ("12 polls would have taken $600 of a $500 wallet") is
 the failure it reproduces. Reverted, sha-verified, not shipped.
 
-**What a real fix needs:** something that distinguishes "THIS PROCESS debited"
-from "a previous run left the flag", which the single boolean cannot express --
-a process-local `debited_this_process`, or re-deriving the flag from the screen
-rather than trusting disk. That is a design change on the money path and is the
-user's call.
+**FIXED 2026-09-20 with the process-local latch, and the hole was one line
+further on than this ticket said.** The stale branch is not where the money
+leaks -- it clears the flag correctly. The leak is the BARE `press("start_match")`
+at the bottom of the same C2 block: `acted_screen` is cleared only when the
+SCREEN CHANGES, so the poll after the clear re-enters C2 with both
+`match_in_progress` tests now False and falls straight through to that press.
+It retries the keystroke on the assumption that THIS PROCESS already paid, and
+nothing checked it.
+
+    seeded flag   presses   debited   12 polls at a genuine dealer prompt
+    none            11        $50     control
+    a previous      10        $ 0     <- OPEN-25, and max_spend never consulted
+    run's
+
+`debited_this_process` is False at startup and set by the debit itself, so it
+CANNOT loop the way clearing `acted_screen` beside the stale flag did (that
+measured SIX debits, 500 -> 200). The press now hands back to the ordinary debit
+path instead, which checks the balance, honours `max_spend` and records the
+spend. Both arms now debit exactly $50.
+
+**AND IT FIXED A SECOND BUG THE TICKET NEVER NAMED.** The stale branch asked
+only whether the flag was SET, never who set it -- so on the control arm it
+fired on the flag run() had just written itself and cleared it mid-match. That
+leaves `match_in_progress` False on disk during a live paid match, which is
+precisely the state C5 needs to refuse a second $50. The control arm's flag now
+survives, and that is a pinned check.
+
+`tests/minigame/test_stale_flag_never_presses_unpaid.py`, five mutants, each
+caught by a different assertion -- including one that produces $150 of debits,
+so the test guards the OVER-charge direction as well as the under-charge.
 
 **OPEN-9 — Can a recovery REPLACE the reset rather than precede it?** Local
 recovery failed because its cost was ADDITIVE — when the fan failed, the reset
