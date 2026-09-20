@@ -2681,11 +2681,15 @@ def screen_is_moving(regions: str = "default", settle_pause: float = 0.12) -> bo
 # wants to sit just above the longest genuine animation and no higher.
 # Measured settle latency was p90 6.0s / max 10.0s — on a frame log whose ~1Hz
 # capture OVERSTATES duration (see settle_stats_summary), so the true max is
-# below that. 15s clears it with headroom while capping the worst case at 15s
-# rather than 20s. Falling through is safe, not dangerous: the read still goes
+# below that. Falling through is safe, not dangerous: the read still goes
 # through validate_game_state() and the normal retry path.
+# I-07: was 15.0, set before the game's own animation ceiling was measured.
+# RULES.md §4 clocks a bases-loaded home run's runners clearing at 16.65s (60fps
+# sampling, two plays) -- ABOVE the old 15s bound, so the gate could force a read
+# mid-animation on the longest plays. Raised to 18.0: the measured ceiling plus
+# one poll of headroom, same margin the old value kept over its own p90/max.
 # Tune from settle_stats_summary() after a real session.
-MAX_CONTINUOUS_MOTION_WAIT = 15.0
+MAX_CONTINUOUS_MOTION_WAIT = 18.0
 
 
 def settle_stats_summary() -> str:
@@ -3613,8 +3617,14 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     biggest = 0.0
     last_beat = start
 
-    def _record_row(outcome):
+    def _record_row(outcome, reason=None):
         """One machine-readable row per deal. THIS IS THE WHOLE EXPERIMENT.
+
+        `reason` (I-09) disambiguates a bare `outcome` for later splitting:
+        "timeout" alone conflates a play with no deal to watch (nothing ever
+        moved) with a deal that started and never finished reading stable --
+        a reader problem, I-01's shape. Defaults to `outcome` itself so every
+        row still carries something, even from a caller that predates this.
 
         The prediction from bases_to_travel has only ever been PRINTED, and the user was
         right to call that out: nothing changes a delay, and no run has ever produced the
@@ -3630,6 +3640,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         """
         row = dict(
             outcome=outcome,
+            reason=reason if reason is not None else outcome,
             predicted_bases=predicted_bases,
             waited=round(time.time() - start, 2),
             settled_at=None if probe_at is None else round(probe_at, 2),
@@ -3668,7 +3679,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             print(f"  [deal] the deal gate could not read the hand "
                   f"({type(e).__name__}: {e}) — reading anyway; the retry path "
                   "will catch a bad read")
-            _record_row("error")
+            _record_row("error", reason="capture_error")
             return False
         biggest = max(biggest, d)
         # THE HEARTBEAT. A 35 s silence and a hung process read exactly alike --
@@ -3732,7 +3743,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 print(f"  [deal] replacement card seen; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f})")
-                _record_row("edge")
+                _record_row("edge", reason="edge_released")
                 return True
             try:
                 hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
@@ -3756,13 +3767,25 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f}{_held})")
-                _record_row("stable")
+                _record_row("stable", reason="stable")
                 return True
-    print(f"  [deal] no replacement card seen in {max_wait:.0f}s — "
-          f"reading anyway (the retry path will catch a bad read). "
-          f"Threshold {th:g}, biggest delta {biggest:.1f}: a biggest well UNDER the "
-          f"threshold means the gate is too high for this turn.")
-    _record_row("timeout")
+    # THREE OUTCOMES, NOT ONE MESSAGE (I-09). This used to print the same "gate is
+    # too high" line whether biggest was 6.2 (nothing moved, edge_seen False) or
+    # 83.1 (motion seen, the hand just never read stable twice -- I-01's shape,
+    # a reader problem, not a threshold problem). Only the first case is actually
+    # about the threshold.
+    if not seen:
+        print(f"  [deal] no motion seen in {max_wait:.0f}s — nothing dealt. "
+              f"Reading anyway (the retry path will catch a bad read). "
+              f"Threshold {th:g}, biggest delta {biggest:.1f}: a biggest well UNDER "
+              f"the threshold means the gate is too high for this turn.")
+        _record_row("timeout", reason="no_edge")
+    else:
+        print(f"  [deal] replacement card seen but the hand never read stable "
+              f"twice in {max_wait:.0f}s — a reader problem, not a threshold one "
+              f"(see I-01). Reading anyway (the retry path will catch a bad read). "
+              f"Threshold {th:g}, biggest delta {biggest:.1f}.")
+        _record_row("timeout", reason="edge_no_stable")
     return False
 
 
@@ -9113,7 +9136,16 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # a wasted vision call plus a 2s retry each time — and it is
                 # the source of the empty-hand / power-0 reads that pushed
                 # should_redraw() into discarding a hand that was actually fine.
-                if post_play_wait_for_deal():
+                #
+                # ONLY ON A CONFIRMED PLAY (I-09). This used to run on both branches
+                # of the if/else above -- a refused play, or ANY discard -- and
+                # `_HAND_BASELINE` is never stashed on either of those (stash happens
+                # once, right before select_and_play's press, and is popped again on
+                # a refusal), so it watched a hand nothing was ever going to change
+                # for the full 20s and wrote a phantom "timeout" row to
+                # deal_timing.jsonl. A discard's own redeal is already watched, when
+                # there is one to watch, by play_one_turn's own gated call.
+                if played and post_play_wait_for_deal():
                     # THE MARGIN IS THE X-AXIS. Passed here and nowhere else because
                     # this is the only point that has both the diamond (stashed at the
                     # play) and the reveal (read just above).

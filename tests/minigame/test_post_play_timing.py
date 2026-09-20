@@ -63,8 +63,14 @@ src = open(os.path.join(_ROOT, "orchestrator.py")).read()
 # actually asserts: the loop asks the QUESTION at call time, and the deal wait --
 # taking the popped baseline -- happens INSIDE the block that question guards.
 _lines = src.splitlines()
+# I-09: the gate is now `if played and post_play_wait_for_deal():` -- a refused
+# play or a discard has no deal to watch, and un-gated this appended a phantom
+# "timeout" row to deal_timing.jsonl for every one of them. The call-time
+# property this test guards (post_play_wait_for_deal() is asked fresh on each
+# poll, not read from the import-time POST_PLAY_WAIT_FOR_DEAL constant) is
+# unchanged; only the line's exact text moved.
 _hit = [n for n, ln in enumerate(_lines)
-        if ln.strip() == "if post_play_wait_for_deal():"]
+        if ln.strip() == "if played and post_play_wait_for_deal():"]
 check(len(_hit) == 1, f"exactly one call-time gate in the turn loop (found {len(_hit)})")
 _inside = False
 if _hit:

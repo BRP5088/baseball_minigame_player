@@ -308,17 +308,28 @@ check(final["wins"] == 1,
       "motion gate: a permanently-moving screen never reached the vision read — "
       f"MAX_CONTINUOUS_MOTION_WAIT ({orchestrator.MAX_CONTINUOUS_MOTION_WAIT}s) "
       "is not forcing a fall-through")
+# I-07: THE EXACT VALUE, PINNED. checks_per_read's min/max below only sanity-check
+# that the bound is not absurd (not zero, not effectively infinite) — 37..150 and
+# 45..180 both happily contain 75 (the OLD 15.0s value), so neither range alone
+# would have caught a regression back to 15.0. This is the literal the constant
+# must equal, not a formula built from it (CLAUDE.md 10.11).
+check(orchestrator.MAX_CONTINUOUS_MOTION_WAIT == 18.0,
+      f"I-07: MAX_CONTINUOUS_MOTION_WAIT should be 18.0 (RULES.md §4's measured "
+      f"16.65s bases-loaded-home-run ceiling, plus one poll), got "
+      f"{orchestrator.MAX_CONTINUOUS_MOTION_WAIT}")
 # LITERAL, not orchestrator.MAX_CONTINUOUS_MOTION_WAIT. Reading the constant
 # means the bar moves with the mutation: setting it to 0.001 leaves this green
 # because `_expected` shrinks too. FIFTH instance of LESSONS.md §1 category (d)
 # in this project — and this file already warns about the trap for two OTHER
 # constants a few lines away, then reproduced it here.
 #
-# 15.0s at ~0.2s per check is ~75 checks; require at least half of that.
+# I-07: MAX_CONTINUOUS_MOTION_WAIT is now 18.0 (RULES.md §4's measured 16.65s
+# bases-loaded-home-run ceiling plus one poll), not 15.0. 18.0s at ~0.2s per
+# check is ~90 checks; require at least half of that.
 # TWO-SIDED. The floor alone left MAX_CONTINUOUS_MOTION_WAIT = 100000.0
 # (27 hours) surviving: a bound that never fires means a permanently animating
 # screen NEVER reaches the vision read, which is the exact failure the
-# fall-through exists to prevent. 15s at ~0.2s per check is ~75; 150 is double
+# fall-through exists to prevent. 18s at ~0.2s per check is ~90; 180 is double
 # that and still catches an effectively-infinite bound. Literals on purpose —
 # reading the constant under test would make this true for any value.
 #
@@ -330,11 +341,11 @@ check(final["wins"] == 1,
 # the plays a result now needs made the upper one fire on arithmetic rather
 # than on behaviour. checks_per_read holds one entry per vision read, so min
 # and max below are the eager and loose directions of the SAME bound.
-check(h.checks_per_read and min(h.checks_per_read) >= 37,
+check(h.checks_per_read and min(h.checks_per_read) >= 45,
       f"motion gate: fell through after only {min(h.checks_per_read or [0])} "
       f"checks (~{min(h.checks_per_read or [0]) * 0.2:.1f}s), expected to hold "
-      "out for roughly 15s — a bound this eager aborts on ordinary animation")
-check(h.checks_per_read and max(h.checks_per_read) <= 150,
+      "out for roughly 18s — a bound this eager aborts on ordinary animation")
+check(h.checks_per_read and max(h.checks_per_read) <= 180,
       f"motion gate ran {max(h.checks_per_read or [0])} checks "
       f"(~{max(h.checks_per_read or [0]) * 0.2:.1f}s) before one vision read "
       "— a bound this loose never reads the screen at all on a permanently "
