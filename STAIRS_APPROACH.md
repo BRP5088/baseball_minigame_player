@@ -147,11 +147,22 @@ question:
    reported it. It had not. The frame-delta arithmetic is what caught it. Never
    judge "did the character/camera move" from looking at two frames.
 
-**THERE IS NO WAKE PATH IN THIS PROJECT.** Nothing greps for one; go_now.py
-only prints "is chiaki up and the console awake?" on failure, and chiaki's own
-host-list keys are not in input_controller.KEYMAP (game actions only — no
-return/enter). So an asleep console is a HARD STOP requiring a human, and the
-standing permission to "wake the PS5" cannot currently be exercised in code.
+**THE WAKE PATH EXISTS. This paragraph said it did not, and said so for long
+enough to be worth a correction rather than a silent edit (checked 2026-09-20).**
+`ensure_stream.ensure()` and `ensure_stream.ensure_live()` are the path, and
+CLAUDE.md section 1 records ensure_live() waking a genuinely sleeping console in
+**8 s** on the live rig, with `streaming()` correctly answering False on the
+standby host list first.
+
+What was true when this was written is the narrow half: go_now.py itself only
+PRINTS "is chiaki up and the console awake?" and chiaki's host-list keys are not
+in `input_controller.KEYMAP`, which is game actions only. Neither of those makes
+an asleep console a hard stop -- `ensure_live()` does not go through KEYMAP.
+
+**The danger in the old wording is the direction it points a future session:** it
+says the standing permission to wake the PS5 "cannot currently be exercised in
+code", so a run that hit a sleeping console would stop and wait for a human when
+one call would have fixed it.
 
 **TO RE-TEST**: with the console on and a verified live picture (idle frame
 delta > 0.5, capture 1920x1080), walk to the doorway pose and read the bearing.

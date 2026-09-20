@@ -24,9 +24,19 @@ live queue. Delete it when the queue is empty.
     689de6d  paid vision model locked OFF at the choke point
     e3dfed8  simulator reshuffled both hands every round; tactics pools drew a +3
 
-## !!! BROKEN RIGHT NOW — fix first, found by QA 2026-09-13 !!!
+## FIXED — was "BROKEN RIGHT NOW", found by QA 2026-09-13, repaired since
 
-**The diamond capture is a NO-OP. Committed broken in e1c1f4a.**
+**RESOLVED (checked 2026-09-20): `capture_diamond_at_play` imports local_state
+INSIDE its own try (`import local_state as _ls`, orchestrator.py, inside the
+wrapped body) and calls `_ls.read_runners(...)`, so there is no NameError and
+the stash is set.** The section below is kept for the shape of the bug -- a
+swallowed NameError producing a diagnostic that silently collects nothing, which
+is 10.1's family -- not as a live defect. The second half, that
+`test_deal_inputs_wired.py` AST-checks the call EXISTS rather than that it WORKS,
+is the part worth re-reading before trusting that test.
+
+**The original report, for the record. The diamond capture was a NO-OP, committed
+broken in e1c1f4a.**
 `local_state` is imported only INSIDE two orchestrator functions (:3536, :4130), never at
 module scope. The capture in play_one_turn calls `local_state.read_runners(...)`, raises
 NameError, is swallowed by its own try/except, and the stash is never set — so

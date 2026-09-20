@@ -110,9 +110,13 @@ Fixed on the TEST side (`MEMORY_IN_PROCESS_ONLY`); production untouched, and the
 file was NOT deleted — it is the suspended match's live state. Mutation-tested:
 with the drop turned into a no-op the file FAILS, restored, sha verified.
 
-**Still failing, pre-existing, NOT investigated** — four separate questions:
-`test_run_resume_and_persist`, `test_reveal_kind_capture`, `test_post_play_timing`,
-`test_local_retry_not_paid`. Setting the memory flag changes none of them.
+**FIXED 2026-09-20 — all four now pass, and the suite is green at 235 files.**
+This line read "still failing, pre-existing, NOT investigated". Three were stale
+TESTS rather than broken code and were repinned to properties instead of source
+text (`test_local_retry_not_paid` took a signature change, `test_reveal_kind_capture`
+pinned a literal line of source, `test_post_play_timing` pinned two exact lines of
+text); `test_run_resume_and_persist` was the real one -- the match log's
+`pending_matchup` was unreachable. See commits fc41a8e and 639ce3a.
 
 ## SUGGESTED NEXT STEP, THE USER'S CALL
 
