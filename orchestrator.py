@@ -7320,6 +7320,80 @@ def spend_and_discard(player_idx):
     return True, None
 
 
+# ---- THE DISCARD STALL BREAKER --------------------------------------------
+# A DISCARD IS OPTIONAL. A TURN IS NOT.
+#
+# Live 2026-09-20: the engine chose to discard hand slot 4, _select_verified could
+# not confirm the cursor there (glow 6.9-9.8 against CURSOR_GLOW_MIN 10.0, with
+# every other slot at 0.0-0.8), the discard was correctly REFUSED, the hand
+# therefore never changed, and play_one_turn reached the identical decision on the
+# next poll. Ten cycles at ~25 s each, zero progress, no bound -- the run had to be
+# killed by hand. Refusing is right; refusing FOREVER is a hang, and section 10.1's
+# whole family is failures that look exactly like working. A spinning loop and slow
+# play print the same thing.
+#
+# SLOT 4 IS NOT BAD LUCK. CLAUDE.md 10.35 measured it directly: "slot 4 never
+# exceeds 11.0 at ANY offset, while slots 0-3 read 26-28 at the shipped position."
+# Any hand whose weakest card sits in slot 4 reproduces this, so it is a permanent
+# property of the window, not a one-off.
+#
+# THE BOUND IS DERIVED, NOT INVENTED. Each attempt ALREADY retries its own presses
+# PRESS_VERIFY_TRIES (5) times, which section 5 prices at 0.152 * 0.25**4 = 0.059%
+# for a press-drop to survive one attempt. Three WHOLE attempts failing on an
+# unchanged hand is ~2e-10 under that model: whatever is happening, it is not a
+# swallowed keystroke, and a fourth press cannot help. So this invents no threshold
+# on any measured quantity (10.4) -- it bounds a retry whose per-attempt failure
+# probability is already measured.
+#
+# WHY FALLING THROUGH IS THE SAFE DIRECTION: the else branch PLAYS. Worst case we
+# play a hand we would rather have improved, which costs at most one weak at-bat.
+# Looping costs the entire unattended run, which is the thing being built.
+#
+# KEYED ON THE HAND, never on the glow. A signature derived from the reader that is
+# failing would reset itself on its own noise and the bound could never be reached.
+DISCARD_STALL_MAX = 3
+_DISCARD_STALL = {"sig": None, "n": 0}
+
+
+def _discard_hand_identity(hand):
+    """A hand's identity, from the CARDS -- nothing the cursor reader can influence.
+
+    NAMED FOR ITS OWNER, because the obvious name was already taken. This shipped as
+    `_hand_signature` and SHADOWED the deal gate's own `_hand_signature(hand_img)`
+    seventeen hundred lines above: same module, same scope, later definition wins.
+    wait_for_hand_deal then called this one with a PIL Image, the `for c in hand`
+    raised, the except set readable False, and EVERY DEAL timed out at the full 20 s
+    while its own log line reported a frame delta of 55.7 against a threshold of 15 --
+    a gate reporting "nothing moved" about a screen that plainly had.
+
+    Nothing failed loudly. Python rebinds a duplicate def in silence, so the only
+    symptom was deals getting slower, which reads exactly like a slow console.
+    That is section 10.1's family reached through the NAMESPACE rather than the
+    control flow, and it was found by another session reading deal_timing.jsonl,
+    not by anything here.
+    """
+    return tuple(sorted(
+        (c.get("hand_index"), c.get("kind"), c.get("power"), c.get("secondary"),
+         c.get("type")) for c in (hand or [])))
+
+
+def discard_stalled(hand) -> bool:
+    """True when THIS EXACT HAND has had DISCARD_STALL_MAX discards refused running.
+
+    Resets the counter whenever the hand changes, so a real redeal clears it and only
+    a genuinely unchanged hand can reach the bound.
+    """
+    sig = _discard_hand_identity(hand)
+    if sig != _DISCARD_STALL["sig"]:
+        _DISCARD_STALL["sig"], _DISCARD_STALL["n"] = sig, 0
+    return _DISCARD_STALL["n"] >= DISCARD_STALL_MAX
+
+
+def note_discard_refused():
+    """Count one refused discard against the hand currently held."""
+    _DISCARD_STALL["n"] += 1
+
+
 def play_one_turn(state_json: dict, batters_used: int):
     """
     Execute one turn. `batters_used` is the caller-tracked count of
@@ -7393,7 +7467,9 @@ def play_one_turn(state_json: dict, batters_used: int):
     else:
         decision = best_pitching_play(player_only, tactics_only, state)
 
-    if should_redraw(player_only, state):
+    # Ask BEFORE the branch: this also resets the counter on a new hand.
+    _stalled = discard_stalled(state_json.get("hand"))
+    if should_redraw(player_only, state) and not _stalled:
         # Discard the WEAKEST card, not the one we would have played.
         #
         # This used to discard `decision.player_card` — the engine's own BEST
@@ -7463,6 +7539,7 @@ def play_one_turn(state_json: dict, batters_used: int):
         _thrown = select_and_discard(player_idx, look=hand_cursor_look,
                                      discards_look=discards_look)
         if _thrown is False:
+            note_discard_refused()
             # AND "NOTHING THROWN" IS NOT WHAT False MEANS ANY MORE. It also covers
             # UNVERIFIED -- the counter never answered -- where the card may well be
             # gone. Saying "nothing thrown" there invites a retry that spends the
@@ -7522,8 +7599,13 @@ def play_one_turn(state_json: dict, batters_used: int):
         # exist on disk because nothing ever wrote the max power down. Every
         # such turn happens inside a $50 match, so the samples are expensive.
         _best = max((p.power for p in player_only), default=None)
-        _why = ("NO DISCARDS LEFT — this hand was not kept on merit"
-                if state.redraws_left <= 0 else "hand is strong enough")
+        if state.redraws_left <= 0:
+            _why = "NO DISCARDS LEFT — this hand was not kept on merit"
+        elif _stalled:
+            _why = (f"the discard was REFUSED {DISCARD_STALL_MAX}x on this "
+                    "exact hand — PLAYING rather than looping forever")
+        else:
+            _why = "hand is strong enough"
         print(f"  [redraw] keeping the hand: best power {_best} vs threshold "
               f"{REDRAW_POWER_THRESHOLD}, {state.redraws_left} discard(s) "
               f"left — {_why}")
@@ -7955,11 +8037,44 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                           f"and the probe itself failed ({e}) — treating as a "
                           "dead stream.")
                 if _paused:
-                    # Alive, just not playing. Reset the clock and keep waiting;
-                    # the no-progress bound still backstops a genuine stall.
+                    # Alive, just not playing. Reset the frozen clock and keep
+                    # waiting -- that part is correct, because a real pause is not
+                    # a dead stream.
+                    #
+                    # BUT THIS BRANCH USED TO ESCAPE EVERY BOUND THE LOOP HAS, and
+                    # its own comment asserted the backstop that the control flow
+                    # prevented: it said "the no-progress bound still backstops a
+                    # genuine stall" while `continue`ing NINE LINES ABOVE
+                    # `polls_without_progress += 1`. So the counter never moved, the
+                    # frozen clock was reset every pass, and stuck_count is not
+                    # touched here at all -- three bounds defeated at once, and the
+                    # only escape was the hand crop's digest changing, which nothing
+                    # in this branch can cause because it presses nothing.
+                    #
+                    # IT IS REACHABLE FROM A DEAD STREAM, which is the exact case the
+                    # "frozen_stream" stop below exists to catch. With the paid model
+                    # off (shipped default since 2026-09-12) `_scr` is "other" for
+                    # EVERY gap local_game_state returns -- "could not capture", "no
+                    # hand crop", "UNRECOGNISED SCREEN". A slept PS5 leaves an overlay
+                    # that captures at 1920x1080 and is unplaceable by every local
+                    # reader, so it reads "other", is called paused, and the run waits
+                    # for ever. Section 1 records that auto-sleep killing an overnight
+                    # run four minutes in; this is how it would do it silently.
+                    #
+                    # A PAUSED POLL IS STILL A POLL WITHOUT PROGRESS. Counting it makes
+                    # the original comment true. A genuine pause ends long before 120
+                    # polls, so nothing legitimate is cut short.
                     last_frame_change_at = time.time()
                     print("  [frozen] looks like a paused/menu screen, not a "
                           "dead stream — waiting rather than stopping.")
+                    polls_without_progress += 1
+                    if polls_without_progress > MAX_POLLS_WITHOUT_PROGRESS:
+                        print(f"No progress in {polls_without_progress} polls, all "
+                              "of them on a screen that looked paused — stopping. "
+                              "A pause that never ends is a stall wearing a pause's "
+                              "clothes.")
+                        stop_reason = "no_progress"
+                        break
                     wait_for_screen_to_settle(max_wait=8.0)
                     continue
                 print(f"The screen has been byte-identical for "

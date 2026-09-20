@@ -754,6 +754,67 @@ def result_scores(img):
     return out
 
 
+# ---- THE RESULT CARD, WHICH IS THE SCREEN THIS BUILD ACTUALLY SHOWS ---------
+#
+# The template bank above reads an ARCHED WINNER/LOSER/DRAW banner over the
+# medallion. Measured 2026-09-20 over a complete match (2,114 logged frames,
+# every 3rd scored): the banner NEVER APPEARED. Top score across the whole run
+# was 0.553 against RESULT_MIN 0.80, and 0 of 705 scored frames cleared the gate.
+# The match ended, the reader called it "not a result screen", run() burned all 15
+# retries on "unreadable screens" and stopped WITHOUT SCORING A FINISHED MATCH --
+# the record still said 40W/10L when the game had just handed us a loss.
+#
+# What IS on screen is a notebook CARD reading "DEFEAT!" with flavour text and a
+# CLOSE button. screen_classifier_experiment.py has recorded the real vocabulary
+# all along in a comment -- "a result modal (WINNER / DEFEAT! / DRAW!)" -- and
+# nothing ever read it. This is section 10.31's missing class for the second time
+# on this exact reader: the DRAW! fix added a third word to a two-word bank, and
+# the same census shape would have caught this one had it asked what the reader
+# CANNOT name.
+#
+# WHY OCR RATHER THAN MORE TEMPLATES. The card is large, flat, high-contrast text,
+# and orchestrator's own gap message was already reading it correctly while the
+# template path failed ("OCR: no result word in ['SPIKED', 'DEFEAT']"). A template
+# bank cut from ONE session could only be validated against itself (10.22/10.30);
+# the OCR needs no bank and was scored over every frame of that match instead.
+#
+# THE CENSUS, run the way at_table's is -- over every frame on disk, where ONE
+# false positive anywhere is a veto:
+#
+#     frames naming a result word     664, ALL "DEFEAT", contiguous
+#     the card's dwell time           ~66 s at 10 Hz  (the arch held 4.0 s)
+#     false positives on the 1,450
+#       non-result frames before it     0
+#
+# HONEST LIMIT, stated rather than hidden: only DEFEAT is confirmed by a frame.
+# WINNER and DRAW are taken from screen_classifier_experiment.py's comment and
+# have NOT been seen by this reader. They are listed because omitting them would
+# make a win unreadable in exactly the way a loss just was -- but the first live
+# win or draw should be checked against this, not assumed.
+RESULT_CARD_BAND = (0.30, 0.20, 0.70, 0.33)   # x0, y0, x1, y1 as FRACTIONS
+RESULT_CARD_WORDS = {"DEFEAT": "loss", "WINNER": "win", "DRAW": "draw"}
+
+
+def read_result_card(full_frame):
+    """(outcome, raw_text) from the end-of-match CARD, or (None, raw_text).
+
+    Deliberately refuses when the band names MORE THAN ONE result word: two words
+    in one title is not a result, it is a bad crop, and a wrong outcome is worse
+    than no outcome (run() acts on it).
+    """
+    from PIL import Image                                    # noqa: F401
+    import ocr_glyphs
+    w, h = full_frame.size
+    x0, y0, x1, y1 = RESULT_CARD_BAND
+    crop = full_frame.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    txt = (ocr_glyphs.image_to_text(crop, 6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ!") or "")
+    up = txt.upper()
+    hits = [k for k in RESULT_CARD_WORDS if k in up]
+    if len(hits) != 1:
+        return None, up.strip()
+    return RESULT_CARD_WORDS[hits[0]], up.strip()
+
+
 def read_result(full_frame):
     """Is this the end-of-match RESULT screen, and what was the outcome.
 
@@ -788,8 +849,19 @@ def read_result(full_frame):
     top = sc[best]
     other = max(v for k, v in sc.items() if k != best)
     if top < RESULT_MIN:
+        # THE TEMPLATE BANK IS NOT THE ONLY RESULT SCREEN. Before calling this "not
+        # a result", ask the CARD reader -- the banner the bank was built for did not
+        # occur once in a whole 2,114-frame match, while the card was up for ~66 s.
+        _card, _raw = read_result_card(full_frame)
+        if _card is not None:
+            out["is_result"] = True
+            out["outcome"] = _card
+            out["why"] = (f"result CARD read {_raw!r} -> {_card} "
+                          f"(no arched banner; best template {top:.3f})")
+            return out
         out["is_result"] = False
-        out["why"] = f"no result word found (best {top:.3f} < {RESULT_MIN})"
+        out["why"] = (f"no result word found (best {top:.3f} < {RESULT_MIN}; "
+                      f"card band read {_raw!r})")
         return out
     out["is_result"] = True
     if top - other < RESULT_MARGIN:

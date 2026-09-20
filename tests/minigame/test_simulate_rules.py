@@ -176,7 +176,12 @@ print("6. the BATTING state knows the opponent's score when there is one")
 _bat, _pit = [], []
 
 
-def _spy(store):
+def _decider(store):
+    # NAMED APART from the simulate_batting_half stub above. Both were `_spy`, which
+    # is harmless in a straight-line script (the first is used before the second is
+    # defined) but trips tests/harness/test_no_shadowed_module_defs.py -- and that
+    # guard is kept strict on purpose, because the same collision in an IMPORTED
+    # module silently broke the deal gate on 2026-09-20.
     def f(hp, ht, st):
         store.append((st.half, st.your_score, st.opp_score, st.target_score))
         return Decision(player_card=max(hp, key=lambda c: c.power),
@@ -185,14 +190,14 @@ def _spy(store):
 
 
 random.seed(1)
-s.simulate_batting_half(_spy(_bat), _spy(_pit), defender_target_score=7)
+s.simulate_batting_half(_decider(_bat), _decider(_pit), defender_target_score=7)
 check(_bat and all(o == 7 for _h, _y, o, _t in _bat),
       f"the batter is told the defender has 7 ({[o for _h, _y, o, _t in _bat]})")
 check(_pit and all(t == 7 for _h, _y, _o, t in _pit),
       f"and the pitcher still gets it as target_score ({[t for _h, _y, _o, t in _pit]})")
 _bat2 = []
 random.seed(1)
-s.simulate_batting_half(_spy(_bat2), _spy([]), defender_target_score=None)
+s.simulate_batting_half(_decider(_bat2), _decider([]), defender_target_score=None)
 check(_bat2 and all(o == 0 for _h, _y, o, _t in _bat2),
       "and when the defender has NOT batted yet it is 0, not None — the first half of a "
       "match has no opponent score to know")

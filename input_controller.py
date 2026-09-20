@@ -861,6 +861,13 @@ def _look_settled(look):
     return glow, ys, 0, []
 
 
+# How many blind nudges may be spent finding a cursor the glow reader cannot see.
+# MAX_HAND_SIZE - 1 moves cross the whole fan; at section 5's measured 15.20%
+# press-drop rate that is ~4.7 presses, and the slack absorbs a clustered run of
+# drops. It is a bound on a RECOVERY, not a threshold on a measured quantity.
+CURSOR_BLIND_NUDGES = 8
+
+
 def _walk_cursor_to(target, look):
     """Press toward `target`, LOOKING after every single press.
 
@@ -872,6 +879,47 @@ def _walk_cursor_to(target, look):
     import local_hand
     glow, ys, n, sel = _look_settled(look)
     cur = local_hand.cursor_slot(glow, sel)
+    # AN UNLOCATABLE CURSOR IS RECOVERABLE, BECAUSE MOVING COMMITS NOTHING.
+    #
+    # Refusing here is right when the FAN cannot be read -- there is nothing to
+    # navigate. It is the wrong answer when the fan reads perfectly and only the
+    # CURSOR cannot be found, because that has a known cause and a free remedy.
+    #
+    # Live 2026-09-20: the cursor sat on slot 4 reading 6.9-9.8 against
+    # CURSOR_GLOW_MIN 10.0 while every other slot read 0.0-1.0. cursor_slot
+    # answered None, this refused, and the engine could neither discard slot 4 nor
+    # navigate AWAY from it to play slots 1 and 2 -- a total deadlock from one
+    # unreadable position. CLAUDE.md 10.35 measured the cause and it is permanent:
+    # "slot 4 never exceeds 11.0 at ANY offset, while slots 0-3 read 26-28 at the
+    # shipped position."
+    #
+    # SO WALK OFF THE BLIND SLOT. move_left/move_right are NAVIGATION; select_card
+    # is the only toggle, and nothing is committed until confirm_play. A nudge
+    # therefore risks nothing that a refusal protects -- it cannot select, deselect,
+    # play or discard -- while landing the cursor on any of slots 0-3 makes it
+    # readable by a factor of three over the gate.
+    #
+    # LOOK AFTER EVERY PRESS, never count them (section 5: 15.20% of presses are
+    # ignored, clustered). That also makes this safe whether or not the fan wraps at
+    # the edge: if it wraps, a blind slot is passed through rather than settled on,
+    # and the re-read catches the first readable position either way.
+    #
+    # THE BUDGET IS DERIVED. The fan is MAX_HAND_SIZE wide, so at most
+    # MAX_HAND_SIZE - 1 moves reach the far edge; at the measured 15.20% drop rate
+    # that needs about 4.7 presses, and the slack below covers a run of drops
+    # without letting a genuinely dead reader press forever.
+    _nudges = 0
+    while n == MAX_HAND_SIZE and cur is None and _nudges < CURSOR_BLIND_NUDGES:
+        _nudges += 1
+        print(f"  [cursor] fan reads but the cursor is nowhere above the gate "
+              f"(glow={glow}) — nudging off the blind slot ({_nudges}/"
+              f"{CURSOR_BLIND_NUDGES}); moving commits nothing")
+        press("move_left")
+        time.sleep(MOVE_SETTLE_SEC)
+        glow, ys, n, sel = _look_settled(look)
+        cur = local_hand.cursor_slot(glow, sel)
+    if _nudges and cur is not None:
+        print(f"  [cursor] recovered on slot {cur} after {_nudges} nudge(s)")
     if n != MAX_HAND_SIZE or cur is None:
         print(f"  [cursor] cannot see the cursor (rows={n}, glow={glow}) — refusing")
         return False, sel

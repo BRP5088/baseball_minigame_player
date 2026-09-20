@@ -211,6 +211,17 @@ class Harness:
         self.frames_grabbed += 1
         return _Im.new("L", (4, 4), 7 if self.frozen else self.frames_grabbed % 251)
 
+    def _full_frame(self):
+        """A blank frame at real capture geometry, for local_game_state's _fast_grab.
+
+        Blank on purpose: every local reader should answer "nothing here" on it, which
+        is the honest scripted state. The harness scripts SCREENS through
+        read_game_state; it must never be the case that what the readers see depends
+        on the machine the suite runs on.
+        """
+        from PIL import Image as _Im
+        return _Im.new("RGB", (1920, 1080), (0, 0, 0))
+
     def _screen_is_moving(self, *a, **k):
         self.motion_checks += 1
         # A real motion check costs two grabs plus the settle pause.
@@ -271,6 +282,29 @@ class Harness:
             # harness has no reason to exercise the real capture path, and a
             # test suite should not be photographing the user's screen.
             "_safe_prompt_check": lambda *a, **k: None,
+            # AND local_game_state's OWN capture, for the same reason and with a
+            # sharper cost. `_fast_grab()` was NOT stubbed, so every frozen-stream
+            # probe in this harness photographed the REAL chiaki window.
+            #
+            # That was inert for as long as the readers failed on whatever was up:
+            # at HEAD, read_result's template bank scores a live screen below
+            # RESULT_MIN and answers "not a result", so the leak changed nothing and
+            # nobody noticed it.
+            #
+            # It stopped being inert on 2026-09-20. A result-CARD reader landed, the
+            # console happened to be sitting on a finished match's "DEFEAT!" screen,
+            # and this harness read it 13 times: local_game_state returned a real
+            # result, run() took the result path instead of the turn path,
+            # _screen_is_moving was never called, the VIRTUAL CLOCK (which only
+            # advances inside it) stopped, and the frozen-stream bound could not fire.
+            # test_run_motion_gate then failed with "2001 polls" -- an offline test
+            # whose verdict depended on what was on the user's television.
+            #
+            # A blank frame at the real capture geometry, not the 4x4 the region stub
+            # uses: read_result needs RESULT_MIN_FRAME_W (384) before it will score at
+            # all, so a tiny frame would take the "too small" branch and exercise a
+            # path production never takes.
+            "_fast_grab": lambda *a, **k: self._full_frame(),
             "press": lambda k, *a, **kw: self.presses.append(k),
             "wait_for_screen_to_settle": lambda *a, **k: True,
             "wait_for_reveal_cards": lambda *a, **k: self.revealed is not None,
