@@ -6360,6 +6360,73 @@ def _tactics_kind_from_name(name):
 # this catches the non-empty-but-fake-name variant of the same failure).
 PLACEHOLDER_CARD_NAMES = {"unknown", "n/a", "none", "?"}
 
+
+# --- observe() functions for input_controller.press_verified (I-11) --------
+#
+# §5: the game IGNORES 15.20% of presses, clustered, and NOTHING we send is
+# lost -- so the only remedy is to LOOK and press again. press_verified is that
+# loop; these say what "it landed" looks like on the two run() screens that
+# press. Each returns a COMPARABLE VALUE that must CHANGE when the press takes,
+# and None ONLY when the screen genuinely cannot be read -- press_verified
+# treats None as blind and refuses to press into the dark.
+
+def _result_screen_up():
+    """observe for close_result: is the end-of-match banner still on screen?
+
+    True before a landed press, False after, None when the reader cannot run --
+    which is exactly read_result's own three-valued contract, so no new
+    constant is invented here.
+
+    The one direction it can be wrong is a result screen mid-FADE, which
+    read_result's docstring records as scoring ~0.43 and answering False. That
+    reads as "the press landed" a poll early; the cost is that run() carries on
+    to its next poll, which is what it does today with no verification at all,
+    and the C1 guard re-presses if the overlay is still up. The opposite
+    mapping -- calling a fade "blind" -- would report a LANDED press as failed.
+    """
+    try:
+        import local_state
+        return local_state.read_result(_fast_grab()).get("is_result")
+    except Exception:
+        return None
+
+
+def _match_start_screen():
+    """observe for start_match: "ban" / "prompt" / "other", or None if blind.
+
+    ONE grab, two readers already on the live path.
+
+    ISSUES.md I-11 proposed "read_ban_counter answers" alone. That is not safe
+    HERE: the counter is unreadable for the whole prompt -> ban transition, so a
+    bare `is not None` stays False while the match is opening and press_verified
+    would fire up to PRESS_VERIFY_TRIES more Squares into it. start_match is
+    `\\` -- the SAME key as confirm_discard (KEYMAP), so those presses land in a
+    live match. Pairing it with the dealer prompt makes a landed press leave
+    "prompt" at once, and the transition is already a change.
+
+    at_table() is the project's authority for "the dealer prompt is up" and is
+    the same reader _dealer_prompt_on_screen uses, so this adds no new gate. If
+    it misses the prompt (it can, over the bright table) the baseline is
+    "other" and the ban counter still supplies the change.
+    """
+    try:
+        img = _fast_grab()
+    except Exception:
+        return None
+    try:
+        if read_ban_counter(img) is not None:
+            return "ban"
+    except Exception:
+        return None
+    try:
+        import table_prompt
+        if table_prompt.at_table(img):
+            return "prompt"
+    except Exception:
+        pass
+    return "other"
+
+
 # Session-scoped cache: reused across ban screens within one script run,
 # so only the FIRST match pays the full ~15-call scan cost. Deliberately
 # in-memory only, never written to disk — this collection belongs to
@@ -8178,7 +8245,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("Result screen never dismissed — stopping. Check the game manually.")
                         stop_reason = "result_never_dismissed"
                         break
-                    press("close_result")
+                    input_controller.press_verified("close_result", _result_screen_up, log=print)
                     wait_for_screen_to_settle(max_wait=8.0)
                     continue
                 # N12: everything below indexes a model-produced dict and writes
@@ -8212,7 +8279,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("Result screen never cleared — stopping.")
                         stop_reason = "result_never_cleared"
                         break
-                    press("close_result")
+                    input_controller.press_verified("close_result", _result_screen_up, log=print)
                     wait_for_screen_to_settle(max_wait=8.0)
                     continue
 
@@ -8318,7 +8385,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # Dismiss regardless of whether scoring succeeded — leaving the
                 # overlay up would strand the loop on a screen it has already
                 # decided not to re-score.
-                press("close_result")
+                input_controller.press_verified("close_result", _result_screen_up, log=print)
                 wait_for_screen_to_settle(max_wait=8.0)
                 continue
 
@@ -8425,7 +8492,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         wait_for_screen_to_settle(max_wait=4.0, regions="match_start")
                         continue
                     reset_hand_memory()  # a new match is a new hand; nothing carries over
-                    press("start_match")
+                    input_controller.press_verified("start_match", _match_start_screen, log=print)
                     wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
                     continue
                 # C5: DO NOT PAY TWICE FOR ONE MATCH.
@@ -8497,7 +8564,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 print(f"Starting next match. ${balance} left"
                       + (f", ${spent}/${max_spend} of session cap spent." if max_spend is not None else "."))
                 reset_hand_memory()  # a new match is a new hand; nothing carries over
-                press("start_match")
+                input_controller.press_verified("start_match", _match_start_screen, log=print)
                 wait_for_screen_to_settle(max_wait=8.0, regions="match_start")
                 continue
 

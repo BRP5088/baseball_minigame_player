@@ -130,9 +130,23 @@ class Harness:
     def __init__(self, screens, play_results=None, balance=500,
                  wins=0, losses=0, draws=0, logger_stop=None, motion=None,
                  revealed=None, opp_local=None, frozen=False, ban_counter=3,
-                 ban_collection=None, ban_cursor=None):
+                 ban_collection=None, ban_cursor=None, drop_presses=None):
         self.screens = list(screens)
         self.idx = 0
+        # I-11: run()'s close_result and start_match go through
+        # input_controller.press_verified, which LOOKS after every press. Two
+        # things follow for this harness.
+        #
+        # `drop_presses` is {action: how many presses the GAME IGNORES}, the
+        # 15.20% of §5 made deterministic: a dropped press is recorded like any
+        # other but does not land, so the observe still reads the old screen
+        # and press_verified must press again.
+        #
+        # `landed` is per POLL, and it must be: press_verified runs entirely
+        # inside one iteration, so a close_result that landed on poll 3 has to
+        # look UNLANDED again when poll 7 presses it. _next_state clears it.
+        self.drop_presses = dict(drop_presses or {})
+        self.landed = set()
         # Each entry is play_one_turn()'s (played, matchup_info) return.
         self.play_results = list(play_results or [])
         self.play_idx = 0
@@ -186,7 +200,26 @@ class Harness:
         # user's DESKTOP 14 times per target and then places no bans at all.
         self.ban_cursor = ban_cursor
 
+    def _press(self, key, *a, **kw):
+        """The recorder every test asserts on, plus I-11's drop simulation."""
+        self.presses.append(key)
+        if self.drop_presses.get(key, 0) > 0:
+            self.drop_presses[key] -= 1
+            return                      # delivered, and the game ignored it
+        self.landed.add(key)
+
+    def _result_screen_up(self):
+        """orchestrator._result_screen_up, scripted: the banner is up until a
+        close_result press of THIS poll lands."""
+        return "close_result" not in self.landed
+
+    def _match_start_screen(self):
+        """orchestrator._match_start_screen, scripted: the dealer prompt is up
+        until a start_match press of THIS poll lands, then the ban screen."""
+        return "ban" if "start_match" in self.landed else "prompt"
+
     def _next_state(self):
+        self.landed.clear()
         self.checks_per_read.append(self.motion_checks - self._checks_at_last_read)
         self._checks_at_last_read = self.motion_checks
         if self.idx < len(self.screens):
@@ -305,7 +338,14 @@ class Harness:
             # all, so a tiny frame would take the "too small" branch and exercise a
             # path production never takes.
             "_fast_grab": lambda *a, **k: self._full_frame(),
-            "press": lambda k, *a, **kw: self.presses.append(k),
+            "press": self._press,
+            # I-11's two observe seams. Scripted for the same reason every
+            # other reader here is: unpatched they run the REAL readers against
+            # the blank _full_frame, which answers "not a result screen" and
+            # "no ban counter" forever, so no press could ever verify and every
+            # site would burn PRESS_VERIFY_TRIES.
+            "_result_screen_up": self._result_screen_up,
+            "_match_start_screen": self._match_start_screen,
             "wait_for_screen_to_settle": lambda *a, **k: True,
             "wait_for_reveal_cards": lambda *a, **k: self.revealed is not None,
             "read_matchup_reveal": lambda *a, **k: list(self.revealed or []),
@@ -341,6 +381,17 @@ class Harness:
             saved[name] = getattr(o, name)
             setattr(o, name, fn)
 
+        # AND input_controller's OWN `press`, because press_verified calls that
+        # one, not orchestrator's (I-11). In production the two names are the
+        # same object -- `from input_controller import press` at the top of
+        # orchestrator -- so stubbing both is what makes this harness match
+        # production rather than a divergence. Left unstubbed, press_verified
+        # would call the REAL press, which refuses under BASEBALL_TEST_RUN and
+        # records nothing, and every assertion on self.presses would go blind.
+        import input_controller as _ic
+        _ic_press = _ic.press
+        _ic.press = self._press
+
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         with open(path, "w") as f:
@@ -352,6 +403,7 @@ class Harness:
         finally:
             for name, fn in saved.items():
                 setattr(o, name, fn)
+            _ic.press = _ic_press
             os.unlink(path)
 
 

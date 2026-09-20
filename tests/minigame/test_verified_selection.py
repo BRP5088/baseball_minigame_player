@@ -178,10 +178,20 @@ class FakeScreen:
         self.cur, self.drop, self.n = start, set(drop), 0
         self.y = list(self.REST)
         self.sent = []
+        # COMMITTING TAKES THE CARD OUT OF THE HAND, and this fixture did not
+        # model that at all -- confirm_play changed nothing on the fake screen,
+        # so the fan still read five rows with the chosen card still lifted.
+        # That was invisible while the commit was blind. It stopped being
+        # invisible when I-11 made confirm_play verify itself against the fan:
+        # a screen where a landed commit looks identical to an ignored one made
+        # every play here read as "the game declined it five times".
+        self.played = False
 
     def press(self, key):
         self.sent.append(key)
-        if key in ("move_left", "move_right"):
+        if key == "confirm_play":
+            self.played = True
+        elif key in ("move_left", "move_right"):
             self.n += 1
             if self.n in self.drop:          # the swallowed keystroke
                 return
@@ -213,7 +223,10 @@ class FakeScreen:
         for i in self.selected():
             glow[i] = 5.7          # a SELECTED card that is not hovered: measured max 5.7
         glow[self.cur] = 30.0      # the card holding the cursor: measured 20.7 - 36.1
-        return glow, list(self.y), 5, self.selected()
+        # Once the play is committed the hand is a card short until the deal
+        # tops it up, so the row count leaves MAX_HAND_SIZE. That is the one
+        # thing on screen that tells a landed confirm_play from an ignored one.
+        return glow, list(self.y), (4 if self.played else 5), self.selected()
 
 
 def run(target, start=0, drop=(), tactics=None):

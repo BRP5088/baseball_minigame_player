@@ -119,8 +119,17 @@ class Harness:
                      "match_in_progress": match_in_progress}
         self.frames = 0
         self.clock = _Clock()
+        # I-11: close_result and start_match go through press_verified, which
+        # LOOKS after every press. Per POLL, because press_verified runs inside
+        # one iteration -- see _run_harness, which has the same pair.
+        self.landed = set()
+
+    def _press(self, key, *a, **kw):
+        self.presses.append(key)
+        self.landed.add(key)          # this file simulates no dropped presses
 
     def _next_state(self):
+        self.landed.clear()
         if self.idx < len(self.screens):
             s = self.screens[self.idx]
             self.idx += 1
@@ -138,6 +147,11 @@ class Harness:
         from PIL import Image
         self.frames += 1
         return Image.new("L", (4, 4), self.frames % 251)
+
+    def _full_frame(self):
+        """A blank frame at real capture geometry, standing in for _fast_grab."""
+        from PIL import Image
+        return Image.new("RGB", (1920, 1080), (0, 0, 0))
 
     def run(self, **kwargs):
         real_save = o.save_progress
@@ -159,7 +173,15 @@ class Harness:
             "screen_is_moving": lambda *a, **k: False,
             "_grab_settle_regions": lambda names: {n: self._frame_bytes() for n in names},
             "_safe_prompt_check": lambda *a, **k: None,
-            "press": lambda key, *a, **kw: self.presses.append(key),
+            # I-11's three seams. `_fast_grab` was NOT patched here and the two
+            # observes call it, so this file would have taken a REAL screenshot
+            # of the user's desktop on every poll -- the exact leak
+            # _run_harness's own comment records finding and closing.
+            "_fast_grab": lambda *a, **k: self._full_frame(),
+            "_result_screen_up": lambda *a, **k: "close_result" not in self.landed,
+            "_match_start_screen": lambda *a, **k: (
+                "ban" if "start_match" in self.landed else "prompt"),
+            "press": self._press,
             "wait_for_screen_to_settle": lambda *a, **k: True,
             "wait_for_reveal_cards": lambda *a, **k: False,
             "read_matchup_reveal": lambda *a, **k: [],
@@ -183,6 +205,14 @@ class Harness:
         for name, fn in patches.items():
             setattr(o, name, fn)
 
+        # AND input_controller's OWN `press`, which is what press_verified
+        # calls (I-11). In production the two names are the same object; left
+        # unstubbed the real one refuses under BASEBALL_TEST_RUN and records
+        # nothing, so every press count here would silently read zero.
+        import input_controller as _ic
+        _ic_press = _ic.press
+        _ic.press = self._press
+
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         with open(path, "w") as f:
@@ -194,6 +224,7 @@ class Harness:
         finally:
             for name, fn in saved.items():
                 setattr(o, name, fn)
+            _ic.press = _ic_press
             os.unlink(path)
 
     def debits(self, start_balance=500):
