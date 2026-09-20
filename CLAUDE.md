@@ -2897,6 +2897,54 @@ earlier census of `cursor_slot` used the reader's own answer (10.22) or a human
 reading a contact sheet. It needs no live change and runs on frames already on
 disk.
 
+**36. "IS THIS DEAD" NEEDS THREE INSTRUMENTS, AND EACH ONE IS WRONG ALONE.**
+2026-09-20, deleting 385 lines. All three failures below were caught by an
+instrument DISAGREEING with a hand-checked fact, never by the instrument itself.
+
+**(a) A ONE-PASS REFERENCE COUNT UNDER-REPORTS, because dead code reads dead
+code.** A scan of `graph_walk.py` reported **0 orphans of 100 top-level names**
+while seven names in it were dead. `GOAROUNDS` is loaded at `:1032` and `:1036`
+-- both inside a block after an unconditional `return False`, which CPython
+never emits (`dis.dis` shows no GOAROUNDS at all). The count cannot see that.
+**Seed the regions that are unreachable for reasons a count cannot see, delete,
+rescan, and iterate to a FIXPOINT.** Round 2 of that loop found seven more
+names, including `hand_digit_reader._WORKER` at 79 lines -- exactly the ones a
+single-pass manifest leaves stranded, which is `_something_moved` in reverse.
+
+**(b) THE `find | xargs grep` RECIPE IN SECTION 2 IS NOW TOO WIDE.**
+`agent_progress/` holds **2,100+ .py files including FOUR copies of
+orchestrator.py** and one of `graph_walk.py`. So
+
+    find . -name '*.py' -not -path './.venv/*' -print0 | xargs -0 grep -l HOME_ROUNDS
+
+returns `./graph_walk.py` AND
+`./agent_progress/verify-sim/scratch_33608/graph_walk.py` -- a "reference" found
+inside a COPY OF THE FILE BEING EXAMINED, reported as a live reader. That recipe
+fixed grep's too-NARROW problem and created a too-WIDE one, and BOTH give a
+confident wrong answer. **Exclude `agent_progress`, `drafts`, `backups`,
+`_obsolete` and `tests_quarantine` when the question is "is this dead"; count
+them separately, because a reference in a landed patch script is history, not a
+caller.**
+
+**(c) A SYMBOL REACHED ONLY BY `getattr` HAS NO STATIC REFERENCES AT ALL.**
+`ban_grid.SHIELD_BOX` looked dead to every count. It is live:
+
+    tools/state_viewer.py:909   _EDIT_CONST = {... "shield": "SHIELD_BOX" ...}
+    tools/state_viewer.py:919   {k: list(getattr(bg, _EDIT_CONST[k])) for k in ...}
+
+Deleting it breaks the live box editor with an AttributeError. That is the
+`identify_edges` precedent reproduced exactly, and the only thing that caught it
+was flagging every candidate whose NAME appears in a string anywhere. **Before
+deleting any name, grep for it as a STRING, not just as an identifier.**
+
+**AND THE UNIT OF PROOF IS THE THING YOU ARE CLAIMING ABOUT.** The same day, an
+exhaustive trace of `hand_digit_reader` -- AST over every module, every public
+function, the commit that cut it -- became the sentence "paddle_venv is CHECKED,
+NOT USED". False: `result_ocr.py` spawns that interpreter for the result banner
+on the live path. One consumer was checked and the claim was made about the
+DEPENDENCY. **An exhaustive trace of the wrong question is still the wrong
+answer**, and it reads exactly like diligence. See section 2.
+
 **1. The commonest bug here: the code did nothing, and doing nothing looked
 exactly like working.** Every bug found on 2026-09-01 had this shape; each fix
 was two or three lines and finding them took a day. Before theorising about a

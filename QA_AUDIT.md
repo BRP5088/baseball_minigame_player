@@ -153,10 +153,17 @@ user's call.
 **Root modules: 13 orphans, all from the pre-`graph_walk` routing generation.**
 No importer, no module-level call, not named by any script, document or test:
 
-    arc_walk.py  pitch_calibrate.py  replay_demo.py  replay_direct.py
+    arc_walk.py  [DELETED 2026-09-20]
+    pitch_calibrate.py  replay_demo.py  replay_direct.py
     replay_recorded.py  replay_scaled.py  route_arcs.py  route_demo3.py
     route_from_demo.py  route_recorded.py  teach_repeat.py  walk_seq.py
     waypoint_replay.py
+
+**TWELVE REMAIN, RE-VERIFIED 2026-09-20: all zero live importers, none with a
+`__main__` guard, 1,265 lines.** Only `arc_walk.py` was in the approved scope of
+that deletion round. `analog_replay_corrected.py` (126 lines) is in the same
+state. `git rm` is still the reversible way to take them, and they are still the
+user's call.
 
 Plus one documented only in `HANDOFF.md`, which CLAUDE.md marks superseded:
 `analog_replay_corrected.py`. Nine others that the naive scan flagged are
