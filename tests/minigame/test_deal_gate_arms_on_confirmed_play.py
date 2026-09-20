@@ -26,6 +26,10 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# The flag goes here too, before ANY project import, so the suite-wide scan
+# (test_every_test_sets_the_flag) can see it set in THIS file.
+os.environ.setdefault("BASEBALL_TEST_RUN", "1")
+
 # _run_harness sets BASEBALL_TEST_RUN / BASEBALL_DEAL_LOG / BASEBALL_MATCH_LOG
 # and imports orchestrator, BEFORE this file touches either -- same reason
 # _run_harness.py itself gives: those redirects must land before import.
