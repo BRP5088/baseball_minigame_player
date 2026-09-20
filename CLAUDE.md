@@ -346,14 +346,48 @@ DO NOT DELETE IT.** Both halves matter and the file used to state only the first
 
 - Never SELECT it as the interpreter. It is Python 3.11 with no `pytesseract`,
   no `mss`, no `Quartz`, so every module fails at import.
-- It IS used, by subprocess, and it is 777M for a reason: it holds `paddleocr`,
-  `paddlepaddle` and `paddlex`, which have no Python 3.14 wheel. That is why it
-  is a second venv rather than part of `.venv`.
-  `hand_digit_reader.py` shells out to `paddle_venv/bin/python`,
-  `orchestrator.py` calls `check_paddle_venv()` whenever
-  `compare_local_reads=True`, and **five production runners pass exactly that**
-  (`run_cycles.py`, `run_tonight.py`, `run_testing.py`, `run_one_match.py`,
-  `play_now.py`). `preflight.py` checks it unconditionally.
+- It is 777M for a reason: it holds `paddleocr`, `paddlepaddle` and `paddlex`,
+  which have no Python 3.14 wheel. That is why it is a second venv rather than
+  part of `.venv`.
+
+**BUT IT IS CHECKED, NOT USED, AND THIS ENTRY SAID "IT IS USED, BY SUBPROCESS"
+(corrected 2026-09-20).** The only function that ever spawns
+`paddle_venv/bin/python` is `hand_digit_reader.read_hand_digits`, and it has had
+**ZERO callers since commit 211c6bf** (2026-09-09, *"the local hand reader runs
+in production"*), which removed the two lines that called it:
+
+    -  from hand_digit_reader import read_hand_digits, group_into_cards
+    -  local_cards = group_into_cards(read_hand_digits(tmp_path))
+
+The template reader replaced it -- the same story as ArmorOCR above, and for the
+same reason. Measured by AST over every non-vendored module (a bare `grep` is
+what got this paragraph wrong twice; `detect` alone matches 343 lines of prose):
+
+    read_hand_digits    0 callers      group_into_cards  0 callers
+    validate_card       0 callers      detect            0 callers  (the two
+                                                          hits are a DIFFERENT
+                                                          detect in tools/)
+    check_paddle_venv   3 call sites   preflight.py:205, orchestrator.py:7628-9
+
+So what survives is the DEPENDENCY CHECK for a reader nothing calls.
+`orchestrator.py:7624-7629` verifies the venv under `compare_local_reads` so
+that *"a stale/missing interpreter surfaces as a swallowed per-turn exception"*
+-- there is no per-turn exception, because there is no per-turn call.
+
+**TWO CORRECTIONS TO THE OLD TEXT BEYOND THAT, both measured.** `preflight.py`
+does NOT check it "unconditionally" in the blocking sense: it is a `warn()`, not
+a `bad()`, so a missing venv never stops a run. And `check_paddle_venv()` either
+RAISES `PaddleVenvMissing` or returns True -- it never returns a falsy value --
+so preflight's `else` branch is **unreachable** and the message it was written to
+print ("hand digits fall back to vision") never appears; the outer `except`
+prints a vaguer one instead. That fallback would be wrong twice over now anyway,
+since the paid vision model is off (section 3).
+
+**NO DELETION IS RECOMMENDED HERE, AND THAT IS DELIBERATE.** This is the
+paragraph that was wrong in the OTHER direction -- "nothing uses it" -- and a
+deletion was nearly carried out on it. 777M, not a git repo, so nothing is
+recoverable afterwards. What is now established is only that the READER is dead;
+whether the venv goes, and whether the check goes with it, is the user's call.
 
 This file said "777M and nothing uses it" until 2026-09-04, and a deletion was
 nearly carried out on that basis. **The claims this file gets wrong are the ones
