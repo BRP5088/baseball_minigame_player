@@ -26,7 +26,9 @@ LOG_DIR = "screenshot_log"
 # 1020x298 crops from the OLD y0=0.770 region, and hand_labels*.json are keyed
 # to those filenames. The current y0=0.716 produces 1020x367 — mixing the two
 # silently mixes coordinate systems, and normalised y fractions differ by ~1.23
-# between them, exactly the scale of the SHIELD_DY / pair-spacing constants.
+# between them, exactly the scale of the shield offset the PaddleOCR worker
+# used (SHIELD_DY, deleted with that worker 2026-09-20; the value was 0.175
+# of the tall crop).
 _Y0 = GAMEPLAY_REGIONS_FRAC["hand"][1]
 OUT_DIR = f"hand_samples_y{_Y0:.3f}".replace(".", "")
 # Mean per-pixel difference below this on a 64x24 thumbnail = same hand.

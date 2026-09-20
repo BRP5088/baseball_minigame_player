@@ -48,7 +48,7 @@ checking.
 
 Two sites use it as a liveness probe:
 
-    console_lock.py:87          holder()      — is the lock's owner alive?
+    console_lock.holder()                     — is the lock's owner alive?
     input_controller.py:1657    chiaki_pid()  — is the cached chiaki pid alive?
 
 (`kill_runaways.py:77` uses `os.kill(pid, 9)` and MEANS to kill; that one is

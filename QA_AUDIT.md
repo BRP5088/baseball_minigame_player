@@ -38,7 +38,7 @@ test asserts against the constant it guards.
 | 5 | `graph_walk.py:777` | the STUCK-hazard half of the BLOCKED test is never exercised | mutant removing `any(h.kind == "STUCK" ...)` **SURVIVED 9** tests; every test stubs `walk_leg` to return `[]` hazards |
 | 6 | `graph_walk.py:1579-1581` | `recover_to_node`'s no-compass guard is never exercised | mutant `if False` **SURVIVED 4**; all 14 calls in `test_graph_walk.py` pass `read_heading=lambda: 90.0` |
 | 7 | `places.py:317` `_as_gray` crop | no explicit test at the rig's other geometry (1867×1050) | static; fixtures exist at 1400×787 and 1920×1080 only. CLAUDE.md 3 says both geometries must be checked |
-| 8 | `console_lock.py:87`, `input_controller.py:1657` | `os.kill(pid, 0)` is a liveness probe on Unix and **`TerminateProcess` on Windows** | matters only where the suite runs on Windows (Snoopy); those tests are excluded there. Do not "fix" in production — see `Snoopy_testing.md` |
+| 8 | `console_lock.holder()`, `input_controller.py:1657` | `os.kill(pid, 0)` is a liveness probe on Unix and **`TerminateProcess` on Windows** | matters only where the suite runs on Windows (Snoopy); those tests are excluded there. Do not "fix" in production — see `Snoopy_testing.md` |
 | 9 | `places.py:368-376`, `table_prompt.py:120`, `places.py:406`, `places.py:485` | unstampable-path warning, `_stroke_mask` 1.0 gate, `match_count` None branch (transitive only), `verdict()` empty-dict branch (unreachable by design — keep) | static; low value; listed so nobody re-derives them |
 
 ## State leaks — CLEAN

@@ -6,7 +6,9 @@
   // NOT paddle_venv: that is Python 3.11 with no pytesseract, no mss, no
   // Quartz, so selecting it makes every module fail at import with a confusing
   // error. But do NOT delete it either — it holds paddleocr/paddlepaddle/
-  // paddlex (no 3.14 wheel) and hand_digit_reader.py shells out to it.
+  // paddlex (no 3.14 wheel) and result_ocr.py shells out to it to read the
+  // WINNER/LOSER/DRAW banner. (It used to say hand_digit_reader.py; that
+  // file's own pipeline was deleted 2026-09-20 and only VERIFIES the venv.)
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.terminal.activateEnvironment": false,
   "python.analysis.extraPaths": ["${workspaceFolder}"],

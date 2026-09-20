@@ -25,8 +25,10 @@ Requires: pip install pyautogui anthropic tesserocr pytesseract numpy Pillow
 (tesserocr is what the local reads actually use; without it every one of them
 falls back to spawning a tesseract process — see _ocr_text)
 Requires: PERSONAL_ANTHROPIC_API_KEY set in your environment.
-Optional (audit-only local OCR): a Python 3.11 venv at ./paddle_venv with
-  paddlepaddle + paddleocr — see hand_digit_reader.py.
+Optional (the RESULT banner): a Python 3.11 venv at ./paddle_venv with
+  paddlepaddle + paddleocr — see result_ocr.py, which spawns it to read
+  WINNER/LOSER/DRAW. hand_digit_reader.py only VERIFIES the venv now; its own
+  hand-digit pipeline was deleted 2026-09-20 for having no callers.
 """
 
 import base64

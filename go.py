@@ -520,8 +520,6 @@ def _nudge(shots=None, log=print):
 
 TARGET_STREAK = 25
 
-RECOVER_STEPS = 8
-
 
 BACK_STEPS = 10
 

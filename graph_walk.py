@@ -968,17 +968,15 @@ def approach_goal(steps, capture=None, read_heading=None, log=print):
 
 
 def reach_table(capture=None, read_heading=None, log=print):
-    """Aim for the dealer prompt, stepping around whatever is in the way.
+    """Aim for the dealer prompt. Sweeps; does NOT step around.
 
     The last leg puts the character AT the table; what varies is the aim and
     whether an NPC is standing on the spot. So: sweep the arc for the prompt,
     and if it is nowhere on the arc, GIVE UP RATHER THAN MOVE -- see the comment
     below for the two measurements that killed both recoveries.
     """
-    import walk_steps as ws
-
     capture = capture or _default_capture
-    ok, aim = face_the_table(capture, read_heading, log=log)
+    ok, _ = face_the_table(capture, read_heading, log=log)
     if ok:
         return True
     # NEITHER RECOVERY BELOW IS ENABLED, and both are kept only because the

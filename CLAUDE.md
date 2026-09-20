@@ -399,9 +399,10 @@ that *"a stale/missing interpreter surfaces as a swallowed per-turn exception"*
 does NOT check it "unconditionally" in the blocking sense: it is a `warn()`, not
 a `bad()`, so a missing venv never stops a run. And `check_paddle_venv()` either
 RAISES `PaddleVenvMissing` or returns True -- it never returns a falsy value --
-so preflight's `else` branch is **unreachable** and the message it was written to
-print ("hand digits fall back to vision") never appears; the outer `except`
-prints a vaguer one instead. That fallback would be wrong twice over now anyway,
+so preflight's `else` branch was **unreachable** and the message it was written
+to print ("hand digits fall back to vision") never appeared. **That branch was
+deleted 2026-09-20**; the check itself stays, because the venv is live for
+`result_ocr`, and its message now names that consumer. That fallback would be wrong twice over now anyway,
 since the paid vision model is off (section 3).
 
 **NO DELETION IS RECOMMENDED HERE, AND THAT IS DELIBERATE.** This paragraph
