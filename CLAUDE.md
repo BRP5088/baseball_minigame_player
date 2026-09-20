@@ -1671,6 +1671,46 @@ module from each file's own imports, and walks the whole tree. A first attempt a
 that matched the bare attribute name `write` and reported 900 sites across PIL --
 the receiver is what makes the match meaningful.
 
+**AND THE REWRITTEN CENSUS STILL MISSED SIX OF SIX NEW FORMS (2026-09-20).** The
+paragraph above records the FIRST census missing seven of eight. Round 3 of the QA
+loop proposed six more evasion forms by reading; all six were then PLANTED as
+working emitters in a scratch copy of the tree (10.16a) and the census exited 0 on
+every one -- `agent_progress/qa3-emit/plant.py`. Five are now closed:
+
+    subprocess + osascript keystroke      CAUGHT   a real key press through System
+                                                   Events, no input library at all
+    a DIFFERENT emitter inside a function  CAUGHT  the tuple was (file, function),
+    already in EXPECTED                            so it collided and vanished
+    getattr(lib, COMPUTED)(k)              CAUGHT  the old rule needed a literal
+    `from pyautogui import *` + bare call  CAUGHT  `*` binds no EMITTERS name
+    an emitter in a SKIPPED directory,     CAUGHT  the skip-list is an ASSERTION
+    imported by a live module                      that nothing live imports past
+                                                   it; it is now CHECKED
+    a FIFO writer whose path is DERIVED    STILL MISSED -- see below
+
+**ONE STAYS OPEN, DELIBERATELY.** The FIFO check pre-filters on two literal
+strings before it will even parse a file, so a writer that builds the same path
+out of pieces is never looked at. Catching it means detecting the PROTOCOL
+(`buttons <n>`, `left_x <n>`) rather than the path, which is new design on the
+input path. No constant is invented for it here.
+
+**AND ONE NAIVE FIX WAS KILLED BY ITS OWN MEASUREMENT, which is why the osascript
+rule looks the way it does.** Scanning every string literal for AppleScript's
+input verbs returns FOURTEEN hits in this tree and **not one is AppleScript** --
+they are ordinary English in error messages and test assertions ("a dropped
+keystroke", "the KEYSTROKE only"). "keystroke" is a normal word in this project's
+vocabulary. 14 false positives, 0 true ones; a rule that cannot tell a sentence
+from a script gets switched off. The shipped rule inspects only actual
+`osascript` invocations and carries BOTH controls -- it must fire on a planted
+`key code 36`, and must NOT fire on the `click button "OK"` that the
+clear-blocking-UI ladder really sends.
+
+**AND 10.10b BIT INSIDE THE PROBE ITSELF.** The planted FIFO writer first scored
+CAUGHT, which looked like the census working. It was my own comment: it explained
+that neither literal appears in the file by SPELLING ONE OF THEM OUT, and the
+substring filter matched the comment. The form was evading all along. A probe for
+a substring filter must contain no literal that filter looks for.
+
 **The shape, one line:** the guard answers a narrower question than the name it is
 filed under. `can_use_background_input` gates a CALL SITE, not the function; the
 census asserted a site EXISTS, not that it is GUARDED; `CHIAKI_INJECT_INPUT`

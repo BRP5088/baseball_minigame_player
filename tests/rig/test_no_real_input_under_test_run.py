@@ -266,17 +266,24 @@ finally:
 # That is CLAUDE.md's own keep_awake lesson: a guard whose trigger is a hand-kept
 # list of NAMES rots silently, because nothing fails when a new name is missing.
 # It now walks every project module and derives the list.
+# (file, enclosing function, WHICH EMITTER). The third field was added after
+# six evasion forms were planted in a scratch copy and SIX OF SIX evaded --
+# agent_progress/qa3-emit/plant.py. Without it a stray pyautogui.click() inside
+# press() collides with the tuple press() already owns and disappears.
 EXPECTED = {
-    ("input_controller.py", "press"),
-    ("input_controller.py", "hold_combo"),
-    ("input_controller.py", "walk_at"),
-    ("input_controller.py", "_bg_hold_keys"),
-    ("input_controller.py", "press_background"),
+    ("input_controller.py", "press", "keyDown"),
+    ("input_controller.py", "press", "keyUp"),
+    ("input_controller.py", "hold_combo", "keyDown"),
+    ("input_controller.py", "hold_combo", "keyUp"),
+    ("input_controller.py", "walk_at", "keyDown"),
+    ("input_controller.py", "walk_at", "keyUp"),
+    ("input_controller.py", "_bg_hold_keys", "CGEventPostToPid"),
+    ("input_controller.py", "press_background", "CGEventPostToPid"),
     # Posts key-UP only, from a finally, for keys the two entries above already
     # pressed. DELIBERATELY has no BASEBALL_TEST_RUN refusal -- see the
     # behavioural check and its control above. Releasing is the safe direction.
-    ("input_controller.py", "_release_keycodes"),
-    ("ensure_stream.py", "_key"),
+    ("input_controller.py", "_release_keycodes", "CGEventPostToPid"),
+    ("ensure_stream.py", "_key", "CGEventPostToPid"),
 }
 EMITTERS = {
     # pyautogui
@@ -311,7 +318,7 @@ def _lib_bindings(tree):
     and `from pyautogui import keyDown` -- the last of which produces a BARE call
     that an attribute-only matcher cannot see.
     """
-    mods, bare = set(), set()
+    mods, bare, star = set(), set(), False
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
             for a in n.names:
@@ -320,10 +327,18 @@ def _lib_bindings(tree):
         elif isinstance(n, ast.ImportFrom):
             if (n.module or "").split(".")[0] in INPUT_LIBS:
                 for a in n.names:
+                    # FORM 5: `*` never equals an EMITTERS name, so a wildcard
+                    # import bound NOTHING here and every later bare keyDown()
+                    # was invisible. Planted and measured: the census exited 0.
+                    # What it binds is not knowable from the AST, so the module
+                    # itself becomes the site.
+                    if a.name == "*":
+                        star = True
+                        continue
                     if a.name in EMITTERS:
                         bare.add(a.asname or a.name)
                     mods.add(a.asname or a.name)
-    return mods, bare
+    return mods, bare, star
 
 
 def _emitter_name(node, mods, bare):
@@ -336,10 +351,18 @@ def _emitter_name(node, mods, bare):
         return f.id                                     # keyDown(k), imported bare
     if (isinstance(f, ast.Call) and isinstance(f.func, ast.Name)
             and f.func.id == "getattr" and len(f.args) >= 2
-            and isinstance(f.args[1], ast.Constant)
-            and f.args[1].value in EMITTERS
             and isinstance(f.args[0], ast.Name) and f.args[0].id in mods):
-        return f.args[1].value                           # getattr(pyautogui,"keyDown")(k)
+        if isinstance(f.args[1], ast.Constant):
+            if f.args[1].value in EMITTERS:
+                return f.args[1].value                   # getattr(pyautogui,"keyDown")(k)
+            return None
+        # FORM 4: a NON-CONSTANT name -- getattr(pyautogui, TABLE[action])(k).
+        # The old rule required a literal, so this returned None and the call
+        # was invisible; planted and measured, the census exited 0. Which
+        # attribute it fetches is not decidable here, and the receiver is an
+        # input library, so it CANNOT BE PROVEN SAFE -- which is the only
+        # honest verdict and the safe direction to be wrong in.
+        return "getattr(<computed>)"
     return None
 
 
@@ -351,8 +374,8 @@ def sites(path):
     visible -- a planted module-level keyDown used to be invisible.
     """
     tree = ast.parse(open(path, encoding="utf-8").read())
-    mods, bare = _lib_bindings(tree)
-    if not mods and not bare:
+    mods, bare, star = _lib_bindings(tree)
+    if not mods and not bare and not star:
         return set()
     owner = {}
     for fn in [n for n in ast.walk(tree)
@@ -360,17 +383,36 @@ def sites(path):
         for node in ast.walk(fn):
             owner[id(node)] = fn.name
     out = set()
+    if star:
+        out.add((os.path.basename(path), "<module>", "from <input lib> import *"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and _emitter_name(node, mods, bare):
-            out.add((os.path.basename(path), owner.get(id(node), "<module>")))
+        if not isinstance(node, ast.Call):
+            continue
+        _e = _emitter_name(node, mods, bare)
+        if _e:
+            # FORM 3: the tuple used to be (file, function) only, so a
+            # DIFFERENT emitter dropped into a function already in EXPECTED
+            # produced a tuple that was already there and `_new` stayed empty.
+            # Planted a pyautogui.click() inside press(): the census exited 0.
+            # Naming the emitter separates them.
+            #
+            # HONEST LIMIT: a SECOND call of the SAME emitter in the SAME
+            # function is still one tuple. That call sits behind the same
+            # focus_input_allowed() guard at the top of the function, so it is
+            # the weakest of the six forms -- but it is not covered, and saying
+            # so is the point.
+            out.add((os.path.basename(path), owner.get(id(node), "<module>"), _e))
     return out
+
+
+SKIPPED_DIRS = {".venv", "paddle_venv", ".claude", "agent_progress", "chiaki-ng-src",
+                "chiaki-ng-build", "tests", "drafts", "__pycache__", "_obsolete",
+                "tests_quarantine", "backups", "demos", "explore", "screenshot_log"}
 
 
 def project_modules():
     """Every project .py that could emit. DERIVED, never hand-kept."""
-    skip = {".venv", "paddle_venv", ".claude", "agent_progress", "chiaki-ng-src",
-            "chiaki-ng-build", "tests", "drafts", "__pycache__", "_obsolete",
-            "tests_quarantine", "backups", "demos", "explore", "screenshot_log"}
+    skip = SKIPPED_DIRS
     for dirpath, dirnames, filenames in os.walk(_ROOT):
         # A VIRTUALENV IS NOT PROJECT CODE. The first version walked into one and
         # reported 900+ "emission sites" across PIL. pyvenv.cfg marks a venv root;
@@ -449,6 +491,109 @@ check(writers == FIFO_WRITERS,
       f"modules that name the injection FIFO AND open something for writing changed: "
       f"{sorted(writers)} vs {sorted(FIFO_WRITERS)}. A new writer sends button masks "
       "straight to the console; inject_reset.py did exactly that, unguarded.")
+# --- FORM 1: a keystroke through osascript, which needs no input library -------
+# AppleScript reaches System Events, so subprocess.run(["osascript","-e",
+# 'tell application "System Events" to key code 36']) is a real key press with no
+# pyautogui, no Quartz and no FIFO. This project already shells out to osascript
+# in six modules, so it is a route someone would plausibly reach for.
+#
+# ONLY ACTUAL osascript CALLS ARE INSPECTED, and that is a measurement not a
+# nicety: scanning every string literal for these verbs returns FOURTEEN hits in
+# this tree, every one ordinary English in an error message or a test assertion
+# ("a dropped keystroke", "the KEYSTROKE only"), and ZERO real ones. A rule that
+# cannot tell a sentence from a script is a rule that gets switched off.
+_OSA_VERBS = ("keystroke", "key code", "key down", "key up")
+_SHELL_OUT = {"run", "call", "Popen", "check_output", "check_call", "system"}
+
+
+def _osascript_input(tree):
+    """(lineno, verb) for every subprocess/os.system call that types something."""
+    out = []
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr in _SHELL_OUT):
+            continue
+        strs = [c.value.lower() for c in ast.walk(n)
+                if isinstance(c, ast.Constant) and isinstance(c.value, str)]
+        if not any("osascript" in s for s in strs):
+            continue
+        for v in _OSA_VERBS:
+            if any(v in s for s in strs):
+                out.append((n.lineno, v))
+                break
+    return out
+
+
+_osa = set()
+for _p in project_modules():
+    try:
+        _t = ast.parse(open(_p, encoding="utf-8").read())
+    except Exception:
+        continue
+    for _ln, _v in _osascript_input(_t):
+        _osa.add((os.path.basename(_p), _ln, _v))
+check(not _osa,
+      f"osascript keystroke injection: {sorted(_osa)}. That is a real key press "
+      "through System Events with no input library involved, so every lockout and "
+      "every check above is blind to it — route it through input_controller, or "
+      "give it its own BASEBALL_TEST_RUN refusal and a behavioural check.")
+# CONTROL: the detector must actually recognise the shape, or it passes by
+# never matching anything (10.1).
+check(_osascript_input(ast.parse(
+          'import subprocess\n'
+          'subprocess.run(["osascript", "-e", '
+          '\'tell application "System Events" to key code 36\'])\n')),
+      "CONTROL: the osascript detector did not fire on a known-positive sample — "
+      "the check above proves nothing")
+# ...and it must NOT fire on this project's real osascript uses, which click
+# named buttons rather than typing.
+check(not _osascript_input(ast.parse(
+          'import subprocess\n'
+          'subprocess.run(["osascript", "-e", '
+          '\'tell application "System Events" to click button "OK" of window 1\'])\n')),
+      "CONTROL: the osascript detector fired on a button CLICK — the clear-blocking-UI "
+      "ladder does exactly that and would be flagged forever")
+
+# --- FORM 6: the skip-list is an ASSERTION, so check it ------------------------
+# Skipping a directory by NAME is the hand-kept-list shape CLAUDE.md's keep_awake
+# lesson warns rots silently -- nothing fails when the list stops being true. What
+# makes it safe is a claim: nothing live depends on those trees. Planted an emitter
+# in drafts/ and imported it from a root module; the census exited 0.
+#
+# Only a directory that CONTAINS .py can supply code. That distinction is
+# load-bearing here, not hypothetical: `import explore` appears twice in
+# overnight/ and resolves to the ROOT MODULE explore.py, because explore/ holds
+# zero .py files and is a data directory. A rule that skipped that test would
+# report two false positives on day one and be switched off.
+_importable_skips = {d for d in SKIPPED_DIRS
+                     if os.path.isdir(os.path.join(_ROOT, d))
+                     and any(f.endswith(".py")
+                             for _, _, fs in os.walk(os.path.join(_ROOT, d))
+                             for f in fs)}
+_leaks = set()
+for _p in project_modules():
+    try:
+        _t = ast.parse(open(_p, encoding="utf-8").read())
+    except Exception:
+        continue
+    for _n in ast.walk(_t):
+        _names = ([a.name for a in _n.names] if isinstance(_n, ast.Import)
+                  else [_n.module] if isinstance(_n, ast.ImportFrom) and _n.module
+                  else [])
+        for _m in _names:
+            if _m.split(".")[0] in _importable_skips:
+                _leaks.add((os.path.basename(_p), _m))
+check(not _leaks,
+      f"live module(s) import code from a SKIPPED directory: {sorted(_leaks)}. The "
+      "scan does not descend there, so an emitter in that tree is invisible to "
+      "every check above — either move the code somewhere scanned, or stop "
+      "importing it.")
+# CONTROL: the rule must be able to SEE a skipped directory that holds code, or
+# it passes by finding nothing to check (10.1).
+check(_importable_skips,
+      "no skipped directory contains any .py — the import-leak check above cannot "
+      "fire, so it proves nothing")
+
 check(namers == FIFO_WRITERS | FIFO_READERS,
       f"modules naming the injection FIFO changed: {sorted(namers)} vs "
       f"{sorted(FIFO_WRITERS | FIFO_READERS)} — a new one is either a writer (guard it) "
