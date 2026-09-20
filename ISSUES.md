@@ -73,10 +73,12 @@ its helper is now `_discard_hand_identity` (orchestrator.py:7358), and
 `tests/harness/test_no_shadowed_module_defs.py` AST-scans every module for a duplicate
 top-level def with a positive control (456 modules, one pre-existing duplicate found and
 renamed in `test_simulate_rules.py`). Verified here: `grep -c "^def _hand_signature"` is 1.
-COMMITTED to main in de5a79b. Still open: the offline replay of the three run-c deals
-(Verify step 2), and `deal_timing.jsonl` rows 37-39 are ARTEFACTS of this bug (a delta
-five times the threshold logged as a timeout) and must be flagged before anyone fits
-that file; the other session left them unedited on purpose.
+COMMITTED to main in de5a79b. **CLOSED 2026-09-20 (85c745b):** the replay
+(`agent_progress/issues/I-01/replay_deal_gate.py`) releases all three run-c deals at frame 3
+of their windows under the fixed helper, and none under the shadowing control.
+`deal_timing.jsonl` rows 37-39 are ARTEFACTS of the bug (a delta five times the threshold
+logged as a timeout); the data file is untouched and `tools/deal_timing.py` now excludes
+that exact shape (`edge_seen` true, timeout, no `reason`) and says so: 40 -> 37 live rows.
 
 ### I-02  Slot 4 cannot be played or discarded                                     P0  input
 
