@@ -4266,8 +4266,13 @@ def local_game_state():
                       f"against {local_state.RESULT_MIN}; OCR: {detail}), not a ban grid "
                       f"(no N/3 counter), and the hand reader says: {why}")
 
+    # I-10: `why` is non-None here only when local_hand_cards actually DROPPED a
+    # player or tactics slot -- it tried the hand memory and the hail-mary bank
+    # first, so a slot carried forward from an earlier turn is READ, not dropped.
+    # A dropped slot means hand_players is short its true maximum, exactly like the
+    # home-plate occluder below, so should_redraw must refuse on this too.
     st = {"screen": "turn", "hand": cards, "batters_used": None, "result_won": None,
-          "collection": [], "homeplate_runner": _hpr}
+          "collection": [], "homeplate_runner": _hpr, "hand_incomplete": bool(why)}
     if _hpr:
         print("  [hand] a runner is on HOME PLATE — its card covers a hand slot, and "
               "no discard can reveal it (the occluder is not a hand card)")
@@ -7383,6 +7388,9 @@ def play_one_turn(state_json: dict, batters_used: int):
         # the slots that survived is not the hand's maximum. should_redraw abstains on
         # it rather than spending one of two discards on a hand that may be strong.
         hidden_by_homeplate_runner=bool(state_json.get("homeplate_runner")),
+        # I-10: THE GENERAL CASE. local_hand_cards can drop a player slot for any
+        # occluder, not just a home-plate runner -- see decision_engine.GameState.
+        hand_incomplete=bool(state_json.get("hand_incomplete")),
     )
 
     player_only = [p for _, p in players]

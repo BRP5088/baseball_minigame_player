@@ -68,6 +68,16 @@ class GameState:
     # plate and his CARD lies inside the hand crop, so read_hand counts it as a sixth
     # card and the slot beneath is dropped. Set by local_game_state; see should_redraw.
     hidden_by_homeplate_runner: bool = False
+    # THE GENERAL CASE OF THE SAME PROBLEM (I-10). hidden_by_homeplate_runner only
+    # ever covered ONE occluder -- a runner stranded on home plate. local_hand_cards
+    # drops ANY player slot it cannot read (a fan-neighbour's card riding over the
+    # power disc, CLAUDE.md 10.28/10.34, or a misread power) once MIN_LOCAL_HAND_CARDS
+    # still remain, and that dropped slot set no flag at all: `hand_players` was
+    # silently the cards that SURVIVED, and max() over them is not the hand's true
+    # maximum. Set by local_game_state whenever `local_hand_cards` reports a dropped
+    # slot (a card the hand memory and the hail-mary bank both failed to recover --
+    # so a slot carried forward from memory still counts as READ, not incomplete).
+    hand_incomplete: bool = False
 
 
 @dataclass
@@ -363,6 +373,11 @@ def should_redraw(hand_players: List[PlayerCard], state: GameState) -> bool:
     # hand may be strong, and spending one of two discards to find out is a cost with
     # no information attached.
     if getattr(state, "hidden_by_homeplate_runner", False):
+        return False
+    # SAME REFUSAL, GENERAL CAUSE. A fan-neighbour occlusion (or any other dropped
+    # player slot) leaves `hand_players` short exactly the same way a home-plate
+    # runner does, and max() over the survivors is just as wrong. See I-10.
+    if getattr(state, "hand_incomplete", False):
         return False
     return max(c.power for c in hand_players) <= REDRAW_POWER_THRESHOLD
 
