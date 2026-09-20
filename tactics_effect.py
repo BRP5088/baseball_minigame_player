@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Do SPEED and FIELDING tactics affect the outcome at all?
 
-    .venv/bin/python tactics_effect.py [match_log.jsonl]
+    .venv/bin/python tactics_effect.py [match_log.jsonl] [--include-legacy]
 
 The game's rule (CLAUDE.md): only SWING_BOOST and PITCH_BOOST add power. Speed
 and fielding boosts carry a nonzero bonus that adds NO power. So the question
@@ -16,6 +16,17 @@ IT REFUSES TO PRODUCE A P-VALUE IT CANNOT SUPPORT. On the log as of
 39 rows have no tactics_kind at all. A p-value on n=2 is not a weak result, it
 is not a result, and printing one invites exactly the confident wrong finding
 this project keeps producing.
+
+I-18a: EVERY ROW HERE IS SCORED ON `outcome`, so this whole script is an
+outcome statistic — unlike analyze_match_log.py, there is no powers-only half
+to keep. By default rows with no `outcome_basis` (the withdrawn "score went
+up" classifier's output, CLAUDE.md section 4) are dropped before anything
+else runs; `--include-legacy` puts them back for the old (unreliable) reading.
+On match_log.jsonl as of 2026-09-20 that is 369 of 373 rows, so every arm
+prints INSUFFICIENT by default — which is the honest answer, not a bug: this
+script cannot yet support a win-rate p-value on real evidence, and reporting
+one built on the old classifier would be the exact mistake OPEN-24/I-18 exists
+to stop repeating.
 """
 import collections
 import json
@@ -33,9 +44,22 @@ def win_rate(rows):
     return sum(1 for r in rows if r.get("outcome") in WIN) / len(rows)
 
 
-def main(path="match_log.jsonl"):
+def main(path="match_log.jsonl", include_legacy=False):
     rows, synthetic, bad = aml.load(path)
     print(f"{len(rows)} rows  ({synthetic} synthetic skipped, {bad} unparseable)\n")
+
+    legacy = [r for r in rows if not aml.has_outcome_basis(r)]
+    if legacy:
+        if include_legacy:
+            print(f"{len(legacy)} legacy rows (no outcome_basis) INCLUDED "
+                  f"(--include-legacy) -- every win rate below is the OLD, "
+                  f"unreliable 'score went up' classifier's opinion.\n")
+        else:
+            rows = [r for r in rows if aml.has_outcome_basis(r)]
+            print(f"{len(legacy)} legacy rows (no outcome_basis -- predate "
+                  f"classify_outcome, CLAUDE.md section 4) EXCLUDED; "
+                  f"{len(rows)} outcome-eligible rows remain (pass "
+                  f"--include-legacy to put them back).\n")
 
     kinds = collections.Counter(r.get("our_tactics_kind") for r in rows)
     missing = kinds.get(None, 0)
@@ -88,4 +112,7 @@ def main(path="match_log.jsonl"):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "match_log.jsonl")
+    _include_legacy = "--include-legacy" in sys.argv
+    _positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+    main(_positional[0] if _positional else "match_log.jsonl",
+         include_legacy=_include_legacy)

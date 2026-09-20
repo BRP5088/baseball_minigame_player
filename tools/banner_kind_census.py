@@ -38,8 +38,12 @@ def badge_of(im, zone):
     return min(up, key=lambda c: c[1]) if up else None
 
 
-if __name__ == "__main__":
-    os.environ["BASEBALL_TEST_RUN"] = "1"
+def score_held_out():
+    """(right, wrong, skipped, rows) over every archived frame that did NOT
+    supply a template -- the reusable core of this script, pulled out so
+    tests/minigame/test_reveal_kind_live_fixtures.py can require the SAME
+    wrong-kind-max check without a second copy of SOURCES/SETS to rot.
+    """
     right, wrong, skipped = [], [], 0
     rows = []
     for pat, mound_kind, home_kind in SETS:
@@ -56,6 +60,12 @@ if __name__ == "__main__":
                 wrong.extend(v for k, v in sc.items() if k != truth)
                 rows.append({"file": os.path.basename(p), "truth": truth,
                              "scores": {k: round(v, 4) for k, v in sc.items()}})
+    return right, wrong, skipped, rows
+
+
+if __name__ == "__main__":
+    os.environ["BASEBALL_TEST_RUN"] = "1"
+    right, wrong, skipped, rows = score_held_out()
     r, w = np.array(right), np.array(wrong)
     print(f"held-out readings: {r.size} right-kind, {w.size} wrong-kind, {skipped} skipped\n")
     if r.size:
