@@ -1966,8 +1966,31 @@ RECORDED_CROPS = ("hand", "scoreboard", "third_base", "first_base", "second_base
 # to delete wholesale, and OPEN-24 is the record of what that cost -- 148 rows of
 # ground truth in match_log.jsonl with ZERO surviving frames, because
 # SCREENSHOT_KEEP_RUNS is 3 and the row outlives the picture.
+# `auto/`, NOT `live/`: `live/` holds the five hand-adjudicated fixtures and the
+# t1/t2 sets that `tests/minigame/test_reveal_kind_live_fixtures.py` and
+# `tools/build_tactics_templates.py` name one by one, and two of those five
+# SUPPLIED TEMPLATES -- so that directory is scored with an exclusion list and an
+# unattended run appending to it buries the curated set in frames nobody has looked
+# at. Frames the rig keeps by itself land here and are HELD-OUT by construction.
 REVEAL_KIND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "test_fixtures", "reveal_kind_truth", "live")
+                               "test_fixtures", "reveal_kind_truth", "auto")
+
+# THE CAP REFUSES; IT DOES NOT PRUNE. This writes into test_fixtures/, which is
+# TRACKED and which tests/harness/test_no_side_effects.py watches, and OPEN-24 is a
+# record of frames being deleted out from under rows that needed them
+# (SCREENSHOT_KEEP_RUNS is 3 and that is exactly how the 148 rows lost their
+# pictures). Deleting the oldest to make room for the newest would repeat it on a
+# corpus whose whole value is coverage of the RARE kinds -- the log's rarest are
+# fielding 8 and speed 6 -- and the oldest frames are the rare ones. ~273 KB a frame,
+# so 200 is ~55 MB and about 50 matches at the measured ~4 tactics plays a match.
+REVEAL_KIND_MAX_FILES = 200
+
+# READ AT CALL TIME (10.18). `out_dir` is the in-process seam every direct-call test
+# uses; this is the one a test that drives run() can reach, because run() calls
+# record_reveal_kind itself and passes no out_dir. Written as a default argument the
+# redirect would be captured when the `def` ran and a test setting it later would
+# write into the real corpus -- leg_reliability.STORE's exact trap.
+REVEAL_KIND_DIR_ENV = "BASEBALL_REVEAL_KIND_DIR"
 
 # JPEG, not PNG, and measured rather than assumed (2026-09-17). A kept frame can
 # answer differently from the live capture it came from -- that is why a compass
@@ -1992,21 +2015,40 @@ def record_reveal_kind(reveal_img, matchup_info, out_dir=None):
     peak frame, already in memory for `read_matchup_reveal`, so this adds no capture,
     no poll and no delay to the turn loop.
 
+    IT ALSO STAMPS THE ROW. `matchup_info` is what `pending_matchup` carries to
+    `log_matchup`, so setting `reveal_frame` here puts the frame's path in the
+    match_log row the same reveal produced -- which is the half OPEN-24 is actually
+    about. The 148 rows that have no picture are not missing frames so much as missing
+    the LINK between a row and its frame, and a filename alone cannot supply it: the
+    row knows the kind and the timestamp, and so does the filename, but only one of
+    them is written by the code that saw both. Stamped after the save, so a refusal
+    or a failed write never leaves the row pointing at a file that is not there.
+
     Returns the filename written, or None. `out_dir` is for tests -- with it the
     BASEBALL_TEST_RUN suppression is bypassed, so a test can prove the write happens
-    without writing into the real corpus.
+    without writing into the real corpus; BASEBALL_REVEAL_KIND_DIR is the same seam
+    for a test that drives run(), which calls this itself and passes no out_dir.
     """
     try:
         kind = (matchup_info or {}).get("our_tactics_kind")
         if not kind or reveal_img is None:
             return None
-        if out_dir is None and _running_under_test():
+        d = out_dir or os.environ.get(REVEAL_KIND_DIR_ENV)
+        if d is None and _running_under_test():
             return None
-        d = out_dir or REVEAL_KIND_DIR
+        d = d or REVEAL_KIND_DIR
         os.makedirs(d, exist_ok=True)
+        if len([f for f in os.listdir(d) if f.endswith(".jpg")]) >= REVEAL_KIND_MAX_FILES:
+            print(f"  [reveal] {d} already holds {REVEAL_KIND_MAX_FILES} frames -- "
+                  f"NOT keeping this {kind} one. Score the corpus and move what it "
+                  f"is worth keeping, then the cap lifts itself; nothing is pruned "
+                  f"here on purpose.")
+            return None
         fname = f"{kind}_{time.time_ns()}.jpg"
-        reveal_img.convert("RGB").save(os.path.join(d, fname),
-                                       quality=REVEAL_KIND_QUALITY)
+        path = os.path.join(d, fname)
+        reveal_img.convert("RGB").save(path, quality=REVEAL_KIND_QUALITY)
+        matchup_info["reveal_frame"] = os.path.relpath(
+            path, os.path.dirname(os.path.abspath(__file__)))
         return fname
     except Exception:
         # Never into the turn loop. A missing corpus frame costs a slower census

@@ -1,7 +1,13 @@
 # live/ — reveal frames kept as the rig plays, labelled by what the engine chose
 
-Empty until a match runs. `orchestrator.record_reveal_kind` writes one frame here
-per turn where WE played a tactics card, named `<kind>_<ns>.jpg`.
+**The recorder writes to `../auto/` now, not here (2026-09-20).** The frames in this
+directory are hand-adjudicated: `tests/minigame/test_reveal_kind_live_fixtures.py`
+names all five, two of them supplied templates, and the census carries an exclusion
+list for those two — so an unattended run appending to this directory would bury a
+curated set in frames nobody has looked at. `orchestrator.record_reveal_kind` writes
+one frame per turn where WE played a tactics card, named `<kind>_<ns>.jpg`, into
+`../auto/`, and stamps that path into the match_log row as `reveal_frame`. Everything
+below is why it exists and how to score it, and applies to both directories.
 
 WHY IT EXISTS (OPEN-24). `reveal_cards.TACTICS_KIND_MIN` (0.75) gates the
 tactics-KIND reader and stands on the 48 frames in `../reveal6/` and `../reveal/`
