@@ -7688,6 +7688,11 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # ONLY signal that input is being dropped — everything else about a
     # misfire looks like a normal turn.
     misfires = 0
+    # How many turns the LOCAL reveal path actually read an opponent power
+    # and compared it against ours (I-12). With the paid model off this is
+    # the only misfire detector that ever runs, so a zero here — not a zero
+    # misfire count — is what "NOT MEASURED" below is protecting against.
+    local_reveal_reads = 0
     plays = 0
     # Plays since the CURRENT match was paid for. `plays` counts the whole
     # session, so it cannot tell a result screen at the start of match 4
@@ -9055,6 +9060,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                             _ours_seen in (_ours_power,
                                                            (_ours_power or 0) + (_bonus or 0)))
                                 if matchup_info.get("opp_power") is not None and _ours_ok:
+                                    local_reveal_reads += 1
                                     pending_matchup = matchup_info
                                     print(f"  [reveal] no opponent NAME "
                                           f"(ours={_ours!r}, revealed players="
@@ -9064,6 +9070,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                 elif matchup_info.get("opp_power") is not None:
                                     # Their card read, ours did not match: this is
                                     # what a misfire looks like from the local side.
+                                    local_reveal_reads += 1
                                     print(f"  [MISFIRE?] the reveal shows our power "
                                           f"as {_ours_seen}, we played {_ours_power} "
                                           f"(+{_bonus}) — not logging this turn.")
@@ -9072,6 +9079,21 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                                        revealed=[("local", _ours_seen)])
                                     matchup_info["misfire_suspected"] = True
                                     misfires += 1
+                                    # Let the input layer slow itself down, same
+                                    # as the paid path below (I-12): this branch
+                                    # is the ONLY misfire detector that ever runs
+                                    # with the paid model off, and it was logging
+                                    # a suspected misfire without ever backing off.
+                                    try:
+                                        input_controller.report_misfire()
+                                    except Exception as _e:
+                                        print(f"  WARNING: report_misfire() raised "
+                                              f"{_e!r} — the input layer did NOT "
+                                              f"slow itself down. Misfires will "
+                                              f"keep being counted with nothing "
+                                              f"adjusting in response; this is not "
+                                              f"a timing problem that resisted the "
+                                              f"fix, it is the fix not running.")
                                 else:
                                     print(f"  [reveal] no OPPONENT card identified "
                                           f"(ours={_ours!r}, revealed players="
@@ -9178,20 +9200,23 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
         print(settle_stats_summary())
         if plays:
             _pct = 100.0 * misfires / plays
-            # A ZERO THAT WAS NEVER MEASURED IS NOT A PASS. The misfire detector lives
-            # entirely in the REVEAL path, and read_matchup_reveal is the only reveal
-            # reader there is -- local_state has none. With the paid model off every
-            # reveal raises, zero turns are logged, and this line then certified "input
-            # timing looks safe" off a detector that never ran. 10.1 verbatim: a success
-            # path and a no-op path with identical output, on the one line in the whole
-            # run that judges input.
-            if misfires == 0 and not paid_model_allowed():
+            # A ZERO THAT WAS NEVER MEASURED IS NOT A PASS. But (I-12) with the paid
+            # model off, opponent_from_reveal's LOCAL comparison above (not
+            # read_matchup_reveal) IS a misfire detector, and it runs on every turn
+            # regardless of paid_model_allowed() -- so a zero here is only "never
+            # measured" when local_reveal_reads is ALSO zero. 10.1 verbatim: a
+            # success path and a no-op path with identical output, on the one line
+            # in the whole run that judges input.
+            if misfires == 0 and not paid_model_allowed() and local_reveal_reads == 0:
                 _verdict = ("NOT MEASURED — the misfire detector lives in the reveal "
                             "path, which is paid-only, so this 0 means the detector "
                             "never ran, not that input is clean")
             else:
-                _verdict = ("input timing looks safe" if misfires == 0 else
-                            "RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py")
+                _prefix = ("MEASURED (local reveal) — "
+                           if not paid_model_allowed() and local_reveal_reads else "")
+                _verdict = (_prefix +
+                            ("input timing looks safe" if misfires == 0 else
+                             "RAISE ACTION_DELAY or set FOCUS_TTL=0 in input_controller.py"))
             print(f"  [input] {plays} cards played, {misfires} suspected misfire(s) "
                   f"({_pct:.1f}%) — {_verdict}")
             try:
