@@ -923,6 +923,20 @@ def _select_verified(target, look):
         return False, before
     if target in before:
         return True, before
+    # AND IF THE TARGET'S POSITION IS UNKNOWN, REFUSE -- DO NOT PRESS.
+    #
+    # select_card is a TOGGLE. Pressing it at a card whose state cannot be read is
+    # as likely to put a selected card DOWN as to put an unselected one up, and the
+    # reader cannot see which happened, so the retry loop keeps going. Live
+    # 2026-09-20: a selected card brightened until its power disc had no dark edge,
+    # `before` came back empty, and five presses toggled the card the engine had
+    # already selected. Refusing hands the decision back to the caller, which
+    # re-reads a fresh frame -- and a refusal is recoverable where a toggle is not.
+    if 0 <= target < len(_ys) and _ys[target] is None:
+        print(f"  [cursor] slot {target}'s position is unreadable, so whether it is "
+              "already selected cannot be told — refusing rather than pressing a "
+              "TOGGLE blind")
+        return False, before
 
     # WHAT COUNTS AS "THE WRONG CARD WENT UP" IS A CHANGE, NOT A STATE. The first version
     # refused whenever ANY other card was raised -- which defeats the whole point of

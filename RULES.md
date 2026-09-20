@@ -27,6 +27,43 @@ inning one and pitch in inning two; you never bat twice.
 **The scoreboard is `[inning1, inning2, TOTAL]`.** The third box is the total,
 not a third inning. Never sum it; take `[-1]`.
 
+### A ROUND IS SIMULTANEOUS, THEN REVEALED
+
+*From the user, 2026-09-20.* **Batting and pitching rounds are 1-to-1: both
+players pick the cards they will play for that round, and when BOTH have
+selected, the reveal phase starts.** There is no "your turn, then theirs" --
+nobody is waiting on the opponent to move first.
+
+**SO AN EMPTY BOARD IS NOT A BLOCKED TURN.** A hand that will not commit is
+almost never the game refusing input; it is the commit not having been offered
+yet, because nothing is selected. That distinction cost an hour on 2026-09-20:
+five `select_card` presses were read as "the game is declining input" when the
+real state was simply that no card had gone up yet.
+
+**THE `△ PLAY` PROMPT IS A CONSEQUENCE OF SELECTION, NOT A PRECONDITION FOR
+IT.** It appears once cards are selected and the round is ready to resolve, and
+it gates the COMMIT. Do not wait for it before pressing select -- it cannot
+appear until after. Read it as "the selection is done and the reveal is ready",
+which makes it the right precondition for `confirm_play` and the wrong one for
+`select_card`.
+
+**PLAYING AND DISCARDING SHARE THE SELECT AND DIFFER AT THE COMMIT**, with a
+different prompt for each:
+
+    select a card       select_card      'enter'   -- the same for both
+    commit a PLAY       confirm_play     'c'       -- the TRIANGLE / PLAY prompt
+    commit a DISCARD    confirm_discard  '\\'
+
+So the button that decides what a selection MEANS is the second one, not the
+first. `select_and_discard` presses `select_card` then `confirm_discard` twice.
+
+**AND THE COMMIT IS DECLINED AT THE SAME RATE AS ANY OTHER PRESS.** Measured
+live 2026-09-20 on the pitching half: `confirm_play` was accepted by chiaki and
+TRANSMITTED to the console (`[btnedge] id=8`) and the game ignored it **twice**
+before the third press landed. CLAUDE.md section 5's 15.20% ignore rate, with
+its documented clustering, applies to the committing press too -- so verify the
+hand actually changed and press again, never assume a sent commit resolved.
+
 **A DISCARD DOES NOT USE THE TURN.** It swaps one card for a new one and the
 player still plays normally afterwards. *Confirmed by the user, 2026-09-16*, and
 the arithmetic of that match agrees: the batting half took **2 discards AND 5

@@ -7241,9 +7241,21 @@ def hand_cursor_look():
     # needs every reading plus which cards are lifted to tell them apart.
     # None where the position was never measured, so the lift check ABSTAINS rather
     # than comparing a slot constant against itself and reporting "nothing moved".
-    return (glow,
-            [None if r.get("y_measured") is False else r.get("y") for r in rows],
-            len(rows), selected)
+    # A PLAYER ROW WHOSE Y CAME FROM A FALLBACK IS None HERE, and that is a
+    # DIFFERENT question from the one cursor_glow asks. The glow window only needs
+    # a usable POSITION, so a fallback y serves it fine -- local_hand.cursor_glow
+    # zeroes the glow when y_measured is False, which is why y_measured must keep
+    # meaning "we have a position" and must NOT be narrowed to "from the disc".
+    #
+    # Selection is the stricter question: selected_cards compares y against the
+    # DISC anchor, so only a disc-derived y can answer it. Reporting the fallback
+    # here let _select_verified believe a SELECTED card was not selected and press
+    # select_card again -- a TOGGLE, which put the card back down. Live 2026-09-20,
+    # five presses at an already-selected card. None makes it refuse instead.
+    _ys = [None if (r.get("y_measured") is False
+                    or (r.get("kind") != "tactics" and r.get("y_from") == "fallback"))
+           else r.get("y") for r in rows]
+    return (glow, _ys, len(rows), selected)
 
 
 def discards_look():
