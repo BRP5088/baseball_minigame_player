@@ -54,15 +54,39 @@ MIN_DISTINCT_X = 3          # a slope through one or two x values is not a slope
 PERMUTATIONS = 10000
 
 
+def is_shadow_artefact(row):
+    """True for a deal-gate timeout logged while I-01's `_hand_signature` collision
+    was live (evening of 2026-09-20 until commit de5a79b).
+
+    A second module-level `_hand_signature` shadowed the deal gate's helper, so
+    every readable-hand poll raised and the gate could never release -- it always
+    timed out at max_wait, however long the hand had actually been stable. A row
+    from that window shows motion (`edge_seen: true`) but never a `reason`: the
+    field did not exist yet (it shipped with I-09, the same fix's sibling), so a
+    row with no `reason` key at all predates it. `reason` alone cannot tell an
+    artefact apart from a genuine "edge seen but never stable" row written AFTER
+    I-09 (which spells that out as `reason: "edge_no_stable"`) -- only the
+    COMBINATION of "no reason field" (pre-I-09) and "edge_seen true, timed out"
+    (the collision's one observable shape) identifies the artefact. A post-I-09
+    row always carries `reason`, so it is never caught by this.
+
+    Fitting a `waited`/`settled_at` from one of these would regress on a software
+    defect, not on deal duration -- the whole point of ISSUES.md I-01's Verify
+    step 2.
+    """
+    return (bool(row.get("edge_seen")) and row.get("outcome") == "timeout"
+            and "reason" not in row)
+
+
 def load(path):
-    """Rows from the JSONL, SYNTHETIC ONES EXCLUDED and counted.
+    """Rows from the JSONL, SYNTHETIC ONES and I-01 SHADOW ARTEFACTS EXCLUDED and counted.
 
     Test rows are stamped `_synthetic` (log_matchup's convention, inherited).
     Silently mixing them into a live dataset is how 30 fabricated rows reached
     match_log.jsonl; silently DROPPING them without saying so is how an n
-    becomes a lie. Both counts are returned.
+    becomes a lie. All three counts are returned.
     """
-    rows, synthetic, malformed = [], 0, 0
+    rows, synthetic, malformed, artefacts = [], 0, 0, 0
     with open(path) as fh:
         for line in fh:
             line = line.strip()
@@ -75,9 +99,11 @@ def load(path):
                 continue
             if r.get("_synthetic"):
                 synthetic += 1
+            elif is_shadow_artefact(r):
+                artefacts += 1
             else:
                 rows.append(r)
-    return rows, synthetic, malformed
+    return rows, synthetic, malformed, artefacts
 
 
 def x_of(row):
@@ -216,9 +242,14 @@ def instrument_health(rows):
 
 
 def report(path):
-    rows, synthetic, malformed = load(path)
+    rows, synthetic, malformed, artefacts = load(path)
     print(f"{path}: {len(rows)} live rows ({synthetic} synthetic excluded, "
-          f"{malformed} malformed)")
+          f"{malformed} malformed, {artefacts} I-01 shadow-artefact timeout(s) excluded)")
+    if artefacts:
+        print(f"  excluded {artefacts} row(s): edge_seen true, outcome timeout, no "
+              "`reason` field -- I-01's shadowed _hand_signature (fixed in de5a79b) "
+              "could see the card move but never read the hand stable, so these timed "
+              "out on a software defect, not on how long the deal actually took.")
     if not rows:
         print("  nothing to report — play some matches first")
         return 0
@@ -298,9 +329,14 @@ def selftest():
             fh.write(json.dumps(r) + "\n")
         fh.write(json.dumps({"predicted_bases": 99, "settled_at": 99.0,
                              "_synthetic": True}) + "\n")
-    rows, syn, bad = load(p)
+        # I-01: edge_seen true, outcome timeout, NO reason field -- the shadowed
+        # _hand_signature's exact shape. Must be excluded and counted, not fitted.
+        fh.write(json.dumps({"outcome": "timeout", "edge_seen": True,
+                             "settled_at": None, "biggest": 55.7}) + "\n")
+    rows, syn, bad, art = load(p)
     os.unlink(p)
-    assert len(rows) == len(planted) and syn == 1 and bad == 0, (len(rows), syn, bad)
+    assert len(rows) == len(planted) and syn == 1 and bad == 0 and art == 1, (
+        len(rows), syn, bad, art)
     print("selftest: planted slope recovered, flat set refused, thin set refused, "
           "synthetic rows excluded and counted")
     return 0
