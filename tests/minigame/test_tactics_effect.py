@@ -34,8 +34,13 @@ def write_log(rows):
 
 
 def row(kind, outcome):
+    # I-18a: tactics_effect now drops any row with no `outcome_basis` by
+    # default (it is entirely an outcome statistic, CLAUDE.md section 4's
+    # withdrawn "score went up" classifier). This file is testing MIN_N /
+    # bonus-kind logic, not that filter, so every synthetic row here carries
+    # one -- exactly as a real post-classify_outcome row would.
     return {"phase": "batting", "our_power": 5, "our_tactics_kind": kind,
-            "our_tactics_bonus": 1, "outcome": outcome}
+            "our_tactics_bonus": 1, "outcome": outcome, "outcome_basis": "margin"}
 
 
 # 3 speed rows against plenty of others: too few to judge, must abstain.
@@ -58,7 +63,8 @@ check("and it detects a total split as unlikely",
 # A bonus with no kind is uncomputable, NOT 'no tactic' — the trap CLAUDE.md
 # records: speed/fielding carry a bonus that adds no power, so treating an
 # unknown kind as zero silently mixes them into the baseline.
-mixed = ([{"our_power": 5, "our_tactics_bonus": 2, "outcome": "hit"}] * 30
+mixed = ([{"our_power": 5, "our_tactics_bonus": 2, "outcome": "hit",
+           "outcome_basis": "margin"}] * 30
          + [row("speed_boost", "hit")] * 12
          + [row("swing_boost", "out")] * 12)
 v = te.main(write_log(mixed))

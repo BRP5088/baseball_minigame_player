@@ -1,6 +1,6 @@
 """Offline analysis of match_log.jsonl — does `secondary` (fielding/speed) matter?
 
-    python3 analyze_match_log.py [path]
+    python3 analyze_match_log.py [path] [--include-legacy]
 
 This is the question the whole log exists to answer, and it is still open. The
 script exists so that answering it is a command rather than a research project,
@@ -24,6 +24,22 @@ WHAT IT ENCODES (each of these was a mistake made once already)
 5. A baseline is always printed. A "discovered" rule that scores below the
    trivial always-out baseline is an artefact, and one such rule was believed
    for a while.
+6. LEGACY ROWS (I-18a). `outcome` was manufactured by the withdrawn "score went
+   up" classifier on every row before `classify_outcome`/`outcome_basis` landed
+   (CLAUDE.md section 4: "26 such rows ... all came from the old ... classifier").
+   369 of 373 rows in match_log.jsonl have no `outcome_basis` at all; only 4
+   (all 2026-09-20) carry one, in {"margin", "tie"}. So by default any OUTCOME
+   statistic (the outcomes tally, the baseline, and anything scored against
+   `u["outcome"]`) is computed over rows WITH `outcome_basis` only, and the
+   count/reason of what was excluded is printed. `--include-legacy` puts the
+   369 back, for anyone who wants the old (unreliable) behaviour.
+
+   THIS DOES NOT TOUCH THE MARGIN/SECONDARY ANALYSIS BELOW. `effective_power`
+   reads `*_power`, `*_tactics_bonus`, `*_tactics_kind` — the SAME local reader
+   in every era (CLAUDE.md section 3) — never `outcome`, so `margin` and
+   `secondary` are computed from ALL genuine rows regardless of `outcome_basis`
+   and stay legacy-inclusive always. Excluding them too would throw away 369
+   rows of a question they can still answer honestly.
 
 No dependency on scipy: the p-value is a permutation test, which also avoids
 assuming normality on tiny samples.
@@ -35,9 +51,13 @@ import statistics
 import sys
 from collections import Counter
 
-LOG = sys.argv[1] if len(sys.argv) > 1 else "match_log.jsonl"
 PERMUTATIONS = 20000
 random.seed(20260826)
+
+
+def has_outcome_basis(row):
+    """True for a row `outcome`-based statistics may trust (I-18a)."""
+    return bool(row.get("outcome_basis"))
 
 
 def load(path):
@@ -91,19 +111,45 @@ def permutation_p(a, b, n=PERMUTATIONS):
     return (hits + 1) / (n + 1)
 
 
-def main():
-    rows, synthetic, bad = load(LOG)
-    print(f"=== {LOG} ===")
+def main(path=None, include_legacy=None):
+    # RESOLVED AT CALL TIME, NOT IMPORT TIME (CLAUDE.md 10.18): a module-level
+    # `LOG`/`INCLUDE_LEGACY` bound from sys.argv when the module loads cannot be
+    # redirected by a caller in the same process, which is exactly the trap a
+    # test needs this function NOT to have. `None` means "read argv now".
+    if path is None:
+        _positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+        path = _positional[0] if _positional else "match_log.jsonl"
+    if include_legacy is None:
+        include_legacy = "--include-legacy" in sys.argv
+
+    rows, synthetic, bad = load(path)
+    print(f"=== {path} ===")
     print(f"  {len(rows)} genuine rows"
           + (f", {synthetic} synthetic dropped" if synthetic else "")
           + (f", {bad} unparseable" if bad else ""))
     if not rows:
         return
 
+    # --- I-18a: legacy rows (no outcome_basis) are excluded from OUTCOME
+    # statistics by default. `rows` itself stays legacy-inclusive -- the
+    # margin/secondary analysis below reads POWERS, not `outcome`, and powers
+    # are read by the same local reader in every era (CLAUDE.md section 3), so
+    # that half of the question is not degraded by this filter. -------------
+    legacy = [r for r in rows if not has_outcome_basis(r)]
+    outcome_rows = rows if include_legacy else [r for r in rows if has_outcome_basis(r)]
+    if legacy:
+        print(f"  {len(legacy)} legacy rows (no outcome_basis -- predate "
+              f"classify_outcome, CLAUDE.md section 4) "
+              + ("INCLUDED (--include-legacy)" if include_legacy else
+                 "EXCLUDED from outcome statistics below (pass --include-legacy "
+                 "to put them back). The margin/secondary analysis further down "
+                 "still uses all rows: it is read from POWERS, not `outcome`."))
+
     phases = Counter(r.get("phase") for r in rows)
     print(f"  phases: {dict(phases)}")
-    print(f"  outcomes (MANUFACTURED, not observed): "
-          f"{dict(Counter(r.get('outcome') for r in rows))}")
+    print(f"  outcomes (MANUFACTURED, not observed) over "
+          f"{len(outcome_rows)} outcome-eligible rows: "
+          f"{dict(Counter(r.get('outcome') for r in outcome_rows))}")
 
     # --- usability accounting: say what is unusable and why ---------------
     usable, reasons = [], Counter()
@@ -130,19 +176,23 @@ def main():
             reasons["secondary missing"] += 1
             continue
         usable.append({"margin": margin, "secondary": sec, "ours": ours,
-                       "phase": r["phase"], "outcome": r.get("outcome")})
+                       "phase": r["phase"], "outcome": r.get("outcome"),
+                       "outcome_eligible": include_legacy or has_outcome_basis(r)})
 
-    print(f"\n  usable for analysis: {len(usable)}/{len(rows)}")
+    print(f"\n  usable for analysis (margin/secondary, powers-only, legacy "
+          f"included): {len(usable)}/{len(rows)}")
     for k, v in reasons.most_common():
         print(f"    excluded {v:3d}: {k}")
 
-    # --- the baseline, always ---------------------------------------------
-    if usable:
-        oc = Counter(u["outcome"] for u in usable)
+    # --- the baseline, always -- OUTCOME-eligible rows only ----------------
+    usable_outcome = [u for u in usable if u["outcome_eligible"]]
+    if usable_outcome:
+        oc = Counter(u["outcome"] for u in usable_outcome)
         top, n_top = oc.most_common(1)[0]
-        print(f"\n  BASELINE — always predict {top!r}: {n_top}/{len(usable)} "
-              f"({100*n_top/len(usable):.0f}%). Any rule scoring below this is "
-              "an artefact, not a finding.")
+        print(f"\n  BASELINE (outcome-eligible rows only) — always predict "
+              f"{top!r}: {n_top}/{len(usable_outcome)} "
+              f"({100*n_top/len(usable_outcome):.0f}%). Any rule scoring below "
+              "this is an artefact, not a finding.")
 
     # --- the actual question ----------------------------------------------
     print("\n  DOES `secondary` AFFECT THE MARGIN NEEDED?")
@@ -186,17 +236,23 @@ def main():
             print(f"    [{_ph}] n={len(_sub)} — not enough on both sides to split")
             continue
         _p = permutation_p(_l, _h)
+        # permutation_p needs >=2 on EACH side; `if not (_l and _h)` above only
+        # checked non-empty, so a 1-vs-N split reached `{_p:.3f}` with _p None
+        # and crashed -- found writing I-18a's own tiny-log test, unrelated to
+        # outcome_basis but a real bug in the same function.
+        _pstr = f"p={_p:.3f}" if _p is not None else "p=NOT COMPUTABLE (n<2 on a side)"
         print(f"    [{_ph}] sec==0 n={len(_l)} {statistics.mean(_l):+.2f} | "
-              f"sec>0 n={len(_h)} {statistics.mean(_h):+.2f} | p={_p:.3f}"
-              + ("" if _p < 0.05 else "  <- nothing here"))
+              f"sec>0 n={len(_h)} {statistics.mean(_h):+.2f} | {_pstr}"
+              + ("" if _p is not None and _p < 0.05 else "  <- nothing here"))
 
     _lop = [u["ours"] for u in usable if u["secondary"] == 0]
     _hip = [u["ours"] for u in usable if u["secondary"] > 0]
     if _lop and _hip:
         _pp = permutation_p(_lop, _hip)
+        _ppstr = f"{_pp:.3f}" if _pp is not None else "NOT COMPUTABLE (n<2 on a side)"
         print(f"\n    CONFOUND CHECK — our own power by group: "
               f"sec==0 {statistics.mean(_lop):.2f} vs sec>0 {statistics.mean(_hip):.2f}"
-              f" (p={_pp:.3f})")
+              f" (p={_ppstr})")
         if _pp is not None and _pp < 0.20:
             print("      ^ the groups differ in RAW POWER too, so any margin "
                   "gap is partly just stronger cards. Not a clean test.")
