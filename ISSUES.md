@@ -68,7 +68,12 @@ the collision restored must time out.
 **Agent brief.** Sonnet. May touch `orchestrator.py` (the new helper only) and one new
 test under `tests/minigame/`. Done when the test passes and fails with the rename reverted.
 
-**Status.** The user relays this to the other agent, which owns the diff.
+**Status.** FIXED in the other agent's working tree, 2026-09-20 evening, uncommitted:
+its helper is now `_discard_hand_identity` (orchestrator.py:7358), and
+`tests/harness/test_no_shadowed_module_defs.py` AST-scans every module for a duplicate
+top-level def with a positive control (456 modules, one pre-existing duplicate found and
+renamed in `test_simulate_rules.py`). Verified here: `grep -c "^def _hand_signature"` is 1.
+Still open: the offline replay of the three run-c deals (Verify step 2).
 
 ### I-02  Slot 4 cannot be played or discarded                                     P0  input
 
@@ -91,10 +96,19 @@ and the glow is blind, PROBE-SELECT: press `select_card` once and read
 between rest and selected). A NEW lift names the slot the cursor is on. If it is the
 target, the selection is done (`_select_verified` already accepts "already up"). If not,
 press once more to untoggle and continue. The `before` set must be captured first;
-`select_card` is a toggle. **The other agent reports "cursor by lift geometry" as REFUTED
-by measurement and not built. Read that measurement before building; if it refutes this
-probe, the fallback is a slot-4-specific glow window measured with a FALSE column, which
-§10.35 says the shipped window cannot supply.**
+`select_card` is a toggle.
+
+**The refutation that does NOT block this**, `agent_progress/cursor-lift-refutation/`
+(progress.md + `measure_lift_vs_glow.py`, re-runnable on a run dir): over 277 five-row
+fans from `screenshot_log/run_20260920_175322`, HOVER produces no measurable rise (slot 3
+p50 7.0 hovered and 7.0 not; slot 4 -10.0 either way; max-rise agrees with the glow reader
+34 times, disagrees 98). So CLAUDE.md §10.28's "the card RISES when the cursor moves onto
+it" is wrong for hover, and a hover-based lift reader is dead. The probe-select uses the
+SELECTION lift (~44 px, `SELECTED_MIN_RISE` 25), which that measurement leaves intact.
+Two cautions from the same write-up: (1) the probe must deselect AND verify the deselect
+landed (§10.29; `close_result` is not a deselect); (2) `selected_cards` skips a player row
+whose y came from a fallback rather than the disc, so it abstains on exactly the cards
+whose disc is unreadable. Check it can SEE the slot before trusting a negative.
 
 **Verify.** Offline: harness test with the glow reader stubbed blind at slot 4 and the
 lift reader answering, asserting the discard of slot 4 lands and that a probe on the
@@ -106,7 +120,8 @@ counter read.
 `input_controller._walk_cursor_to`, `_select_verified`. Must not touch `local_hand`'s
 glow constants. Done when both verifications pass.
 
-**Status.** Open. Blocked on the location of the other agent's refutation (ask the user).
+**Status.** Open. Unblocked: the refutation is on disk (above) and the other agent
+confirms its nudge cannot walk ONTO slot 4, so the gap stands.
 
 ### I-03  A refused PLAY ends the run instead of playing another card             P0  loop
 
@@ -115,7 +130,9 @@ prints `play REFUSED` and returns `False, None`. `orchestrator.py:9188-9199 run(
 `else` branch is written for discards ("A discard leaves the screen looking identical")
 but takes every `False`, increments `stuck_count`, and at `MAX_STUCK_ATTEMPTS` (15,
 `orchestrator.py:293`) stops with `stop_reason = "redraw_never_played"`. Run b lines 36-108:
-eight identical refusals of the same play, ~25 s each, until Ctrl-C.
+eight identical refusals of the same play, ~25 s each, until Ctrl-C. So it is a bounded
+stall of about six minutes ending in a STOP, not a hang; the other agent confirms this
+and withdraws its earlier "unbounded".
 
 **Root cause.** Refused plays and refused discards share one counter and one exit, and
 the exit is a STOP. The engine has a full ranking of the hand but only ever asks for its
