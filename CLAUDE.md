@@ -350,10 +350,31 @@ DO NOT DELETE IT.** Both halves matter and the file used to state only the first
   which have no Python 3.14 wheel. That is why it is a second venv rather than
   part of `.venv`.
 
-**BUT IT IS CHECKED, NOT USED, AND THIS ENTRY SAID "IT IS USED, BY SUBPROCESS"
-(corrected 2026-09-20).** The only function that ever spawns
-`paddle_venv/bin/python` is `hand_digit_reader.read_hand_digits`, and it has had
-**ZERO callers since commit 211c6bf** (2026-09-09, *"the local hand reader runs
+**RETRACTION, SAME DAY (2026-09-20). THIS ENTRY BRIEFLY SAID "IT IS CHECKED,
+NOT USED". THAT WAS WRONG, AND IT IS THE THIRD TIME THIS ONE PARAGRAPH HAS BEEN
+WRONG ABOUT THE SAME 777M.** `paddle_venv` IS used, on the live path, by a
+consumer the retraction never looked at:
+
+    orchestrator.py:4112-4113   import result_ocr; result_ocr.start()
+    result_ocr.py:120           subprocess.Popen([PADDLE_PYTHON, "-u", PROBE], ...)
+    orchestrator.py:4155, 4251  result_ocr.read_banner(full)  -> WINNER/LOSER/DRAW
+
+So the venv is spawned to read the RESULT BANNER, not the hand. `tools/read_banner_paddle.py`
+is the probe it runs. **DO NOT DELETE `paddle_venv`** -- unchanged, for a reason
+the wrong version had removed.
+
+**THE MISTAKE IS WORTH MORE THAN THE FACT.** I traced `hand_digit_reader`
+exhaustively -- AST over every non-vendored module, every public function, the
+commit that cut it -- and then wrote the conclusion about **paddle_venv**. One
+consumer was checked and the claim was made about the DEPENDENCY. That is this
+paragraph's own documented failure mode, committed inside a correction TO that
+failure mode, by someone who had just re-read it. An exhaustive trace of the
+wrong question is still the wrong answer, and thoroughness on one consumer reads
+exactly like thoroughness on all of them.
+
+**WHAT IS ACTUALLY TRUE, and it is narrower than either previous version:** the
+HAND-digit pipeline inside `hand_digit_reader.py` is dead.
+`read_hand_digits` has had **ZERO callers since commit 211c6bf** (2026-09-09, *"the local hand reader runs
 in production"*), which removed the two lines that called it:
 
     -  from hand_digit_reader import read_hand_digits, group_into_cards
@@ -383,11 +404,18 @@ print ("hand digits fall back to vision") never appears; the outer `except`
 prints a vaguer one instead. That fallback would be wrong twice over now anyway,
 since the paid vision model is off (section 3).
 
-**NO DELETION IS RECOMMENDED HERE, AND THAT IS DELIBERATE.** This is the
-paragraph that was wrong in the OTHER direction -- "nothing uses it" -- and a
-deletion was nearly carried out on it. 777M, not a git repo, so nothing is
-recoverable afterwards. What is now established is only that the READER is dead;
-whether the venv goes, and whether the check goes with it, is the user's call.
+**NO DELETION IS RECOMMENDED HERE, AND THAT IS DELIBERATE.** This paragraph
+has now been wrong in BOTH directions -- "nothing uses it" once, "checked, not
+used" once -- and a deletion was nearly carried out on the first. 777M, not a git
+repo, so nothing is recoverable afterwards. What is established is that the
+HAND-DIGIT reader is dead and that `result_ocr` keeps the venv live. The dead
+half is `hand_digit_reader`'s read pipeline; the venv stays.
+
+**THE RULE THIS EARNS, and it generalises past paddle:** when a trace concludes
+that a DEPENDENCY is unused, the unit of proof is the dependency, not the module
+you happened to start from. Enumerate every spawner of the interpreter -- here,
+every `subprocess` call whose argv names a venv python -- before saying the word
+"unused".
 
 This file said "777M and nothing uses it" until 2026-09-04, and a deletion was
 nearly carried out on that basis. **The claims this file gets wrong are the ones
