@@ -59,7 +59,24 @@ for p in FIX:
     hand = dict(o.crop_gameplay_regions(Image.open(p)))["hand"]
     if len(lh.read_hand(o._blank_homeplate_strip(hand))) != 5:
         bad_fixed += 1
-check(bad_raw > 0, f"WITHOUT the fix, {bad_raw} of {len(FIX)} frames read the wrong row count")
+# THE ROW-COUNT PREMISE IS NOW FALSE UPSTREAM, AND THAT IS A FIX, NOT A LOSS
+# (2026-09-20). This used to assert `bad_raw > 0` -- that WITHOUT blanking some
+# of these frames read the wrong row count, which is what justified the blank.
+# read_hand's fan gate then stopped deciding the whole frame from the MEDIAN
+# residual and started counting the discs that land on a slot. The fan path now
+# places the five real cards and simply drops the runner's extra disc, where the
+# median rule used to reject the frame and fall through to the ungated path,
+# which returns six rows. Measured over these 14 frames: the digits are IDENTICAL
+# with and without blanking, 14 of 14.
+#
+# So the assertion is inverted rather than deleted -- if a frame ever again reads
+# the wrong count without the blank, that is a REGRESSION in the fan gate and this
+# must say so loudly rather than quietly going back to being satisfied.
+check(bad_raw == 0,
+      f"{bad_raw} of {len(FIX)} frames read the wrong row count WITHOUT blanking. "
+      "read_hand's fan gate is supposed to place these itself now (it counts discs "
+      "landing on slots rather than taking the median residual); if this fires, that "
+      "gate has regressed -- fix it there, not by leaning on the blank.")
 check(bad_fixed == 0, f"WITH it, {bad_fixed} do -- every frame parses as five rows")
 
 # 3. should_redraw ABSTAINS when a slot is hidden, however weak the visible cards are.

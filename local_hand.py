@@ -573,7 +573,31 @@ def read_hand(img):
     if len(strong) >= FIT_MIN_DISCS:
         s = img.width / ANCHOR_W
         fit = sorted(_slot(c[0], c[1], s)[0] / s for c in strong)
-        if fit[len(fit) // 2] <= FIT_MAX:
+        # COUNT THE DISCS THAT LAND ON A SLOT; DO NOT TAKE THE MEDIAN (2026-09-20).
+        #
+        # A SELECTED card is displaced ~22-26 px HORIZONTALLY as well as lifted, so
+        # its residual clears FIT_MAX on its own. The median then decides the whole
+        # frame: with ONE card selected it still lands on a resting disc and the fit
+        # passes, but with TWO selected -- which is what the engine chooses on every
+        # play that attaches a tactics card -- the median lands on a DISPLACED disc
+        # and the fan is rejected. Measured live, a real hand with slots 0 and 1 up:
+        #
+        #     residuals 26.3 (sel)  22.3 (sel)  12.7  0.0   median 22.3 > 20.0
+        #
+        # read_hand then falls to _read_ungated, whose rows carry NO slot identity
+        # and NO y -- so selected_cards and cursor_slot both go blind at exactly the
+        # moment the loop needs to verify a two-card play.
+        #
+        # The question the gate is for is "is the fan THERE", not "is every card at
+        # rest". FIT_MIN_DISCS discs landing on slots answers it, and reuses the two
+        # constants already fitted for this -- nothing new is invented.
+        #
+        # Measured over 540 archived hand crops: 459 accepted by both rules, 8
+        # rejected by both, ZERO that this rule rejects and the median accepts, and
+        # exactly ONE newly admitted -- hand_1788969878714664000.png, which is a
+        # fully visible five-card fan (POWER SWING +2, BATTER 7/1, SPEED BOOST +1,
+        # BATTER 5/2, BATTER 4/3) that the median rule was dropping.
+        if sum(1 for r in fit if r <= FIT_MAX) >= FIT_MIN_DISCS:
             return _read_fan(img, strong)
     return _read_ungated(img, strong)
 
