@@ -7422,6 +7422,62 @@ def note_discard_refused():
     _DISCARD_STALL["n"] += 1
 
 
+# I-03: THE SIBLING OF THE DISCARD BREAKER ABOVE, FOR A REFUSED *PLAY*.
+#
+# select_and_play() returning False used to fall straight into run()'s discard
+# counter and stop_reason ("redraw_never_played") -- named for the wrong branch,
+# and with no fallback: the engine kept offering the SAME card every poll (the
+# decision is recomputed from the same hand each time), so a card that could
+# never be verified stopped the whole run at MAX_STUCK_ATTEMPTS (run b,
+# 2026-09-20: eight identical refusals, ~25s each).
+#
+# Keyed on the same hand identity as _DISCARD_STALL (_discard_hand_identity --
+# nothing the cursor reader can influence), so a real redeal resets it. Unlike
+# the discard breaker, which just stops RETRYING and falls through to playing
+# the existing decision, there is no "instead" for a play to fall through to --
+# so once the CURRENT target has been refused PLAY_STALL_MAX times running, it
+# is EXCLUDED from the pool play_one_turn offers to best_batting_play /
+# best_pitching_play, and whatever is next-best on this hand gets its own fresh
+# budget. should_redraw and the discard branch still see the FULL hand: a card
+# nothing can confirm is not worth spending a discard over either.
+PLAY_STALL_MAX = 3
+_PLAY_STALL = {"sig": None, "n": 0, "excluded": frozenset()}
+
+
+def play_excluded_slots(hand) -> frozenset:
+    """hand_index values ruled out for THIS hand by repeated play refusal.
+
+    Resets (both the count and the exclusion set) whenever the hand changes --
+    same identity discard_stalled uses, so a real redeal, including the one a
+    discard itself causes, clears both.
+    """
+    sig = _discard_hand_identity(hand)
+    if sig != _PLAY_STALL["sig"]:
+        _PLAY_STALL["sig"] = sig
+        _PLAY_STALL["n"] = 0
+        _PLAY_STALL["excluded"] = frozenset()
+    return _PLAY_STALL["excluded"]
+
+
+def play_stalled(hand) -> bool:
+    """True once the card currently being offered on this exact hand has been
+    refused PLAY_STALL_MAX times running."""
+    play_excluded_slots(hand)  # syncs sig/n/excluded to this hand first
+    return _PLAY_STALL["n"] >= PLAY_STALL_MAX
+
+
+def note_play_refused():
+    """Count one refused play against the current target on the hand held."""
+    _PLAY_STALL["n"] += 1
+
+
+def exclude_play_slot(idx):
+    """Stop offering this hand_index for the rest of this hand's life, and
+    give whatever is played next its own fresh PLAY_STALL_MAX budget."""
+    _PLAY_STALL["excluded"] = _PLAY_STALL["excluded"] | {idx}
+    _PLAY_STALL["n"] = 0
+
+
 def play_one_turn(state_json: dict, batters_used: int):
     """
     Execute one turn. `batters_used` is the caller-tracked count of
@@ -7493,10 +7549,28 @@ def play_one_turn(state_json: dict, batters_used: int):
     player_only = [p for _, p in players]
     tactics_only = [t for _, t in tactics]
 
+    # I-03: a card refused PLAY_STALL_MAX times running on this exact hand is
+    # excluded from what gets OFFERED to the play decision -- see
+    # play_excluded_slots above. should_redraw() just below, and the discard
+    # branch it guards, still see the full hand: a card select_and_play cannot
+    # confirm is not worth spending a discard over either, so only the pool
+    # passed to best_batting_play/best_pitching_play drops it.
+    _play_excluded = play_excluded_slots(state_json.get("hand"))
+    _decision_players = [p for i, p in players if i not in _play_excluded]
+    _decision_tactics = [t for i, t in tactics if i not in _play_excluded]
+    if _play_excluded:
+        print(f"  [play] hand_index {sorted(_play_excluded)} refused "
+              f"{PLAY_STALL_MAX}x running on this hand — excluded; offering "
+              "the next-best reachable card instead")
+    if not _decision_players:
+        print("  [play] every reachable card on this hand has been refused — "
+              "nothing left to play")
+        return False, {"play_refused": True}
+
     if state_json["phase"] == "batting":
-        decision = best_batting_play(player_only, tactics_only, state)
+        decision = best_batting_play(_decision_players, _decision_tactics, state)
     else:
-        decision = best_pitching_play(player_only, tactics_only, state)
+        decision = best_pitching_play(_decision_players, _decision_tactics, state)
 
     # Ask BEFORE the branch: this also resets the counter on a new hand.
     _stalled = discard_stalled(state_json.get("hand"))
@@ -7685,9 +7759,16 @@ def play_one_turn(state_json: dict, batters_used: int):
     # Both slots are SPENT (the tactics one too, when one was attached).
     forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
-        print("  play REFUSED — the selection could not be verified; nothing committed")
+        note_play_refused()
+        if play_stalled(state_json.get("hand")):
+            print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
+                  f"{player_idx} on this exact hand — excluding it so the next "
+                  "poll offers the next-best reachable card instead")
+            exclude_play_slot(player_idx)
+        else:
+            print("  play REFUSED — the selection could not be verified; nothing committed")
         pop_hand_baseline()
-        return False, None
+        return False, {"play_refused": True}
 
     matchup_info = {
         # POPPED by run() before this dict can reach pending_matchup, so
@@ -9255,6 +9336,21 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             print(f"  [reveal] turn NOT logged — "
                                   f"{type(_e).__name__}: {_e}")
                     stuck_count = 0     # N25: only a confirmed PLAY is progress
+                elif matchup_info is not None and matchup_info.get("play_refused"):
+                    # I-03: a refused PLAY (select_and_play returned False) used to
+                    # share the discard branch below and its stop_reason
+                    # "redraw_never_played" -- which named the wrong branch, and
+                    # gave play_one_turn's own PLAY_STALL_MAX fallback (excludes the
+                    # refused slot, offers the next-best reachable card) no visible
+                    # outcome of its own before this counter hit MAX_STUCK_ATTEMPTS.
+                    # Run b, 2026-09-20: eight identical refusals, ~25s each, until
+                    # the run was stopped by hand.
+                    stuck_count += 1
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Play refused repeatedly with no card landing — "
+                              "stopping. Check the game manually.")
+                        stop_reason = "play_refused"
+                        break
                 else:
                     # A discard leaves the screen looking identical. Legitimate
                     # discards are capped by the game (2-3 per match), so
