@@ -42,6 +42,13 @@ WHAT THIS FILE PINS:
   CONTROL: (4) with every row's y readable, a press that reads no cursor mid-walk
       still hits the old, unmodified refusal -- proving this fix is scoped to
       occluded rows and not "forgive any lost cursor once".
+  (5) a LEFTWARD walk (every case above is rightward) exercises the `prev - 1`
+      branch of `expected`'s ternary directly -- a mutant hardcoding
+      `expected = prev + 1` is invisible to (1)-(4);
+  (6) two occlusions separated by a genuinely readable slot prove
+      `dead_reckoned_last` actually RESETS on a clean read, not just that it
+      caps one consecutive dead-reckon -- both found by an independent skeptic
+      review and folded in here rather than left as scratch scripts.
 """
 import os as _os
 import sys as _sys
@@ -189,6 +196,46 @@ try:
           "dead-reckoning" not in out)
     check("CONTROL: the plain 'lost the cursor' line fires",
           "lost the cursor after 2 press(es)" in out)
+
+    # --- (5) LEFTWARD walk across an occluded slot: every case above walks
+    #         RIGHTWARD (0->4 or 0->1), so a mutant that hardcodes
+    #         `expected = prev + 1` in place of the ternary
+    #         `prev + 1 if prev < target else prev - 1` is invisible to them --
+    #         walking cur=4 -> target=0 across occluded slot 3 exercises the
+    #         `prev - 1` branch directly (independent skeptic review, I-32) ----
+    s = OccludedScreen(cur_glow_slot=4, occluded={3})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(0, s.look)
+    out = buf.getvalue()
+    check("(5) leftward walk arrives crossing one occluded slot", ok is True)
+    check("(5) exactly 4 presses, all move_left",
+          s.sent == ["move_left"] * 4)
+    check("(5) the occluded slot is named in the log",
+          "slot 3 is occluded" in out)
+
+    # --- (6) TWO occlusions separated by a genuinely readable slot: occluded
+    #         {1, 3} with slot 2 readable in between, walking 0->4. Checks that
+    #         `dead_reckoned_last` actually RESETS on the clean read at slot 2 --
+    #         if the reset were dropped, the flag from the FIRST dead-reckon
+    #         (slot 1) would still be set when slot 3 goes dark, and the SECOND
+    #         dead-reckon would be wrongly blocked by a guess three steps stale
+    #         (independent skeptic review, I-32) ------------------------------
+    s = OccludedScreen(cur_glow_slot=0, occluded={1, 3})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(6) arrives across two occlusions separated by a readable slot",
+          ok is True)
+    check("(6) exactly 4 presses, all move_right",
+          s.sent == ["move_right"] * 4)
+    check("(6) BOTH occluded slots are named in the log",
+          "slot 1 is occluded" in out and "slot 3 is occluded" in out)
+    check("(6) dead-reckoned twice -- the flag reset after the clean read at 2",
+          out.count("dead-reckoning") == 2)
 
     # --- no bare-bool checks slipped in (CLAUDE.md 5's nine check() signatures) --
     check("PROBE_SELECT_MAX untouched by this file's fix",

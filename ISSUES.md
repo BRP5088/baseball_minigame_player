@@ -795,7 +795,19 @@ occluded target and returns success instead of refusing. Siblings all still pass
 unreadable.py`, `test_verified_presses_on_match_path.py`, `tests/rig/test_no_real_input_
 under_test_run.py`, `tests/harness/test_no_shadowed_module_defs.py`.
 
-**Status.** Fixed on branch, awaiting skeptic.
+**Status.** MERGED to main 2026-09-21 (a5e212a), skeptic CONFIRMED WITH NOTES
+(coverage gaps folded into the test): an independent review confirmed the diff
+matches this ticket, found no overstated claims, and reproduced the fixer's own
+three mutants by hand, but found two of its OWN gaps -- the shipped test only
+ever walks rightward, so a mutant hardcoding `expected = prev + 1` (dropping the
+`prev - 1` branch) survived, and it never separates two occlusions by a clean
+read, so a mutant dropping the `dead_reckoned_last` reset also survived. Both
+are folded into `tests/minigame/test_walk_crosses_occluded_slot.py` as checks
+(5) (a leftward walk, occluded slot 3, must arrive in 4 presses naming it) and
+(6) (occluded {1, 3} with readable slot 2 in between, walk 0->4, must arrive in
+4 presses naming BOTH). Each mutant reproduced on this checkout and shown to
+fail exactly its own check and no other, sha256-verified restored byte for byte
+between them.
 
 ## C. Costs wins
 
