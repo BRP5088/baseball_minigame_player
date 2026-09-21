@@ -217,6 +217,43 @@ with Stubs() as s:
     check(len(lines) == 2, f"(e) one line per recorded step (got {len(lines)}: {lines})")
 
 
+# (f) THE GUARD SITS INSIDE look() AND apply_action(), NOT ONLY AT THE ENTRY POINTS.
+# QA round 3's finder stripped look()'s own _refuse_if_test_run() call and every
+# check above still passed, because they all reach look() through run_one_step,
+# whose own refusal fires first. These two call the functions DIRECTLY with the
+# opt-in off and a capture/press that would raise if reached: a stripped guard
+# lets the sentinel fire, so the mutant cannot survive this section.
+_saved_flag = mc.CRAWL_DRIVE_IN_TESTS
+mc.CRAWL_DRIVE_IN_TESTS = False
+_saved_grab = game_capture.grab
+_saved_fast = getattr(mc.o, "_fast_grab", None)
+def _sentinel(*a, **k):
+    raise AssertionError("capture/press reached past the guard")
+try:
+    game_capture.grab = _sentinel
+    mc.o._fast_grab = _sentinel
+    os.environ["BASEBALL_TEST_RUN"] = "1"
+    try:
+        mc.look(1)
+        check(False, "(f) look() called directly under BASEBALL_TEST_RUN must refuse")
+    except RuntimeError as e:
+        check("REFUSING" in str(e), f"(f) look() refuses with the lockout message (got {e!r})")
+    except AssertionError as e:
+        check(False, f"(f) look() reached the capture: {e}")
+    try:
+        mc.apply_action("d3", {}, None)
+        check(False, "(f) apply_action() called directly under BASEBALL_TEST_RUN must refuse")
+    except RuntimeError as e:
+        check("REFUSING" in str(e), f"(f) apply_action() refuses with the lockout message (got {e!r})")
+    except AssertionError as e:
+        check(False, f"(f) apply_action() reached a press: {e}")
+finally:
+    game_capture.grab = _saved_grab
+    if _saved_fast is not None:
+        mc.o._fast_grab = _saved_fast
+    mc.CRAWL_DRIVE_IN_TESTS = _saved_flag
+
+
 print()
 if fails:
     print(f"{len(fails)} FAILED")
