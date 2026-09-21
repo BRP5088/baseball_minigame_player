@@ -756,6 +756,14 @@ its banner sits above the padded band the reader searches, a zone/pad geometry g
 `record_reveal_kind` keeps one frame per tactics play under
 `test_fixtures/reveal_kind_truth/auto/`, links it from the row as `reveal_frame`, and
 refuses past 200 files; `tests/minigame/test_reveal_frame_kept.py`, three mutants caught.
+Reveal-log crash fixed (21dd7589bfc29149e8b59f9b9b861819be98e6dc): `_ours_seen` was bound
+only when the local opponent read succeeded and read unconditionally in the no-opponent
+branch, so an occluded reveal printed UnboundLocalError instead of "no OPPONENT card
+identified"; one binding added, pinned by
+`tests/minigame/test_reveal_log_never_unbound.py`. Separately, the census's confirm_play
+verify failure on 2026-09-20 was the game ignoring FIVE consecutive presses (frames
+static, then the next poll's press landed), the longest run observed; PRESS_VERIFY_TRIES
+= 5 is now at the observed maximum and is a tuning question, not a bug.
 
 ### I-19  There is no run census tool                                              P1  evidence
 
