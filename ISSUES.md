@@ -408,6 +408,29 @@ called once. Control: matching powers → not called.
 
 ---
 
+### I-22  A PITCH FOCUS at slot 3 read UNKNOWN for four turns: bank coverage, not occlusion   P1  reader
+
+**Evidence.** overnight/run_live_20260920d.log, pitching half: after the discard at slot 3
+the redeal read `3: UNKNOWN` four straight turns (hand_incomplete each time) and only then
+`pitch_boost +1`. The four dropped-hand stills in diagnostics/deal_frames are the SAME card
+(pairwise correlation 0.99+), plainly legible; `read_bonus` read 1 every time.
+
+**Root cause.** `read_tactics_type`'s score sat at 0.755-0.764 against MIN_TYPE_SCORE 0.85,
+stable to three decimals across tens of seconds: this card's disc lands at x=642, left of the
+661-664 cluster the bank's slot-3 pitch_boost templates were cut from. The same gap as commit
+83a4a73's FIELDING PLAY at slot 3. The "watching the redeal" gate never armed because the
+discarded slot is readable at discard time by definition.
+
+**Fix.** MERGED 2026-09-20 (16319b8): one donor in tools/build_hand_tactics_templates.py cut
+at its found position, bank rebuilt (373 templates); a second independent frame reads 0.996+.
+
+**Verify.** tests/minigame/test_i22_pitch_boost_slot3.py (stripping the donor regresses both
+fixtures to the exact live scores); test_tactics_bank_is_rebuildable.py catches the same
+mutation from the builder side. Three turns played with an invisible pitch boost cost
+nothing this match (pitch boosts would have attached; I-14 says a boost changes outcomes).
+
+**Status.** Merged.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
