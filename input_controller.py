@@ -1103,6 +1103,41 @@ def _select_verified(target, look):
             # Pressing again compounds it.
             print(f"  [cursor] select_card raised {new}, expected {target} — refusing")
             return False, sel
+        # THE TARGET'S OWN DISC CAN GO BLIND THE MOMENT IT LIFTS (I-21). Selecting a
+        # card brightens it until its power disc loses the dark edge read_hand needs
+        # for a position, so a card that DID select reads exactly like one that did
+        # not: selected_cards abstains on a row it cannot place, so `target` is
+        # missing from `sel` either way. Live 2026-09-20: the first press landed, the
+        # retry read the lifted 9 as absent and pressed select_card again -- a
+        # TOGGLE -- five times, visibly selecting and deselecting the card the user
+        # was watching on the stream. NEVER PRESS select_card AGAIN while the target
+        # is in this state; the pre-loop guard above already proved its disc was
+        # readable before this attempt's press (every later attempt only reaches a
+        # press having just confirmed the same, below), so a press is the only thing
+        # that could have made it unreadable now, and a second press is as likely to
+        # put a landed card back DOWN as to select one that truly did not land.
+        if 0 <= target < len(_ys) and _ys[target] is None:
+            time.sleep(SELECT_RETRY_CONFIRM_SEC)
+            _g, _ys, n, sel = _look_settled(look)
+            if n != MAX_HAND_SIZE:
+                print(f"  [cursor] cannot read the fan on the blind-lift re-check "
+                      f"(rows={n}) — refusing")
+                return False, sel
+            if target in sel:
+                print(f"  [cursor] select_card landed late, disc visible again "
+                      f"({SELECT_RETRY_CONFIRM_SEC}s)")
+                return True, sel
+            if 0 <= target < len(_ys) and _ys[target] is None:
+                print(f"  [cursor] {target}'s disc is unreadable after the press and "
+                      "was readable before it — selected by inference (disc "
+                      "unreadable after lift)")
+                return True, sorted(set(before) | {target})
+            # Readable again but not lifted: this attempt's press was genuinely
+            # dropped, not a landed one gone blind. The look just taken proves the
+            # target is back at rest and readable, so the next attempt's press
+            # satisfies the same invariant this branch exists to protect.
+            print(f"  [cursor] select_card did not land (attempt {attempt}) — retrying")
+            continue
         if attempt < SELECT_ATTEMPTS:
             time.sleep(SELECT_RETRY_CONFIRM_SEC)
             _g, _ys, n, sel = _look_settled(look)
