@@ -1012,6 +1012,13 @@ def _walk_cursor_to(target, look):
     steps = 0
     excluded = set()
     first_cur = cur
+    # (I-33) True once `cur` is known only by INFERENCE -- specifically, the I-02
+    # probe's selection lift landing on a slot OTHER than the call's own target --
+    # rather than a direct glow read. `cursor_slot()` just confirmed the fan by
+    # glow above, so this starts False. NOT set after an I-32 dead-reckon; see
+    # that branch's own comment for why. See the retry this feeds, below the I-02
+    # probe branch.
+    cur_confirmed_blind = False
     # DEAD-RECKONING ACROSS AN OCCLUDED SLOT (I-32). `cursor_glow` returns 0.0 BY
     # CONSTRUCTION for any row whose y was never measured (CLAUDE.md 10.28's fan
     # occlusion: one card's power disc sits under its neighbour, `y_measured: False`
@@ -1052,11 +1059,13 @@ def _walk_cursor_to(target, look):
                 print(f"  [cursor] excluding slot {cur} finds the real cursor on "
                       f"{retried} — continuing the walk from there")
                 cur = first_cur = retried
+                cur_confirmed_blind = False
                 steps = 0
                 continue
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
         prev = cur
+        prev_blind = cur_confirmed_blind
         press("move_right" if cur < target else "move_left")
         steps += 1
         time.sleep(MOVE_SETTLE_SEC)
@@ -1066,6 +1075,8 @@ def _walk_cursor_to(target, look):
             return False, sel
         cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
         was_dead_reckoned, dead_reckoned_last = dead_reckoned_last, False
+        if cur is not None:
+            cur_confirmed_blind = False
         if cur is None:
             expected = prev + 1 if prev < target else prev - 1
             # CROSSING AN OCCLUDED SLOT MID-WALK (I-32), CHECKED BEFORE THE I-02
@@ -1096,6 +1107,13 @@ def _walk_cursor_to(target, look):
                       "glow cannot read; dead-reckoning one step across it")
                 cur = expected
                 dead_reckoned_last = True
+                # NOT cur_confirmed_blind = True (I-33). I-32's own bound above is
+                # STRICTER than I-33's retry -- "no code chains guesses to cover
+                # it" means not even one retry press after a dead-reckon, which
+                # `tests/minigame/test_walk_crosses_occluded_slot.py` cases (2) and
+                # (2b) pin exactly (2 presses, refuse, nothing further). Flagging a
+                # dead-reckoned `cur` as blind here would have the I-33 retry add a
+                # press I-32 deliberately refuses to send.
                 continue
             # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
             # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
@@ -1109,7 +1127,43 @@ def _walk_cursor_to(target, look):
                     return False, sel
                 cur = new_cur
                 first_cur, steps = cur, 0
+                cur_confirmed_blind = True
                 continue
+            # (I-33) `prev` was ITSELF only known by inference -- the I-02 probe
+            # above landing on a DIFFERENT slot than the call's own target, never a
+            # direct glow read -- so a press off it that reads nothing is exactly
+            # what a DROPPED press looks like too: the cursor may never have left
+            # `prev`, and `prev`'s own glow cannot confirm that either way
+            # (CLAUDE.md 10.35's structurally-blind slot, e.g. slot 4 reading 0.4
+            # against CURSOR_GLOW_MIN 10.0). Reproduced live 2026-09-21 (I-33,
+            # overnight/run_live_20260921f.log): verified on slot 4 via the I-02
+            # probe, one press toward slot 0, "lost the cursor" with
+            # glow=[0.0, 0.4, 0.0, 0.0, 0.4] -- slot 4 still reading exactly its
+            # blind ceiling. One retry in the same direction absorbs a single
+            # dropped press (section 5: 15.20% of presses are ignored) without
+            # risking an overshoot -- the one place a second press COULD run past
+            # `target` is abs(prev - target) == 1, and that case already returned
+            # above via the I-02 probe branch, never reaching here.
+            #
+            # DELIBERATELY NOT SET AFTER AN I-32 DEAD-RECKON (see that branch's own
+            # comment above): I-32's bound is one guess and no chaining at all, and
+            # a retry press here would be exactly the chain it refuses to add.
+            if prev_blind:
+                print(f"  [cursor] the press left blind slot {prev} and nothing "
+                      "reads — a dropped press looks identical; pressing once more "
+                      "before refusing")
+                press("move_right" if prev < target else "move_left")
+                steps += 1
+                time.sleep(MOVE_SETTLE_SEC)
+                glow, ys, n, sel = _look_settled(look)
+                if n != MAX_HAND_SIZE:
+                    print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) "
+                          "— refusing")
+                    return False, sel
+                cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                if cur is not None:
+                    cur_confirmed_blind = False
+                    continue
             print(f"  [cursor] lost the cursor after {steps} press(es) "
                   f"(glow={glow}) — refusing")
             return False, sel
