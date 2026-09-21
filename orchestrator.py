@@ -2437,6 +2437,43 @@ def _fast_grab():
     return img
 
 
+def _screen_shows_the_game():
+    """Cheap liveness gate: is the capture actually a picture of the game?
+
+    I-05a. CLAUDE.md section 1: ensure_live() returning True is not proof the
+    game will take input -- the PS5 Control Center can be open on top of a
+    live heartbeat, and until this landed nothing in run() re-checked that.
+    Evidence 2026-09-20: a parked match, the PS5 auto-slept, run_one_match.py
+    burned "Couldn't read the screen" polls against chiaki's own host list
+    (1867x1050), ensure_live() then woke the console and returned True with
+    the overlay still up, and the loop's only bound on any of it was
+    MAX_STUCK_ATTEMPTS (fifteen retries against dead frames before stopping).
+    This runs before read_state_for_turn, every poll, so a dead capture is
+    caught on poll 1.
+
+    Two checks, cheapest first:
+      1. Size. The PS5 streams 1920x1080 (SETTLE_CALIBRATION_WIDTH); chiaki's
+         host list (1867x1050) and the desktop-fallback path are not that.
+      2. ensure_stream.looks_like_ui(img) -- the same Qt-flat-fill census
+         streaming() uses. A True here does NOT mean "not the game": I-24
+         found it firing on the game's OWN "Load Last Save" dialog. So a
+         True is trusted only when NO game reader also answers --
+         ensure_stream._game_visible(img), the SAME reader set
+         ensure_stream._dismiss_overlay_if_blocking uses, so that exact I-24
+         false positive cannot also trip THIS gate.
+    """
+    try:
+        img = _fast_grab()
+    except Exception:
+        return False
+    if img is None or img.size != (1920, 1080):
+        return False
+    import ensure_stream
+    if not ensure_stream.looks_like_ui(img):
+        return True
+    return ensure_stream._game_visible(img)
+
+
 def _grab_settle_regions(region_names):
     """One screenshot -> {name: grayscale crop} for every named region.
 
@@ -8143,6 +8180,11 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # when the screen is still), and how many polls it has absorbed.
     motion_wait_started = None
     motion_skips = 0
+    # I-05a: has ensure_stream.ensure_live() already been tried for the
+    # CURRENT stall? ensure_live() is slow (it can wake the console, clear
+    # dialogs, retry a restart) so it is worth at most once per stall, not
+    # once per poll -- reset the moment the gate stops firing.
+    liveness_recovery_tried = False
     # Turns where the card we played was not the card we chose. This is the
     # ONLY signal that input is being dropped — everything else about a
     # misfire looks like a normal turn.
@@ -8238,6 +8280,38 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
             screenshot_stop = start_screenshot_logger()
 
         while wins < target_wins:
+            # I-05a: A CHEAP LIVENESS GATE, before any read at all -- even
+            # before the motion check, which is itself a real (if cheap)
+            # capture. ensure_live()'s own success is not proof of this (see
+            # _screen_shows_the_game()'s docstring): it can return True with
+            # the PS5 Control Center still open on a live heartbeat, and
+            # until now the only bound on that was MAX_STUCK_ATTEMPTS worth
+            # of "Couldn't read the screen" retries below, burned reading a
+            # dead frame instead of being caught on the first poll.
+            try:
+                _looking_at_game = _screen_shows_the_game()
+            except Exception as e:
+                # Never let a broken liveness check end the run on its own --
+                # fall through to the normal read/validate path, same shape
+                # as the motion check just below.
+                print(f"  [liveness] check failed ({e}) — reading anyway.")
+                _looking_at_game = True
+            if not _looking_at_game:
+                print(f"  [liveness] not looking at the game — "
+                      f"({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                if not liveness_recovery_tried:
+                    import ensure_stream
+                    ensure_stream.ensure_live(log=print)
+                    liveness_recovery_tried = True
+                stuck_count += 1
+                if stuck_count >= MAX_STUCK_ATTEMPTS:
+                    print("Stuck too long off the game screen — stopping. Check the game manually.")
+                    stop_reason = "not_looking_at_the_game"
+                    break
+                time.sleep(2)
+                continue
+            liveness_recovery_tried = False
+
             # NO ACTION NEEDED: if something is animating, the right move is to
             # do nothing and look again. Costs ~0.2s locally instead of a vision
             # call on a frame that was never going to read cleanly.

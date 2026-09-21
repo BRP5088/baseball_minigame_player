@@ -138,9 +138,21 @@ class Harness:
     def __init__(self, screens, play_results=None, balance=500,
                  wins=0, losses=0, draws=0, logger_stop=None, motion=None,
                  revealed=None, opp_local=None, frozen=False, ban_counter=3,
-                 ban_collection=None, ban_cursor=None, drop_presses=None):
+                 ban_collection=None, ban_cursor=None, drop_presses=None,
+                 liveness_frame=None):
         self.screens = list(screens)
         self.idx = 0
+        self.next_state_calls = 0
+        # I-05a: orchestrator._screen_shows_the_game() runs before EVERY read,
+        # even before the ones _fast_grab's blank default frame satisfies
+        # harmlessly (read_result etc.) -- unpatched, a solid-colour frame
+        # reads as chiaki UI (looks_like_ui: one exact RGB value over the
+        # whole frame) with no game reader answering, which would fire the
+        # gate on literally every poll of every OTHER test in this suite.
+        # Default: stub it to always say "yes, the game". A test that wants
+        # the REAL gate (test_run_gates_on_liveness.py) passes a PIL image
+        # here instead, and the real function runs against it unstubbed.
+        self.liveness_frame = liveness_frame
         # I-11: run()'s close_result and start_match go through
         # input_controller.press_verified, which LOOKS after every press. Two
         # things follow for this harness.
@@ -227,6 +239,7 @@ class Harness:
         return "ban" if "start_match" in self.landed else "prompt"
 
     def _next_state(self):
+        self.next_state_calls += 1
         self.landed.clear()
         self.checks_per_read.append(self.motion_checks - self._checks_at_last_read)
         self._checks_at_last_read = self.motion_checks
@@ -385,6 +398,16 @@ class Harness:
             "save_progress": fake_save,
             "time": self.clock,
         }
+        if self.liveness_frame is None:
+            # Default: never fire the I-05a liveness gate for tests that are
+            # not about it -- see the constructor's comment on liveness_frame.
+            patches["_screen_shows_the_game"] = lambda *a, **k: True
+        else:
+            # Real gate: fed the scripted frame instead of the blank default,
+            # with "_screen_shows_the_game" left OUT of patches so its own
+            # logic (size check, looks_like_ui, ensure_stream._game_visible)
+            # runs unstubbed against it.
+            patches["_fast_grab"] = lambda *a, **k: self.liveness_frame
         for name, fn in patches.items():
             saved[name] = getattr(o, name)
             setattr(o, name, fn)

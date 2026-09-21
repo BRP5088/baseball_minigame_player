@@ -49,7 +49,12 @@ def run(frozen_seq, restarts=2):
             calls["clear"] += 1
             return True
         es._clear_blocking_ui = clear
-        es._dismiss_overlay_if_blocking = lambda log=None: False
+        # I-05a: ensure_live() now PROPAGATES this return value (it used to
+        # discard it and always return True), so this stub must say the
+        # overlay was confirmed clear -- the concern of THIS file is
+        # clear/restart counts, not the dismiss-and-verify logic itself,
+        # which test_overlay_dismiss_is_verified.py owns.
+        es._dismiss_overlay_if_blocking = lambda log=None: True
         def fake_run(cmd, *a, **k):
             if cmd and "restart_chiaki.sh" in str(cmd[0]):
                 calls["restart"] += 1

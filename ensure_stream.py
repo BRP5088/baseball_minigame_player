@@ -476,6 +476,13 @@ def ensure_live(log=print, restarts=2):
     heartbeat, and a heartbeat continues through a decoder stall. A five-run
     measurement was lost on 2026-09-02 because every reset in it probed a still
     picture and concluded the input was dead.
+
+    I-05a: a live, updating picture is STILL not proof the game will take
+    input -- the PS5 Control Center can sit on top of it, heartbeating and
+    updating the whole time. This now PROPAGATES _dismiss_overlay_if_blocking's
+    verified result instead of discarding it: True only once a game reader
+    actually answers, False if the overlay budget (two presses) ran out and
+    the console is still not showing the game.
     """
     if _refuse_under_test("probe or RESTART the stream"):
         return False
@@ -483,8 +490,7 @@ def ensure_live(log=print, restarts=2):
 
     for attempt in range(restarts + 1):
         if ensure(log=log) and not is_frozen():
-            _dismiss_overlay_if_blocking(log=log)
-            return True
+            return _dismiss_overlay_if_blocking(log=log)
 
         # A FROZEN PICTURE IS USUALLY SOMETHING SITTING ON TOP OF THE STREAM,
         # not a dead stream — and restarting cannot fix any of them:
@@ -582,6 +588,56 @@ def _clear_blocking_ui(log=print):
     return True
 
 
+# I-05a. The reader set _dismiss_overlay_if_blocking (and orchestrator's own
+# liveness gate) trust to mean "the GAME is actually on screen". Four cheap
+# readers, none of which chiaki's own chrome (the host list, a Qt dialog, the
+# PS5 Control Center) can satisfy:
+#
+#     compass.read_bearing        -- the world
+#     pause_menu.is_pause_screen  -- the pause book
+#     table_prompt.at_table       -- the dealer's Play prompt
+#     reset_env.load_save_dialog  -- the reset's own confirm dialog
+#
+# Left OUT on purpose: local_hand.read_hand (a five-slot disc search, the
+# heaviest reader in the project) and orchestrator.read_ban_counter
+# (per-threshold OCR over two boxes). Both answer on exactly one screen apiece
+# -- a dealt hand, a ban screen -- that nothing in this project's evidence
+# lists as what a reconnect or a stuck poll actually lands on; these four are
+# the cheap ones and between them cover the world, the pause menu, the
+# dealer's table, and -- the reason `load_save_dialog` is in this set at all
+# -- the one screen I-24 already found `looks_like_ui` misreading as chiaki's
+# own UI. Using the SAME set in both places (see orchestrator._screen_shows_
+# the_game) is what keeps that exact false positive from also tripping the
+# OTHER gate.
+def _game_visible(img):
+    """True if a reader that only ever answers on the GAME recognises `img`."""
+    import compass
+    import pause_menu as pm
+    import table_prompt as tp
+    import reset_env
+    try:
+        if compass.read_bearing(img) is not None:
+            return True
+    except Exception:
+        pass
+    try:
+        if pm.is_pause_screen(img):
+            return True
+    except Exception:
+        pass
+    try:
+        if tp.at_table(img):
+            return True
+    except Exception:
+        pass
+    try:
+        if reset_env.load_save_dialog(img):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _dismiss_overlay_if_blocking(log=print):
     """Close the PS5 home overlay if it is sitting on top of the game.
 
@@ -591,20 +647,41 @@ def _dismiss_overlay_if_blocking(log=print):
     stays — hiding the compass and the pause book from everything downstream.
     Observed repeatedly on 2026-09-02.
 
-    Escape is mapped to the PS button in chiaki, which closes it.
+    I-05a: this used to send ONE ps_button press and return True unconditionally
+    -- never checking whether the press actually cleared anything. Evidence
+    2026-09-20: after ensure_live() woke a sleeping console, the PS5 Control
+    Center was STILL up after that one press; a second press, by hand, cleared
+    it. Now it LOOKS after every press -- a fresh capture, judged by
+    _game_visible() above -- and returns True only once a game reader actually
+    answers (including the very first look: nothing to dismiss IS the game
+    being visible). Escape is mapped to the PS button in chiaki, which closes
+    the overlay; it is a TOGGLE (CLAUDE.md section 1), so this is bounded at
+    TWO presses -- a blind third could reopen whatever the first two closed.
+    ensure_live() propagates this return value: False now means "still
+    blocked", not "nothing needed doing".
     """
     import compass
-    import pause_menu as pm
 
     try:
         img = compass.fast_capture()
-        if compass.read_bearing(img) is not None or pm.is_pause_screen(img):
-            return False          # the game is visible; nothing to dismiss
-        pid = _pid()
-        if pid is None:
-            return False
-        log("  compass unreadable and no pause menu — dismissing the PS5 overlay")
-        _key(pid, 53, after=3.0)
-        return True
     except Exception:
         return False
+    if _game_visible(img):
+        return True           # the game is visible; nothing to dismiss
+    pid = _pid()
+    if pid is None:
+        return False
+    for attempt in range(2):
+        log(f"  compass unreadable and no pause menu — dismissing the PS5 "
+            f"overlay (press {attempt + 1}/2)")
+        try:
+            _key(pid, 53, after=3.0)
+        except Exception:
+            return False
+        try:
+            img = compass.fast_capture()
+        except Exception:
+            continue
+        if _game_visible(img):
+            return True
+    return False
