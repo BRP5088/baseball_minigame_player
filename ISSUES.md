@@ -1894,7 +1894,7 @@ already blind — the two windows can disagree) is now marked too:
 unreachable, since the argument for unreachability does not hold in that one
 narrow window.
 
-**Status.** Redone after REFUTED skeptic round 1; awaiting skeptic round 2.
+**Status.** merged 2f18a734dbd43828f4f6fbbafb8a20a947456e0e; skeptic round 1 REFUTED (29% healthy-turn refusals), round 2 CONFIRMED WITH NOTES, 7/7 mutants.
 
 ### I-44  `_clear_strays`'s commit-time inference asks for no real corroboration   P0  guard
 
@@ -2003,7 +2003,7 @@ survived round 1's suite entirely; caught now by a dedicated case that forces
 the post-clear branch to run with an uncorroborated want-blind target present.
 All sha256-verified restored, `__pycache__` cleared between mutants.
 
-**Status.** Redone after REFUTED skeptic round 1; awaiting skeptic round 2.
+**Status.** PARTIAL, merged 2f18a734dbd43828f4f6fbbafb8a20a947456e0e: the corroboration gate is inert in production (every success path marks, so inferred_targets == want always; N-1); the original QA6 Q2 hole (a dropped press + false inference supplies its own corroboration) is STILL OPEN and needs corroboration the inference cannot manufacture (selection-lift geometry or a post-commit read). Live watch: count 'may still be physically lifted' lines on the next matches; the archive bounds it at 14 exemption events vs 51 refusals.
 
 ## C. Costs wins
 
