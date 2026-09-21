@@ -58,6 +58,14 @@ def check(name, cond):
         FAILS.append(name)
 
 
+# CLAUDE.md sec 10.11: a test must not assert a constant against itself. (iv-e) below
+# exercises the MECHANISM (the cap refuses, never prunes) entirely through
+# o.MONEY_READ_MAX_FILES, so an accidental edit to the cap would sail through
+# unnoticed -- pin the literal once, here.
+check(f"MONEY_READ_MAX_FILES is still its pinned 200 (got {o.MONEY_READ_MAX_FILES})",
+      o.MONEY_READ_MAX_FILES == 200)
+
+
 # ---------------------------------------------------------------------------
 # Part 1: _reset_progress() must always hand back RELOAD_WALLET when the read
 # disagrees with it, or raised -- never the raw read.

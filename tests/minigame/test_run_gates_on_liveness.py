@@ -92,6 +92,16 @@ from PIL import Image
 
 import ensure_stream
 
+# CLAUDE.md sec 10.11: a test must not assert the constant against ITSELF (that rises
+# with the constant and passes forever). Every check below reads o.LIVENESS_MISS_SEC
+# so an accidental edit sails through unnoticed -- pin the literal directly, once, so
+# a change to the 9,729-frame-census calibration (CLAUDE.md sec 3/the QA6 finder notes)
+# fails loudly instead of silently retuning every downstream assertion with it.
+check(o.LIVENESS_MISS_SEC == 6.0,
+      f"LIVENESS_MISS_SEC drifted from its calibrated 6.0s to {o.LIVENESS_MISS_SEC} -- "
+      f"every debounce assertion in this file reads the constant, not this literal, so "
+      f"a silent retune would otherwise pass unnoticed")
+
 HOSTLIST = os.path.join(_ROOT, "test_fixtures", "not_streaming",
                         "hostlist_standby.png")
 DIALOG = os.path.join(_ROOT, "test_fixtures",

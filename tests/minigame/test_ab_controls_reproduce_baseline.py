@@ -8,6 +8,7 @@ seed, same RNG call sequence) is what makes a small n sufficient here. The 12,00
 3-seed runs that produced the reported findings do not belong in a unit suite (see
 test_tie_risk_is_closed.py's own docstring for the same rule).
 """
+import json
 import os
 import sys
 
@@ -93,6 +94,18 @@ check(meta["n_used_for_distribution"] > 0,
       f"log-derived distribution was built from a nonzero number of qualifying rows "
       f"({meta['n_used_for_distribution']} of {meta['rows_with_outcome_basis_or_margin']} "
       f"with a local reveal read, {meta['rows_excluded_no_local_reveal_read']} excluded)")
+
+# CLAUDE.md sec 2/10.16c's own lesson applied to a data file: a change in match_log.jsonl
+# must fail this LOUDLY, not silently shift what the arm measures. This checkout's tracked
+# match_log.jsonl has zero qualifying rows (verified), so load_log_distribution() falls
+# back to the pinned ISSUES.md I-17 snapshot -- that fallback is exactly what this check
+# pins: the live call must reproduce the committed artefact bit-for-bit.
+_PINNED_PATH = os.path.join(_ROOT, "tools", "ab_data", "opp_pitcher_dist_20260921.json")
+with open(_PINNED_PATH) as _f:
+    _pinned = json.load(_f)
+check(meta == _pinned,
+      f"load_log_distribution() reproduces the pinned artefact "
+      f"{os.path.relpath(_PINNED_PATH, _ROOT)} exactly")
 
 print()
 if fails:
