@@ -50,6 +50,12 @@ and never averaged. The score is the max over the bank, so adding an example can
 only raise a score -- which is why LOST and CLASS FLIPS must both be 0 and are
 checked here.
 
+I-22 (2026-09-20) ADDS A SECOND DONOR, one PITCH FOCUS card at slot 3, for the
+same reason: a bank-coverage gap the corpus census above never sampled (it only
+tallied REJECTION RATE against MIN_TYPE_SCORE, not the LEFT-shifted disc position
+that caused this one). n=1 distinct card, stated rather than hidden -- see
+test_fixtures/hand_reads/README.md for the frames and the trace.
+
     .venv/bin/python -B tools/build_hand_tactics_templates.py [--check]
 
 --check verifies the shipped bank matches what this script would build, and
@@ -88,6 +94,19 @@ DONORS = [
     ("overnight/local_hand/hand_1788938103188984000.png", 3, "fielding_boost"),
     ("overnight/local_hand/hand_1788938208525368000.png", 3, "fielding_boost"),
     ("overnight/local_hand/hand_1788938305027886000.png", 3, "fielding_boost"),
+    # I-22, same shape, a different type: a live PITCH FOCUS card sat unplayed in
+    # slot 3 for four consecutive turns and read type_score 0.755-0.764 every
+    # time -- MIN_TYPE_SCORE is 0.85. Its disc lands at x=642 in the 979-wide
+    # crop, well left of the ~661-664 cluster the bank's other pitch_boost
+    # examples were cut from (overnight/local_hand's slot-3 pitch_boost cards
+    # score 0.97 mean against the bank; this card's own crop correlates only
+    # 0.28 against one of those). Not occlusion -- the card is plainly legible
+    # and read_bonus already read it correctly (bonus=1, 0.92-0.94) on every
+    # poll -- and not a timing artefact -- the four polls span tens of seconds
+    # and agree to three decimal places. test_fixtures/hand_reads/README.md
+    # has the full trace. See test_fixtures/hand_reads/README.md; the second of
+    # the two frames it names is kept OUT of this list as an independent check.
+    ("test_fixtures/hand_reads/i22_pitch_boost_slot3_turn1.png", 3, "pitch_boost"),
 ]
 
 
