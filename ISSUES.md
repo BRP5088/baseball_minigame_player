@@ -2777,6 +2777,13 @@ test_refusal_unwinds.py reconciled 307408c: scenarios 3 re-pinned to the
 batter-alone contract, 1 kept (plus 1 new scenario added so the
 general-refusal unwind's own mutant has something real to catch).
 
+QA8 (`agent_progress/qa8/silent_state`): `orchestrator.spend_and_play` never read
+`input_controller.tactics_dropped_last_play()`, so `tools/match_crawl.py` printed
+"COMMITTED" for a batter-alone fallback play the same way `play_one_turn` already
+guards against (~8473); fixed by reading the flag in `spend_and_play` itself and
+printing/returning the drop via the existing `(ok, why)` tuple, case H + mutant 4
+in `tests/minigame/test_tactics_select_fallback.py`.
+
 ### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
 
 **Evidence.** `agent_progress/census/reveal_orphans_trace/` traced 42 fully-readable

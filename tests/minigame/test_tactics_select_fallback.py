@@ -333,6 +333,51 @@ try:
         ic.tactics_dropped_last_play = _real_tdl
 
     # =====================================================================
+    print("(H) orchestrator.spend_and_play reads tactics_dropped_last_play() too "
+          "(QA8, agent_progress/qa8/silent_state) -- a hand-driven crawl calling "
+          "spend_and_play directly (tools/match_crawl.py) must not report a play "
+          "whose tactics attachment was dropped as a clean COMMIT")
+    # =====================================================================
+    _real_select_and_play_ic = ic.select_and_play
+    _real_tdl_h = ic.tactics_dropped_last_play
+    ic.select_and_play = lambda *a, **k: True
+    try:
+        # (H-control) the fallback did NOT fire -- why stays None, same as before
+        # this fix, and both slots are forgotten from hand memory either way.
+        orch._hand_memory.clear()
+        orch._hand_memory[0] = {"power": "7", "secondary": 1, "art": None}
+        orch._hand_memory[1] = {"power": None, "secondary": 2, "art": None}
+        ic.tactics_dropped_last_play = lambda: False
+        ok, why = orch.spend_and_play(0, 1)
+        check("(H-control) ok is True", ok is True)
+        check("(H-control) why carries no drop message", why is None)
+        check("(H-control) both slots are still forgotten",
+              0 not in orch._hand_memory and 1 not in orch._hand_memory)
+
+        # (H) the fallback DID fire -- select_and_play still returns True (the
+        # batter alone committed), but spend_and_play must now say so instead of
+        # reporting a silent COMMIT: `why` names the dropped slot and I-48, and
+        # the line prints for a crawl script that only reads stdout.
+        orch._hand_memory[0] = {"power": "7", "secondary": 1, "art": None}
+        orch._hand_memory[1] = {"power": None, "secondary": 2, "art": None}
+        ic.tactics_dropped_last_play = lambda: True
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ok, why = orch.spend_and_play(0, 1)
+        check("(H) ok is still True (the batter alone committed)", ok is True)
+        check("(H) why names the dropped tactics slot and I-48",
+              why is not None and "tactics slot 1" in why and "DROPPED" in why
+              and "I-48" in why)
+        check("(H) the drop is printed, not just returned",
+              "DROPPED" in buf.getvalue() and "tactics slot 1" in buf.getvalue())
+        check("(H) both slots are still forgotten",
+              0 not in orch._hand_memory and 1 not in orch._hand_memory)
+    finally:
+        ic.select_and_play = _real_select_and_play_ic
+        ic.tactics_dropped_last_play = _real_tdl_h
+        orch._hand_memory.clear()
+
+    # =====================================================================
     print()
     print("MUTATION TESTING")
     # =====================================================================
@@ -470,6 +515,54 @@ try:
     finally:
         orch._grab_settle_regions = _real_grab
         orch.hand_cursor_look = _real_look
+
+    # --- mutant 4: drop the flag read in spend_and_play (QA8) ---------------
+    print("mutant 4: spend_and_play no longer reads tactics_dropped_last_play() "
+          "-- case H must go back to a silent COMMIT")
+    try:
+        _mutate(
+            ORCH_PATH,
+            '    if _ic.tactics_dropped_last_play():\n'
+            '        why = f"tactics slot {tactics_idx} was DROPPED -- batter played alone (I-48)"\n'
+            '        print(f"  [spend_and_play] {why}")\n'
+            '        return True, why\n'
+            '    return True, None\n',
+            '    return True, None\n')
+        _reload_orch()
+        _real_sp_ic = ic.select_and_play
+        _real_tdl_m4 = ic.tactics_dropped_last_play
+        ic.select_and_play = lambda *a, **k: True
+        ic.tactics_dropped_last_play = lambda: True
+        orch._hand_memory.clear()
+        orch._hand_memory[0] = {"power": "7", "secondary": 1, "art": None}
+        orch._hand_memory[1] = {"power": None, "secondary": 2, "art": None}
+        try:
+            ok, why = orch.spend_and_play(0, 1)
+            check("mutant 4 caught: why no longer names the drop",
+                  ok is True and why is None)
+        finally:
+            ic.select_and_play = _real_sp_ic
+            ic.tactics_dropped_last_play = _real_tdl_m4
+            orch._hand_memory.clear()
+    finally:
+        _restore_orch()
+
+    # --- sanity: spend_and_play reports the drop again after the restore ----
+    _real_sp_ic = ic.select_and_play
+    _real_tdl_m4 = ic.tactics_dropped_last_play
+    ic.select_and_play = lambda *a, **k: True
+    ic.tactics_dropped_last_play = lambda: True
+    orch._hand_memory.clear()
+    orch._hand_memory[0] = {"power": "7", "secondary": 1, "art": None}
+    orch._hand_memory[1] = {"power": None, "secondary": 2, "art": None}
+    try:
+        ok, why = orch.spend_and_play(0, 1)
+        check("post-restore sanity: case H passes again",
+              ok is True and why is not None and "tactics slot 1" in why)
+    finally:
+        ic.select_and_play = _real_sp_ic
+        ic.tactics_dropped_last_play = _real_tdl_m4
+        orch._hand_memory.clear()
 
 finally:
     pass

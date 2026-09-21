@@ -7814,6 +7814,16 @@ def spend_and_play(player_idx, tactics_idx=None):
     ok = _ic.select_and_play(player_idx, tactics_idx, look=hand_cursor_look)
     if ok is False:
         return False, "the cursor could not be verified -- NOTHING was committed"
+    # QA8 (agent_progress/qa8/silent_state): play_one_turn already reads this flag
+    # right after select_and_play (orchestrator.py ~8473) because the I-48
+    # batter-alone fallback can commit a play whose tactics card was NEVER spent --
+    # select_and_play still only returns one bool. A hand-driven crawl calling this
+    # function directly skipped that check entirely and reported "COMMITTED" for a
+    # play that left the tactics card on the floor. Checked here too, same as there.
+    if _ic.tactics_dropped_last_play():
+        why = f"tactics slot {tactics_idx} was DROPPED -- batter played alone (I-48)"
+        print(f"  [spend_and_play] {why}")
+        return True, why
     return True, None
 
 

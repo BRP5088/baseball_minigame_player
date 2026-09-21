@@ -564,7 +564,8 @@ def apply_action(cmd, r, dec, dry=False, allow_pay=False):
         ok, why = (o.spend_and_discard(slot) if kind == "discard"
                   else o.spend_and_play(slot))
         out["acted"] = (f"select_and_{kind}({slot})"
-                        + (" -> COMMITTED" if ok else f" -> REFUSED ({why})"))
+                        + (f" -> DROPPED ({why})" if ok and why else
+                           " -> COMMITTED" if ok else f" -> REFUSED ({why})"))
         if not ok:
             out["refused"] = True
             out["refusal_reason"] = why
@@ -591,7 +592,8 @@ def apply_action(cmd, r, dec, dry=False, allow_pay=False):
         out["pressed"] = True
         ok, why = o.spend_and_play(_p, _t)
         out["acted"] = (f"select_and_play({_p}, tactics={_t})"
-                        + (" -> COMMITTED" if ok else f" -> REFUSED ({why or 'nothing committed'})"))
+                        + (f" -> DROPPED ({why})" if ok and why else
+                           " -> COMMITTED" if ok else f" -> REFUSED ({why or 'nothing committed'})"))
         if not ok:
             out["refused"] = True
             out["refusal_reason"] = why or "nothing committed"
@@ -604,7 +606,9 @@ def apply_action(cmd, r, dec, dry=False, allow_pay=False):
             return out
         out["pressed"] = True
         ok, why = o.spend_and_play(s)
-        out["acted"] = f"select_and_play({s})" + (" -> COMMITTED" if ok else f" -> REFUSED ({why})")
+        out["acted"] = f"select_and_play({s})" + (
+            f" -> DROPPED ({why})" if ok and why else
+            " -> COMMITTED" if ok else f" -> REFUSED ({why})")
         if not ok:
             out["refused"] = True
             out["refusal_reason"] = why
