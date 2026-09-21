@@ -2902,3 +2902,114 @@ now asserted to produce.
 **Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
+
+### I-53  A cursor lost right after dead-reckoning across an occluded slot is refused instead of nudged    P1  input
+
+**Evidence.** Census over every `overnight/run_live_2026092*.log` in the main checkout
+(25 files), counting `[cursor] lost the cursor after N press(es)`:
+
+    file                     events  dead-reckon adjacent?   resolution
+    run_live_20260921d.log     3     no -- glow never clears  play REFUSED, retried
+                                      CURSOR_GLOW_MIN anywhere next poll on the same
+                                      (no "occluded"/            hand_index, refused
+                                      "dead-reckoning" line       again, excluded after
+                                      anywhere in the log)         3x running
+    run_live_20260921f.log     1     no -- I-33's cross-call     _unwind_selection put
+                                      blind cursor (a SEPARATE     the stray back down,
+                                      earlier call left slot 4     re-verified on 4 with
+                                      selected; THIS call's        1 press on the retry
+                                      own top-of-function read
+                                      never dead-reckoned)
+    run_live_20260921t.log     1     YES -- "slot 1 is           I-48's fallback fired:
+                                      occluded ... dead-           "tactics slot 3 could
+                                      reckoning" printed twice     not be verified --
+                                      immediately before it        dropping the boost and
+                                                                    playing the batter
+                                                                    alone" (a real swing_
+                                                                    boost/speed_boost was
+                                                                    silently never played)
+
+Only ONE of the five (`run_live_20260921t.log`, the case this ticket was opened
+against) is the I-32/I-53 shape at all -- the other four are different failure
+modes (a totally-blind fan across the whole gate, and I-33's cross-call belief
+loss) that this fix does not and should not touch, confirmed by re-running the
+full suite unchanged after the fix (§ Verify).
+
+**Root cause, traced in the code (not guessed).** `_walk_cursor_to`'s dead-reckon
+branch (I-32) assigns `cur` the crossed slot's `expected` value with NO read at all
+-- by design, since the slot's `ys[i] is None` means the glow reader cannot answer
+either way. The NEXT press's own `cur_confirmed_blind` (I-33's "was this position
+actually trusted" flag) is deliberately left UNCHANGED by the dead-reckon branch
+(its own comment: "NOT cur_confirmed_blind = True"), so whether the following lost
+read gets I-33's one-retry depends entirely on what `cur_confirmed_blind` happened
+to be BEFORE the crossing, not on the fact that a guess was just made. In the
+run_live_20260921t.log trace, that flag was carried over from a prior call's
+top-of-function lift-fallback (`_cur_from_lift`), so ONE extra retry did fire and
+still failed (three presses total) -- but nothing in the code special-cases "the
+position we just moved away from was never itself confirmed", so a run where the
+prior belief happened to be trusted (the common case) gets ZERO retries after a
+dead-reckon and refuses on the very next lost read.
+
+**Fix**, `input_controller._walk_cursor_to` only. A new branch, keyed on
+`was_dead_reckoned` (already computed every iteration for I-32's own one-guess
+cap; unused elsewhere), fires when a lost read immediately follows a dead-reckoned
+crossing -- REGARDLESS of `cur_confirmed_blind`, since a guessed position was never
+read at all and so was never "trusted" in I-33's sense either. It presses again (a
+real move, never a second guess -- `select_card` is the only toggle) and re-looks,
+up to `PRESS_VERIFY_TRIES` (5, reused, nothing invented) times, breaking as soon as
+a real read names a slot. If that slot is not yet `target`, `continue` hands
+control back to the ordinary outer `while cur != target:` loop, which already
+presses toward `target` from wherever `cur` is -- including PAST it, in which case
+the very next iteration's existing direction check (`move_right if cur < target
+else move_left`) walks back with no special-cased code. Only if every extra press
+also fails to read does the branch fall through to the original "lost the cursor
+... refusing" line.
+
+Placed BEFORE I-33's own `prev_blind` branch in the same `if cur is None:` chain,
+so the two interact cleanly: when both conditions are true (as in the reproduction
+above), I-53's branch runs first and its own bounded loop supersedes I-33's single
+retry rather than stacking with it; I-33's branch is now only ever reached when
+`was_dead_reckoned` is False, so it keeps its ORIGINAL behaviour unchanged for
+every loss that did not follow a dead-reckon (test (D)/CONTROL pins this: exact
+same press count as before the fix). I-32's own one-consecutive-dead-reckon cap
+(`not was_dead_reckoned` in the dead-reckon condition) and the "never dead-reckon
+onto the target" rule (I-02's probe-select path, case (3)) are both untouched --
+I-53 cannot chain a SECOND guess, because it never guesses; it only chains real
+presses-and-reads or runs out of budget.
+
+One side effect, understood and accepted rather than incidental: two OCCLUDED
+slots back to back (the file's old case (2b), "no code chains guesses to cover
+it") now also RECOVERS instead of hard-refusing, because pressing past a second
+occluded slot for real and reading the slot after it is not a guess -- it is
+exactly what I-53 is for. The one-guess cap that motivated the old refusal is
+about never ASSUMING a second position with no read; it says nothing about
+retrying with real presses, which this never was and still isn't.
+
+**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`, rewritten to keep
+the I-32 cases (1)/(3)/(5)/(6) and fold the two behaviour-changing ones into the
+new I-53 family below them: (A) the dead-reckon press itself was dropped, so the
+real cursor is still ON the occluded slot when the next look fails -- one extra
+move finds a readable slot and the walk arrives; (B) every extra move is also
+dropped -- refuses, same as an unrecoverable loss always has, after the full
+`PRESS_VERIFY_TRIES` budget; (C) the retry runs past a slot whose own read
+momentarily misses (including the target itself) and lands past it -- the ordinary
+per-step direction logic (nothing special-cased for this) walks it back and
+arrives; (D) CONTROL, no occlusion anywhere -- a lost cursor is refused with the
+EXACT press count it always had, proving the retry never fires without a
+dead-reckon behind it. Also green, unchanged: `test_verified_selection.py`,
+`test_tactics_select_fallback.py` (whose own mutation harness mutates and restores
+`input_controller.py` -- confirms the new branch coexists with I-48's fallback),
+`test_commit_refuses_unseen_strays.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`.
+
+**Mutants (3, `__pycache__` cleared before/after each, sha256-verified restore to
+`f4dbfd8de773ac8d21c06944399b84f55e8a958ca51065398c4975735b161431`):**
+
+    drop the extra-move branch (`if was_dead_reckoned:` -> `if False:`)
+        -> test_walk_crosses_occluded_slot.py: (A)/(B)/(C) all FAIL (11 checks)
+    widen the retry bound (`PRESS_VERIFY_TRIES + 1` -> `PRESS_VERIFY_TRIES + 50`)
+        -> test_walk_crosses_occluded_slot.py: (B) FAILS (press count, refusal line)
+    skip the walk-back (`continue` -> `return True, sel` on a found-but-unconfirmed cur)
+        -> test_walk_crosses_occluded_slot.py: (A)/(C) FAIL (press counts, wrong "arrived")
+
+**Status.** fixed on branch, awaiting skeptic.
