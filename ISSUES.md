@@ -270,7 +270,10 @@ on disk, so its false-positive rate is measured ~0 but its ability to catch
 a real overlay is unmeasured (safe direction: it can only fail by not
 firing); and _dismiss_overlay_if_blocking has no pre-filter or debounce of
 its own, so on a false fire it could in principle leave the overlay open --
-untestable offline, no such fixture exists. Awaiting merge.
+untestable offline, no such fixture exists.
+
+**Status.** merged 44c0c99199ab725665b1d79f0f065a36de44ed7d; skeptic CONFIRMED WITH
+NOTES (9,729-frame census, 1 miss of 0.102 s; notes folded).
 
 ### I-06  A stalled match is abandoned by the next cycle with no record             P1  money
 
