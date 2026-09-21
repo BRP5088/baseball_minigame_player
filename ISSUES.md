@@ -2611,4 +2611,65 @@ Also green: `tests/minigame/test_verified_selection.py`,
 `tests/rig/test_no_real_input_under_test_run.py` (the emission census — the new
 frame keeper does a screen GRAB, no press, and was not flagged as a new input site).
 
-**Status.** Fixed on branch, awaiting skeptic.
+**Skeptic round (`agent_progress/issues/I-48/skeptic.md`): CONFIRMED WITH NOTES, three
+edits.**
+
+- **S-2 (defect, latent).** The fallback guard was `target == tactics_index and target
+  != card_index`, true when `card_index` is `None` — a tactics-only call (the signature
+  allows it; no production caller passes it today) whose select never lands took the
+  fallback, `want` became `set()`, and `_clear_strays` passed vacuously — confirm_play
+  sent on an EMPTY fan, reporting True. Fixed: `and card_index is not None` added to the
+  guard. Case F pins it (`tests/minigame/test_tactics_select_fallback.py`).
+- **S-3 (defect, real, unmeasured before this).** The batter-alone fallback committed a
+  play with NO WAY for `play_one_turn` to learn the tactics card was dropped:
+  `note_slot_dealt(player_idx, tactics_idx)` claimed a slot that was never spent, and
+  `matchup_info["our_tactics_bonus"/"our_tactics_kind"]` still recorded
+  `decision.tactics_card`'s own bonus/kind — what the ENGINE CHOSE, not what was
+  actually played. `match_log.jsonl` would have recorded a boost that never went in, on
+  exactly the field OPEN-24 calls this project's only non-circular tactics ground truth,
+  and `record_reveal_kind` would have kept a labelled reveal frame for a reveal with no
+  tactics card in it — poisoning the `TACTICS_KIND_MIN` corpus. Fixed: a module flag
+  beside `_MAYBE_LIFTED` (`input_controller._LAST_PLAY_DROPPED_TACTICS`, cleared at the
+  top of every `_verified_select_and_play_inner` call, set only in the fallback branch;
+  read via `tactics_dropped_last_play()`). `orchestrator.play_one_turn` reads it right
+  after `select_and_play(...)` returns True, before `note_slot_dealt`/`matchup_info`:
+  drops `tactics_idx` from `note_slot_dealt`, zeroes `our_tactics_bonus`/sets
+  `our_tactics_kind` to `None` (which also makes `record_reveal_kind`'s own `if not
+  kind: return None` gate skip the frame — one field change closes both holes), and adds
+  `"tactics_dropped": true` so a later census can tell "no tactics card was ever chosen"
+  apart from "one was chosen and dropped". Case G pins it, driving the REAL
+  `play_one_turn`/`hand_to_cards`/`best_batting_play` (not a scripted `matchup_info` —
+  `tests/minigame/_run_harness.py`'s `Harness` stubs `play_one_turn` out entirely via
+  `play_results=[...]`, so it cannot exercise a fix that lives inside that function).
+- **S-4 (defect, in the guard's own proof).** Case D's two checks passed even with the
+  `_running_under_test()` guard stripped, whenever `_grab_settle_regions` happened to
+  raise (any headless box, or chiaki down) — `record_refused_select`'s own
+  `except Exception: return None` supplied the same answer the guard would have, so the
+  test proved nothing about the guard specifically. Fixed: case D now stubs
+  `_grab_settle_regions`/`hand_cursor_look` to WORK, the same as case E, so the write is
+  what the mutant actually has to survive.
+
+Re-ran the skeptic's own M1-M4 against the fixed code (real file mutation,
+`__pycache__` cleared, sha256-verified restore, scratchpad script, not shipped):
+M1 (fallback fires for the batter too) CAUGHT, M2 (`_clear_strays`'s `want <= lifted`
+dropped — pre-existing code, unchanged by this fix) CAUGHT by
+`test_commit_refuses_unseen_strays.py` (confirmed directly against that file, EXIT=1,
+3 checks fail), M3 (unwind the full target set instead of `{tactics_index}`) CAUGHT,
+M4 (strip the `BASEBALL_TEST_RUN` guard, capture stubbed to succeed) CAUGHT. Plus the
+three mutants above (case A/A/E). All seven caught; both files restored byte-for-byte.
+
+**LATER (not fixed now, per the skeptic and the coordinator's call): the tactics slot
+is NOT excluded after the fallback fires.** Only the batter is spared exclusion —
+`note_play_refused()`/`exclude_play_slot` are never reached because `select_and_play`
+returns True. Nothing marks tactics_idx as unreliable, so the NEXT turn re-offers the
+same tactics attachment, and if the same occlusion-crossing problem recurs it burns
+`SELECT_ATTEMPTS` (5) presses again — roughly 5 x (0.60 + 1.60)s ≈ 11s — before falling
+back a second time. This converts I-48's deadlock into a per-turn TAX rather than
+removing it; not a stall (the play still commits every time), just a repeated cost.
+Fixing it would mean tracking a per-slot-per-reason exclusion for TACTICS attachments
+separate from `_PLAY_STALL` (which is keyed on the player_idx the play command
+targets, not the tactics_idx) — new state, not a one-line change, and deliberately
+deferred.
+
+**Status.** Fixed on branch (skeptic round applied, `--no-verify`), CONFIRMED WITH
+NOTES.

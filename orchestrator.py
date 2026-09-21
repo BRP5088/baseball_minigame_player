@@ -8465,9 +8465,22 @@ def play_one_turn(state_json: dict, batters_used: int):
         pop_hand_baseline()
         return False, {"play_refused": True}
 
+    # I-48 SKEPTIC S-3: the batter-alone fallback inside select_and_play can commit a
+    # play whose tactics card was NEVER spent -- select_and_play still only returns one
+    # bool, so this is the one place that finds out. Checked BEFORE note_slot_dealt and
+    # the matchup_info below, which is why it must not move: both were about to record a
+    # tactics card as played when it was dropped on the floor.
+    _tactics_dropped = input_controller.tactics_dropped_last_play()
+    if _tactics_dropped:
+        print(f"  [play] tactics slot {tactics_idx} was dropped by the batter-alone "
+              "fallback (I-48) — logging this turn as the batter alone")
+        tactics_idx = None
+
     # I-29: CONFIRMED -- player_idx (and tactics_idx, when one was spent) are
     # real deal events. Forget them from both stall trackers, same reason as
-    # the discard site above -- see note_slot_dealt.
+    # the discard site above -- see note_slot_dealt. tactics_idx is already None
+    # above when I-48's fallback dropped it, so this never claims a slot that was
+    # not actually spent.
     note_slot_dealt(player_idx, tactics_idx)
 
     matchup_info = {
@@ -8479,13 +8492,24 @@ def play_one_turn(state_json: dict, batters_used: int):
         "our_card_name": decision.player_card.name,
         "our_power": decision.player_card.power,
         "our_secondary": decision.player_card.secondary,
-        "our_tactics_bonus": decision.tactics_card.bonus if decision.tactics_card else 0,
+        # I-48: zero, not decision.tactics_card's own bonus/kind, when the fallback
+        # dropped the tactic -- decision.tactics_card describes what the ENGINE CHOSE,
+        # not what was actually played, and this row is the log's only non-circular
+        # tactics ground truth (CLAUDE.md OPEN-24). "our_tactics_kind": None also makes
+        # record_reveal_kind (its own gate is `if not kind: return None`) skip keeping a
+        # reveal frame for a tactics card that was never on the table.
+        "our_tactics_bonus": (0 if _tactics_dropped else
+                               decision.tactics_card.bonus if decision.tactics_card else 0),
         # The TYPE, not just the bonus. power_bonus() (simulate.py:97) only
         # counts SWING_BOOST/PITCH_BOOST toward power — a speed or fielding
         # tactic has a nonzero bonus that adds NO power. Logging the bonus
         # alone left effective power uncomputable on 20 of 39 logged rows,
         # which is most of the signal this log exists to measure.
-        "our_tactics_kind": decision.tactics_card.kind.value if decision.tactics_card else None,
+        "our_tactics_kind": (None if _tactics_dropped else
+                              decision.tactics_card.kind.value if decision.tactics_card else None),
+        # I-48: named so a later census can tell "no tactics card was ever chosen"
+        # apart from "one was chosen and dropped" without re-deriving it from the log.
+        "tactics_dropped": _tactics_dropped,
         "runners_before": len(runners),
         "score_before": state_json["your_score"] if state_json["phase"] == "batting" else state_json["opp_score"],
     }

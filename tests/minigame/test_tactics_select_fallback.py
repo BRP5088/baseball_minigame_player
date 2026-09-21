@@ -185,19 +185,54 @@ try:
           unwind_calls == [{0}])
 
     # =====================================================================
+    print("(F) tactics-only call (card_index=None), select never lands -> "
+          "REFUSES with no confirm press (I-48 skeptic S-2)")
+    # =====================================================================
+    # The pre-fix guard was `target == tactics_index and target != card_index`, which
+    # is TRUE when card_index is None -- the paragraph it sits under assumes
+    # "card_index's own walk+select already succeeded above", which is exactly false
+    # for a tactics-only call (no production caller passes card_index=None today, but
+    # the signature allows it). Reproduced by the skeptic: `want` became `set()` and
+    # confirm_play was sent on an EMPTY fan, returning True. `card_index is not None`
+    # closes it.
+    s = PlayScreen(cur=1, never_lands={1})
+    ok, out, unwind_calls = _play(None, 1)
+    check("(F) a tactics-only call still refuses when its select never lands",
+          ok is False)
+    check("(F) nothing was ever committed", s.confirmed_sel is None)
+    check("(F) confirm_play was never sent on the empty fan", "confirm_play" not in s.sent)
+    check("(F) the I-48 fallback did NOT fire (card_index is None)",
+          "dropping the boost" not in out)
+
+    # =====================================================================
     print("(D) record_refused_select writes NOTHING under BASEBALL_TEST_RUN")
     # =====================================================================
+    # I-48 SKEPTIC S-4: the capture is stubbed to WORK here, the same as case E --
+    # otherwise this case's two checks pass whenever the capture merely FAILS (which
+    # record_refused_select's own `except Exception: return None` already covers on
+    # its own, guard or no guard), and the mutant that strips the _running_under_test()
+    # guard survives on any machine where the stub -- or a real screen -- succeeds.
+    # The stub proves the guard itself is what refuses the write, not a coincidental
+    # capture failure.
+    _real_grab_d = orch._grab_settle_regions
+    _real_look_d = orch.hand_cursor_look
+    orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
+    orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [2])
     _os.environ["BASEBALL_TEST_RUN"] = "1"
-    with tempfile.TemporaryDirectory() as _watch:
-        # No out_dir and no env override -- the same _running_under_test() gate
-        # record_reveal_kind / record_money_read_frame already use.
-        _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
-        got = orch.record_refused_select(0, "player+tactics", 1)
-        check("(D) returns None under the test flag", got is None)
-        check("(D) writes nothing to the real corpus",
-              not _os.path.isdir(orch.DEAL_FRAME_DIR)
-              or not any(n.startswith("refused_select_")
-                         for n in _os.listdir(orch.DEAL_FRAME_DIR)))
+    try:
+        with tempfile.TemporaryDirectory() as _watch:
+            # No out_dir and no env override -- the same _running_under_test() gate
+            # record_reveal_kind / record_money_read_frame already use.
+            _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
+            got = orch.record_refused_select(0, "player+tactics", 1)
+            check("(D) returns None under the test flag", got is None)
+            check("(D) writes nothing to the real corpus",
+                  not _os.path.isdir(orch.DEAL_FRAME_DIR)
+                  or not any(n.startswith("refused_select_")
+                             for n in _os.listdir(orch.DEAL_FRAME_DIR)))
+    finally:
+        orch._grab_settle_regions = _real_grab_d
+        orch.hand_cursor_look = _real_look_d
 
     # =====================================================================
     print("(E) record_refused_select writes the dir + why.json when not "
@@ -230,6 +265,59 @@ try:
     finally:
         orch._grab_settle_regions = _real_grab
         orch.hand_cursor_look = _real_look
+
+    # =====================================================================
+    print("(G) play_one_turn's own matchup_info is honest when the fallback "
+          "dropped the tactic (I-48 skeptic S-3)")
+    # =====================================================================
+    # Drives the REAL play_one_turn/hand_to_cards/best_batting_play, not a scripted
+    # matchup_info: `_run_harness.Harness` (used by test_reveal_frame_kept.py etc.)
+    # stubs play_one_turn itself out via play_results=[...], so it cannot exercise
+    # this fix at all -- it lives INSIDE play_one_turn, before that dict is built.
+    # Only select_and_play, the screen grabs and tactics_dropped_last_play() are
+    # stubbed here; hand_to_cards, best_batting_play, should_redraw and the
+    # matchup_info construction all run for real.
+    _hand = [
+        {"kind": "player", "hand_index": 0, "name": "Test Batter", "power": 7,
+         "secondary": 1},
+        {"kind": "tactics", "hand_index": 1, "name": "Power Swing",
+         "type": "swing_boost", "bonus": 2},
+    ]
+    _state_json = {"phase": "batting", "your_score": 0, "opp_score": 0,
+                   "discards_left": 0, "runners": [], "hand": _hand}
+
+    _real_select_and_play = orch.select_and_play
+    _real_grab_g = orch._grab_settle_regions
+    _real_tdl = ic.tactics_dropped_last_play
+    orch.select_and_play = lambda *a, **k: True
+    orch._grab_settle_regions = lambda regions: {r: Image.new("L", (10, 10))
+                                                  for r in regions}
+    try:
+        # (G-control) the fallback did NOT fire -- the engine's own tactics
+        # choice is logged unchanged, and tactics_dropped is False.
+        ic.tactics_dropped_last_play = lambda: False
+        played, info = orch.play_one_turn(_state_json, 0)
+        check("(G-control) played", played is True)
+        check("(G-control) a tactics card was actually chosen by the engine",
+              info.get("our_tactics_kind") == "swing_boost"
+              and info.get("our_tactics_bonus") == 2)
+        check("(G-control) tactics_dropped is False", info.get("tactics_dropped") is False)
+
+        # (G) the fallback DID fire -- the engine still CHOSE a tactics card
+        # (decision.tactics_card is the same swing_boost), but it never went in,
+        # so the logged row must show no kind/bonus and carry tactics_dropped.
+        ic.tactics_dropped_last_play = lambda: True
+        played, info = orch.play_one_turn(_state_json, 0)
+        check("(G) played (the batter alone still committed)", played is True)
+        check("(G) our_tactics_kind is None, not the engine's chosen swing_boost",
+              info.get("our_tactics_kind") is None)
+        check("(G) our_tactics_bonus is 0, not the engine's chosen 2",
+              info.get("our_tactics_bonus") == 0)
+        check("(G) tactics_dropped is True", info.get("tactics_dropped") is True)
+    finally:
+        orch.select_and_play = _real_select_and_play
+        orch._grab_settle_regions = _real_grab_g
+        ic.tactics_dropped_last_play = _real_tdl
 
     # =====================================================================
     print()
@@ -298,8 +386,12 @@ try:
           "(the pre-fix behaviour) -- case A must now REFUSE")
     try:
         _mutate(IC_PATH,
-                "            tactics_index = None\n            continue\n",
-                "            tactics_index = None\n            return False\n")
+                "            tactics_index = None\n"
+                "            _LAST_PLAY_DROPPED_TACTICS = True\n"
+                "            continue\n",
+                "            tactics_index = None\n"
+                "            _LAST_PLAY_DROPPED_TACTICS = True\n"
+                "            return False\n")
         _reload_ic()
         s = PlayScreen(cur=0, never_lands={1})
         ok, out, unwind_calls = _play(0, 1)
