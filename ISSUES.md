@@ -537,6 +537,57 @@ a glow percentage -- do not conflate the two.)
 
 **Status.** Merged; live confirmation open: resume the parked match.
 
+### I-26  `_clear_strays` refused on a flickered read, not a lift              P0  guard
+
+**Evidence.** `overnight/run_live_20260920h.log`: four "went unreadable DURING this
+operation" refusals (slot 0 once, slot 1 twice, slot 3 once), every one followed by a
+successful retry a poll or two later. Offline replay of the frame window for the line-14
+occurrence (`screenshot_log/run_20260920_220144/`, 29 frames at 10 Hz spanning ~2.9s, the
+card never moving and not even that turn's play target) shows slot 0's disc read cycling
+between a bogus-but-measured position and `None` several times with nothing pressed near
+it: `y_from="disc", digit=None` on 21 of 29 frames (glow 29.9-70.3) against `y_from` fallback
+or `kind="unknown"` on the rest, both of which `hand_cursor_look`'s own gating maps to
+`None`.
+
+**Root cause.** `_clear_strays` took one `look()` at the top of the operation and compared
+it to the caller's baseline with no re-look of any kind, so a slot that happened to land on
+a `None`-gated frame at that instant was scored as "went unreadable DURING this operation" —
+indistinguishable, at that layer, from a card we had actually just lifted. The 29-frame
+probe shows the card never moved; the refusal was decided on a coin flip between two
+unstable disc-finder states of the exact same untouched card.
+
+**Fix.** MERGED 2026-09-20 (67f3851): one re-look after `SELECT_RETRY_CONFIRM_SEC`, a
+sustained blind is REFUSED, and only a slot untrustworthy at baseline is exempt.
+`input_controller._untrustworthy_slots(glow, ys)` marks a baseline slot untrustworthy when
+its `y` is already `None` or its glow exceeds `local_hand.CURSOR_GLOW_MAX` (I-25's own
+false-on-card ceiling, reused since this layer has no `y_from`/`digit` to ask directly), so
+a slot bad from the start never counts as newly-blind. Any OTHER newly-blind slot gets
+exactly one extra `look()` after `SELECT_RETRY_CONFIRM_SEC`; if it reads back real and
+unselected, the operation proceeds on the fresh read. The first version of this fix
+(ecabe6f) instead let a still-`None` slot through whenever the rest of the fan looked
+untouched ("at rest"); the skeptic REFUTED that in the dangerous direction — a stray card
+OUR OWN PRESS lifts also reads `y=None` and is absent from `sel` (a `None` row is skipped by
+`selected_cards`), so `_at_rest` could not tell a lifted-and-blind stray from an
+undisturbed slot and would have committed the stray. That fallback is deleted outright: a
+slot still unreadable after the one re-look is refused, full stop, unless it was already
+proven untrustworthy at baseline.
+
+**Verify.** `tests/minigame/test_stray_guard_ignores_flicker.py`, cases (a)-(e): (a) a
+one-frame flicker that recovers on the re-look commits with exactly one extra look; (b) a
+baseline-untrustworthy slot (bogus glow or `None` from the start) commits with no extra
+look; (c) a genuinely lifted stray that cannot be cleared is still refused (control); (d) our
+own press lifts a stray that reads `None` on both the check-look and the re-look — refused;
+(e) the mirror of (a), a lift that reverts and reads back real and unselected on the re-look
+— commits. Mutation-tested: reverting the re-look branch to the old immediate refusal fails
+(a); dropping the glow-ceiling half of `_untrustworthy_slots` fails (b); forcing the deleted
+`_at_rest` fallback back to `True` fails (d) (it survived the pre-amendment suite because no
+earlier case reached that branch with a still-non-empty newly-blind set after the re-look).
+Restored after each; `git diff input_controller.py | grep -i MUTANT` empty. All nine
+requested regression files plus `test_no_real_input_under_test_run.py`,
+`test_every_test_sets_the_flag.py` and `test_no_shadowed_module_defs.py` pass unmodified.
+
+**Status.** Merged; live confirmation open.
+
 ### I-27  A slot flickering to UNKNOWN reset the stall counters and forgot an exclusion   P0  loop
 
 **Evidence.** `overnight/run_live_20260920h.log` lines ~136-150 (main checkout path): hand_index
