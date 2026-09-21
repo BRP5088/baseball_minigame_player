@@ -3366,7 +3366,8 @@ frame); both files restored byte-for-byte (sha256-verified) after. The
 shipped order already had the guard first -- N-2 pins that it stays first,
 it does not change production code.
 
-**Status.** fixed on branch (round 2), awaiting skeptic.
+**Status.** merged af9a5bb; Opus skeptic round 1 REFUTED (parity), round 2
+CONFIRMED WITH NOTES; N-2 ordering pinned as case I.
 
 ### I-53  A cursor lost right after dead-reckoning across an occluded slot is refused instead of nudged    P1  input
 
