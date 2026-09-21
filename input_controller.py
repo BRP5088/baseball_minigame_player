@@ -1595,12 +1595,13 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
     AND m_slot's mark has been cleared -- i.e. the caller's ordinary commit
     may proceed. `detail` is a short string naming which branch fired.
 
-    NOT WIRED IN. The one place this disambiguation is needed --
-    `_verified_select_and_play_inner`'s commit guard, where the refuted rule
-    lived -- is owned by a different branch for this ticket (ISSUES.md I-52).
-    This function is built and tested standalone (see
-    `tests/minigame/test_discard_confirm_verified.py`, cases F2-F4) and is
-    ready to be called from there.
+    WIRED IN, at the one place this disambiguation is needed: `_clear_strays`'s
+    `_unproven` branch (I-43's refusal site), which every commit -- play and
+    discard alike -- passes through. Built and tested standalone first (see
+    `tests/minigame/test_discard_confirm_verified.py`, cases F2-F4), then
+    end-to-end through the real `_verified_select_and_play_inner` (cases H/I,
+    same file) replaying the match-3 shape this function's own docstring
+    above names.
     """
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE or t_slot not in sel or _ys[m_slot] is not None:
@@ -1954,15 +1955,52 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         # See _MAYBE_LIFTED and this function's own docstring.
         _unproven = _untouched_blind & _MAYBE_LIFTED
         if _unproven:
-            print(f"  [cursor] slot(s) {sorted(_unproven)} may still be physically "
-                  "lifted by an earlier attempt that could not prove the board "
-                  "clean (I-43) — refusing to commit rather than waving them "
-                  "through as a chronic occlusion")
-            invalidate_cursor()
-            return False
-        print(f"  [cursor] slot(s) {sorted(_untouched_blind)} were ALREADY unreadable "
-              "before this operation began — proceeding. We cannot have raised them, "
-              "and refusing forever is how a hand with one occluded card deadlocks.")
+            # I-52 FOLLOW-UP, BEFORE REFUSING: a marked slot beside a target we
+            # KNOW is currently lifted (in `sel`) may be explained by that
+            # neighbour's own lift rather than a stray of its own -- see
+            # resolve_neighbour_occlusion's docstring for the mechanism and why
+            # the adjacency exemption that used to live here was refuted and
+            # removed. Bounded to the slots actually adjacent to a selection;
+            # a lone stray with nothing selected beside it never reaches this.
+            _tried = False
+            for _m in sorted(_unproven):
+                for _t in (_m - 1, _m + 1):
+                    if _t in sel:
+                        _tried = True
+                        _ok, _detail = resolve_neighbour_occlusion(_m, _t, look)
+                        print(f"  [cursor] slot {_m} beside selected slot {_t} "
+                              f"(I-52): {_detail}")
+                        break
+            if _tried:
+                # THE MANOEUVRE PRESSED KEYS (lowered and, on proof, re-raised
+                # a target). Re-observe rather than trust the look this block
+                # started with -- a failed re-raise leaves the target DOWN,
+                # and it is the FRESH `sel` below, not a stale one, that lets
+                # `want <= lifted` further down catch a target that never
+                # made it back up.
+                _g, _ys, n, sel = _look_settled(look)
+                if n != MAX_HAND_SIZE:
+                    print("  [cursor] cannot read the fan after the neighbour "
+                          "disambiguation — refusing. A commit whose lifted "
+                          "set was never seen is a blind commit.")
+                    _mark_maybe_lifted(_unproven)
+                    invalidate_cursor()
+                    return False
+                _reconcile_maybe_lifted(_ys, sel)
+                _blind_now = {i for i, y in enumerate(_ys) if y is None}
+                _untouched_blind = _blind_now - set(want)
+                _unproven = _untouched_blind & _MAYBE_LIFTED
+            if _unproven:
+                print(f"  [cursor] slot(s) {sorted(_unproven)} may still be physically "
+                      "lifted by an earlier attempt that could not prove the board "
+                      "clean (I-43) — refusing to commit rather than waving them "
+                      "through as a chronic occlusion")
+                invalidate_cursor()
+                return False
+        if _untouched_blind:
+            print(f"  [cursor] slot(s) {sorted(_untouched_blind)} were ALREADY unreadable "
+                  "before this operation began — proceeding. We cannot have raised them, "
+                  "and refusing forever is how a hand with one occluded card deadlocks.")
     _want_blind = set(want) & _blind_now
     if _want_blind:
         print(f"  [cursor] slot(s) {sorted(_want_blind)} are the engine's own "

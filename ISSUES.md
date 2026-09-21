@@ -3473,10 +3473,19 @@ shape, row 26 above) and 8 at lines 922-996 (the neighbour-occlusion shape).
        the re-raise of t_slot fails    -> refuse. t_slot left down, nothing
                                          partially lifted.
 
-   **NOT WIRED IN.** The one place this is needed —
-   `_verified_select_and_play_inner`'s commit guard, where the refuted rule
-   lived — is owned by a different branch for this ticket. Built and tested
-   standalone (cases F2-F4 below); ready to be called from there.
+   **NOW WIRED IN (third pass).** The first wiring pass left this function
+   built and tested but uncalled — CLAUDE.md 10.1's own shape, "the code did
+   nothing, and doing nothing looked exactly like working" — so the live
+   deadlock it was built to fix (`run 21t` match 3: `may still be physically
+   lifted` x8, every batter excluded) was exactly as reachable as before.
+   `_clear_strays`'s own `_unproven` branch (`input_controller.py:1970`, the
+   I-43 refusal site every commit — play and discard alike — passes through)
+   now calls it: on `_m` in `_unproven` beside a `_t` in `sel`, call
+   `resolve_neighbour_occlusion(_m, _t, look)`; on ANY attempt, re-observe
+   the fan before re-checking `_unproven`/`want <= lifted` (a failed re-raise
+   leaves `_t` down, and only a FRESH look, not the stale one this block
+   started with, lets the downstream `want <= lifted` floor catch it — see
+   the second mutant below). See cases H/I.
 
 **What the adjacency rule got wrong, in the skeptic's own words.** It cleared the
 mark at `run_live_20260921t.log:912` ("slot(s) [1] read unreadable... something we
@@ -3507,11 +3516,23 @@ blind with T down — ok=False, mark SURVIVES, T left down, exactly 1 press (bou
 no loop chasing a stray); (F4) the re-raise of T itself fails — ok=False, T left
 down, exactly 6 presses (1 lower + `SELECT_ATTEMPTS` failed re-raises); (G) I-43
 true-positive control: an isolated marked slot survives, including with an
-unrelated NON-adjacent selection elsewhere in the hand. `def check(name, cond)`,
-name-first.
+unrelated NON-adjacent selection elsewhere in the hand. **(H)/(I), NEW (third
+pass) — end to end through the REAL `_verified_select_and_play_inner`, not a
+stub of it**, replaying the exact match-3 shape `resolve_neighbour_occlusion`'s
+own docstring names (hand [swing+1, speed+1, 4/3, 4/3, 8/1], card_index=4,
+tactics_index=0, slot 1 unreadable from the operation's own baseline —
+routing the mark through `_untouched_blind`/`_unproven`, the branch this pass
+wires up, rather than the separate `_new_blind` re-look branch): (H) COMMIT —
+slot 0 already lifted at baseline (occlusion tied to its own lift), the play
+lowers it, sees slot 1 read, clears the mark, re-raises slot 0, and presses
+confirm_play exactly once, 3 `select_card` presses total (raise 4, lower 0,
+re-raise 0 — tactics 0 was already up, so no press to raise it); (I) the
+REFUSE mirror — slot 1 stays blind no matter what (a genuine stray) — the play
+REFUSES, confirm_play is never sent, slot 1's mark SURVIVES, and slot 0 is
+left DOWN by the failed disambiguation. `def check(name, cond)`, name-first.
 
-**Mutants (8 total, `__pycache__` cleared and sha256-verified restored between
-each, `17438cc2b54ea7666dc3b1bde931904995db5fba6ad8303dedcd6e1d23eacd21`):**
+**Mutants (10 total, `__pycache__` cleared and sha256-verified restored
+between each, `3f23bb104231109a67902474f9db59506b7a41e9b632c8b8f30ed12b938a7645`):**
 
     force press_verified tries=1 (drop the retry)
         -> case A FAILS: only 1 press, never lands, ok=False
@@ -3533,6 +3554,19 @@ each, `17438cc2b54ea7666dc3b1bde931904995db5fba6ad8303dedcd6e1d23eacd21`):**
     the skeptic's M3: prove-clean on a count that did NOT fall (`<` -> `<=`)
         -> case B FAILS: 5 presses sent, not 1 (the ambiguous read is wrongly
            treated as a fall, so the retry never triggers)
+    (third pass, the wiring) `_clear_strays`: `if _t in sel:` -> `if False:`,
+    i.e. the call to resolve_neighbour_occlusion is never reached
+        -> case H FAILS 4 ways (ok=False not True, 0 confirm_play presses not
+           1, the mark survives instead of clearing, 2 select_card presses
+           not 3); case I also catches it (slot 0 is never touched at all, so
+           "T left down" reads {0, 4} instead of {4})
+    (third pass) resolve_neighbour_occlusion: skip the re-raise, fake ok=True
+    without calling _select_verified(t_slot, look)
+        -> case H FAILS 4 ways: ok=False (refused downstream by the `want <=
+           lifted` floor — "the engine's cards [0, 4] are not all lifted
+           ([4])"), 2 confirm_play... 0 presses not 1, 8 select_card presses
+           not 3, {4} not {0, 4} lifted. Case F4 also catches it (a
+           pre-existing case that exercises the same call).
 
 **Run.** `test_discard_confirm_verified.py`, `test_discard_is_proven.py`,
 `test_verified_selection.py`, `test_commit_refuses_unseen_strays.py`,
@@ -3540,7 +3574,15 @@ each, `17438cc2b54ea7666dc3b1bde931904995db5fba6ad8303dedcd6e1d23eacd21`):**
 `test_run_debit_and_scoring.py`, `test_i22_pitch_boost_slot3.py`,
 `test_tactics_select_fallback.py`, `test_refusal_unwinds.py`,
 `tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
-`tests/rig/test_no_real_input_under_test_run.py` — all exit 0.
+`tests/rig/test_no_real_input_under_test_run.py` — all exit 0. **Also run
+(third pass) `test_lifted_discard_row_rescued.py`: FAILS on this branch, but
+identically on `main` (0b15578) — the traceback is inside
+`_verified_select_and_play_inner`'s I-48b/I-48c re-verify loop calling
+`_walk_cursor_to`, an `IndexError` from the test's own scripted
+`_fake_cursor_glow5`/`_queue5` running out of frames, and `git diff main --
+input_controller.py` touches no line between there and `_clear_strays`. A
+separate, pre-existing issue (I-48e); this branch does not change its
+outcome.**
 
 **Also this pass:** the dead `DISCARD_CONFIRM_TRIES` constant (superseded by
 `PRESS_VERIFY_TRIES` once confirm_discard went through `press_verified`) and its
@@ -3550,7 +3592,11 @@ now caught and converted to the safe UNVERIFIED outcome instead of propagating
 with no `_mark_maybe_lifted`/`invalidate_cursor` (`select_bans_verified` carries
 the identical lesson).
 
-**Status.** Fixed on branch (second pass, addressing the skeptic's refutation).
-`resolve_neighbour_occlusion` is built and tested but NOT wired into
-`_verified_select_and_play_inner`'s commit guard — that integration belongs to
-whichever branch owns that function next. Awaiting skeptic.
+**Status.** Fixed on branch (third pass). `resolve_neighbour_occlusion` is now
+WIRED IN at `_clear_strays`'s I-43 refusal site (`input_controller.py:1970`),
+verified end to end through the real `_verified_select_and_play_inner` (cases
+H/I) and by 2 new mutants, in addition to the standalone cases (F2-F4) from
+the second pass. Rebased onto main (0b15578, I-48b merged) first, per the
+coordinator's lift of the `_clear_strays` prohibition; `_probe_select_
+blind_target` (owned by a different pending branch) is untouched. Awaiting
+skeptic.

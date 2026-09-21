@@ -35,12 +35,20 @@ own press -- I-21's own lift signature), with no measurement separating it
 from a genuine stray, and it WIDENED `ISSUES.md` I-48d (OPEN). It is gone.
 The replacement, `resolve_neighbour_occlusion`, presses nothing blind: it
 lowers the KNOWN-lifted neighbour, looks again, and only clears the mark on
-what it actually SEES -- see cases F2-F4 below. It is built and tested here
-but NOT WIRED into the commit path that needs it
-(`_verified_select_and_play_inner`, owned by a different branch this ticket).
+what it actually SEES -- see cases F2-F4 below.
+
+**IT IS NOW WIRED IN.** A second pass found the first one incomplete in
+CLAUDE.md 10.1's own shape: a fix that is not wired in is dead code, and the
+live deadlock (`run 21t` match 3: "may still be physically lifted" x8, every
+batter excluded) was exactly as reachable as before. `_clear_strays`'s own
+`_unproven` branch (input_controller.py's I-43 refusal site) now calls
+`resolve_neighbour_occlusion` before refusing -- see cases H/I below, which
+drive the change end to end through the REAL `_verified_select_and_play_
+inner`, not a stub of it.
 
 Fix, confined to `_MAYBE_LIFTED`/`_reconcile_maybe_lifted`/
-`resolve_neighbour_occlusion` and `select_and_discard` (see ISSUES.md I-52):
+`resolve_neighbour_occlusion`/`_clear_strays` and `select_and_discard`
+(see ISSUES.md I-52):
 
   1. confirm_discard is now verified with `press_verified`, the same helper
      I-11 uses for every other commit press: it retries the PRESS, not just
@@ -55,8 +63,9 @@ Fix, confined to `_MAYBE_LIFTED`/`_reconcile_maybe_lifted`/
      `_reconcile_maybe_lifted` cannot see at all, since it only takes
      `(ys, sel)`.
   3. `resolve_neighbour_occlusion(m_slot, t_slot, look)`: a bounded,
-     press-and-look disambiguation for the neighbour-occlusion shape,
-     available for wiring into the commit path.
+     press-and-look disambiguation for the neighbour-occlusion shape, now
+     called from `_clear_strays` at the I-43 refusal site (cases F2-F4 test
+     it standalone; cases H/I test the wiring end to end).
 
 `def check(name, cond)` name-first, matching this suite.
 """
@@ -181,6 +190,86 @@ class NeighbourRig:
             ys[M_SLOT] = None
         glow = [0.0] * ic.MAX_HAND_SIZE
         return glow, ys, ic.MAX_HAND_SIZE, sel
+
+
+class HandRig:
+    """Drives the REAL `_verified_select_and_play_inner` end to end, replaying
+    the match-3 shape `resolve_neighbour_occlusion`'s own docstring names:
+    hand [swing+1, speed+1, 4/3, 4/3, 8/1], card_index=4 (the 8/1 batter),
+    tactics_index=0 (swing+1), slot 1 (speed+1) unreadable.
+
+    Slot 0 starts the call ALREADY lifted -- standing in for whatever earlier
+    partial attempt left it that way and marked slot 1 -- so THIS operation's
+    own baseline (`_ys0`, read before it presses anything) already shows slot
+    1 blind. That is what routes the mark through `_clear_strays`'s
+    `_untouched_blind`/`_unproven` path (what this case exists to exercise)
+    rather than the separate `_new_blind` "re-look" branch, which is for a
+    slot that goes blind DURING an operation and is a different guard.
+
+    `t0_lift_frees_m1`: True models OCCLUSION -- slot 1 reads the instant
+    slot 0 comes back down (the COMMIT case, H). False models a GENUINE
+    STRAY -- slot 1 stays blind no matter what (the REFUSE mirror, I).
+    """
+
+    def __init__(self, t0_lift_frees_m1):
+        self.cursor = 2
+        self.lifted = {0}
+        self.t0_lift_frees_m1 = t0_lift_frees_m1
+        self.confirmed = 0
+        self.sent = []
+
+    def press(self, key, **kw):
+        self.sent.append(key)
+        if key == "move_left":
+            self.cursor = max(0, self.cursor - 1)
+        elif key == "move_right":
+            self.cursor = min(ic.MAX_HAND_SIZE - 1, self.cursor + 1)
+        elif key == "select_card":
+            if self.cursor in self.lifted:
+                self.lifted.discard(self.cursor)
+            else:
+                self.lifted.add(self.cursor)
+        elif key == "confirm_play":
+            self.confirmed += 1
+
+    def look(self):
+        if self.confirmed:
+            # A LANDED confirm_play takes the card out of the fan -- a gone
+            # fan is a sentinel, not a five-row read (_verified_select_and_
+            # play_inner's own comment on _fan_state).
+            return [], [], 0, []
+        glow = [0.0] * ic.MAX_HAND_SIZE
+        glow[self.cursor] = 30.0
+        ys = [200 + i for i in range(ic.MAX_HAND_SIZE)]
+        m1_blind = (0 in self.lifted) if self.t0_lift_frees_m1 else True
+        if m1_blind:
+            ys[1] = None
+        return glow, ys, ic.MAX_HAND_SIZE, sorted(self.lifted)
+
+
+def _run_end_to_end():
+    """Case (H): COMMIT. Case (I): the REFUSE mirror. Real function, real
+    resolve_neighbour_occlusion, real _clear_strays -- only `press`/`look`
+    are stubbed, through a rig that models the fan, not the guards."""
+    old_press = ic.press
+    try:
+        ic.clear_maybe_lifted()
+        ic._mark_maybe_lifted({1})
+        rig_h = HandRig(t0_lift_frees_m1=True)
+        ic.press = rig_h.press
+        ok_h = ic._verified_select_and_play_inner(4, 0, rig_h.look)
+        maybe_lifted_after_h = set(ic._MAYBE_LIFTED)
+
+        ic.clear_maybe_lifted()
+        ic._mark_maybe_lifted({1})
+        rig_i = HandRig(t0_lift_frees_m1=False)
+        ic.press = rig_i.press
+        ok_i = ic._verified_select_and_play_inner(4, 0, rig_i.look)
+        maybe_lifted_after_i = set(ic._MAYBE_LIFTED)
+    finally:
+        ic.press = old_press
+        ic.clear_maybe_lifted()
+    return ok_h, ok_i, rig_h, rig_i, maybe_lifted_after_h, maybe_lifted_after_i
 
 
 def run_discard(rig):
@@ -376,6 +465,30 @@ try:
     ic._reconcile_maybe_lifted([180, None, 160, 165, 168], [3])
     check("(G) ...and a non-adjacent selection does not rescue it either",
           1 in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+
+    # =====================================================================
+    print("(H)/(I) END TO END through the REAL _verified_select_and_play_inner "
+          "-- resolve_neighbour_occlusion is now WIRED IN, not standalone")
+    # =====================================================================
+    ok_h, ok_i, rig_h, rig_i, marked_after_h, marked_after_i = _run_end_to_end()
+    check("(H) the match-3 shape COMMITS: T lowered, slot 1 read, mark "
+          "cleared, T re-raised, confirm once", ok_h is True, str(ok_h))
+    check("(H) confirm_play pressed exactly once", rig_h.confirmed == 1,
+          str(rig_h.sent))
+    check("(H) slot 1's mark is cleared by the proven occlusion",
+          1 not in marked_after_h, str(marked_after_h))
+    check("(H) exactly 3 select_card presses -- raise 4, lower 0, re-raise 0 "
+          "(tactics 0 was already up, so no press to raise it)",
+          rig_h.sent.count("select_card") == 3, str(rig_h.sent))
+    check("(H) both targets end up lifted", {0, 4} <= rig_h.lifted, str(rig_h.lifted))
+
+    check("(I) the mirror -- slot 1 stays blind with T down -- REFUSES",
+          ok_i is False, str(ok_i))
+    check("(I) confirm_play is never sent", rig_i.confirmed == 0, str(rig_i.sent))
+    check("(I) slot 1's mark SURVIVES -- a genuine stray, now with evidence",
+          1 in marked_after_i, str(marked_after_i))
+    check("(I) T (slot 0) is left DOWN by the failed disambiguation",
+          0 not in rig_i.lifted, str(rig_i.lifted))
 finally:
     _time.sleep = _real_sleep
     ic.clear_maybe_lifted()
