@@ -3139,6 +3139,118 @@ the money path and wants a live screen to check before it ships, not a
 same-day follow-on to this ticket.
 
 **Status.** OPEN, no fix here.
+### I-48e  The I-48b shared re-check retried a tactics card on a single flickering read (8 phantom presses; test_lifted_discard_row_rescued case 5)  P1  play
+
+**Evidence.** The I-48b regression triage note above (commit 0b15578) and its
+repro `agent_progress/issues/I-48b/probe_i48b_case5_extra_presses.py` (main
+checkout, offline scratch, not committed here): `tests/minigame/
+test_lifted_discard_row_rescued.py` case (5) fails at HEAD with `IndexError: pop
+from empty list` -- `input_controller.py`'s shared re-check block
+(pre-fix ~:2182-2194) takes at least one MORE `_look_settled` call before
+`_clear_strays` than the case's 4-frame script budgeted for, and extending the
+queue shows why: `_walk_cursor_to`'s blind-nudge loop fires 8 real `move_left`
+presses hunting a cursor that was never lost, for a target (a TACTICS card)
+that had been correctly selected the whole operation.
+
+**Root cause, traced against the real code (call-counting `look()` stub, not
+committed).** Case (5) calls `_verified_select_and_play_inner(2, None, look)`,
+so `want = {2}` and `_kinds0[2] == "tactics"` (the baseline, pre-press snapshot
+already threaded into `_clear_strays` as `kinds0`). The pre-fix call sequence:
+before_all(1) + the target loop's own walk(1) + select(1) = 3 calls, all
+reading the SAME already-lifted baseline (slot 2 needs zero presses -- "already
+selected" is a success, not a press). Call 4 is the shared re-check's OWN
+preliminary look (`_g1, _ys1, n1, sel1 = _look_settled(look)`), which reads a
+COMMIT-TIME GLITCH on slot 2's banner (`type=None`, the exact I-36 tactics-row
+misread shape `ISSUES.md` already documents) -- its `y` nulls, `selected_cards`
+skips it, so `_missing = {2}`. The retry loop then enters `_walk_cursor_to(2,
+look)`, a 5th look, and the test's own 4-item queue has nothing left.
+
+The test's own comment names the INTENDED architecture: 4 looks total --
+"baseline, the walk's own look, the select's own look, and `_clear_strays`'s
+commit-time look". In the pre-I-48b code (no shared re-check at all), that 4th
+look was `_clear_strays`'s OWN internal `_look_settled`, which ALREADY handles
+exactly this case correctly via its existing `_baseline_not_tactics`/
+`_want_inferred` gate (this file ~:1893-1894, unchanged by this ticket): it
+refuses to trust "readable at baseline, blind now" as proof of a lift for a
+tactics-baseline target, requiring a genuine risen `sel` read instead, and
+refuses the whole play when it doesn't see one. The shared re-check's own
+preliminary look was pure REDUNDANT overhead for an all-tactics `want` --
+answering a question `_clear_strays` was about to answer anyway, one look
+later, with a stricter gate -- and the SECOND question ("is this really
+missing, or just a flicker") was never asked at all before spending real
+presses on it.
+
+**Fix**, in the shared re-check block only (`input_controller.py`, the same
+`_verified_select_and_play_inner` function I-48b/I-48c added). `_baseline_is_
+tactics(k)` mirrors `_clear_strays`'s own `_baseline_not_tactics`, reading the
+SAME `_kinds0` snapshot already threaded into `_clear_strays` below it (no new
+capture). Two gates, matching the docstring:
+
+    (a) target's BASELINE kind is a PLAYER card (disc-anchored, does not
+        flicker this way) -> trust the first look, exactly as I-48b/I-48c
+        shipped. UNCHANGED.
+    (b) target's BASELINE kind is 'tactics' -> only trust a MISSING read once
+        a SECOND settled look, taken after the same `SELECT_RETRY_CONFIRM_SEC`
+        sleep the I-26 flicker re-look already uses inside `_clear_strays`
+        (~:1813-1822), ALSO shows it missing. A target that reappears in `sel`
+        on the re-look is a flicker (I-26), not a toggle, and is dropped from
+        `_missing` with no press sent.
+
+**When `want` has NO player-kind target at baseline, the whole block is
+skipped -- no look is taken here at all**, and execution falls straight to
+`_clear_strays`, whose own single fresh look (existing, untouched) answers the
+question with its own, already-stricter gate. This is what restores case (5)
+to exactly 4 total `look()` calls: before_all + walk + select + `_clear_
+strays`'s own look, with `_clear_strays` itself producing the correct refusal
+(`"the engine's cards [2] are not all lifted"`) -- the same shape the pre-I-48b
+code produced, because for an all-tactics `want` a look here first can only
+ever be a wasted, redundant read of the exact same question `_clear_strays` is
+about to ask with a STRICTER gate, never a safer one.
+
+**Verify.** `test_lifted_discard_row_rescued.py`: all 5 cases pass, case (5)
+now `ok5=False`, `_presses5==[]`, `len(_queue5)==0` -- UNCHANGED, not edited.
+`test_tactics_select_fallback.py`: cases A-M unchanged and still pass (every
+pre-existing screen returns a plain `sel` list with no `.kinds`, so `_kinds0`
+is `None` and the new gate is permissive there, matching the file's own stated
+convention -- the preliminary look still always fires for them). Two new
+cases, driven through the real `_verified_select_and_play_inner` with a new
+`TacticsKindPlayScreen` (carries `.kinds`, mirroring `orchestrator._CursorSel`,
+plus two call-numbered fault-injection knobs found by tracing a real run
+once, the same method case (5)'s own queue uses):
+
+    (N) card_index=0 ('player'), tactics_index=1 ('tactics'), both land
+        cleanly. The shared re-check's own preliminary look (traced as call
+        #9) reads slot 1 unlifted via a pure READ glitch (`hide_on_call`,
+        `self.lifted` untouched) -- the confirmatory re-look (call #10, no
+        glitch) reads it lifted again. Zero extra presses; `sent` matches the
+        control case (B)'s exactly; both commit.
+    (O) same setup, but a REAL drop (`drop_on_call`, mutates `self.lifted` for
+        real at call #9) -- still missing on the confirmatory look #10 -- the
+        EXISTING retry loop fires (`_walk_cursor_to` + `_select_verified`,
+        exactly one extra `select_card` press) and recovers it; both commit.
+
+9/9 pre-existing mutants in the file still caught; the file's own mutation
+harness still passes end to end. Also green: `test_refusal_unwinds.py`,
+`test_verified_selection.py`, `test_commit_refuses_unseen_strays.py`,
+`test_inference_needs_baseline_read.py`, `test_walk_crosses_occluded_slot.py`,
+`tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`.
+
+**Mutants for THIS ticket (`agent_progress/issues/I-48e/mutate_i48e.py`, not
+committed), both caught, `input_controller.py` restored byte-for-byte
+(sha256-verified) after each:**
+
+    1. remove the gate entirely (revert to the pre-fix unconditional look)
+       -> case (5) fails again (the extra look/press regression returns) AND
+          case (N)/(O) fail (their log-text assertions no longer hold)
+    2. gate on a single look (keep the all-tactics skip and the split, drop
+       the confirmatory sleep+re-look, trust the first look as final)
+       -> case (5) unaffected (no player-kind target, block still skipped for
+          it) but case (N) fails -- a pure flicker now costs real presses,
+          which is the discriminating case this fix exists for
+
+**Status.** fixed on branch, awaiting skeptic.
 ### I-50  A dropped select_card press on the ban grid is never retried; 15 of 37 matches start a ban short  P1  money
 
 **Evidence.** Census (`agent_progress/census/ban_shortfall/progress.md`, main
