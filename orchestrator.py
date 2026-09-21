@@ -307,6 +307,15 @@ MAX_UNRECOGNIZED_ATTEMPTS = 6
 # starts risking the real hazard: a gap long enough for the opponent to act,
 # which would silently mislabel the outcome rather than omit it.
 MAX_PENDING_READ_FAILURES = 2
+
+# How long a RECOGNISED transition screen ("new_inning"/"reveal_recap", I-35) may
+# persist before it is treated as stuck rather than trusted forever. Measured
+# durations for both, `overnight/run_live_20260921n.log`: 6.6-13.7s, reveal-episode
+# close to the next recognisable screen. 30s is a bit over 2x the longest observed
+# span -- generous the same way MAX_PENDING_READ_FAILURES's raise from 0 was, without
+# being unbounded: a genuinely frozen or misidentified screen still stops the run
+# rather than waiting on a transition that never ends.
+TRANSITION_SCREEN_MAX_SEC = 30.0
 # Screen-independent bound; see polls_without_progress in run(). Generous, since
 # a legitimate match has long stretches (ban scan, animations) with no debit,
 # result or play — it only has to be tighter than "forever".
@@ -3942,7 +3951,11 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     return False
 
 
-VALID_SCREENS = {"turn", "discard_prompt", "result", "ban_screen", "match_start_prompt", "other"}
+VALID_SCREENS = {"turn", "discard_prompt", "result", "ban_screen", "match_start_prompt", "other",
+                  # I-35: two recognised, EXPECTED transition screens between a reveal
+                  # resolving and the next hand being dealt. Local-only today (neither is
+                  # ever returned by the paid path) -- see local_game_state().
+                  "new_inning", "reveal_recap"}
 
 
 # Possible on-card values. Powers 4-9 and shield 0-3 are what the roster and
@@ -4451,9 +4464,32 @@ def local_game_state(turns_this_half=None):
                     "hand": [], "batters_used": None, "collection": [], "runners": None,
                     "discards_left": None, "phase": None,
                     "your_score": None, "opp_score": None}, None
+        # I-35: TWO MORE NAMED SCREENS, tried only after result/ban/prompt/hand/OCR have
+        # all declined -- a turn must still be named a turn first. Between a reveal
+        # resolving and the next hand's fan appearing the game shows the settled
+        # REVEAL-RECAP tableau (cards on the diamond, no fan) and, once per half, a
+        # "NEW INNING" banner; either can sit on screen 6-14s (agent_progress/reveal-
+        # drops/progress.md), long enough to exhaust MAX_PENDING_READ_FAILURES and
+        # silently drop the pending match_log row. Recognising them here means run()
+        # can leave that row waiting instead (see the pending_matchup guard in run()).
+        try:
+            if local_state.is_new_inning(full):
+                return {"screen": "new_inning", "hand": [], "batters_used": None,
+                        "collection": [], "runners": None, "discards_left": None,
+                        "phase": None, "result_won": None}, None
+        except Exception:
+            pass
+        try:
+            if local_state.is_reveal_recap(full):
+                return {"screen": "reveal_recap", "hand": [], "batters_used": None,
+                        "collection": [], "runners": None, "discards_left": None,
+                        "phase": None, "result_won": None}, None
+        except Exception:
+            pass
         return None, (f"UNRECOGNISED SCREEN -- not a result (best word {best_word:.3f} "
                       f"against {local_state.RESULT_MIN}; OCR: {detail}), not a ban grid "
-                      f"(no N/3 counter), and the hand reader says: {why}")
+                      f"(no N/3 counter), not a new-inning/reveal-recap transition, "
+                      f"and the hand reader says: {why}")
 
     # I-10: `why` is non-None here only when local_hand_cards actually DROPPED a
     # player or tactics slot -- it tried the hand memory and the hail-mary bank
@@ -8473,6 +8509,18 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # express it; a process-local latch can, and it cannot loop because the
     # debit is what sets it.
     debited_this_process = False
+    # I-35: when the CURRENT run of "new_inning"/"reveal_recap" began (None between
+    # such runs) -- see TRANSITION_SCREEN_MAX_SEC and the dispatch branch for these
+    # two screens below.
+    #
+    # NOT reset by an unreadable poll in between (the Opus skeptic caught this,
+    # `agent_progress/issues/I-35-skeptic/progress.md`): the raise path this
+    # variable's reset line sits after is a `continue` ~200 lines above it, so a
+    # gap that alternates transition/unreadable keeps one uninterrupted clock
+    # across the WHOLE gap, not just the recognised part of it. That is the
+    # direction that matters (it still bounds the total wait), so it is kept as
+    # designed -- but "uninterrupted" describes runs of a RECOGNISED screen only.
+    transition_screen_since = None
     # "No action needed" bookkeeping: when the current run of motion began (None
     # when the screen is still), and how many polls it has absorbed.
     motion_wait_started = None
@@ -8821,7 +8869,15 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 except Exception as e:
                     print(f"  [local-check] comparison failed ({e}) — skipping, real loop unaffected.")
 
-            if pending_matchup is not None:
+            # I-35: a RECOGNISED transition screen ("new_inning"/"reveal_recap") is
+            # not a follow-up read -- the score fields are deliberately None on both
+            # (see local_game_state()), so resolving pending_matchup against one would
+            # read as "outcome unscorable" and drop the row on the very poll that
+            # correctly identified the gap, which is the opposite of what recognising
+            # it is for. Leave the row waiting; the next "turn" (or "result") read
+            # resolves it, same as any other brief stumble.
+            if pending_matchup is not None and state_json.get("screen") not in (
+                    "new_inning", "reveal_recap"):
                 # Matchup logging is diagnostic-only (see the removal-plan
                 # comment on MATCH_LOG_FILE) — a failure here (e.g. a disk
                 # error on log_matchup's write) must never crash the real
@@ -9003,7 +9059,46 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
             if screen != "result":
                 last_result_read = None
 
-            if screen == "result":
+            if screen not in ("new_inning", "reveal_recap"):
+                transition_screen_since = None
+
+            if screen in ("new_inning", "reveal_recap"):
+                # I-35: a recognised, EXPECTED transition between a reveal resolving
+                # and the next hand being dealt -- the "NEW INNING" half-boundary
+                # banner, or the settled reveal-recap tableau (cards on the diamond,
+                # no hand fan). Nothing to act on: the pending match_log row was left
+                # untouched above (the pending_matchup guard), to be resolved by the
+                # next "turn"/"result" read rather than dropped on this expected gap
+                # the way MAX_PENDING_READ_FAILURES used to (ISSUES.md I-35).
+                #
+                # BOUNDED: persisting here past TRANSITION_SCREEN_MAX_SEC is treated as
+                # stuck rather than trusted forever -- a frozen or genuinely
+                # misidentified screen must still stop the run. Measured durations for
+                # both screens are 6.6-13.7s (agent_progress/reveal-drops/progress.md),
+                # well under the 30s bound.
+                _now_ts = time.time()
+                if transition_screen_since is None:
+                    transition_screen_since = _now_ts
+                _elapsed_ts = _now_ts - transition_screen_since
+                if _elapsed_ts > TRANSITION_SCREEN_MAX_SEC:
+                    print(f"  [state] stuck on {screen!r} for {_elapsed_ts:.0f}s -- "
+                          "treating as an unreadable screen rather than trusting the "
+                          "transition forever.")
+                    if pending_matchup is not None:
+                        print(f"  [reveal] {screen} outlasted "
+                              f"{TRANSITION_SCREEN_MAX_SEC:.0f}s -- dropping the "
+                              f"pending row for our_power "
+                              f"{pending_matchup.get('our_power')}.")
+                        pending_matchup = None
+                    stuck_count += 1
+                    transition_screen_since = None  # re-arm; do not fire every poll
+                    if stuck_count >= MAX_STUCK_ATTEMPTS:
+                        print("Stuck too long on a transition screen — stopping. "
+                              "Check the game manually.")
+                        stop_reason = "unreadable_screens"
+                        break
+                time.sleep(0.5)
+            elif screen == "result":
                 # C1 GUARD: this branch persists win/loss/draw counts, so acting on
                 # the same result screen twice permanently corrupts progress.json —
                 # potentially past target_wins, ending the run on a fabricated

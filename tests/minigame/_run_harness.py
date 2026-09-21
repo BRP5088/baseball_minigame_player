@@ -264,6 +264,12 @@ class Harness:
             self.idx += 1
         else:
             s = "other"
+        # I-35: a scripted Exception means "this poll's read_state_for_turn RAISES",
+        # i.e. a genuinely unreadable screen (the "LOCAL STATE GAP" path) rather than
+        # a recognised one -- the same shape _play_one_turn already gives play_results.
+        # No existing test passes an Exception here, so this is purely additive.
+        if isinstance(s, BaseException):
+            raise s
         if isinstance(s, dict):
             return dict(s)
         # Minimal well-formed payload; branches that need more get a dict.
