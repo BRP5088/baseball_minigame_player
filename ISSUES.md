@@ -1075,12 +1075,229 @@ through a recognised transition.
 discards_left is still 1") and `run_live_20260921n.log` (the last "the discard was
 REFUSED 3x on this exact hand" block: "select_card did not land (attempt 1..4)", "never
 landed after 5 attempts", three polls). Both in the pitching half with 1 discard left; the
-first discard of the same half worked.
+first discard of the same half worked. Frames: `screenshot_log/run_20260921_080311/`
+(main checkout).
 
-**Root cause.** UNKNOWN, under offline investigation with the 21n screenshot log
-(`agent_progress/issues/I-36/`).
+**Root cause.** ESTABLISHED, read-only, from `agent_progress/issues/I-36/progress.md`
+(copied into this worktree's `agent_progress/issues/I-36/`). Target slot 3 (the 5/0
+pitcher, weakest by `(power, secondary)`) genuinely lifts on the first `select_card`
+press. For 2-5 seconds afterward, while it overlaps its neighbour in the fan, `read_hand`
+misreads its row as `kind='tactics', digit=None, type=None, y_from='fallback'` -- a REAL
+(wrong) y, not a None one. `orchestrator.hand_cursor_look`'s null rule (~line 7465, before
+this fix) only treated a row as position-unknown when `y_measured is False` OR the row
+was NOT typed 'tactics' and came from a fallback position -- `kind == 'tactics'` skipped
+the null, so `_ys[3]` read a real number, `_select_verified` concluded the press "did not
+land", and pressed `select_card` AGAIN: a TOGGLE, which put the just-lifted card back
+down. Repeats ~15 times (3 polls x up to 5 attempts) over ~40s without the discard ever
+committing. This is I-37's shape one layer over: I-37 fixed whether the FAN is admitted
+at all; this is about how one ROW inside an admitted fan gets typed. Measured directly:
+I-37 (already merged into this branch) does NOT fix it -- 167 of 378 frames in the
+failing window (`08:14:49-08:15:27`, `screenshot_log/run_20260921_080311/`) still misread
+slot 3 exactly this way with I-37's fix in place.
 
-**Status.** Investigating.
+**Fix v1.** `orchestrator.hand_cursor_look` only: a row is now ALSO treated as
+position-unknown when `kind == 'tactics'` AND `digit is None` AND `type is None`.
+`type` is read from the card's own banner and populated whenever that banner is
+legible, which is the normal case for a genuine tactics card -- so `type is None` is
+the discriminator between a genuine tactics card and a garbled lifted row typed
+'tactics' with no banner actually read. This lets the EXISTING I-21 "selected by
+inference" rescue in `_select_verified` catch the case, with no new machinery.
+
+**v1 WAS REFUTED, NARROWLY, BY AN INDEPENDENT SKEPTIC** (`agent_progress/issues/
+I-36-skeptic/progress.md`, two repros run against the real code, not committed).
+Before v1, `_ys[i]` could never go None for a `kind=='tactics'` row at all -- the
+pre-I-36 rule explicitly excluded `kind == "tactics"` -- so I-21's inference branch in
+`_select_verified` (~1323-1327) was STRUCTURALLY UNREACHABLE for a tactics target; only
+a real, geometric `target in sel` could confirm one. v1's widened null rule removed
+that exclusion for EVERY tactics row, garbled or genuine, which made the inference
+newly reachable on a TACTICS TARGET too -- not just on a misclassified player lift,
+which is the only case ISSUES.md's control paragraph had analysed. `_clear_strays`'s
+`_want_inferred` (~1554-1556, ~1577-1580) uses the IDENTICAL heuristic independently, at
+commit time. Both are exploitable: a genuine tactics target whose `select_card` press is
+DROPPED and whose banner transiently misreads `type=None` on the SAME look that follows
+is then named "selected by inference" although it never lifted -- `confirm_play`/
+`confirm_discard` then commits the OTHER (genuinely selected) card only, silently (a
+lost boost, not a wrong card, and nothing distinguishes it in the log). Measured against
+real frames (`screenshot_log/run_20260921_080311/`, unstubbed reader): the genuinely-
+ambient (not-lifted) version of this misread is RARE, ~0.4% of tactics-row instances (5
+of ~1,145 measured), longest observed run on the same slot 4 frames -- under
+`SELECT_RETRY_CONFIRM_SEC` (1.6s) -- but reachable through the shipped code exactly as
+v1 wrote it, confirmed by a working repro, not merely argued.
+
+**Fix v2 (this worktree).** The widened null rule in `hand_cursor_look` is UNCHANGED --
+it still cannot tell "garbled by an overlap" from "this banner just missed a read" from
+one frame alone, and does not try to. Instead the INFERENCE that CONSUMES the null is
+gated on what the row was typed AT BASELINE, before any press touched it:
+`_select_verified` now also captures the target's baseline `kind` (from the very first,
+pre-press look) and refuses to trust the inference when that baseline kind was
+'tactics' -- I-36's actual bug (a PLAYER card mid-lift, misread as tactics) always has a
+baseline kind of 'player', so it is unaffected and still rescued; the skeptic's exploit
+(a genuine, untouched tactics card) always has a baseline kind of 'tactics', so the
+inference is now refused and the ordinary retry-and-look loop runs instead -- exactly
+the pre-I-36 behaviour for that slot, restored. `_clear_strays`'s two `_want_inferred`
+sites get the SAME gate via a new `kinds0` parameter, threaded from its two callers
+(`_verified_select_and_play_inner`, `select_and_discard`) the same way `ys0` already is
+-- both already take an identical baseline look for `ys0`'s own sake, so `kinds0` is the
+same look's `.kinds`, not an extra capture.
+
+**The plumbing, because it decided where the gate could live.** `hand_cursor_look`'s
+4-element return (`glow, ys, n, sel`) is UNCHANGED in shape -- ~20 call sites in
+`input_controller.py` alone unpack it positionally, and so does every test's own
+`look()` stub, so widening it to 5 elements would be a breaking change everywhere
+rather than a fix in one place. Instead `sel` is now `orchestrator._CursorSel`, a `list`
+subclass that behaves as a plain list to every existing consumer (`in`, `sorted()`,
+`set()`, `==`, all defer to `list`) and additionally carries `.kinds`, the per-slot kind
+from the SAME look. `getattr(sel, "kinds", None)` is how a caller reads it; a `look()`
+that returns a plain list (any test stub, any caller written before this) supplies no
+kinds and the gate is then PERMISSIVE -- unchanged, pre-tightening behaviour -- which is
+why I-21's own sibling test (a player-only scenario) needed no changes.
+
+**"Never a wrong play" is WITHDRAWN as stated; replaced with what the gate actually
+proves.** The v1 write-up's control paragraph claimed the residual risk "always resolves
+in the safe direction ... never a wrong play" for ANY tactics row; the skeptic's repro is
+the direct counterexample, on the TARGET path specifically. v2's gate closes exactly
+that gap -- a TACTICS-baseline target can no longer reach a commit via inference alone,
+only via a real geometric read or an exhausted, refused retry -- and this is verified
+below (case 4), not merely argued. What is NOT re-proven, and is not claimed to be: that
+a PLAYER-baseline target could never ALSO produce a coincidental false-positive
+inference (i.e. read as tactics/typeless while genuinely never lifted). The mechanism
+I-36 itself measured -- pixel overlap between adjacent cards, which only occurs once a
+card is physically raised above its fan neighbours -- gives a REASON to expect a resting
+player card cannot trigger the same misclassification, but that reason is read from the
+code and the corpus census, not a fresh measurement of THIS specific sub-case, so it is
+recorded here as ESTABLISHED-by-mechanism rather than ESTABLISHED-by-measurement
+(CLAUDE.md 10.32).
+
+**Verify.** `tests/minigame/test_lifted_discard_row_rescued.py`, three copied real
+frames from the failing window (`test_fixtures/hand_reads/i36_lifted_discard_before.jpg`,
+`_garbled.jpg`, `_after.jpg`, real `cp`, never symlinked) plus one synthetic pair and the
+skeptic's own repro shape, four cases: (1) `_select_verified(3, ...)` driven with a
+stubbed `orchestrator._grab_settle_regions` returning the real before/garbled/garbled
+frame sequence (a PLAYER-baseline target) is rescued by inference -- exactly ONE
+`select_card` press, `sel == [3]`; (2) CONTROL on the SAME garbled frame: slot 2
+(fielding_boost, a genuine tactics card whose banner DID read) keeps its measured y,
+while slot 3 is nulled; (3) a SYNTHETIC player-baseline before/after row pair (stubbed
+`local_hand.cursor_glow`) reproduces the same tactics/None/None-after-press shape and is
+also rescued with one press; (4) THE SKEPTIC'S REPRO -- a SYNTHETIC TACTICS-baseline
+target, its first press scripted as dropped (y never leaves rest across two garbled
+type=None looks) -- must NOT be named selected by inference, and the retry that actually
+lands (a genuine lift, banner reads fine again) must succeed on its own geometric merits;
+asserts exactly 2 presses and that every scripted frame was consumed (an early,
+wrongly-inferred return would have left frames unconsumed). Three mutants, each caught
+by a different check, sha256-verified restored byte for byte between them: (a) revert
+the widened null rule to the pre-v1 rule -- caught by (1), which exhausts its scripted
+look() frames retrying select_card a second time and crashes with an unconsumed-queue
+IndexError (the same "runs out of scripted frames" shape I-33's own tests use); (b) drop
+the `type is None` guard (null unconditionally on any tactics/fallback row) -- caught
+exactly by check (2), the CONTROL: slot 2's genuine, correctly-read tactics row gets
+wrongly nulled; (c, the skeptic's new mutant) revert the baseline-kind gate in
+`_select_verified` (`if _bk != "tactics":` -> `if True:`) -- caught exactly by check (4):
+the dropped press on the genuine tactics target is wrongly named selected on ONE press
+instead of retried, and a scripted frame is left unconsumed. `digit is None` in the null
+rule is DROPPED, not pinned: the skeptic's own mutant (drop only that half, keep `type is
+None`) SURVIVED v1's full suite -- `digit` never varies for a tactics row by
+construction, so the clause contributed no selectivity, and an untested clause that
+looks load-bearing is worse than none (CLAUDE.md 10.9); `type is None` is the
+semantically correct discriminator on its own. Siblings run clean, unmodified:
+`tests/minigame/test_select_stops_when_lift_unreadable.py` (I-21),
+`tests/minigame/test_verified_presses_on_match_path.py`,
+`tests/minigame/test_stray_guard_exempts_target.py`,
+`tests/minigame/test_stray_guard_ignores_flicker.py`,
+`tests/minigame/test_false_cursor_on_occluded_slot.py`,
+`tests/minigame/test_hand_read_two_lifted.py` (I-37),
+`tests/minigame/test_walk_retries_off_blind_slot.py` (I-33),
+`tests/harness/test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
+
+**Status.** v1 REFUTED 2026-09-21 (reachable inference on a tactics TARGET, not just a
+non-target stray). v2 fixed on branch (this worktree, merged with I-37 as
+`worktree-agent-ae8e1e3cee1e04f4a`): the baseline-kind gate closes the specific path the
+skeptic demonstrated; the player-baseline path (I-36's own reported bug) is unaffected
+and remains fixed. Awaiting a second skeptic pass on v2.
+
+### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
+
+**Evidence.** overnight/run_live_20260921j.log:844-849 (07:50): hand `0: UNKNOWN
+1: swing_boost +1 2: 5/3 3: 5/2 4: 4/3`, the engine selected slot 2 then slot 1
+(attaching the boost), both verified, and the very next read stalled: "cannot read
+the fan after select_card (rows=0) -- refusing". A second live occurrence at 08:00,
+ONE card lifted (`0: Fielding Play +1 | 1: Pitcher 9/2 LIFTED | 2: Pitcher 7 |
+3: Pitcher 9 | 4: Pitcher 6`), same shape: `read_hand` returned 3 rows, none with a
+measured y. Frames: `test_fixtures/hand_reads/i37_two_lifted_20260921.png`,
+`i37_one_lifted_20260921.png`.
+
+**Root cause.** `read_hand`'s "is the fan there" gate (I-32's neighbour, the
+2026-09-20 COUNT fix in `local_hand.py`) counted only `_strong_discs(img)` --
+discs found as an isolated dark digit ringed by white, at `DARK_THRESHOLDS`
+(110/90/130). A SELECTED card's own disc often needs a threshold ABOVE that range
+to register at all (it brightens on lift; that is what `RAISED_DARK_MAX` exists
+for elsewhere in this file), so it can be entirely absent from `strong` while
+sitting, at the right position, in the WHITE-DISC or WREATH candidates
+`_read_fan` itself already pools from (`_white_discs`, `find_tactics`). On the
+two-lifted frame, `_strong_discs` found 4 candidates and only ONE cleared
+`FIT_MAX`; `_white_discs` finds the selected player card's own disc at cost 15.7
+(comfortably under `FIT_MAX` -- the cost formula `|dx| + |dy|/3` weighs a pure
+vertical lift lightly, and a white-disc blob's x is cleaner than a noisy partial
+digit-in-disc crop), invisible to the gate that decides whether to call
+`_read_fan` at all.
+
+**Fix.** `local_hand.py`: `read_hand`'s gate is now `_fan_looks_present(img,
+strong, s)`, which pools `strong` + `_white_discs` + `find_tactics` (the SAME
+candidates `_read_fan` itself reads from, deduped via the existing `_free`
+bookkeeping), takes the BEST cost PER SLOT (0..4), and requires `FIT_MIN_DISCS`
+slots at or under `FIT_MAX` -- same two constants, nothing invented.
+`_read_fan`/`_read_ungated` are untouched.
+
+**Verify.** `tests/minigame/test_hand_read_two_lifted.py`: both live fixtures read
+5 rows, every row `y_measured`, `selected_cards` names exactly the lifted slot(s)
+([1, 2] and [1]), the lifted cards' own kind/type/digit are correct, the untouched
+resting cards read unchanged; a CONTROL fixture with no selection (`hand_cursor/
+cursor_on_1.png`) reads byte-identical digits to before the fix; a negative-control
+fixture (`overnight/local_hand/hand_1788963163511615000.png`, the same one I-32's
+neighbour test uses) is still rejected as a non-fan. Three mutants, all caught:
+(1) reverting to the old strong-only gate and (2) keeping the broadened
+candidate pool but taking the FIRST candidate per slot instead of the best
+(min-cost) one -- both caught end to end, row count collapses to 4/3 and the
+file raises an IndexError (`strong`'s own bad candidate for the lifted slot is
+seen before the good white-disc one, so "first wins" reproduces the same stall
+the fix exists for); (3) replacing the per-slot dedup with a raw count over the
+pooled candidates (an independent skeptic's finding, 2026-09-21: this survived
+every local_hand test in the repo including this file's first version) --
+caught by check (e), two synthetic same-slot candidates >25px apart (so
+`_free`'s own dedup does not collapse them first) that a raw count wrongly
+admits and the deduped gate correctly refuses. sha256-verified restored byte
+for byte between all three mutants.
+
+**Regression check.** `agent_progress/issues/I-37/probe6_corpus_regression.py`
+(not part of the suite, too slow): over 2,396 archived hand crops
+(`overnight/local_hand/*.png`) plus the two fixtures above and the two
+`test_fixtures/selected_card/` fixtures I-32's neighbour test uses, the broadened
+gate agrees with the old (strong-only) gate on every frame except 4 -- ZERO
+frames flip from admitted to rejected, and the 4 newly-admitted are both I-37
+fixtures plus 2 archived corpus frames whose paid-model "vision" label in
+`agreement.jsonl` (never trusted for card VALUES, fine for card COUNT) confirms
+are genuine five-card fans the old gate was dropping for no reason.
+
+**CORRECTED 2026-09-21, caught by an independent skeptic.** The probe's first
+version opened the two I-37 fixtures with `Image.open()` directly -- they are
+FULL 1920x1080 frames, not hand crops -- so at ~2x calibration scale every
+raw-pixel size gate rejected every disc on them and BOTH gates rejected BOTH
+fixtures; the script's own tally then said "2 newly-admitted", not 4, and never
+exercised the fixtures the fix targets at all (the fix itself, verified through
+`orchestrator.crop_gameplay_regions` the way `test_hand_read_two_lifted.py`
+and production both do, was never in question). Fixed by cropping the two
+fixtures through `orchestrator.crop_gameplay_regions(img)["hand"]` before
+either gate sees them, matching the test. Re-run, it prints exactly:
+
+    total files: 2400   both admit: 462   both reject: 1934
+    old-admits-new-rejects (BAD): 0   new-admits-old-rejects (newly fixed): 4
+
+naming the four files above (`agent_progress/issues/I-37/probe6_corrected_output.txt`).
+
+**Status.** Fixed in this worktree, not yet merged. Independent skeptic round
+2026-09-21 (`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH
+NOTES -- the fix itself was never in question; two write-up/coverage gaps were
+found and both fixed on this branch (the corpus-regression probe's fixture
+scale bug, and the missing per-slot-dedup mutant), see above.
 
 ### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
 

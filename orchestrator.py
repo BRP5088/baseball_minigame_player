@@ -7534,6 +7534,28 @@ def hand_to_cards(hand: list):
     return players, tactics
 
 
+class _CursorSel(list):
+    """`selected_cards()`'s own list, PLUS the per-slot `kind` read on this
+    same look, carried as `.kinds` -- I-36 skeptic (2026-09-21).
+
+    A plain `list` subclass so every EXISTING consumer of `sel` keeps working
+    with zero changes: `in`, `sorted()`, `set()`, `len()`, `== [3]`, all defer
+    to `list`'s own behaviour because this IS one. Only a caller that asks for
+    `.kinds` explicitly sees the extra data; everything else cannot tell this
+    apart from the plain list `hand_cursor_look` used to return. Chosen over
+    widening `hand_cursor_look`'s 4-tuple return because ~20 call sites in
+    `input_controller.py` alone unpack it positionally (`glow, ys, n, sel =
+    look()`), and every custom `look()` stub across the test suite does the
+    same -- a 5th element would be a breaking change everywhere, not a fix in
+    one place. `getattr(sel, "kinds", None)` is how a caller reads it, so a
+    `look()` that returns a plain list (any test stub, any future caller)
+    degrades safely to "kind unknown" rather than raising.
+    """
+    def __init__(self, items, kinds):
+        super().__init__(items)
+        self.kinds = kinds
+
+
 def hand_cursor_look():
     """(cursor_index or None, y per card, row count) from ONE fresh frame.
 
@@ -7553,6 +7575,10 @@ def hand_cursor_look():
         hand = _blank_homeplate_strip(hand)
     _idx, glow, rows = local_hand.cursor_glow(hand)
     selected = local_hand.selected_cards(rows, hand.width / local_hand.ANCHOR_W)
+    # THE PER-SLOT KIND FROM THIS SAME LOOK, carried on `selected` via
+    # `_CursorSel` -- see its own docstring. This is what lets a caller tell a
+    # target's BASELINE row apart from a garbled one (I-36 skeptic, below).
+    selected = _CursorSel(selected, [r.get("kind") for r in rows])
     # THE WHOLE PROFILE, not one answer. A SELECTED card keeps glowing, so once anything
     # is selected the brightest card is no longer necessarily the cursor -- the caller
     # needs every reading plus which cards are lifted to tell them apart.
@@ -7569,8 +7595,33 @@ def hand_cursor_look():
     # here let _select_verified believe a SELECTED card was not selected and press
     # select_card again -- a TOGGLE, which put the card back down. Live 2026-09-20,
     # five presses at an already-selected card. None makes it refuse instead.
+    #
+    # I-36: A TACTICS-TYPED FALLBACK ROW CAN ALSO BE A GARBLED PLAYER LIFT, and the
+    # `kind != "tactics"` guard above let it straight through with a real (wrong)
+    # y -- 167 of 378 frames in the failing window still misread this way even
+    # after I-37's fan-gate fix, because that fix widened the "is a fan here"
+    # PRESENCE gate, not this per-row TYPE/POSITION classification. A card raised
+    # mid-lift can overlap its neighbour and get typed 'tactics' with no banner
+    # actually read: `kind == "tactics"` and `type is None` at once. A GENUINE
+    # tactics card almost always clears this, because `type` is read from its
+    # own banner and populated whenever that banner is legible -- the normal
+    # case, not the exception.
+    #
+    # DROPPED, NOT PINNED: an earlier version of this line also required
+    # `digit is None`. An independent skeptic's mutant (c) -- dropping ONLY
+    # that half, keeping `type is None` -- survived the full suite: `digit` is
+    # None for every tactics row EMITTED BY THE FIRST BUILD PATH (no disc to
+    # read), so the clause never varied on any fixture and was pure dead
+    # weight. It is REMOVED rather than kept-as-documentation, because an
+    # untested clause that looks load-bearing is worse than no clause
+    # (CLAUDE.md 10.9) -- and `type is None` is the semantically correct
+    # discriminator on its own regardless: what makes a row "genuinely
+    # tactics" is that its BANNER read, not that its (irrelevant) digit field
+    # is empty.
     _ys = [None if (r.get("y_measured") is False
-                    or (r.get("kind") != "tactics" and r.get("y_from") == "fallback"))
+                    or (r.get("kind") != "tactics" and r.get("y_from") == "fallback")
+                    or (r.get("kind") == "tactics" and r.get("y_from") == "fallback"
+                        and r.get("type") is None))
            else r.get("y") for r in rows]
     return (glow, _ys, len(rows), selected)
 

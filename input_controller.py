@@ -1256,6 +1256,14 @@ def _select_verified(target, look):
     """
     import local_hand
     _g, _ys, n, before = _look_settled(look)
+    # THE BASELINE KIND, if this `look()` supplies one (I-36 skeptic). A tuple
+    # `.kinds` attribute on `before` (orchestrator's `_CursorSel`) names what
+    # `read_hand` called EVERY row on the very first, pre-press look -- the
+    # one question a garbled POST-press read cannot answer for itself. A
+    # `look()` that returns a plain list (any test stub, any future caller)
+    # has no `.kinds`, and `_kinds0` is then None -- see the inference branch
+    # below for what that means.
+    _kinds0 = getattr(before, "kinds", None)
     # THE GUARD _look_settled's DOCSTRING ASSUMES. It says the unusable read "must not"
     # be handed back "because the caller's guard tests the row count" -- and four of its
     # five callers had no such guard. On an ungated frame `before` is whatever the bad
@@ -1331,10 +1339,45 @@ def _select_verified(target, look):
                       f"({SELECT_RETRY_CONFIRM_SEC}s)")
                 return True, sel
             if 0 <= target < len(_ys) and _ys[target] is None:
-                print(f"  [cursor] {target}'s disc is unreadable after the press and "
-                      "was readable before it — selected by inference (disc "
-                      "unreadable after lift)")
-                return True, sorted(set(before) | {target})
+                # I-36 SKEPTIC: THE INFERENCE MUST NOT FIRE ON A BASELINE
+                # TACTICS ROW. The garbled row this rescue exists for (I-36
+                # itself) and a genuine tactics card whose own banner just
+                # missed a read are INDISTINGUISHABLE from `_ys` alone --
+                # both are `kind=='tactics'` with no type, on a fallback y.
+                # The one thing that tells them apart is what the row was
+                # typed BEFORE any press touched it: I-36's target was a
+                # PLAYER card that only turned 'tactics' by misreading the
+                # overlap; a card that was ALREADY 'tactics' at baseline is
+                # never the case this rescue was built for, and trusting the
+                # inference there let a dropped press on a genuine tactics
+                # target -- unmoved, its own banner glitching twice by
+                # coincidence -- be reported "selected" although it never
+                # lifted (reproduced by the skeptic against the real code,
+                # ~0.4% ambient rate, max observed run 4 frames). `None`
+                # means this `look()` supplied no baseline kind at all (any
+                # test stub, any future caller) and is PERMISSIVE -- the
+                # pre-tightening behaviour, unchanged -- because every
+                # sibling test that exercises this branch (I-21's own) is a
+                # PLAYER scenario with no kind to gate on.
+                _bk = (_kinds0[target]
+                       if _kinds0 is not None and target < len(_kinds0) else None)
+                if _bk != "tactics":
+                    print(f"  [cursor] {target}'s disc is unreadable after the press "
+                          "and was readable before it — selected by inference (disc "
+                          "unreadable after lift)")
+                    return True, sorted(set(before) | {target})
+                # STILL UNREADABLE, gated out — this is NOT the "readable
+                # again" case below (the target's position is not back; only
+                # the INFERENCE is refused). Retry the press: on a genuinely
+                # dropped press against a resting tactics card, the next
+                # attempt lands it for real and `target in sel` (a real,
+                # geometric read) catches it above, no inference needed.
+                print(f"  [cursor] {target} is unreadable after the press, but its "
+                      "BASELINE row was already typed 'tactics' — a genuine tactics "
+                      "card can misread its own banner without ever having moved, so "
+                      "this is not trusted as an inferred selection (I-36 skeptic); "
+                      "retrying instead")
+                continue
             # Readable again but not lifted: this attempt's press was genuinely
             # dropped, not a landed one gone blind. The look just taken proves the
             # target is back at rest and readable, so the next attempt's press
@@ -1424,7 +1467,7 @@ def _untrustworthy_slots(glow, ys):
     return blind
 
 
-def _clear_strays(want, look, blind_before=frozenset(), ys0=None):
+def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None):
     """Put down every lifted card the engine did not choose. True if safe to commit.
 
     Factored out of _verified_select_and_play so the DISCARD path can run it too.
@@ -1466,6 +1509,16 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None):
     baseline (`ys0[k] is not None`) and is blind NOW -- that is a proven lift, not
     a chronic occlusion. A `want` slot blind at baseline AND blind now must still
     show up in `sel` on its own merits, or the commit refuses.
+
+    `kinds0` GATES THE SAME INFERENCE ON BASELINE KIND (I-36 skeptic). The
+    identical heuristic above -- readable at baseline, blind now -- is ALSO
+    what `_select_verified` uses, and it is reachable here independently: a
+    fresh look taken at commit time, well after `_select_verified` already
+    returned, can ALSO find a target's tactics row transiently blind. `kinds0`
+    is the caller's OWN baseline kinds (the same look that produced `ys0`),
+    and inference is trusted only when the baseline row was NOT 'tactics' --
+    `None` (no kinds supplied) is permissive, matching every caller that
+    predates this gate.
     """
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE:
@@ -1561,9 +1614,16 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None):
     # that was already unreadable before this operation touched anything (a
     # skeptic caught the first version trusting `want` unconditionally, which
     # would have let a chronically-occluded, never-selected target through).
+    # I-36 SKEPTIC: the same "baseline was 'tactics'" gate _select_verified
+    # uses, applied here too -- see this function's own docstring. `kinds0`
+    # absent (None) is permissive, matching every caller written before this.
+    def _baseline_not_tactics(k):
+        return kinds0 is None or k >= len(kinds0) or kinds0[k] != "tactics"
+
     _want_inferred = {k for k in want
                        if k in _blind_now
-                       and ys0 is not None and k < len(ys0) and ys0[k] is not None}
+                       and ys0 is not None and k < len(ys0) and ys0[k] is not None
+                       and _baseline_not_tactics(k)}
     lifted = set(sel) | _want_inferred
     extra = lifted - want
     if extra:
@@ -1586,7 +1646,8 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None):
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
         _want_inferred = {k for k in want
                            if k in _blind_now
-                           and ys0 is not None and k < len(ys0) and ys0[k] is not None}
+                           and ys0 is not None and k < len(ys0) and ys0[k] is not None
+                           and _baseline_not_tactics(k)}
         lifted = set(sel) | _want_inferred
         if n != MAX_HAND_SIZE or (_blind_now - set(want)) or lifted - want:
             print(f"  [cursor] after clearing, the lifted set is still {sel} against "
@@ -1662,6 +1723,11 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # THE BOARD AS WE FOUND IT. Anything already up belongs to a previous caller and
     # is not ours to clear; the commit path below handles a stray that is still there.
     _g0, _ys0, n0, before_all = _look_settled(look)
+    # CAPTURED BEFORE `before_all` IS REBUILT AS A PLAIN SET, which loses the
+    # `.kinds` attribute a real look() carries (I-36 skeptic) -- this is the
+    # SAME baseline read `_ys0` comes from, so it is the correct kinds to
+    # thread into `_clear_strays` below.
+    _kinds0 = getattr(before_all, "kinds", None)
     before_all = set(before_all) if n0 == MAX_HAND_SIZE else set()
     targets = {t for t in (card_index, tactics_index) if t is not None}
 
@@ -1702,7 +1768,7 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # was never readable (or never trustworthy -- I-26) is told apart from one this
     # call lifted.
     _blind0 = _untrustworthy_slots(_g0, _ys0)
-    if not _clear_strays(want, look, blind_before=_blind0, ys0=_ys0):
+    if not _clear_strays(want, look, blind_before=_blind0, ys0=_ys0, kinds0=_kinds0):
         return False
 
     # LOOK AFTER THE COMMIT TOO (I-11). Every other press in this function is
@@ -1826,6 +1892,8 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     _g0, _ys0, _n0, _before0 = _look_settled(look)
     _blind0 = _untrustworthy_slots(_g0, _ys0) if _n0 == MAX_HAND_SIZE else frozenset()
     _ys0_for_strays = _ys0 if _n0 == MAX_HAND_SIZE else None
+    # SAME BASELINE, SAME KINDS (I-36 skeptic) -- see _verified_select_and_play_inner.
+    _kinds0_for_strays = getattr(_before0, "kinds", None)
     ok, _sel = _walk_cursor_to(card_index, look)
     if not ok:
         invalidate_cursor()
@@ -1844,7 +1912,8 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # deliberately leaves a wrongly-raised card up ("pressing again compounds it"),
     # and the clear-at-commit is the play path's answer to that. The discard path
     # simply did not have one.
-    if not _clear_strays({card_index}, look, blind_before=_blind0, ys0=_ys0_for_strays):
+    if not _clear_strays({card_index}, look, blind_before=_blind0, ys0=_ys0_for_strays,
+                          kinds0=_kinds0_for_strays):
         return False
     # AND PUT THE CURSOR BACK ON THE CARD. _clear_strays walks to each stray to
     # deselect it and does not walk back, so adding it here parked the cursor on the
