@@ -1156,9 +1156,11 @@ close_result to dismiss the overlay even though it does not re-score -- 2 presse
 across 2 sightings is correct, not a symptom; an earlier draft of this test wrongly
 asserted exactly 1 press.)
 
-**Status.** Fixed, awaiting live verification (this ticket is offline-only; a live
-run is what would confirm the measured 6.6-13.7s dwell and the 30s bound against a
-real match rather than a scripted one).
+**Status.** Merged 26255bcace2b87b48dff5e24d3f3c4660d35313f, skeptic CONFIRMED WITH
+NOTES, follow-up 29469b1 closed mutants A and B; E is docstring-only. Awaiting live
+verification (this ticket is offline-only; a live run is what would confirm the
+measured 6.6-13.7s dwell and the 30s bound against a real match rather than a
+scripted one).
 
 ### I-36  The half's second discard is refused three times, then the stall breaker plays   P1  input/loop
 
