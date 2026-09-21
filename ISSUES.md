@@ -2005,8 +2005,8 @@ All sha256-verified restored, `__pycache__` cleared between mutants.
 
 **Status.** PARTIAL, merged 2f18a734dbd43828f4f6fbbafb8a20a947456e0e: the corroboration gate is inert in production (every success path marks, so inferred_targets == want always; N-1); the original QA6 Q2 hole (a dropped press + false inference supplies its own corroboration) is STILL OPEN and needs corroboration the inference cannot manufacture (selection-lift geometry or a post-commit read). Live watch: count 'may still be physically lifted' lines on the next matches; the archive bounds it at 14 exemption events vs 51 refusals.
 
-**N-2 closed on this branch by (2), NARROWLY — read before building anything on this
-entry.** Traced first, against the real, unmodified code, before writing anything
+**N-2 closed on branch e55a02e by (2), NARROWLY — read before building anything on
+this entry.** Traced first, against the real, unmodified code, before writing anything
 (CLAUDE.md 10.32): candidate 1 (selection-lift geometry, `local_hand.selected_
 cards`) is UNAVAILABLE for validating this specific inference by construction —
 `selected_cards` requires `y is not None` and, for a non-tactics row, `y_from !=
