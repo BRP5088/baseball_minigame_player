@@ -1546,6 +1546,70 @@ press/grab behind `<NAME>_DRIVE_IN_TESTS`, scanner widened to `.pop`.
 
 **Status.** Merged.
 
+### I-42  `cursor_labels_from_lifts.py`'s labels were 28/81 wrong, from a cursor caught mid-travel   P2  evidence
+
+**Evidence, from an independent census (`agent_progress/census/cursor_vlm/notes.md`,
+main checkout, read-only, 2026-09-21).** 81 lift-derived labels from two real runs
+(`screenshot_log/run_20260921_080311`, `run_20260921_075118`) were checked against
+`local_hand.cursor_slot`'s own read: 53 agreed, 28 did not. Every one of the 28 has
+the same signature (`scripts/investigate_mismatches.py`): the target slot's own glow
+is under 5% in the labelled frame — nowhere near `CURSOR_GLOW_MIN` (10.0) or the
+reader's documented true-cursor floor (20.7-36.1) — and the rise fires the very next
+captured frame, ~100ms later. That is a cursor caught MID-TRAVEL between slots, not
+one that was parked and then pressed select: the tool's core assumption ("the frame
+before a rise is a frame whose cursor slot is known") is violated whenever the
+pre-select cursor travel crosses the ~100ms gap between two captures. 9 of the 28 are
+a second, separate artefact — one selection's rise flickering near
+`SELECTED_MIN_RISE`, re-triggering "newly risen" several times for one event.
+
+**Root cause.** `tools/cursor_labels_from_lifts.py`'s HOLD=3 persistence filter
+catches a lift that never becomes a real selection; it has nothing to say about a
+real selection reached by a cursor that was already moving, or about the same
+selection's rise flickering across the detector's edge.
+
+**Fix, two independent checks, neither consulting `cursor_slot` or `cursor_glow`**
+(CLAUDE.md 10.22 — an independent label cannot mark its own homework; both are pure
+geometry from `selected_cards`, same as the original signal):
+
+  1. CAPTURE GAP: the frame immediately before the labelled frame must show the SAME
+     selected-set as the labelled frame — evidence the fan was already quiet for
+     >=2 frames before the rise, not mid a fast cursor jump.
+  2. NO-FLICKER: the rising slot must not have been risen at all in the
+     `FLICKER_WINDOW` (10) frames before the labelled frame — a re-rise right after a
+     drop is the same selection flickering, not a new one.
+
+`labels_for()` now returns `(kept, rejected)` with a reason per rejection
+(`capture_gap`, `flicker`, or the original `transient`) instead of silently dropping
+candidates, and `main()` prints both lists per run.
+
+**Verify, re-run on the same two real corpora the census used** (frame paths matched
+by basename against `agent_progress/census/cursor_vlm/joined.jsonl`'s 81 ground-truth
+rows, main checkout, read-only):
+
+    of 28 known-bad (A != C)    28 rejected (100%)    0 wrongly kept
+    of 53 known-good (A == C)   44 correctly kept (83%)  9 wrongly rejected (17%)
+
+Every one of the 28 bad labels is now caught — 16 by flicker alone, 11 by
+capture_gap+flicker together, 1 by capture_gap alone. The cost is real and reported
+rather than tuned away: 9 of 53 good labels (17%) are also rejected, all by the same
+two checks, because a genuine parked-and-selected cursor can occasionally sit inside
+a fan that had *other* recent activity or a near-window flicker on the same slot. No
+threshold here was chosen to hit a number (CLAUDE.md 10.4) — `FLICKER_WINDOW=10` and
+the 2-frame capture-gap requirement are the literal reading of the two checks' own
+definitions, not a fit to this data.
+
+**Tests.** `tests/harness/test_cursor_labels_capture_gap.py`, 8 checks (`check(name,
+cond)`, no bare `PASS True`), 4 synthetic frame-sequence cases: a clean selection
+(kept), a rise one frame after a move (rejected, capture_gap), a flicker re-rise
+(rejected, flicker), and the original HOLD filter still firing on its own
+(rejected, transient). Two mutants, both by hand (forcing `gap_ok = True` and
+`flickered = False` in turn): each breaks exactly the case it corresponds to and no
+other, files restored byte-for-byte (sha256-verified) between and after.
+
+**Status.** Fixed on this branch (`tools/cursor_labels_from_lifts.py`,
+`tests/harness/test_cursor_labels_capture_gap.py`), awaiting skeptic. Both real runs
+re-scanned end to end offline, no console, no live change.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
