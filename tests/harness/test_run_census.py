@@ -10,11 +10,22 @@ Shape follows tests/harness/test_state_files_are_real.py: check(label, cond),
 confirmed by `grep -m1 -o "def check(.*)" tests/harness/test_state_files_are_real.py`
 before writing any assertion here, per CLAUDE.md's "nine different check()
 signatures" warning -- a reversed call would pass vacuously on every input.
+
+I-19b (agent_progress/issues/I-19b/progress.md): the run_live_20260920{d,g,h}.log
+census found two defects: `deal_timeouts` only matched the pre-I-09 combined
+message, and five refusal shapes (I-25/I-21) had no column and were counted by
+hand. Both fixed in tools/run_census.py; pinned below against run_live_20260920h.log
+(and, for the deal-timeout regex specifically, run_live_20260920d.log, the only
+one of the three that actually contains a post-I-09 "no motion seen" line --
+h.log has zero deal-timeout lines of any wording, verified by direct grep, so its
+own deal_timeouts pin cannot by itself discriminate the fix from the pre-fix
+tool; d.log and the synthetic CONTROL below are what actually catch that mutant).
 """
 import json
 import os
 import subprocess
 import sys
+import tempfile
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _TOOL = os.path.join(_ROOT, "tools", "run_census.py")
@@ -23,6 +34,8 @@ _LOGS = [
     os.path.join(_ROOT, "overnight", "run_one_match_20260920b.log"),
     os.path.join(_ROOT, "overnight", "run_one_match_20260920c.log"),
 ]
+_D_LOG = os.path.join(_ROOT, "overnight", "run_live_20260920d.log")
+_H_LOG = os.path.join(_ROOT, "overnight", "run_live_20260920h.log")
 
 os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import; the tool
                                         # imports nothing project-specific, but
@@ -119,6 +132,101 @@ except json.JSONDecodeError:
 check(f"default glob found all three fixtures, sorted (got {names2})",
       names2 == ["run_one_match_20260920.log", "run_one_match_20260920b.log",
                  "run_one_match_20260920c.log"])
+
+# --- I-19b: run_live_20260920{d,h}.log -------------------------------------
+
+check(f"fixture log present: {_D_LOG}", os.path.exists(_D_LOG))
+check(f"fixture log present: {_H_LOG}", os.path.exists(_H_LOG))
+
+
+def _grep_count(path, *needles):
+    """Count lines in `path` containing any of `needles` -- the "compute the
+    expected with grep" half of the pin, done in Python so it needs no shell."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return sum(1 for line in f if any(n in line for n in needles))
+
+
+out3 = subprocess.run(
+    [sys.executable, _TOOL, _D_LOG, _H_LOG, "--json"],
+    capture_output=True, text=True, timeout=30,
+)
+check(f"run_census.py exits 0 on d/h logs (rc={out3.returncode}, stderr={out3.stderr!r})",
+      out3.returncode == 0)
+try:
+    rows3 = json.loads(out3.stdout)
+except json.JSONDecodeError as e:
+    rows3 = []
+    check(f"d/h stdout is valid JSON ({e})", False)
+
+if len(rows3) == 3:
+    d, h, _total3 = rows3
+
+    expected_h_deal = _grep_count(_H_LOG, "no motion seen in", "the hand never read stable")
+    check(f"h.log: deal timeouts equal the grep-computed count "
+          f"(got {h.get('deal_timeouts')}, expected {expected_h_deal})",
+          h.get("deal_timeouts") == expected_h_deal)
+    check(f"h.log: 4 stray_guard (got {h.get('stray_guard')})", h.get("stray_guard") == 4)
+    check(f"h.log: 3 pre_press_guard (got {h.get('pre_press_guard')})",
+          h.get("pre_press_guard") == 3)
+    check(f"h.log: 3 inferred_select (got {h.get('inferred_select')})",
+          h.get("inferred_select") == 3)
+    check(f"h.log: 8 plays_refused (got {h.get('plays_refused')})",
+          h.get("plays_refused") == 8)
+
+    # d.log is the one of the three tonight's logs that actually contains a
+    # post-I-09 "no motion seen" line (verified by direct grep) -- unlike
+    # h.log's deal_timeouts pin above, this one DOES change if the tool is
+    # reverted to matching the pre-I-09 string alone.
+    expected_d_deal = _grep_count(_D_LOG, "no motion seen in", "the hand never read stable")
+    check(f"d.log: deal timeouts equal the grep-computed count "
+          f"(got {d.get('deal_timeouts')}, expected {expected_d_deal})",
+          d.get("deal_timeouts") == expected_d_deal)
+else:
+    check(f"one row per d/h log plus a TOTAL row (got {len(rows3)})", False)
+
+# --- CONTROL: one line of each new wording, exactly one hit per column -----
+
+_CONTROL_LOG = (
+    '    [cursor] still at 2 after 8 presses — refusing\n'
+    '    [cursor] slot(s) [3] went unreadable DURING this operation ([None]) '
+    '— refusing.\n'
+    "    [cursor] slot 4's position is unreadable, so whether it is already "
+    'selected cannot be told — refusing rather than pressing a TOGGLE blind\n'
+    "    [cursor] 2's disc is unreadable after the press and was readable "
+    'before it — selected by inference (disc unreadable after lift)\n'
+    '  play REFUSED 3x running on hand_index 1 on this exact hand — '
+    'excluding it\n'
+    '    [verify] confirm_play: FAILED after 5 attempts, state never left (2,)\n'
+    '  [deal] no motion seen in 20s — nothing dealt. Threshold 15, biggest '
+    'delta 5.0: under threshold.\n'
+    '  [deal] replacement card seen but the hand never read stable twice in '
+    '20s — a reader problem. Threshold 15, biggest delta 40.0.\n'
+)
+_CONTROL_EXPECTED = {
+    "false_cursor": 1, "stray_guard": 1, "pre_press_guard": 1,
+    "inferred_select": 1, "excluded": 1, "confirm_verify_fail": 1,
+    "deal_timeouts": 2, "deal_timeouts_with_edge": 1,
+}
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    control_path = os.path.join(tmpdir, "control.log")
+    with open(control_path, "w", encoding="utf-8") as f:
+        f.write(_CONTROL_LOG)
+    out4 = subprocess.run(
+        [sys.executable, _TOOL, control_path, "--json"],
+        capture_output=True, text=True, timeout=30,
+    )
+    check(f"run_census.py exits 0 on the control log (rc={out4.returncode}, "
+          f"stderr={out4.stderr!r})", out4.returncode == 0)
+    try:
+        rows4 = json.loads(out4.stdout)
+        control_row = rows4[0]
+    except (json.JSONDecodeError, IndexError) as e:
+        control_row = {}
+        check(f"control stdout is valid JSON with one row ({e})", False)
+    for col, want in _CONTROL_EXPECTED.items():
+        check(f"control log: {col} == {want} (got {control_row.get(col)})",
+              control_row.get(col) == want)
 
 print("\nall green" if ok else "\nFAILURES above")
 sys.exit(0 if ok else 1)
