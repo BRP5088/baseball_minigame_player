@@ -100,15 +100,22 @@ check("CARD" in res["why"],
 # --- 3. the reader refuses an ambiguous band ---------------------------------
 # Two result words in one title is a bad crop, not a result. A wrong outcome is
 # worse than no outcome.
-_saved = ls.RESULT_CARD_WORDS
+#
+# I-30: used to fabricate a fake second key ("EFEAT", a substring of "DEFEAT")
+# to force two hits under the OLD substring matcher. Under the word-boundary
+# fix "EFEAT" can no longer match at all (there is no boundary between the D
+# and the E it would need), so the ambiguity is built the honest way instead:
+# mock the OCR text to contain two REAL, SEPARATE whole words.
+import ocr_glyphs as _og3                                                   # noqa: E402
+_saved_ocr3 = _og3.image_to_text
 try:
-    ls.RESULT_CARD_WORDS = {"DEFEAT": "loss", "EFEAT": "win"}   # both must hit
+    _og3.image_to_text = lambda *a, **k: "DEFEAT WINNER"
     _out, _raw = ls.read_result_card(img)
     check(_out is None,
           f"two matching words in one band must REFUSE, not pick one; got {_out!r} "
           f"from {_raw!r}")
 finally:
-    ls.RESULT_CARD_WORDS = _saved
+    _og3.image_to_text = _saved_ocr3
 
 # --- 4. NEGATIVE CONTROL: a non-result screen must not name an outcome -------
 # The census found 0 false positives over 1,450 non-result frames; this pins one of
@@ -164,10 +171,74 @@ if _os.path.exists(WIN_FIX):
           f"({max(_wsc.values()):.3f} against RESULT_MIN {ls.RESULT_MIN}); if it no "
           f"longer does, re-check why 'why' above still says win.")
 
+
+# --- 6. I-30: A SUBSTRING MATCH SCORED A PHANTOM DRAW -------------------------------
+# 2026-09-20, live, round 1, 0-0. A batter card OCR'd as "JOHNNY DRAWERS" (see
+# test_fixtures/result_screens/phantom_draw_20260920.png -- the real frame, screenshot_log/
+# run_20260920_224358/20260920_225512_083.jpg, scoreboard 0-0-0, one card reading "JOHNNY
+# DRAWERS" sitting in RESULT_CARD_BAND) and the OLD `k in up` substring test matched "DRAW"
+# inside "DRAWERS". read_result_card now matches a WHOLE WORD via \b regex.
+#
+# The archived frame itself is a real-image negative control -- but its raw OCR output is
+# NOT reproducible offline: scanned against EVERY ONE of the 7,093 frames of that run
+# (agent_progress/issues/I-30/scan_draw_hits.py), read_result_card's OCR never once
+# contains the substring "DRAW" on any of them. The live capture that produced 'JOHNNY
+# DRAWERS' evidently differs from what the 10Hz screenshot logger archived (CLAUDE.md
+# section 3: capture geometry/quality is not guaranteed to match across capture paths).
+# So the mechanism is pinned directly, against the EXACT OCR string the incident's own log
+# line recorded, with OCR itself stubbed out -- deterministic, and it is what the code
+# actually does with that string, not a guess about it.
+DRAW_FIX = _os.path.join(_ROOT, "test_fixtures", "result_screens",
+                         "phantom_draw_20260920.png")
+check(_os.path.exists(DRAW_FIX), f"fixture missing: {DRAW_FIX}")
+if _os.path.exists(DRAW_FIX):
+    dimg = Image.open(DRAW_FIX)
+    _dout, _draw = ls.read_result_card(dimg)
+    check(_dout is None,
+          f"the phantom-draw frame must read no result word; got {_dout!r} from {_draw!r}")
+    _dres = ls.read_result(dimg)
+    check(_dres["outcome"] != "draw",
+          f"the phantom-draw frame must not be scored as a draw; got outcome="
+          f"{_dres['outcome']!r}, why={_dres['why']!r}")
+
+import ocr_glyphs as _og                                                    # noqa: E402
+_saved_ocr = _og.image_to_text
+try:
+    # The exact raw text overnight/run_live_20260920i.log:488 recorded:
+    # "[state] the templates missed this banner; OCR read it: 'JOHNNY DRAWERS'"
+    _og.image_to_text = lambda *a, **k: "JOHNNY DRAWERS"
+    _blank = Image.new("RGB", (768, 432), (0, 0, 0))   # only width is read before OCR
+    _out, _raw = ls.read_result_card(_blank)
+    check(_out is None,
+          f"'JOHNNY DRAWERS' must not read as a result word; got {_out!r} from {_raw!r}")
+    check(_raw == "JOHNNY DRAWERS", f"raw OCR text mutated unexpectedly: {_raw!r}")
+
+    # The word ITSELF must still be read as a whole token, both bare and with the
+    # game's own punctuation.
+    _og.image_to_text = lambda *a, **k: "DRAW!"
+    _out2, _raw2 = ls.read_result_card(_blank)
+    check(_out2 == "draw", f"'DRAW!' must still read as draw; got {_out2!r} from {_raw2!r}")
+
+    # Same fix, same rule, for WINNER and DEFEAT (the task's own ask: "same for
+    # WINNER/DEFEAT") -- a longer word that merely STARTS with one of ours must not
+    # match either.
+    _og.image_to_text = lambda *a, **k: "DEFEATED FOES"
+    _out3, _raw3 = ls.read_result_card(_blank)
+    check(_out3 is None,
+          f"'DEFEATED' must not match DEFEAT as a substring; got {_out3!r} from {_raw3!r}")
+
+    _og.image_to_text = lambda *a, **k: "RUNNER WINNER"
+    _out4, _raw4 = ls.read_result_card(_blank)
+    check(_out4 == "win",
+          f"WINNER must still be read as a whole word inside a longer line; got "
+          f"{_out4!r} from {_raw4!r}")
+finally:
+    _og.image_to_text = _saved_ocr
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
 print("  the DEFEAT! card reads as a loss, the arched bank does not, an ambiguous "
-      "band refuses, a non-result frame names nothing, and the WINNER card word is "
-      "now confirmed by a live frame too")
+      "band refuses, a non-result frame names nothing, the WINNER card word is "
+      "now confirmed by a live frame too, and 'JOHNNY DRAWERS' no longer reads as a draw")
