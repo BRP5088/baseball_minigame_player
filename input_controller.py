@@ -1280,6 +1280,16 @@ def _clear_strays(want, look, blind_before=frozenset()):
 
     So the gate below requires every y to be MEASURED, not merely that the fan was
     counted. The walk can still tolerate one unreadable card; the COMMIT cannot.
+
+    A SLOT IN `want` IS NEVER A STRAY CANDIDATE (I-28). I-21 already established why
+    a target's own disc goes blind: selecting IS what makes it unreadable, so a
+    correctly-landed target reads exactly like a stray mid-lift. Scoring that as
+    "went unreadable DURING this operation" refused a landed select three times
+    running and excluded the card (overnight/run_live_20260920h.log:121-132,
+    reproduced offline: want={1}, blind_before=set(), a look() that always answers
+    slot 1 blind). The exemption is narrow -- only slots the engine itself chose are
+    exempt; any OTHER slot that goes blind mid-operation still gets the I-26 re-look
+    and, failing that, the refusal.
     """
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE:
@@ -1310,7 +1320,13 @@ def _clear_strays(want, look, blind_before=frozenset()):
     # licence -- and it is NARROW, because a slot that goes blind mid-operation still
     # refuses exactly as before.
     _blind_now = {i for i, y in enumerate(_ys) if y is None}
-    _new_blind = _blind_now - set(blind_before)
+    # I-28: `want` IS EXEMPT FROM "NEWLY BLIND". The engine's own target(s) are
+    # EXPECTED to go blind the moment they lift (I-21's own mechanism: selecting a
+    # card is what makes its disc unreadable), so a landed select must never be
+    # scored as "went unreadable DURING this operation" -- that refused a correctly
+    # selected card three times running and excluded it. Only a slot OUTSIDE
+    # `want` can be newly blind in the dangerous sense this guard exists for.
+    _new_blind = _blind_now - set(blind_before) - set(want)
     if _new_blind:
         # A SINGLE LOOK CAN CATCH A FLICKER, NOT A LIFT (I-26). The occluded-disc
         # reader can drop a slot from a real (if untrustworthy) position to
@@ -1329,7 +1345,7 @@ def _clear_strays(want, look, blind_before=frozenset()):
             invalidate_cursor()
             return False
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
-        _new_blind = _blind_now - set(blind_before)
+        _new_blind = _blind_now - set(blind_before) - set(want)
         # NO "AT REST" FALLBACK (I-26, skeptic-refuted). A slot WE genuinely
         # lift and then cannot read looks IDENTICAL to a flicker at this point:
         # a raised card's disc shrinks out of DISC_MIN_R, so its y goes None
@@ -1340,8 +1356,9 @@ def _clear_strays(want, look, blind_before=frozenset()):
         # `ok=True` through with the card still up. One re-look is the whole
         # allowance; still unreadable after it is refused, full stop. The
         # only slots this never refuses are ones proven untrustworthy at
-        # BASELINE (`blind_before`, case b above) -- never a slot that turned
-        # blind during this operation.
+        # BASELINE (`blind_before`, case b above) or the engine's OWN targets
+        # (`want`, I-28) -- never a STRAY that turned blind during this
+        # operation.
         if _new_blind:
             print(f"  [cursor] slot(s) {sorted(_new_blind)} still unreadable after "
                   f"the re-look ({_ys}) — refusing. They were measurable when this "
@@ -1349,11 +1366,23 @@ def _clear_strays(want, look, blind_before=frozenset()):
                   "raised card would go in with the commit.")
             invalidate_cursor()
             return False
-    if _blind_now:
-        print(f"  [cursor] slot(s) {sorted(_blind_now)} were ALREADY unreadable before "
-              "this operation began — proceeding. We cannot have raised them, and "
-              "refusing forever is how a hand with one occluded card deadlocks.")
-    lifted = set(sel)
+    _untouched_blind = _blind_now - set(want)
+    if _untouched_blind:
+        print(f"  [cursor] slot(s) {sorted(_untouched_blind)} were ALREADY unreadable "
+              "before this operation began — proceeding. We cannot have raised them, "
+              "and refusing forever is how a hand with one occluded card deadlocks.")
+    _want_blind = set(want) & _blind_now
+    if _want_blind:
+        print(f"  [cursor] slot(s) {sorted(_want_blind)} are the engine's own "
+              "target(s) and are unreadable — I-21's inference: selecting a card is "
+              "what makes its own disc unreadable, so this is expected, not a stray.")
+    # I-28: A BLIND `want` SLOT COUNTS AS LIFTED. `sel` comes from selected_cards(),
+    # which abstains on exactly the row this guard just exempted (its own y is
+    # None), so `sel` alone cannot see an inferred-selected target -- the final
+    # commit gate below would refuse it right after this guard just proved it safe.
+    # OR it in here, once, so the stray computation and the commit gate both agree
+    # with the exemption above.
+    lifted = set(sel) | (set(want) & _blind_now)
     extra = lifted - want
     if extra:
         # TRY TO PUT THEM DOWN, with the same walk-and-verify used to raise them.
@@ -1372,12 +1401,14 @@ def _clear_strays(want, look, blind_before=frozenset()):
                 invalidate_cursor()
                 return False
         _g, _ys, n, sel = _look_settled(look)
-        if n != MAX_HAND_SIZE or any(y is None for y in _ys) or set(sel) - want:
+        _blind_now = {i for i, y in enumerate(_ys) if y is None}
+        lifted = set(sel) | (set(want) & _blind_now)
+        if n != MAX_HAND_SIZE or (_blind_now - set(want)) or lifted - want:
             print(f"  [cursor] after clearing, the lifted set is still {sel} against "
                   f"{sorted(want)} — refusing to commit")
             invalidate_cursor()
             return False
-    if not want <= set(sel):
+    if not want <= lifted:
         print(f"  [cursor] the engine's cards {sorted(want)} are not all lifted "
               f"({sel}) — refusing to commit a partial selection")
         invalidate_cursor()
