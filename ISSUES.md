@@ -2671,8 +2671,9 @@ separate from `_PLAY_STALL` (which is keyed on the player_idx the play command
 targets, not the tactics_idx) — new state, not a one-line change, and deliberately
 deferred.
 
-**Status.** Fixed on branch (skeptic round applied, `--no-verify`), CONFIRMED WITH
-NOTES.
+**Status.** merged db3bfcb247a085d50411d5056a28fe00e91c8e5c, skeptic CONFIRMED WITH
+NOTES round 1, S-2/S-3/S-4 fixed 2c6cca5, 7/7 mutants; LATER: tactics slot not
+excluded after the fallback (~11 s per later turn).
 
 ### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
 
