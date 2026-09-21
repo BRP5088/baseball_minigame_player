@@ -1951,16 +1951,33 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
         if target is None:
             continue
         ok, _sel = _walk_cursor_to(target, look)
-        if not ok:
-            _unwind_selection(before_all, look, targets, ys0=_ys0)
+        if ok:
+            ok, _sel = _select_verified(target, look)
+        if ok:
+            _inferred_targets |= getattr(_sel, "inferred", frozenset())
+            continue
+        if target == tactics_index and target != card_index:
+            # I-48: THE TACTIC FAILED TO VERIFY, NOT THE BATTER -- card_index's own
+            # walk+select already succeeded above, or this loop would never have
+            # reached the tactics target at all. ISSUES.md I-48's census shows the
+            # tactics select failing repeatedly whenever the cursor walk to it is
+            # forced to cross an occluded slot (a home-plate runner's card, e.g.),
+            # never the batter's own selection. `orchestrator.exclude_play_slot`
+            # can only exclude the BATTER's hand_index on a refusal here (this
+            # function returns one bool for the whole call, so the caller cannot
+            # see which target failed) -- so refusing the whole play burns every
+            # batter in turn for a boost worth ~+0.6 runs/half (CLAUDE.md §4)
+            # against a stalled half. Unwind the tactic attempt ALONE and commit
+            # the batter without it instead.
+            print(f"  [cursor] tactics slot {tactics_index} could not be verified "
+                  "— dropping the boost and playing the batter alone (I-48)")
+            _unwind_selection(before_all, look, {tactics_index}, ys0=_ys0)
             invalidate_cursor()
-            return False
-        ok, _sel = _select_verified(target, look)
-        if not ok:
-            _unwind_selection(before_all, look, targets, ys0=_ys0)
-            invalidate_cursor()
-            return False
-        _inferred_targets |= getattr(_sel, "inferred", frozenset())
+            tactics_index = None
+            continue
+        _unwind_selection(before_all, look, targets, ys0=_ys0)
+        invalidate_cursor()
+        return False
 
     # COMMIT ONLY WHAT THE ENGINE CHOSE.
     #

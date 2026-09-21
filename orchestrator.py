@@ -7423,6 +7423,64 @@ def record_money_read_frame(frame, answer, out_dir=None):
         return None
 
 
+# I-48: keep a frame per refused SELECT so a human can eyeball what the cursor read at
+# the moment a play refused, without re-deriving it from the log every time. Same shape
+# as record_money_read_frame / _save_dropped_hand: never raises into the turn loop,
+# writes nothing under BASEBALL_TEST_RUN unless a test hands it out_dir (or sets
+# REFUSED_SELECT_DIR_ENV), and REFUSES past the cap rather than pruning -- OPEN-24 is
+# the record of a pruned corpus losing the rows that needed it. Lives under
+# DEAL_FRAME_DIR itself (a sibling of the dropped_*/deal_* dirs already there), not a
+# directory of its own, because it is the same "a hand-crop-plus-why.json for one
+# moment of the deal gate" shape those two already use.
+REFUSED_SELECT_DIR_ENV = "BASEBALL_REFUSED_SELECT_DIR"
+REFUSED_SELECT_MAX_DIRS = 200
+
+
+def record_refused_select(target, kind, attempt, out_dir=None):
+    """Keep the frame + why.json a refused select_and_play() call left behind.
+
+    Grabs its own frame rather than reusing a decision-time one, because the
+    population a human wants here is whatever the reader can still see AFTER
+    the refusal -- the same look select_and_play presses against
+    (hand_cursor_look), so `already_selected` is not stale.
+
+    `target` is the hand_index select_and_play was asked to play, `kind` says
+    whether a tactics card was also attempted this turn ("player" or
+    "player+tactics" -- select_and_play returns one bool for the whole call, so
+    orchestrator cannot see which of the two targets inside it actually failed
+    to verify; see ISSUES.md I-48), and `attempt` is play_stalled's own running
+    count of refusals on this exact hand.
+
+    Never raises into the turn loop. Returns the directory written, or None.
+    """
+    try:
+        d = out_dir or os.environ.get(REFUSED_SELECT_DIR_ENV)
+        if d is None and _running_under_test():
+            return None
+        d = d or DEAL_FRAME_DIR
+        os.makedirs(d, exist_ok=True)
+        existing = [n for n in os.listdir(d) if n.startswith("refused_select_")]
+        if len(existing) >= REFUSED_SELECT_MAX_DIRS:
+            print(f"  [play] {d} already holds {REFUSED_SELECT_MAX_DIRS} refused-select "
+                  "dirs -- NOT keeping this one. Nothing is pruned here on purpose.")
+            return None
+        hand_img = _grab_settle_regions(("hand",))["hand"]
+        if hand_img is None:
+            return None
+        _glow, _ys, _n, sel = hand_cursor_look()
+        out = os.path.join(d, f"refused_select_{time.time_ns()}")
+        os.makedirs(out, exist_ok=True)
+        hand_img.save(os.path.join(out, "hand.png"))
+        with open(os.path.join(out, "why.json"), "w") as fh:
+            json.dump({"target": target, "kind": kind,
+                       "already_selected": list(sel), "attempt": attempt},
+                      fh, indent=1)
+        print(f"  [play] kept the frame this refusal happened on -> {out}")
+        return out
+    except Exception:
+        return None
+
+
 def read_balance_from_pause_menu() -> int:
     """
     Open the pause menu, read the money total off it via vision, then
@@ -8383,6 +8441,9 @@ def play_one_turn(state_json: dict, batters_used: int):
     forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
+        record_refused_select(
+            player_idx, "player+tactics" if tactics_idx is not None else "player",
+            _PLAY_STALL["n"])
         if play_stalled(state_json.get("hand")):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
