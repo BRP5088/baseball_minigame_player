@@ -2322,6 +2322,77 @@ restored and sha256-verified back to `d09cbcb...` (unchanged from HEAD, confirme
 affected by this — they compare simulate.py's own deterministic scorers against each
 other and never touch `match_log.jsonl`.
 
+### I-46  Raised card's disc located on the decorative icon, digit reads None (8%)     P2  reader
+
+**Evidence.** `agent_progress/census/raised_disc/` (2,446 sampled frames across three
+recorded runs): on a RAISED (selected) player card, `read_hand` locates a disc
+(`y_from == "disc"`) but `read_digit` returns None on 23 of 287 (8.0%). Every one of the
+23 digits is plainly legible by eye on the contact sheet
+(`agent_progress/census/raised_disc/sheet.jpg`); `read_digit`'s own template score tops
+out at 0.793 across all 23, cleanly under `MIN_SCORE` 0.80 (the real-digit population's
+own minimum is 0.821), so the gate is correct and was not moved.
+
+**Root cause, measured** (`agent_progress/issues/I-46/progress.md`): a small decorative
+icon (a baseball-seam on a PITCHER card, a bat on a BATTER card) sits over the top-left
+of the power disc. On a raised card the true digit's own ink either never clears any of
+`DARK_THRESHOLDS`/`RAISED_DARK_MAX` (the brightened card washes it out) or MERGES with
+the brightened ring into a blob too big for `circle_finder`'s `DIGIT_W`/`DIGIT_H` gates
+(measured merged blobs 37x34 and 57x59, against a digit's 6-26 x 10-32) -- while the
+icon, a separate sprite unaffected by the brightening, stays an isolated blob of exactly
+digit size and wins every candidate pass, correctly reading nothing. This is NOT a
+candidate-selection bug: `_white_discs`'s own digit-in-disc extraction, checked
+independently, lands on the SAME icon in 20 of 22 cases it fires on at all (within
+1-23px), and the existing `RAISED_DARK_MAX` circle-finder pass proposes zero candidates
+in its own search window on all 23 frames. There is no discarded correct candidate for a
+rank-ordering fix to prefer -- the true digit is simply never proposed by any
+circle-finding pass.
+
+**Fix** (`local_hand.py`, `RAISED_SEARCH_DY`/`DX`/`STEP`/`R` and the loop appended after
+the existing `RAISED_DARK_MAX` pass in `_read_fan`): search POSITION directly near the
+slot anchor, scored only by `read_digit`'s own `MIN_SCORE` gate (untouched) -- the same
+shape `DIGIT_RADII` already uses to search SCALE. A raised card lifts fairly
+consistently (measured over 22 of 23 census frames via an exhaustive grid search: dy
+-49..-34 anchor px, dx -10..+14); the shipped window (dy -60..-25, dx +-20) is generous
+around that, not fitted to it. It runs only where every pass above still leaves a
+PLAYER slot's digit unread, so it can add a reading and never change one.
+
+**Verify.** Regression corpus (`overnight/local_hand/*.png` + `test_fixtures/hand_reads/`,
+2,409 frames), HEAD vs the fix: digits CHANGED 0, previously-read now None
+(regression) 0, previously None now read 4 (all "9", scores 0.86-0.95, confirmed
+correct by eye against the source frames). On the 23-frame census itself, through the
+actual production `read_hand()`: 17 of 23 now read, every one matching the digit
+legible on the contact sheet by eye. The remaining 6 sit outside the deliberately
+narrow, safety-margined search window (near-duplicate frames of the same hand whose
+frame-to-frame jitter pushed the digit out, or one frame where the icon nearly fully
+covers the digit) and correctly still abstain rather than guess.
+`tests/minigame/test_raised_disc_reads.py` pins 5 of the census frames (copied to
+`test_fixtures/hand_reads/i46_raised_{1..5}.png`) plus a control fixture that already
+read correctly before the fix and must read identically after it. Mutation-tested:
+reverting `local_hand.py` to HEAD makes all 5 new-reading assertions fail (exit 1);
+restored and sha256-verified. `tests/minigame/test_verified_selection.py`,
+`test_hand_read_two_lifted.py`, `test_hand_memory_persists.py`,
+`tests/harness/test_no_undefined_names.py`, and `test_claude_md_constants.py` all pass
+unchanged.
+
+**Status.** merged (this commit), narrow window kept. Independent skeptic review
+(`agent_progress/issues/I-46/skeptic.md`) reproduced the regression check and the
+17/23 census result exactly, confirmed scaling and the "cannot overwrite a read
+digit" invariant by tracing, and found two small defects: D1, the search wrote `y`
+but not `x`, so 3 of 34 real hits checked offline kept the EARLIER pass's `x` (the
+icon's), up to 67px off; D2, a dead `x = r.get("x")` fetch. Both fixed here. A
+WIDE-vs-NARROW window comparison was run (WIDE recovers 22/23 census frames instead
+of 17/23, at 0 accuracy cost measured offline, but costs 274ms/one firing slot and
+539ms/two against a 150ms poll, versus NARROW's 77ms/138ms) -- NARROW is kept for the
+runtime margin; the full table is in skeptic.md. `local_hand.py` also now documents,
+where `SELECTED_MIN_RISE` sits, that the search window (dy -60..-25) lies entirely
+above it, so every slot this pass reads is reported SELECTED by construction (a fact
+of the window's geometry, not an independent measurement) -- and records the measured
+runtime (0/1/2 firing slots: ~36/77/138ms; 87.9% of frames fire zero times). The new
+test's (a2) section pins D1 against x positions measured independently of this fix's
+own output; mutation-tested (dropping the x write makes it fail, restored and
+sha256-verified). `local_hand.py` and the new test are the only files touched besides
+this entry.
+
 ### I-47  Two silent permissive defaults in offline tools (QA7)                     P2  evidence
 
 **F1. `load_log_distribution()` in `tools/ab_engine_i15_16_17.py` fell back to the
