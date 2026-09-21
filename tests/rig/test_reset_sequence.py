@@ -126,6 +126,15 @@ class Game:
         # How many cross presses on the pause menu get DROPPED before one opens
         # the confirmation dialog. Measured live 2026-09-01 on three runs.
         self.drop_commits = 0
+        # QA round 3: how many YES (confirm -> loading) presses get DROPPED
+        # before one lands — the same shape as drop_commits, for the second
+        # cross instead of the first.
+        self.drop_yes = 0
+        # QA round 3: while set, the "loading" screen's own LEVEL sits this
+        # close to "confirm"'s — modelling a world that IS loading, just
+        # slowly enough that the raw pixel delta cannot tell it apart from a
+        # dropped press. None means the normal, well-separated LEVEL table.
+        self.loading_delta = None
         # Seconds after the first OPTIONS press before the menu actually
         # renders. Measured live 2026-09-02: it appeared after the per-attempt
         # poll windows had closed, and the reset condemned it.
@@ -164,6 +173,8 @@ class Game:
         base = LEVEL[self.state]
         if self.state == "confirm":
             base = LEVEL["pause"] - self.confirm_drop
+        elif self.state == "loading" and self.loading_delta is not None:
+            base = (LEVEL["pause"] - self.confirm_drop) + self.loading_delta
         return int(round(base + self.nudge))
 
     def capture(self):
@@ -227,8 +238,11 @@ class Game:
                 else:
                     self.state = "confirm"
             elif self.state == "confirm":
-                self.state = "loading"
-                self._world_at = self.clock + self.load_secs
+                if self.drop_yes > 0:
+                    self.drop_yes -= 1   # the YES press was lost
+                else:
+                    self.state = "loading"
+                    self._world_at = self.clock + self.load_secs
         elif action == "look_right":
             self.nudge += self.probe_moves
         elif action == "look_left":
@@ -742,6 +756,71 @@ finally:
             delattr(_o2, "read_ban_counter")
     else:
         _o2.read_ban_counter = _saved2[3]
+
+
+# =========================================================================
+# 12. QA round 3: the YES retry re-reads the screen before pressing again.
+# =========================================================================
+# The commit loop just above already re-verifies before every retry
+# (is_pause_screen / selected_item); the YES loop that follows it used to
+# retry on the raw pixel delta ALONE. If the first held YES landed and the
+# world then loads SLOWLY, that looks identical to a dropped press — the
+# fix must tell them apart by re-reading the screen, not by waiting longer.
+#
+# `reset_env.load_save_dialog` does real OCR, and every frame in this
+# harness is a solid grey square, so the unpatched function reads False no
+# matter what — it could never distinguish "dialog still up" from "dialog
+# gone" here either way. Patched LOCALLY (and restored) to read the pixel
+# level back against LEVEL["confirm"] (via Game.level()'s own formula), the
+# same technique Game._fresh() already uses elsewhere in this file — this
+# does not touch the real function or any other scenario, which all still
+# exercise the genuine always-False OCR path.
+_CONFIRM_LEVEL = int(round(LEVEL["pause"] - 78.0))   # default confirm_drop
+
+
+def _pixel_says_confirm(img):
+    return img.convert("L").getpixel((0, 0)) == _CONFIRM_LEVEL
+
+
+_real_load_save3 = reset_env.load_save_dialog
+try:
+    reset_env.load_save_dialog = _pixel_says_confirm
+
+    # 12a. First held YES lands, but the world loads slowly enough that the
+    #      delta from "confirm" to "loading" (3.0) never clears
+    #      CONFIRM_DELTA_MIN (12.0) for two would-be polls. Exactly ONE
+    #      Cross must be sent for the YES step, and the reset must still
+    #      complete once the (slow) world actually returns.
+    g, res, err = run("YES lands, slow world load", state="pause",
+                      loading_delta=3.0)
+    check(err is None,
+          f"a landed YES whose world loads slowly still raised {err!r} — the "
+          f"low delta was mistaken for a dropped press")
+    check(res == 97.4,
+          f"slow world load returned {res!r}, expected the spawn bearing 97.4")
+    _crosses12a = [a for _k, a in g.events if _k == "press" and a == "cross"]
+    check(len(_crosses12a) == 2,
+          f"slow world load: sent {len(_crosses12a)} crosses, expected "
+          f"exactly 2 (commit, then ONE YES) — a second, blind YES press "
+          f"went into a screen that had already moved on")
+
+    # 12b. CONTROL: the dialog genuinely stays up after the first YES press
+    #      (dropped, not slow) — the content reader must still say so, and
+    #      the loop must still retry.
+    g, res, err = run("YES dropped once, dialog stays up", state="pause",
+                      drop_yes=1)
+    check(err is None,
+          f"one dropped YES press still killed the reset ({err!r}) — it must "
+          f"be retried, like the commit press already is")
+    check(res == 97.4,
+          f"returned {res!r} after recovering from a dropped YES press")
+    _crosses12b = [a for _k, a in g.events if _k == "press" and a == "cross"]
+    check(len(_crosses12b) == 3,
+          f"dropped YES: sent {len(_crosses12b)} crosses, expected 3 "
+          f"(commit, dropped YES, successful YES) — a dialog that is "
+          f"genuinely still up must still be retried, not treated as landed")
+finally:
+    reset_env.load_save_dialog = _real_load_save3
 
 
 if fails:

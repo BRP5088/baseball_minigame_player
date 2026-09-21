@@ -227,11 +227,11 @@ _saved_flag = mc.CRAWL_DRIVE_IN_TESTS
 mc.CRAWL_DRIVE_IN_TESTS = False
 _saved_grab = game_capture.grab
 _saved_fast = getattr(mc.o, "_fast_grab", None)
-def _sentinel(*a, **k):
+def _sentinel_direct(*a, **k):
     raise AssertionError("capture/press reached past the guard")
 try:
-    game_capture.grab = _sentinel
-    mc.o._fast_grab = _sentinel
+    game_capture.grab = _sentinel_direct
+    mc.o._fast_grab = _sentinel_direct
     os.environ["BASEBALL_TEST_RUN"] = "1"
     try:
         mc.look(1)
