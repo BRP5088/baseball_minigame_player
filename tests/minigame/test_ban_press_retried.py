@@ -108,6 +108,120 @@ class FakeGrid:
         return set(self._committed)
 
 
+class SlowSplashGrid:
+    """A single target whose select_card LANDS immediately but whose banned_set()
+    only reveals it once enough VIRTUAL time has passed -- the skeptic's harness
+    shape for "the re-check is not on a settled frame". time.sleep() is stubbed to
+    `tick`, which advances a fake clock; look() and press() cost no time. Reveal
+    is set to outlive exactly ONE settle (the sleep already spent before the first
+    `_after` read) but not two, so it tells apart "no extra sleep before the retry
+    re-check" from "one more settle before it".
+    """
+
+    def __init__(self):
+        self.r, self.c = 0, 0
+        self.presses = []
+        self.select_presses = 0
+        self.true_banned = set()
+        self._press_clock = {}
+        self.clock = 0.0
+        self.reveal_after = 1.5 * ic.BAN_NAV_SETTLE
+
+    def tick(self, dur):
+        self.clock += dur
+
+    def press(self, action, **kw):
+        self.presses.append(action)
+        if action != "select_card":
+            return
+        self.select_presses += 1
+        cell = (self.r, self.c)
+        if cell in self.true_banned:
+            self.true_banned.discard(cell)
+            self._press_clock.pop(cell, None)
+        else:
+            self.true_banned.add(cell)
+            self._press_clock[cell] = self.clock
+
+    def look(self):
+        return (self.r, self.c)
+
+    def banned_set(self):
+        return {c for c in self.true_banned
+                if self.clock - self._press_clock[c] >= self.reveal_after}
+
+
+class StaleRetryGrid:
+    """T1=(0,0) lands cleanly. T2=(1,1)'s first press is dropped; its RETRY press
+    lands not at (1,1) but at T1's cell -- a stale cursor, CLAUDE.md's own "a stale
+    column frame bans the wrong card" shape -- which UN-BANS T1. T2's second retry
+    then lands correctly. Exercises `_gone` firing on a RETRY (not just attempt 1)
+    and the running baseline (`_before`) reflecting the PREVIOUS attempt, not the
+    frame before the very first press.
+    """
+
+    def __init__(self):
+        self.r, self.c = 0, 0
+        self.presses = []
+        self.banned = set()
+        self._at = {}   # cell AIMED at -> count of select_card presses aimed there
+
+    def press(self, action, **kw):
+        self.presses.append(action)
+        if action == "move_down":
+            self.r = 1
+        elif action == "move_up":
+            self.r = 0
+        elif action == "move_right":
+            self.c = 1
+        elif action == "move_left":
+            self.c = 0
+        elif action == "select_card":
+            aimed = (self.r, self.c)
+            n = self._at.get(aimed, 0)
+            self._at[aimed] = n + 1
+            if aimed == (1, 1):
+                if n == 0:
+                    return                            # T2's first press: dropped
+                real_cell = (0, 0) if n == 1 else (1, 1)   # n==1: stale onto T1
+            else:
+                real_cell = aimed
+            if real_cell in self.banned:
+                self.banned.discard(real_cell)
+            else:
+                self.banned.add(real_cell)
+
+    def look(self):
+        return (self.r, self.c)
+
+    def banned_set(self):
+        return set(self.banned)
+
+
+class BlindRetryGrid(FakeGrid):
+    """Like FakeGrid, but the look() called right after ANY select_card press
+    returns None once (an unreadable frame -- ban_cursor_absolute's own None on a
+    mid-animation frame) before reporting the cursor truthfully again. A blind
+    retry look must not be read as "the cursor moved" and must not abandon the
+    chain.
+    """
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self._blind_pending = False
+
+    def press(self, action, **kw):
+        super().press(action, **kw)
+        if action == "select_card":
+            self._blind_pending = True
+
+    def look(self):
+        if self._blind_pending:
+            self._blind_pending = False
+            return None
+        return super().look()
+
+
 def run(grid, want):
     real_press, real_sleep = ic.press, ic.time.sleep
     ic.press = grid.press
@@ -122,6 +236,7 @@ def run(grid, want):
 
 
 GRID3 = [(r, c, object()) for r in range(4) for c in range(4)]
+GRID2 = [(r, c, object()) for r in range(2) for c in range(2)]
 
 
 print("A. FIRST PRESS DROPPED, SECOND LANDS -> 3/3 placed, 2 presses at each cell")
@@ -141,6 +256,25 @@ check(f"placed despite the delayed read ({placed})", placed == [(1, 2)])
 check(f"still banned, not toggled back off ({sorted(g.banned)})", g.banned == want)
 check(f"exactly ONE select_card press ({g.select_presses}) — a naive retry would have "
       "pressed a second time and un-banned it", g.select_presses == 1)
+
+print("\nB2. THE SPLASH OUTLIVES ONE SETTLE BUT NOT TWO -> the retry's re-check must "
+      "itself wait a settle, not just spend the wall time of a look() + banned_set()")
+g = SlowSplashGrid()
+real_press, real_sleep = ic.press, ic.time.sleep
+ic.press = g.press
+ic.time.sleep = g.tick
+try:
+    placed = ic.select_bans_verified(
+        GRID3, {(0, 0)}, look=g.look, banned_set=g.banned_set,
+        confirm_ban=lambda pos: pos in g.true_banned, log=lambda *a: None)
+finally:
+    ic.press, ic.time.sleep = real_press, real_sleep
+check(f"placed once the second settle clears the splash ({placed})", placed == [(0, 0)])
+check(f"still banned, not toggled back off ({sorted(g.true_banned)})",
+      g.true_banned == {(0, 0)})
+check(f"exactly ONE select_card press ({g.select_presses}) — without a settle before "
+      "the retry's re-check, it would still be reading the stale (pre-press) frame and "
+      "would press again, un-banning it", g.select_presses == 1)
 
 print("\nC. ALL TRIES DROPPED -> 'leaving it', PRESS_VERIFY_TRIES presses, run continues")
 g = FakeGrid(never_lands=True)
@@ -170,6 +304,53 @@ check(f"nothing ever banned ({sorted(g.banned)})", not g.banned)
 check(f"exactly ONE select_card press ({g.select_presses}) — the retry's here==want "
       "check must stop a second, blind press once the cursor has moved off target",
       g.select_presses == 1)
+
+print("\nF. A STALE RETRY PRESS LANDS ON AN EARLIER TARGET: un-ban caught, later target "
+      "still lands, and the un-ban is reported exactly once")
+g = StaleRetryGrid()
+_wrong = []
+real_press, real_sleep = ic.press, ic.time.sleep
+ic.press = g.press
+ic.time.sleep = lambda *_a: None
+try:
+    placed = ic.select_bans_verified(
+        GRID2, {(0, 0), (1, 1)}, look=g.look, banned_set=g.banned_set,
+        confirm_ban=lambda pos: pos in g.banned,
+        on_wrong_ban=lambda want, gone: _wrong.append((want, sorted(gone))),
+        log=lambda *a: None)
+finally:
+    ic.press, ic.time.sleep = real_press, real_sleep
+check(f"T2 placed, T1 dropped from `placed` ({placed})", placed == [(1, 1)])
+check(f"the screen agrees: only T2 carries an X ({sorted(g.banned)})",
+      g.banned == {(1, 1)})
+check(f"on_wrong_ban fired exactly ONCE ({_wrong}) — a stale baseline (M3: no "
+      "`_before = _after` between retries) reports the same un-ban a second time; "
+      "an attempt-1-only `_gone` check (M4) never reports it at all",
+      len(_wrong) == 1)
+if _wrong:
+    check(f"...naming what actually happened (want={_wrong[0][0]}, "
+          f"gone={_wrong[0][1]})", _wrong[0] == ((1, 1), [(0, 0)]))
+
+print("\nG. A BLIND RETRY LOOK IS NOT A MOVED CURSOR: try again rather than abandon")
+g = BlindRetryGrid(drop_first=1)
+_logged = []
+real_press, real_sleep = ic.press, ic.time.sleep
+ic.press = g.press
+ic.time.sleep = lambda *_a: None
+try:
+    placed = ic.select_bans_verified(
+        GRID3, {(0, 0)}, look=g.look, banned_set=g.banned_set,
+        confirm_ban=lambda pos: pos in g.banned, log=_logged.append)
+finally:
+    ic.press, ic.time.sleep = real_press, real_sleep
+check(f"placed despite a blind retry look ({placed})", placed == [(0, 0)])
+check(f"exactly TWO select_card presses (one dropped, one landed after the blind "
+      f"retry was retried rather than abandoned) ({g.select_presses})",
+      g.select_presses == 2)
+check("the chain was never abandoned as a cursor drift",
+      not any("cursor left" in m for m in _logged))
+check("the blind frame was named truthfully",
+      any("could not be read" in m for m in _logged))
 
 print()
 if _fails:

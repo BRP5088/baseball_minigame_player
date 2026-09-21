@@ -2520,7 +2520,24 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                     _settled = False
                     for _attempt in range(1, PRESS_VERIFY_TRIES + 1):
                         if _attempt > 1:
+                            # A SETTLED FRAME, NOT THE ONE THE PREVIOUS PRESS LEFT
+                            # BEHIND. Without this sleep the only settle a retry's
+                            # re-check had was the one already spent before _after
+                            # below plus the wall time of one look() + one
+                            # banned_set() -- reader time, not a settle. A splash
+                            # that outlives that would then have this re-check miss
+                            # the X and press again, un-banning it.
+                            time.sleep(BAN_NAV_SETTLE)
                             _here_retry = look()
+                            if _here_retry is None:
+                                # A BLIND FRAME IS NOT A MOVED CURSOR. Reported as
+                                # "cursor left" before, which named the wrong cause
+                                # and abandoned the chain on one unreadable frame.
+                                # Try again rather than pressing blind or giving up.
+                                log(f"  [ban] the ban screen could not be read before "
+                                    f"retry {_attempt}/{PRESS_VERIFY_TRIES} — trying "
+                                    "again rather than pressing blind")
+                                continue
                             if _here_retry != want:
                                 log(f"  [ban] cursor left {want} before retry "
                                     f"{_attempt}/{PRESS_VERIFY_TRIES} — not pressing "
