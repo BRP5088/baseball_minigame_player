@@ -2159,4 +2159,15 @@ rejections in this particular run (no candidate in it happened to sit inside 2 f
 of a reset), so the fix changes no label on this corpus while closing the gap the QA7
 finder demonstrated synthetically.
 
-**Status.** Fixed on branch, awaiting merge.
+**Status.** Merged 3d0526c. `tests/minigame/test_ab_controls_reproduce_baseline.py` and
+`tests/harness/test_cursor_labels_capture_gap.py` re-run on main post-merge against this
+checkout's own grown `match_log.jsonl`: both exit 0. `test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py` and `test_claude_md_constants.py` also green; a
+`find | xargs grep` for `labels_for`/`load_log_distribution` across `tools`, `tests` and
+`overnight` (CLAUDE.md sec 2's `.gitignore`-blind-`grep` warning) turned up only the four
+files already covered here. Two independent mutants spot-checked post-merge, each
+`__pycache__`-cleared and sha256-restored: `len(hist) < 2` -> `< 3` in `labels_for` makes
+case 10 (the 2-prior-frames control) FAIL as insufficient_history instead of KEPT;
+dropping `d["fallback"] = True` from the fallback branch (stderr line left intact) makes
+F3's `meta["fallback"] is True` check die with `KeyError: 'fallback'`. Both restored;
+`git status --porcelain` shows no source diff.
