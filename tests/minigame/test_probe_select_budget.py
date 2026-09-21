@@ -40,12 +40,53 @@ end to end -- this file is scoped to the budget change and the attempt log):
   (D) a rise at the WRONG slot after two dropped presses is untouched: the existing
       untoggle-and-continue behaviour still fires, at the SAME press it always did.
 
-FakeScreen models a "dropped" press as `None` in `select_queue` (no effect at all,
-not a toggle) rather than reusing `test_blind_slot_probe_select.py`'s toggle-based
-`ProbeScreen` -- simpler here because this file drives the probe directly rather
-than through moves, and the toggle model would make a "double press" mutant look
-identical to a single clean one on some inputs (two toggles cancel), which is
-exactly the ambiguity a press-count assertion needs to avoid.
+FakeScreen (A-D) models a "dropped" press as `None` in `select_queue` (no effect at
+all, not a toggle) -- simple and sufficient for A-D, which never put the true
+cursor on an already-selected slot.
+
+INDEPENDENT SKEPTIC ROUND, REFUTED (agent_progress/issues/I-51/skeptic.md):
+`select_card` is a TOGGLE and does NOT move the cursor, so when the TRUE cursor
+sits on an ALREADY-SELECTED slot (I-48b: the batter selected first, then dropped
+navigation presses toward the tactics target left the true cursor sitting on the
+batter still), the `select_queue=[None|slot]` model above CANNOT represent what
+happens -- every probe press toggles the batter, and the original code (A-D's
+own code) only ever checked for a RISE, never a DISAPPEARANCE. Raising the budget
+2 -> 5 changed the TOGGLE PARITY of an unrelated press storm without the probe
+ever noticing: P(the already-selected batter left DOWN) measured **0.229 at
+budget 2, 0.707 at budget 3, 0.621 at budget 5** -- non-monotonic in the budget,
+so it was never a knob to nudge, and end to end
+(`_verified_select_and_play_inner`) budget 5 turned a COMMITTED batter-alone play
+(budget 2) into a FULL STALL, in a scenario I-48b traced live.
+
+THE B1 FIX mirrors the rise branch with a disappearance branch: `gone = [i for i
+in before if i not in sel]`; if `gone`, the true cursor is (or was) on `gone[0]`,
+and it is put back UP via `_select_verified` (not `_deselect_verified` -- the goal
+is to RESTORE a selection the probe's own press just knocked down, not remove a
+stray one) before returning, with no further select_card press. `ToggleFakeScreen`
+below models a REAL toggle at a fixed cursor slot, which the None/slot model
+cannot -- this is why A-D and E-F use two different fakes, not one:
+
+  (E) the true cursor sits on an ALREADY-SELECTED slot, all PRESS_VERIFY_TRIES
+      presses land -> the slot is re-lifted, the probe returns True naming it,
+      the batter is never left down;
+  (F) same, but presses 1 and 3 are dropped (an ODD number of LANDED presses,
+      which the pre-fix toggle-only view could not survive) -> the same outcome;
+  (G) end to end through the REAL `_verified_select_and_play_inner` (I-48b's own
+      shape): card_index=2 already selected and verified, the walk toward
+      tactics_index=0 loses the cursor one step away and probes -- every press
+      lands on the ALREADY-SELECTED batter (slot 2) -- and the play COMMITS with
+      confirm_play sent exactly once, at BOTH budget 2 and budget 5 (was a full
+      stall at 5 before the fix).
+
+THE B2 FIX: `orchestrator.play_one_turn`'s own `record_refused_select` call
+(orchestrator.py ~:8472, the ONE production call site) now passes
+`extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS}`, module-qualified
+because the probe REBINDS that name every call so a `from ... import` copy would
+go stale:
+
+  (H) driving the REAL `play_one_turn` with `select_and_play` stubbed to refuse,
+      `_LAST_PROBE_ATTEMPTS` seeded to a known sentinel -- the why.json the real
+      call site writes carries that sentinel under "probe_attempts".
 """
 import os as _os
 import sys as _sys
@@ -111,6 +152,33 @@ class ProbeFakeScreen:
             self.y[t] = REST[t]         # already up -> DOWN
         else:
             self.y[t] -= 44             # a selected card RISES
+
+
+class ToggleFakeScreen:
+    """A REAL toggle at a FIXED cursor slot -- select_card never moves the
+    cursor, so every landed press toggles `cursor`'s own selection state,
+    exactly the I-48b mechanism (I-51 skeptic B1). `drops[i]` is whether the
+    (i+1)-th select_card press is swallowed (no effect at all, nothing
+    toggles). `ys` defaults to fully readable."""
+
+    def __init__(self, cursor, selected, drops, ys=None):
+        self.cursor = cursor
+        self.sel = set(selected)
+        self.drops = list(drops)
+        self.ys = ys if ys is not None else [100] * N
+        self.sent = []
+
+    def look(self):
+        return [0.2] * N, list(self.ys), N, sorted(self.sel)
+
+    def press(self, key):
+        self.sent.append(key)
+        if key != "select_card":
+            return
+        i = len([k for k in self.sent if k == "select_card"]) - 1
+        if i < len(self.drops) and self.drops[i]:
+            return                      # dropped: nothing toggles
+        self.sel ^= {self.cursor}       # TOGGLE
 
 
 _real_press = ic.press
@@ -200,9 +268,116 @@ try:
     check("(D) the wrong slot was explicitly untoggled",
           deselect_calls == [2])
     check("(D) it ends up put back down", 2 not in sel)
+
+    # --- (E) B1: the true cursor sits on an ALREADY-SELECTED slot, every -----
+    #         press lands -> re-lifted, no batter lost --------------------
+    s = ToggleFakeScreen(cursor=2, selected=[2], drops=[False] * ic.PRESS_VERIFY_TRIES)
+    ic.press = s.press
+    ok, cur, sel = ic._probe_select_blind_target(0, s.ys, sorted(s.sel), s.look)
+    check("(E) succeeds, naming the true (already-selected) cursor slot",
+          ok is True and cur == 2)
+    check("(E) the batter is never left down", 2 in sel)
+
+    # --- (F) same, but presses 1 and 3 are DROPPED (an ODD landed count) ----
+    s = ToggleFakeScreen(cursor=2, selected=[2],
+                          drops=[True, False, True, False, False])
+    ic.press = s.press
+    ok, cur, sel = ic._probe_select_blind_target(0, s.ys, sorted(s.sel), s.look)
+    check("(F) succeeds despite an odd landed-press count",
+          ok is True and cur == 2)
+    check("(F) the batter is never left down", 2 in sel)
+
+    # --- (G) end to end, I-48b's own shape: through the REAL
+    #         _verified_select_and_play_inner, both budgets commit ----------
+    class PlayScreen:
+        """slot 0 (tactics) is structurally glow-blind (I-02); select_card
+        ALWAYS lands on `true_cursor` (2, the batter) -- I-48b's premise --
+        and it is a real toggle."""
+
+        def __init__(self):
+            self.glow_slot, self.true_cursor = 2, 2
+            self.y, self.sent, self.committed = list(REST), [], False
+
+        def selected(self):
+            return [i for i, y in enumerate(self.y) if REST[i] - y >= 25]
+
+        def look(self):
+            glow = [0.2] * N
+            if self.glow_slot is not None and self.glow_slot != 0:
+                glow[self.glow_slot] = 27.0
+            return glow, [100] * N, (0 if self.committed else N), self.selected()
+
+        def press(self, key):
+            self.sent.append(key)
+            if key == "move_left":
+                self.glow_slot = max(0, (self.glow_slot or 0) - 1)
+            elif key == "move_right":
+                self.glow_slot = min(N - 1, (self.glow_slot or 0) + 1)
+            elif key == "select_card":
+                t = self.true_cursor
+                self.y[t] = REST[t] if REST[t] - self.y[t] >= 25 else REST[t] - 44
+            elif key == "confirm_play":
+                self.committed = True
+
+    for _budget in (2, 5):
+        scr = PlayScreen()
+        ic.press = scr.press
+        old_max = ic.PROBE_SELECT_MAX
+        ic.PROBE_SELECT_MAX = _budget
+        try:
+            res = ic._verified_select_and_play_inner(2, 0, scr.look)
+        finally:
+            ic.PROBE_SELECT_MAX = old_max
+        check(f"(G budget={_budget}) the play COMMITS, not stalls",
+              res is True)
+        check(f"(G budget={_budget}) confirm_play sent exactly once",
+              scr.sent.count("confirm_play") == 1)
+        check(f"(G budget={_budget}) the batter ends up selected at commit",
+              2 in scr.selected())
 finally:
     ic.press = _real_press
     ic._deselect_verified = _real_deselect
+    ic.PROBE_SELECT_MAX = ic.PRESS_VERIFY_TRIES
+
+# --- (H) B2: the REAL orchestrator.play_one_turn call site passes `extra` ---
+_hand = [
+    {"kind": "player", "hand_index": 0, "name": "Test Batter", "power": 7,
+     "secondary": 1},
+    {"kind": "tactics", "hand_index": 1, "name": "Power Swing",
+     "type": "swing_boost", "bonus": 2},
+]
+_state_json = {"phase": "batting", "your_score": 0, "opp_score": 0,
+               "discards_left": 0, "runners": [], "hand": _hand}
+_real_sap = orch.select_and_play
+_real_grab_h = orch._grab_settle_regions
+_real_look_h = orch.hand_cursor_look
+_real_attempts = ic._LAST_PROBE_ATTEMPTS
+_env_key = orch.REFUSED_SELECT_DIR_ENV
+_had_env, _old_env = _env_key in _os.environ, _os.environ.get(_env_key)
+orch.select_and_play = lambda *a, **k: False       # every play is refused
+orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
+orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
+ic._LAST_PROBE_ATTEMPTS = [
+    {"attempt": 1, "glow": [0.2] * N, "ys": [100] * N, "selected": []}]
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        _os.environ[_env_key] = tmp
+        played, info = orch.play_one_turn(_state_json, 0)
+        check("(H) play_one_turn reports the refusal (played False)", played is False)
+        dirs = [d for d in _os.listdir(tmp) if d.startswith("refused_select_")]
+        check("(H) exactly one refused_select_* dir was written", len(dirs) == 1)
+        why = json.load(open(_os.path.join(tmp, dirs[0], "why.json"))) if dirs else {}
+        check("(H) why.json carries probe_attempts from _LAST_PROBE_ATTEMPTS",
+              why.get("probe_attempts") == ic._LAST_PROBE_ATTEMPTS)
+finally:
+    orch.select_and_play = _real_sap
+    orch._grab_settle_regions = _real_grab_h
+    orch.hand_cursor_look = _real_look_h
+    ic._LAST_PROBE_ATTEMPTS = _real_attempts
+    if _had_env:
+        _os.environ[_env_key] = _old_env
+    else:
+        _os.environ.pop(_env_key, None)
 
 if fails:
     for f in fails:
@@ -220,6 +395,7 @@ print()
 print("MUTATION TESTING")
 # =============================================================================
 IC_PATH = _os.path.join(_ROOT, "input_controller.py")
+ORCH_PATH = _os.path.join(_ROOT, "orchestrator.py")
 
 
 def _sha(path):
@@ -263,6 +439,24 @@ def _restore_ic():
         f.write(_IC_ORIG_BYTES)
     _reload_ic()
     check("input_controller.py restored byte-for-byte", _sha(IC_PATH) == _ic_sha0)
+
+
+_orch_sha0 = _sha(ORCH_PATH)
+with open(ORCH_PATH, "rb") as f:
+    _ORCH_ORIG_BYTES = f.read()
+
+
+def _reload_orch():
+    global orch
+    _clear_pycache("orchestrator")
+    orch = importlib.reload(orch)
+
+
+def _restore_orch():
+    with open(ORCH_PATH, "wb") as f:
+        f.write(_ORCH_ORIG_BYTES)
+    _reload_orch()
+    check("orchestrator.py restored byte-for-byte", _sha(ORCH_PATH) == _orch_sha0)
 
 
 _real_press = ic.press
@@ -326,7 +520,130 @@ finally:
     ic.press = _real_press
     _restore_ic()
 
-# --- sanity: the fix is intact after all three mutants ----------------------
+# --- mutant 4 (skeptic's M1, re-run): `if target in new:` -> `if new:` ------
+# A rise at the WRONG slot would then be misattributed to the TARGET -- case D
+# must catch it (cur must stay 2, the true slot, never 4).
+print("mutant 4 (skeptic M1): `if target in new:` -> `if new:` -- case D must "
+      "misattribute the wrong-slot rise to the target")
+try:
+    _mutate(IC_PATH, "        if target in new:\n", "        if new:\n")
+    _reload_ic()
+    s = ProbeFakeScreen(select_queue=[None, None, 2])
+    ic.press = s.press
+    ok, cur, sel = ic._probe_select_blind_target(4, s.ys, [], s.look)
+    check("mutant 4 caught: the wrong slot (2) was reported as the target (4)",
+          ok is True and cur == 4)
+finally:
+    ic.press = _real_press
+    _restore_ic()
+
+# --- mutant 5 (B1): the whole disappearance ("gone") branch is dropped -----
+print("mutant 5: the B1 disappearance branch is deleted -- case E must fail "
+      "(the already-selected batter is lost, not re-lifted)")
+try:
+    _mutate(
+        IC_PATH,
+        '        # B1: a DISAPPEARANCE names the true cursor exactly as a rise does --\n'
+        '        # this press toggled an already-selected slot back down, so put it back\n'
+        '        # up and stop; never press select_card again on the strength of a guess.\n'
+        '        gone = [i for i in before if i not in sel]\n'
+        '        if gone:\n'
+        '            back = gone[0]\n'
+        '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
+        '                  "selected before this probe) — the true cursor is there; "\n'
+        '                  "re-selecting it rather than pressing blind again")\n'
+        '            ok2, sel2 = _select_verified(back, look)\n'
+        '            if not ok2:\n'
+        '                print(f"  [cursor] could not re-select probe slot {back} — refusing "\n'
+        '                      "rather than leaving it lost")\n'
+        '                return False, None, sel2\n'
+        '            return True, back, sel2\n',
+        '')
+    _reload_ic()
+    s = ToggleFakeScreen(cursor=2, selected=[2], drops=[False] * ic.PRESS_VERIFY_TRIES)
+    ic.press = s.press
+    ok, cur, sel = ic._probe_select_blind_target(0, s.ys, sorted(s.sel), s.look)
+    check("mutant 5 caught: the already-selected batter (2) ends up lost",
+          2 not in sel)
+finally:
+    ic.press = _real_press
+    _restore_ic()
+
+# --- mutant 6: presses AFTER detecting a disappearance, WITHOUT verifying --
+# A plain extra press right before the existing `_select_verified` call turns
+# out EQUIVALENT for most drop patterns -- `_select_verified` itself checks
+# state before pressing, so an unconditional press one line earlier does
+# exactly what its own first internal attempt would have done anyway (same
+# press() call, same position in the drop sequence, same outcome). The
+# discriminating mutant is the one the skeptic's wording actually guards
+# against: pressing WITHOUT VERIFYING the result at all, so a corrective press
+# that itself gets swallowed (F's own odd drop pattern makes this happen) is
+# reported as success with the batter still down.
+print("mutant 6: press-and-return-unverified after detecting a disappearance "
+      "-- case F must show the batter left down when that corrective press "
+      "is itself dropped")
+try:
+    _mutate(
+        IC_PATH,
+        '            ok2, sel2 = _select_verified(back, look)\n'
+        '            if not ok2:\n'
+        '                print(f"  [cursor] could not re-select probe slot {back} — refusing "\n'
+        '                      "rather than leaving it lost")\n'
+        '                return False, None, sel2\n'
+        '            return True, back, sel2\n',
+        '            press("select_card")  # MUTANT (I-51 test): no verify\n'
+        '            return True, back, sel\n')
+    _reload_ic()
+    s = ToggleFakeScreen(cursor=2, selected=[2],
+                          drops=[True, False, True, False, False])
+    ic.press = s.press
+    ok, cur, sel = ic._probe_select_blind_target(0, s.ys, sorted(s.sel), s.look)
+    check("mutant 6 caught: an unverified corrective press that got dropped "
+          "still reports the batter selected", 2 not in sel)
+finally:
+    ic.press = _real_press
+    _restore_ic()
+
+# --- mutant 7 (B2): the production call site drops `extra=` ----------------
+print("mutant 7 (B2): orchestrator.play_one_turn's record_refused_select call "
+      "drops extra= -- case H must find no probe_attempts in why.json")
+try:
+    _mutate(
+        ORCH_PATH,
+        '        record_refused_select(\n'
+        '            player_idx, "player+tactics" if tactics_idx is not None else "player",\n'
+        '            _PLAY_STALL["n"],\n'
+        '            extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS})',
+        '        record_refused_select(\n'
+        '            player_idx, "player+tactics" if tactics_idx is not None else "player",\n'
+        '            _PLAY_STALL["n"])')
+    _reload_orch()
+    _real_sap_m7 = orch.select_and_play
+    _real_grab_m7 = orch._grab_settle_regions
+    _real_look_m7 = orch.hand_cursor_look
+    orch.select_and_play = lambda *a, **k: False
+    orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
+    orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
+    ic._LAST_PROBE_ATTEMPTS = [
+        {"attempt": 1, "glow": [0.2] * N, "ys": [100] * N, "selected": []}]
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            _os.environ[orch.REFUSED_SELECT_DIR_ENV] = tmp
+            orch.play_one_turn(_state_json, 0)
+            dirs = [d for d in _os.listdir(tmp) if d.startswith("refused_select_")]
+            why = (json.load(open(_os.path.join(tmp, dirs[0], "why.json")))
+                   if dirs else {})
+            check("mutant 7 caught: probe_attempts never reached why.json",
+                  "probe_attempts" not in why)
+    finally:
+        orch.select_and_play = _real_sap_m7
+        orch._grab_settle_regions = _real_grab_m7
+        orch.hand_cursor_look = _real_look_m7
+        _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
+finally:
+    _restore_orch()
+
+# --- sanity: the fix is intact after all mutants ----------------------------
 s = ProbeFakeScreen(select_queue=[None, None, None, None, 4])
 ic.press = s.press
 try:
@@ -337,8 +654,36 @@ check("post-restore sanity: case A passes again",
       ok is True and cur == 4 and s.sent.count("select_card") == ic.PRESS_VERIFY_TRIES
       and len(ic._LAST_PROBE_ATTEMPTS) == ic.PRESS_VERIFY_TRIES)
 
+s = ToggleFakeScreen(cursor=2, selected=[2], drops=[False] * ic.PRESS_VERIFY_TRIES)
+ic.press = s.press
+try:
+    ok, cur, sel = ic._probe_select_blind_target(0, s.ys, sorted(s.sel), s.look)
+finally:
+    ic.press = _real_press
+check("post-restore sanity: case E passes again", ok is True and cur == 2 and 2 in sel)
+
+with tempfile.TemporaryDirectory() as tmp:
+    orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
+    orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
+    orch.select_and_play = lambda *a, **k: False
+    ic._LAST_PROBE_ATTEMPTS = [{"attempt": 1, "glow": [0.0] * N, "ys": [100] * N,
+                                 "selected": []}]
+    try:
+        _os.environ[orch.REFUSED_SELECT_DIR_ENV] = tmp
+        orch.play_one_turn(_state_json, 0)
+    finally:
+        orch._grab_settle_regions = _real_grab_h
+        orch.hand_cursor_look = _real_look_h
+        orch.select_and_play = _real_sap
+        _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
+    dirs = [d for d in _os.listdir(tmp) if d.startswith("refused_select_")]
+    why = json.load(open(_os.path.join(tmp, dirs[0], "why.json"))) if dirs else {}
+    check("post-restore sanity: case H's probe_attempts is back",
+          "probe_attempts" in why)
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
-print("  all three mutants caught, input_controller.py restored byte-for-byte")
+print("  all seven mutants caught, input_controller.py and orchestrator.py "
+      "restored byte-for-byte")

@@ -2976,4 +2976,81 @@ finds its anchor and still passes -- confirms the `extra` merge does not disturb
 `tests/harness/test_no_shadowed_module_defs.py`,
 `tests/rig/test_no_real_input_under_test_run.py` -- all green.
 
-**Status.** fixed on branch, awaiting skeptic.
+**INDEPENDENT SKEPTIC ROUND 1: REFUTED, two blockers, both fixed
+(`agent_progress/issues/I-51/skeptic.md`, `probe_toggle_parity.py`,
+`probe_end_to_end.py`).**
+
+**B1 (the real bug).** `select_card` is a TOGGLE and does NOT move the cursor, so
+when the TRUE cursor sits on an ALREADY-SELECTED slot (I-48b: the batter selected
+first, then dropped navigation presses toward the tactics target left the true
+cursor sitting on the batter still), the probe's `select_queue=[None|slot]`
+fixer's-own fake could not represent it, and every probe press TOGGLES the
+already-selected batter -- the original code only ever checked `sel - before`
+(a rise), never `before - sel` (a disappearance). Raising the budget 2 -> 5
+changed the TOGGLE PARITY of an unrelated press storm without the probe ever
+noticing: P(the already-selected batter left DOWN), CLAUDE.md sec5's clustered
+chain -- **0.229 at budget 2, 0.707 at budget 3, 0.621 at budget 5** --
+non-monotonic in the budget, so it was never a knob to nudge. End to end through
+the real `_verified_select_and_play_inner` (I-48b's own shape), budget 2
+COMMITTED the batter alone (I-48's fallback) and budget 5 was a FULL STALL --
+I-51 was built to remove stalls and, unfixed, it added one. Safety was intact
+throughout (`_clear_strays`' `want <= lifted` gate caught it every time -- cost
+was a stall, never a wrong commit).
+
+Fix: mirror the rise branch with a disappearance branch, inserted before the
+rise check. `gone = [i for i in before if i not in sel]`; if `gone`, the true
+cursor is (or was) on `gone[0]`, put back UP via `_select_verified` (not
+`_deselect_verified` -- restoring a selection the probe's own press just
+knocked down, not removing a stray one) and return, with NO further
+select_card press. Re-run against the skeptic's own two scripts: `probe_end_to_end.py`
+now returns True with confirm_play sent exactly once at BOTH budget 2 and 5 (was a
+stall at 5); `probe_toggle_parity.py`'s exhaustive sweep (every drop pattern,
+budgets 2 and 5) reads "restored" on every row, P(left DOWN) = 0.0000 at both
+budgets, and the wrong-slot CONTROL is unharmed. New test cases (E) all-land,
+(F) an odd landed-press count (1, 3 dropped), (G) end to end through
+`_verified_select_and_play_inner` at both budgets.
+
+**B2 (half the ticket was dead).** The sole production call site
+(`orchestrator.py` ~:8472, inside `play_one_turn`) passed no `extra`, so
+`input_controller._LAST_PROBE_ATTEMPTS` never reached a live why.json --
+CLAUDE.md 10.1, a fix that produces output that looks like evidence and does
+not. Fixed: `extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS}`,
+module-qualified (not `from ... import`) because the probe REBINDS that name
+every call. New test case (H) drives the REAL `play_one_turn` with
+`select_and_play` stubbed to refuse and confirms the real call site's why.json
+carries the seeded sentinel.
+
+**Non-blocking, fixed while here (Q3):** the `extra` merge used to
+`open(path, "w")` (truncating) and then `json.dump` straight into it -- an
+unserialisable `extra` would destroy the good base record the merge was
+supposed to enrich. Now serialises to a string first (`json.dumps(..., default=str)`)
+and only writes the file once that succeeds; `default=str` also means most
+unserialisable values degrade to a string instead of raising at all.
+
+**Mutants, round 2 (4 new, 7 total in `test_probe_select_budget.py`):**
+
+    (M1, the skeptic's own, re-run) `if target in new:` -> `if new:`
+        -> case D: a wrong-slot rise is misattributed to the target
+    the whole B1 disappearance branch deleted
+        -> case E: the already-selected batter ends up lost, not re-lifted
+    press-and-return WITHOUT verifying, after detecting a disappearance
+        -> case F: a corrective press that itself gets dropped is reported
+           as success with the batter still down (an earlier attempt --
+           an extra press placed just BEFORE the existing, still-verifying
+           `_select_verified` call -- was an EQUIVALENT mutant: that helper
+           already checks state before pressing, so a redundant press one
+           line earlier does exactly what its own first internal attempt
+           would have done; not counted)
+    orchestrator.py's call site drops extra=
+        -> case H: probe_attempts never reaches why.json
+
+All four caught; the original three (budget reverted, press-before-look,
+attempt-log dropped) still caught after the B1/B2 edits; both files restored
+byte-for-byte (sha256-verified). Full regression re-run, all green:
+`test_probe_select_budget.py`, `test_blind_slot_probe_select.py`,
+`test_verified_selection.py`, `test_tactics_select_fallback.py`,
+`test_commit_refuses_unseen_strays.py`, `test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `test_no_real_input_under_test_run.py`,
+`test_walk_crosses_occluded_slot.py`.
+
+**Status.** fixed on branch (round 2), awaiting skeptic.

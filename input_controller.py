@@ -945,18 +945,39 @@ def _probe_select_blind_target(target, ys, before_sel, look):
     unlikely. `_LAST_PROBE_ATTEMPTS` records one entry per look taken here, in
     order, so a refusal's why.json can show exactly which attempts saw nothing.
 
+    I-51 SKEPTIC B1: select_card is a TOGGLE and it does NOT move the cursor, so
+    when the TRUE cursor sits on an ALREADY-SELECTED card (I-48b: the batter was
+    selected first, then dropped navigation presses toward the tactics target
+    left the true cursor sitting on the batter still), every probe press toggles
+    THAT card, not the target -- and the original code only ever checked for a
+    RISE (`sel - before`), never a DISAPPEARANCE (`before - sel`). Raising the
+    budget from 2 to 5 therefore changed the TOGGLE PARITY (even presses restore
+    it, odd presses leave it down) without the probe ever noticing either way --
+    measured non-monotonic in the budget (P(left down) 0.229 at 2, 0.707 at 3,
+    0.621 at 5; agent_progress/issues/I-51/skeptic.md). The mirror fix below
+    NAMES a disappearance exactly as the rise branch names a target: if `before`
+    holds a slot `sel` no longer does, the true cursor is (or was) there, and it
+    is put back UP via `_select_verified` (not `_deselect_verified` -- the goal
+    here is to restore the selection the probe itself knocked down, not remove a
+    stray one) before returning. No further select_card press follows a detected
+    disappearance; `_select_verified` does its own look-first, press-only-if-
+    needed pass.
+
     Returns (ok, cur, sel):
       ok=True,  cur=target        target lifted -- the cursor was on it. `sel`
                                    still names target selected, so the caller's own
                                    _select_verified sees "already selected" on its
                                    next look and presses nothing further.
-      ok=True,  cur=<other slot>  a DIFFERENT slot lifted -- that names where the
-                                   cursor actually is. It has been UNTOGGLED back
-                                   down (verified, not assumed) and the walk should
-                                   continue toward `target` from there.
+      ok=True,  cur=<other slot>  a DIFFERENT slot lifted, or an ALREADY-SELECTED
+                                   slot was toggled down by this probe and put back
+                                   UP -- either way this names where the cursor
+                                   actually is (untoggled/re-selected and VERIFIED,
+                                   not assumed) and the walk should continue toward
+                                   `target` from there.
       ok=False, cur=None          refuse: `target`'s row is unreadable to the lift
                                    reader, nothing lifted after PROBE_SELECT_MAX
-                                   tries, or the untoggle could not be verified.
+                                   tries, or the untoggle/re-select could not be
+                                   verified.
     """
     global _LAST_PROBE_ATTEMPTS
     _LAST_PROBE_ATTEMPTS = []
@@ -982,6 +1003,21 @@ def _probe_select_blind_target(target, ys, before_sel, look):
             print(f"  [cursor] cannot read the fan after the probe select (rows={n}) "
                   "— refusing")
             return False, None, sel
+        # B1: a DISAPPEARANCE names the true cursor exactly as a rise does --
+        # this press toggled an already-selected slot back down, so put it back
+        # up and stop; never press select_card again on the strength of a guess.
+        gone = [i for i in before if i not in sel]
+        if gone:
+            back = gone[0]
+            print(f"  [cursor] probe-select made {back} disappear (it was already "
+                  "selected before this probe) — the true cursor is there; "
+                  "re-selecting it rather than pressing blind again")
+            ok2, sel2 = _select_verified(back, look)
+            if not ok2:
+                print(f"  [cursor] could not re-select probe slot {back} — refusing "
+                      "rather than leaving it lost")
+                return False, None, sel2
+            return True, back, sel2
         new = [i for i in sel if i not in before]
         if target in new:
             print(f"  [cursor] probe-select: {target} lifted — the cursor was there")

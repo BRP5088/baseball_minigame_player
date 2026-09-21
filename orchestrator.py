@@ -7491,8 +7491,15 @@ def record_refused_select(target, kind, attempt, out_dir=None, extra=None):
             with open(why_path) as fh:
                 why = json.load(fh)
             why.update(extra)
+            # I-51 skeptic Q3 (non-blocking, fixed while here): serialise to a
+            # STRING before opening the file for write. `open(..., "w")` truncates
+            # immediately, so a dump that raised partway through an unserialisable
+            # `extra` used to destroy the good base record it was meant to enrich.
+            # `default=str` also means most unserialisable values degrade to a
+            # string instead of raising at all.
+            payload = json.dumps(why, indent=1, default=str)
             with open(why_path, "w") as fh:
-                json.dump(why, fh, indent=1)
+                fh.write(payload)
         print(f"  [play] kept the frame this refusal happened on -> {out}")
         return out
     except Exception:
@@ -8469,9 +8476,16 @@ def play_one_turn(state_json: dict, batters_used: int):
     forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
+        # I-51 SKEPTIC B2: without `extra`, input_controller._LAST_PROBE_ATTEMPTS
+        # never reached why.json on the live path at all -- module-qualified
+        # (not `from ... import`) because the probe REBINDS that name on every
+        # call, so a bound-at-import copy would go stale the first time it ran.
+        # select_and_play can probe TWICE in one call (once per target when a
+        # tactics card is also attached), so this records the LAST probe only.
         record_refused_select(
             player_idx, "player+tactics" if tactics_idx is not None else "player",
-            _PLAY_STALL["n"])
+            _PLAY_STALL["n"],
+            extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS})
         if play_stalled(state_json.get("hand")):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
