@@ -3069,10 +3069,9 @@ byte-for-byte (sha256-verified) after every mutant. Also green:
 `tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
 `tests/rig/test_no_real_input_under_test_run.py`.
 
-**Status.** fixed on branch (shared re-check, covers I-48b + the sibling shape),
-skeptic round 1 CONFIRMED WITH NOTES (N1 implemented here; N2 filed separately
-below as I-48d, OPEN, not fixed; N3, N4 cosmetic/process, not this ticket's
-business).
+**Status.** merged 0748b80; Opus skeptic CONFIRMED WITH NOTES, mechanism PROVEN
+(probe2.py R1); N1 applied 2bad7ab (shared re-verify covers the sibling shape
+j.log:620 / o.log:1040); 9/9 mutants.
 
 ### I-48d  An invisible (chronically occluded) stray can still be committed through the I-26/I-28 exemption    P2  play
 
