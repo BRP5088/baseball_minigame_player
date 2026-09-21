@@ -726,7 +726,7 @@ boundary block, `test_give_up_dialog_recognized.py`, `test_close_result_refuses_
 four mutants caught, including the skeptic's fresh-read one; 1,340 fixtures swept with zero
 give-up false positives.
 
-**Status.** Merged; live confirmation open.
+**Status.** Merged; live confirmation open. QA round 5 (41dd459cad89a71bff9af2bb63881dd78be8bf5e): the give-up test's stub answered from its own press flag rather than the frame, so a stale post-press read went uncaught; it now keys on the frame's capture sequence and that mutant fails.
 
 ## C. Costs wins
 
