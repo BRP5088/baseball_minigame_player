@@ -7529,21 +7529,50 @@ def _discard_hand_identity(hand):
     That is section 10.1's family reached through the NAMESPACE rather than the
     control flow, and it was found by another session reading deal_timing.jsonl,
     not by anything here.
+
+    Returns a dict keyed by hand_index, NOT a flat sorted tuple -- I-27. A card
+    that flickers to UNKNOWN for one poll is DROPPED from `hand` entirely
+    (local_hand_cards's `dropped.append(i); continue`), so a tuple of every
+    card compared by `!=` treated a missing slot exactly like a changed one:
+    the identity changed, the stall counters reset, and an excluded slot came
+    back on offer three refusals after it was excluded. Keying by index lets
+    the caller compare only the slots readable on BOTH sides.
     """
-    return tuple(sorted(
-        (c.get("hand_index"), c.get("kind"), c.get("power"), c.get("secondary"),
-         c.get("type")) for c in (hand or [])))
+    return {c.get("hand_index"): (c.get("kind"), c.get("power"),
+                                   c.get("secondary"), c.get("type"))
+            for c in (hand or [])}
+
+
+def _hand_identity_changed(stored, current):
+    """True when `current` is a GENUINELY different hand from `stored` -- some
+    hand_index readable in BOTH disagrees. A slot missing from either side
+    (unreadable this poll, or not yet seen at all) is not a change on its
+    own -- I-27: a slot flickering to UNKNOWN must not reset the stall
+    counters or forget an excluded slot (agent_progress/census-20260920,
+    section 5 finding 1: the excluded card came back on offer 14 lines after
+    a 3x exclusion, purely because an unrelated slot went UNKNOWN and dropped
+    out of `hand` for one poll).
+    """
+    if stored is None:
+        return True
+    return any(stored[idx] != card for idx, card in current.items() if idx in stored)
 
 
 def discard_stalled(hand) -> bool:
     """True when THIS EXACT HAND has had DISCARD_STALL_MAX discards refused running.
 
     Resets the counter whenever the hand changes, so a real redeal clears it and only
-    a genuinely unchanged hand can reach the bound.
+    a genuinely unchanged hand can reach the bound. A slot dropping out and coming
+    back (I-27) is not a redeal -- see _hand_identity_changed.
     """
     sig = _discard_hand_identity(hand)
-    if sig != _DISCARD_STALL["sig"]:
+    if _hand_identity_changed(_DISCARD_STALL["sig"], sig):
         _DISCARD_STALL["sig"], _DISCARD_STALL["n"] = sig, 0
+    else:
+        # Same hand -- merge in whatever this poll can see, so a slot that was
+        # missing when the signature was first established (or during an
+        # earlier flicker) is still there to compare against next time.
+        _DISCARD_STALL["sig"] = {**_DISCARD_STALL["sig"], **sig}
     return _DISCARD_STALL["n"] >= DISCARD_STALL_MAX
 
 
@@ -7579,13 +7608,16 @@ def play_excluded_slots(hand) -> frozenset:
 
     Resets (both the count and the exclusion set) whenever the hand changes --
     same identity discard_stalled uses, so a real redeal, including the one a
-    discard itself causes, clears both.
+    discard itself causes, clears both. A slot dropping out and coming back
+    (I-27) is not a redeal -- see _hand_identity_changed.
     """
     sig = _discard_hand_identity(hand)
-    if sig != _PLAY_STALL["sig"]:
+    if _hand_identity_changed(_PLAY_STALL["sig"], sig):
         _PLAY_STALL["sig"] = sig
         _PLAY_STALL["n"] = 0
         _PLAY_STALL["excluded"] = frozenset()
+    else:
+        _PLAY_STALL["sig"] = {**_PLAY_STALL["sig"], **sig}
     return _PLAY_STALL["excluded"]
 
 
