@@ -624,6 +624,40 @@ unmodified against the fix.
 
 **Status.** Merged.
 
+### I-28  The stray guard refused the engine's own target for going blind on its own lift   P0  guard
+
+**Evidence.** QA round 4 finder reproduced offline; live in
+`overnight/run_live_20260920h.log:121-132`: "selected by inference" followed by "went
+unreadable DURING this operation" three times running, then the 9 excluded.
+
+**Root cause.** `_clear_strays` never exempted `want` from its newly-blind refusal, and
+the commit gate could not see a blind selected target either — `selected_cards` skips a
+blind row, so a `want` slot that goes unreadable the instant it lifts (I-21's own
+mechanism) is never in `sel` and fails `want <= set(sel)` on the next line even if the
+early refusal is fixed.
+
+**Fix.** MERGED 2026-09-20 (aed2468): `want` is exempt from the newly-blind
+refusal/re-look, and a blind `want` slot counts as lifted everywhere `sel` is consulted
+— but only when it was READABLE at baseline and is blind now (I-21's own signature).
+The first version (c286308) counted any blind `want` slot unconditionally and was
+narrowed after a skeptic showed it would trust a target that was chronically
+unreadable before the operation ever pressed anything, on nothing but being blind and
+being `want`.
+
+**Verify.** `tests/minigame/test_stray_guard_exempts_target.py`, cases (a)-(f): (a) the
+literal repro, blind-on-lift target with `sel` containing it — commits, one look, no
+extra press; (b) CONTROL, a non-want slot blind through the re-look — still refused;
+(c) an inferred-selected target not in `sel`, beside a genuinely lifted non-want stray
+that cannot be cleared — refused, proving the exemption doesn't mask a real stray; (d)
+two simultaneous blind targets with nothing in `sel` at all — commits; (e) an
+inferred target beside a non-want slot occluded since baseline — commits, and that
+slot is never walked to or deselected (spied); (f) a target blind at baseline too, with
+no proof it was ever selected — refused. Two mutants, "count all blind slots as
+lifted" and "want blind at baseline counts", each killed by a different case ((e) and
+(f) respectively). All 11 regression files pass unmodified.
+
+**Status.** Merged; live confirmation open.
+
 ### I-29  A redeal at a stalled slot that draws the same value inherited the old refusal count   P1  loop
 
 **Evidence.** QA round 4 (not seen live): `_discard_hand_identity` compares a VALUE tuple
