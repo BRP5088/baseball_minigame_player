@@ -126,6 +126,11 @@ def _try(fn, *a, **k):
 
 def look(step):
     """Grab ONE frame and ask every reader about THAT frame. Returns (report, image)."""
+    # THE GUARD SITS WHERE THE DAMAGE HAPPENS. The skeptic on this rebuild called
+    # look() directly under BASEBALL_TEST_RUN and reached a real screen grab: the
+    # entry-point refusals in run_one_step/main protected only the callers that
+    # went through them. Capture has no lockout of its own, so this is its only one.
+    _refuse_if_test_run()
     img = o._fast_grab()
     r = {"step": step, "t": time.time(),
          "clock": datetime.datetime.now().strftime("%H:%M:%S"), "size": list(img.size)}
@@ -535,6 +540,9 @@ def apply_action(cmd, r, dec, dry=False, allow_pay=False):
     (tests/harness/test_tools_spend_properly.py's whole-tools scan enforces
     exactly this for every file under tools/).
     """
+    _refuse_if_test_run()   # same reason as look(): presses have input_controller's
+                            # own lockout behind them, but the refusal belongs here too
+
     cmd = (cmd or "").strip()
     out = {"acted": None, "pressed": False, "refused": False, "refusal_reason": None}
 
