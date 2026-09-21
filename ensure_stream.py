@@ -764,6 +764,22 @@ def _dismiss_overlay_if_blocking(log=print):
     TWO presses -- a blind third could reopen whatever the first two closed.
     ensure_live() propagates this return value: False now means "still
     blocked", not "nothing needed doing".
+
+    RESIDUAL RISK (round-3 skeptic, 2026-09-21, NOT fixed here -- reachable
+    only on a false fire, and the false-fire rate is measured at ~0, see
+    orchestrator.LIVENESS_MISS_SEC's comment). This function has NEITHER a
+    looks_like_ui pre-filter NOR any debounce of its own: it takes ONE fresh
+    capture and, if no reader answers, presses -- so if the caller's 6.0s of
+    evidence was itself a false alarm, a single unlucky frame here is enough
+    to press ps_button. Two outcomes follow a false fire: two presses is an
+    even TOGGLE (~6s, net no change, harmless); one press then a reader
+    answers through the freshly-opened overlay leaves the overlay OPEN while
+    this function reports True. Whether that second outcome is reachable
+    depends on whether any of the nine _game_visible readers can answer
+    THROUGH an open PS5 Control Center -- it is a bar along the bottom of the
+    screen, the compass sits at the top of the HUD -- which is UNTESTABLE
+    OFFLINE: no fixture of an overlay-over-game frame exists anywhere in
+    test_fixtures/. Do not build a fix for this without one.
     """
     import compass
 

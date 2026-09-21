@@ -253,10 +253,24 @@ PS5 overlay up and confirm the cycle refuses rather than presses.
 
 **Status.** Open. Blocked on I-01 to I-04 landing first.
 
-**I-05a:** second attempt on branch worktree-agent-a7613eff370917779 (3731b5e);
-skeptic CONFIRMED WITH NOTES, NOT merged: three holes (streak counted in polls
-not time; two surviving mutants M2/M5; all-readers-crashed reads as an
-overlay) — see HANDOFF_NOW.md.
+**I-05a:** third attempt on branch worktree-agent-a7613eff370917779 (7d1c70b,
+plus one prose-only follow-up commit): round 2's three holes are fixed
+(debounce is now a wall-clock window, LIVENESS_MISS_SEC, not a poll count;
+M2 and M5 both killed; ensure_stream._game_visible fails open when every
+reader crashes). Round-3 skeptic verdict: CONFIRMED WITH NOTES (not
+merge-blocking). The deciding measurement: over 1004s of real 10Hz gameplay
+across the three surviving screenshot_log/ runs (9729 frames,
+agent_progress/issues/I-05a-skeptic-r3/census_gate.json), the REAL liveness
+gate misses exactly ONE genuine game frame (a ban-selection splash, 0.102s)
+-- LIVENESS_MISS_SEC=6.0 is a 59x margin over that. 9 of 9 mutants killed
+(M1-M5, the HOLE-3 guard, plus two new shapes from the skeptic). 14/14
+regression files EXIT:0. Two open notes, neither blocking: the AMBIGUOUS
+branch's true-positive class (a real PS5 overlay over a live game) has n=0
+on disk, so its false-positive rate is measured ~0 but its ability to catch
+a real overlay is unmeasured (safe direction: it can only fail by not
+firing); and _dismiss_overlay_if_blocking has no pre-filter or debounce of
+its own, so on a false fire it could in principle leave the overlay open --
+untestable offline, no such fixture exists. Awaiting merge.
 
 ### I-06  A stalled match is abandoned by the next cycle with no record             P1  money
 

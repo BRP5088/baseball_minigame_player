@@ -2481,46 +2481,66 @@ def _screen_shows_the_game(img):
 # not a safe proxy for "past one transition's width" when the loop's own
 # sleep is conditional.
 #
-# MEASURED (agent_progress/issues/I-05a/measure_miss_runs.py, output saved
-# alongside it as miss_runs.json and miss_runs_full.log): every archived
-# deal-timing probe on disk, diagnostics/deal_frames/deal_*/t<ms>.png -- a
-# live ~6.5Hz capture of exactly the transition this debounce exists for,
-# because a card deal is a real animation, not a static screen, and
-# ensure_stream._game_visible() has no reason to answer True on every one of
-# its frames. Scored the REAL _game_visible() (not a fake) over all 34
-# archived deal_* directories:
+# FIRST MEASUREMENT (agent_progress/issues/I-05a/measure_miss_runs.py, output
+# saved alongside it as miss_runs.json and miss_runs_full.log) was every
+# archived deal-timing probe on disk, diagnostics/deal_frames/deal_*/t<ms>.png,
+# and it gave a MAX of 3242ms with 21 of 21 frames of that probe reading as a
+# miss -- i.e. the entire capture. That number is CENSORED, not a ceiling:
+# 32 of the 34 probes are only ~3.2s long by construction (a deal-timing probe
+# stops recording once the deal settles), so a real miss run longer than that
+# could not have been seen in them at all. Read it as a LOWER bound on how
+# long an ordinary deal can hold _game_visible() at False, not as the longest
+# such run that exists.
 #
-#   longest UNINTERRUPTED _game_visible-miss run per directory, ms:
-#     10 of 34 dirs: 0 (every frame recognised -- includes the two ~19.8s,
-#                       125/126-frame long captures)
-#     24 of 34 dirs: nonzero, sorted: 344, 809, 1117, 1439, 1440, 1445,
-#       1903, 1908, 1920, 1932, 1937, 2084, 2086, 2086, 2228, 2282, 2399,
-#       2405, 2408, 2540, 2723, 2742, 3208, 3242  (median 2086)
-#   MAX observed: 3242ms, in deal_1789948058834858000 -- 21 of 21 frames of
-#   that ~3.24s probe read as a miss, i.e. the ENTIRE capture. Not a fluke of
-#   one frame: several other dirs clear 2.4-2.7s the same way.
+# THE DECIDING MEASUREMENT (round-3 skeptic, agent_progress/issues/
+# I-05a-skeptic-r3/, census_gate.py / census_gate.json) runs the REAL
+# orchestrator._screen_shows_the_game() -- the exact function this gate calls,
+# gate AND readers together -- over every frame of the three surviving
+# screenshot_log/ runs (SCREENSHOT_KEEP_RUNS=3 had already pruned the older
+# ones this file used to cite by name; they are gone, not just unread):
 #
-# So an ordinary deal can hold _game_visible() at False, alone, for the
-# WHOLE ~3.2s it takes -- this constant cannot sit right above that without
-# risking a false fire on a plain deal. Set with margin above the measured
-# max rather than at it (§10.4: no paired "definitely blocked" population
-# exists to sit BETWEEN, only this one-sided ceiling, so the honest move is
-# margin, not a midpoint):
+#   directory                frames  dur_s  gate MISS  longest miss run
+#   run_20260921_080311        8036  829.6          1           0.102 s
+#   run_20260921_075118        1254  129.6          0           0.000 s
+#   run_20260921_080207         439   45.2          0           0.000 s
+#   TOTAL                      9729 1004.4          1           0.102 s
 #
-#   LIVENESS_MISS_SEC = 6.0   (~1.85x the measured 3242ms max)
+# The single miss, viewed, is a genuine game screen: the ban grid mid-
+# selection, "BANNED CARDS 1/3" legible, an X being drawn -- read_ban_counter
+# misses during that splash (already documented, §11), for one frame, 0.102s.
+# The census also contains the class this constant was worried about and is
+# UNTROUBLED by it: 363 of 804 sampled frames from the same run are the
+# settled post-reveal recap tableau (no five-card hand, `local_game_state`
+# cannot read it), in runs up to 20.7s long, and the gate reads GAME on every
+# single one of them -- because `looks_like_ui(img)` answers False on real,
+# textured H.264 video before any reader even runs; the pre-filter does the
+# work here, not the widened reader set. Over 1004s of real two-match
+# gameplay, the longest genuine-game not-visible run is 0.102s.
 #
-# This does not by itself bound false fires during a deal: the real gate is
-# `looks_like_ui(img) AND not _game_visible(img)` (see
-# _screen_shows_the_game() above), and looks_like_ui fires on ~1.2% of real
-# streaming frames (§3 of CLAUDE.md, the Qt-flat-fill test) -- a card
-# animation is real H.264 video content, not a Qt overlay, so the compound
-# condition should be far rarer than _game_visible-alone misses. That
-# narrower population (deal frames that ALSO pass looks_like_ui) was not
-# measured here; 6.0s is deliberately sized to survive even if it turns out
-# not to be rare. At the far end, MAX_STUCK_ATTEMPTS (15) still bounds the
-# total stall budget at 15 * 6.0s = 90s worst case before the run gives up,
-# which is the existing runaway guard this debounce sits inside of, per the
-# skeptic's own fallback guidance.
+#   LIVENESS_MISS_SEC = 6.0   -- a 59x margin over the measured 0.102s max,
+#                                and still ~1.85x the deal-probe LOWER bound
+#                                above, which is corroboration, not the basis
+#
+# ONE BRANCH OF THIS GATE HAS NO LIVE EVIDENCE BEHIND IT, AND THAT MATTERS
+# MORE THAN THE CONSTANT. This 6.0s window belongs to the AMBIGUOUS branch
+# (right size, looks_like_ui True, no reader answers) -- and in both censuses
+# above, `looks_like_ui` never once fired on a genuine game frame, so the
+# ambiguous branch's TRUE-positive class (a real PS5 Control Center sitting
+# over a live game) has n = 0 on disk: no such fixture exists anywhere under
+# test_fixtures/. Its measured FALSE-positive rate is ~0 (0 fires in 9729
+# frames); its ability to actually CATCH a real overlay is UNMEASURED. That
+# is a one-sided gate and it stays one-sided until an overlay-over-game frame
+# is captured -- it is not a reason to distrust the constant, because the
+# safe direction holds either way: this branch can only fail by NOT firing,
+# which is exactly the pre-fix status quo.
+#
+# THE WRONG-SIZE branch (chiaki's own window, fires at once, no debounce) is
+# the one with live evidence: overnight/run_live_20260921h.log shows run()
+# launched against a sleeping console, capturing the 1867x1050 host list,
+# printing UNRECOGNISED SCREEN 15 times and stopping WITHOUT EVER CALLING
+# ensure_live. That failure is real, observed, and this branch is what fixes
+# it -- see the "console-asleep-at-launch" scenario in
+# tests/minigame/test_run_gates_on_liveness.py.
 LIVENESS_MISS_SEC = 6.0
 
 
