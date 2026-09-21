@@ -238,8 +238,10 @@ try:
           out.count("dead-reckoning") == 2)
 
     # --- no bare-bool checks slipped in (CLAUDE.md 5's nine check() signatures) --
+    # I-51 made PROBE_SELECT_MAX an alias of PRESS_VERIFY_TRIES (was a literal 2);
+    # this file's own fix never touches either, so the two must still agree.
     check("PROBE_SELECT_MAX untouched by this file's fix",
-          ic.PROBE_SELECT_MAX == 2)
+          ic.PROBE_SELECT_MAX == ic.PRESS_VERIFY_TRIES)
 finally:
     ic.press = _real_press
 

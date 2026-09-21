@@ -7436,7 +7436,7 @@ REFUSED_SELECT_DIR_ENV = "BASEBALL_REFUSED_SELECT_DIR"
 REFUSED_SELECT_MAX_DIRS = 200
 
 
-def record_refused_select(target, kind, attempt, out_dir=None):
+def record_refused_select(target, kind, attempt, out_dir=None, extra=None):
     """Keep the frame + why.json a refused select_and_play() call left behind.
 
     Grabs its own frame rather than reusing a decision-time one, because the
@@ -7450,6 +7450,12 @@ def record_refused_select(target, kind, attempt, out_dir=None):
     orchestrator cannot see which of the two targets inside it actually failed
     to verify; see ISSUES.md I-48), and `attempt` is play_stalled's own running
     count of refusals on this exact hand.
+
+    `extra` (I-51) is an OPTIONAL dict merged into why.json on top of the four
+    fields above -- e.g. input_controller._LAST_PROBE_ATTEMPTS, the blind-target
+    probe's own per-attempt glow/ys/selected reads, so a refusal's why.json can
+    show WHICH attempts saw nothing rather than only the frame taken after the
+    fact. Defaults to None so every existing caller is unchanged.
 
     Never raises into the turn loop. Returns the directory written, or None.
     """
@@ -7475,6 +7481,18 @@ def record_refused_select(target, kind, attempt, out_dir=None):
             json.dump({"target": target, "kind": kind,
                        "already_selected": list(sel), "attempt": attempt},
                       fh, indent=1)
+        # I-51: merged in AFTER the write above, never inside it -- that json.dump
+        # call is a mutation ANCHOR for tests/minigame/test_tactics_select_fallback.py
+        # (I-48's own mutant 3), and rewriting it inline here would silently break
+        # that file's exact-string match (CLAUDE.md 10.19) without either file
+        # saying so.
+        if extra:
+            why_path = os.path.join(out, "why.json")
+            with open(why_path) as fh:
+                why = json.load(fh)
+            why.update(extra)
+            with open(why_path, "w") as fh:
+                json.dump(why, fh, indent=1)
         print(f"  [play] kept the frame this refusal happened on -> {out}")
         return out
     except Exception:

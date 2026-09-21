@@ -2902,3 +2902,78 @@ now asserted to produce.
 **Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
+
+### I-51  The blind-target probe gives up after 2 presses; two clustered drops refuse a play on a healthy cursor   P1  play
+
+**Evidence.** `agent_progress/census/blind_cursor_m4/progress.md` (cycle7 match4,
+`refused_select_1790026023456048000`). `_walk_cursor_to` presses toward a target one
+step away, reads back a blind cursor, and hands off to `_probe_select_blind_target`
+(input_controller.py, ~:910) when the target's row IS readable to the lift reader --
+that probe presses `select_card` up to `PROBE_SELECT_MAX` (2) times, looking for the
+target to rise. Here it pressed twice, nothing lifted, and the play was REFUSED. The
+kept post-refusal frame shows the cursor sitting correctly on the target the whole
+time: slot 3, glow 26.9 (comfortably inside `cursor_slot`'s own measured true band
+20.7 .. 36.1, well clear of `CUR_TRUSTED_GLOW_MIN`), digit 9 legible off a
+disc-anchored y, nothing selected. Not CLAUDE.md 10.28-style occlusion (the disc is
+fully legible) and not slot-4's structural glow ceiling (slot 3 reads fine). The
+simplest account consistent with the evidence: two GENUINELY DROPPED `select_card`
+presses on a cursor that was exactly where the walk expected it. The very next poll
+re-decided the same play and committed it after one dropped `confirm_play` retry --
+an ordinary press-drop, not a stuck slot.
+
+**Root cause.** CLAUDE.md section 5 measured the console ignoring 15.20% of presses,
+CLUSTERED (P(ignore | previous ignored) = 0.250, longest observed run 4) -- the exact
+reasoning that already raised `PRESS_VERIFY_TRIES` from 3 to 5 (independent-assumption
+tail 0.95% -> clustered-tail 0.059%) after it fired on a live $50 match at 2. The
+probe's own budget was never re-derived alongside it: `PROBE_SELECT_MAX = 2` (one
+retry) leaves a ~3.8% chance of two clustered drops in a row, which is exactly what
+this event looks like. The user's bar is zero stalls, and a second constant on the
+same money path, bounding retries against the same measured drop rate, drifted from
+the first one that was already fixed for this reason.
+
+**Fix.** `PROBE_SELECT_MAX` now ALIASES `PRESS_VERIFY_TRIES` (defined right after it,
+since Python needs that name to exist first) instead of a separately-derived 2 -- both
+bound retrying `select_card` against the same measured, clustered press-drop rate, so
+they cannot drift apart again. The probe's existing safety is untouched and now stated
+as an explicit invariant in its docstring: every iteration LOOKS before it decides
+whether to press again, so a press whose lift only becomes visible on the very next
+look is caught there -- an extra press after a landed one is impossible by
+construction, not merely unlikely. `input_controller._LAST_PROBE_ATTEMPTS` now records
+one entry (glow, ys, selected) per attempt, reset at the top of every probe call, so a
+refusal's own evidence shows which attempts saw nothing instead of only the frame
+grabbed after the fact. `orchestrator.record_refused_select` grew an optional `extra`
+dict argument (default `None`, so every existing caller -- including
+`tests/minigame/test_tactics_select_fallback.py`'s own mutation anchor on that
+function's `json.dump` call -- is byte-for-byte unchanged) that merges into why.json
+AFTER the base write, never inside it, specifically so it does not disturb that
+anchor.
+
+**Verify.** `tests/minigame/test_probe_select_budget.py` (new): (A) four clustered
+drops then a landed 5th press -> success, exactly `PRESS_VERIFY_TRIES` (5) presses;
+(B) the first press lands -> success, exactly 1 press, no double-toggle; (C) all 5
+dropped -> refusal, `_LAST_PROBE_ATTEMPTS` carries 5 records in order, and
+`record_refused_select(..., extra={"probe_attempts": ...})` persists them into
+why.json while `extra=None` (every existing call site) writes no such key at all; (D)
+a rise at the wrong slot after two drops is untouched -- explicit untoggle, walk
+continues. Three mutants, `__pycache__` cleared and sha256-verified restore around
+each:
+
+    PROBE_SELECT_MAX reverted to a literal 2
+        -> case A: refuses at 2 presses, never reaches the 5th
+    an unconditional press before the loop's own first look
+        -> case B: 2 presses sent instead of 1
+    _LAST_PROBE_ATTEMPTS.append(...) dropped
+        -> case C: 0 records instead of 5
+
+All three caught. Also re-ran unaffected: `tests/rig/test_blind_slot_probe_select.py`
+(updated to assert `PROBE_SELECT_MAX == PRESS_VERIFY_TRIES` rather than the literal
+2), `tests/minigame/test_walk_crosses_occluded_slot.py` (same literal updated),
+`tests/minigame/test_verified_selection.py`, `tests/minigame/
+test_tactics_select_fallback.py` (its own mutant 3 on `record_refused_select` still
+finds its anchor and still passes -- confirms the `extra` merge does not disturb it),
+`tests/minigame/test_commit_refuses_unseen_strays.py`,
+`tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py` -- all green.
+
+**Status.** fixed on branch, awaiting skeptic.

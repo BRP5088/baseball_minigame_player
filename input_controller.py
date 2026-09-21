@@ -896,15 +896,23 @@ CUR_TRUSTED_GLOW_MIN = 20.7
 # drops. It is a bound on a RECOVERY, not a threshold on a measured quantity.
 CURSOR_BLIND_NUDGES = 8
 
-# How many times the PROBE-SELECT itself may be pressed before refusing. The probe
-# is a single select_card press, and section 5's press-drop rate is 15.20%,
-# CLUSTERED (P(ignore | previous ignored) = 0.250) -- so it can be dropped exactly
-# like any other press. One retry (2 total) absorbs a lone drop without turning a
-# genuinely dead slot into an unbounded press loop; it is not derived from
-# SELECT_ATTEMPTS (5) because that number bounds a SELECTION the caller already
-# knows is reachable, while this one bounds a PROBE whose whole purpose is to find
-# out whether the target is reachable at all.
-PROBE_SELECT_MAX = 2
+# PROBE_SELECT_MAX (the blind-target probe's own press budget) is defined further
+# down in this file, right after PRESS_VERIFY_TRIES -- I-51 makes it REUSE that
+# constant rather than a separately-derived number, and Python needs
+# PRESS_VERIFY_TRIES to exist first for that alias to bind.
+
+
+# I-51: the LAST _probe_select_blind_target call's per-attempt look reads (glow,
+# ys, selected slots), so a refusal's why.json (orchestrator.record_refused_select's
+# `extra` argument) can show WHICH attempts were tried rather than only the frame
+# taken after the fact. Same module-local shape as _LAST_PLAY_DROPPED_TACTICS above:
+# reset at the top of every call so a refusal never reports a PREVIOUS probe's
+# attempts, appended to as the call proceeds. Evidence this exists for:
+# agent_progress/census/blind_cursor_m4/progress.md -- cycle7 match4 refused a play
+# on a cursor that (per the post-refusal frame) was sitting correctly on the target
+# the whole time, and the one thing that frame could not show is what the probe's
+# OWN intermediate looks saw.
+_LAST_PROBE_ATTEMPTS = []
 
 
 def _probe_select_blind_target(target, ys, before_sel, look):
@@ -921,6 +929,22 @@ def _probe_select_blind_target(target, ys, before_sel, look):
     agent_progress/cursor-lift-refutation/: hover-lift is dead at every slot,
     slot 4 reads -10.0 hovered or not; only selection lifts).
 
+    I-51: the budget is PROBE_SELECT_MAX presses, now an ALIAS of PRESS_VERIFY_TRIES
+    (5) rather than its own separately-derived 2 -- both bound retrying select_card
+    against the SAME measured, clustered 15.20% press-drop rate (CLAUDE.md section
+    5), and two clustered drops (~3.8%) is routine enough to have refused a play on
+    a cursor that was, per the kept frame, sitting correctly on the target the whole
+    time (cycle7 match4, agent_progress/census/blind_cursor_m4/progress.md).
+
+    INVARIANT: a landed press LIFTS the card (or, if it lands on the wrong slot,
+    lifts THAT one), and every iteration below looks BEFORE it presses again -- the
+    look from attempt N is what decides whether attempt N+1's press is ever sent.
+    So a press whose lift only becomes visible on the look that follows it is
+    caught there, before a further press could double-toggle it back down: an
+    extra press after a landed one is impossible by construction, not merely
+    unlikely. `_LAST_PROBE_ATTEMPTS` records one entry per look taken here, in
+    order, so a refusal's why.json can show exactly which attempts saw nothing.
+
     Returns (ok, cur, sel):
       ok=True,  cur=target        target lifted -- the cursor was on it. `sel`
                                    still names target selected, so the caller's own
@@ -934,6 +958,8 @@ def _probe_select_blind_target(target, ys, before_sel, look):
                                    reader, nothing lifted after PROBE_SELECT_MAX
                                    tries, or the untoggle could not be verified.
     """
+    global _LAST_PROBE_ATTEMPTS
+    _LAST_PROBE_ATTEMPTS = []
     # CAUTION 2 FROM THE REFUTATION: selected_cards SKIPS a row whose y is a
     # fallback (it abstains on exactly the cards whose disc is unreadable), so
     # "nothing lifted" from a slot the reader cannot see is not evidence of
@@ -950,6 +976,8 @@ def _probe_select_blind_target(target, ys, before_sel, look):
         press("select_card")
         time.sleep(SELECT_SETTLE_SEC)
         _g, _ys, n, sel = _look_settled(look)
+        _LAST_PROBE_ATTEMPTS.append({"attempt": attempt, "glow": list(_g),
+                                      "ys": list(_ys), "selected": list(sel)})
         if n != MAX_HAND_SIZE:
             print(f"  [cursor] cannot read the fan after the probe select (rows={n}) "
                   "— refusing")
@@ -970,7 +998,7 @@ def _probe_select_blind_target(target, ys, before_sel, look):
             return True, other, sel2
         if attempt < PROBE_SELECT_MAX:
             print(f"  [cursor] probe-select raised nothing (attempt {attempt}/"
-                  f"{PROBE_SELECT_MAX}) — retrying once; a dropped press is routine "
+                  f"{PROBE_SELECT_MAX}) — retrying; a dropped press is routine "
                   "at this console's 15.20% ignore rate")
     print(f"  [cursor] probe-select raised nothing after {PROBE_SELECT_MAX} attempts "
           "— refusing")
@@ -3811,6 +3839,11 @@ def targeted_input_allowed(what):
 # 152. That is the argument for the bigger sample, and it was not precision.
 PRESS_VERIFY_TRIES = 5
 PRESS_VERIFY_SETTLE = 0.45      # time for the UI to show the change before re-reading
+
+# I-51: _probe_select_blind_target's own press budget REUSES this constant rather
+# than a separately-derived number -- see that function's docstring. Placed here,
+# after PRESS_VERIFY_TRIES, because that is what it aliases.
+PROBE_SELECT_MAX = PRESS_VERIFY_TRIES
 
 
 def press_verified(action, observe, tries=None, settle=None, log=None):
