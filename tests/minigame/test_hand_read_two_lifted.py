@@ -151,6 +151,68 @@ if _os.path.exists(_NEG):
 else:
     check(False, f"negative fixture missing: {_NEG}")
 
+# =========================================================================
+print("(e) MUTANT GUARD: the same slot found twice by two passes must count "
+      "once, not two")
+# =========================================================================
+# I-37's fix pools strong + white-disc + wreath candidates and takes the BEST
+# cost PER SLOT specifically so that one card, found twice by two different
+# detector passes, cannot satisfy FIT_MIN_DISCS on its own -- the docstring
+# names this ("so a slot found twice by two passes counts once") but nothing
+# in this file exercised it (an independent skeptic's finding, 2026-09-21: a
+# mutant replacing the per-slot dedup with a raw count over all pooled
+# candidates survived every local_hand test in the repo, including this one).
+#
+# Two synthetic white-disc candidates are placed on the SAME slot (slot 0's
+# player anchor: one dead on it, one 45px below -- cost 0 and 15, both under
+# FIT_MAX 20) with no other slot represented anywhere. They are placed >25px
+# apart (raw pixel distance, not cost) so `_free`'s own proximity dedup --
+# which exists to stop a SINGLE blob being counted twice by adjacent detector
+# passes, not to enforce one-hit-per-slot -- does not collapse them into one
+# candidate before the gate ever sees two; the two-detector-passes-on-one-card
+# scenario this guards against is exactly a case `_free` cannot catch, because
+# a white-disc blob and a wreath detection (or two different white-disc blobs
+# on one card's ring) legitimately sit that far apart while still being ONE
+# card. A blank canvas supplies zero `strong` discs, so these two synthetic
+# points are the WHOLE candidate pool. The deduped (correct) gate sees ONE
+# distinct slot with evidence -- below FIT_MIN_DISCS (2) -- and must refuse
+# the fan. A raw count over the pool sees TWO candidates and would wrongly
+# admit it.
+_orig_white_discs = lh._white_discs
+_orig_find_tactics = lh.find_tactics
+
+
+def _dup_slot_white_discs(g):
+    x0, y0 = lh.SLOT_PLAYER[0]
+    return [(int(x0), int(y0), 40, (0, 0, 1, 1)),
+            (int(x0), int(y0) + 45, 40, (0, 0, 1, 1))]
+
+
+def _no_tactics(img, dark_max=110):
+    return []
+
+
+try:
+    lh._white_discs = _dup_slot_white_discs
+    lh.find_tactics = _no_tactics
+    _blank = Image.new("L", (int(lh.ANCHOR_W), 300), color=128)
+    _strong = lh._strong_discs(_blank)
+    _admitted = lh._fan_looks_present(_blank, _strong, _blank.width / lh.ANCHOR_W)
+finally:
+    lh._white_discs = _orig_white_discs
+    lh.find_tactics = _orig_find_tactics
+
+check(_strong == [],
+      f"CONTROL: a blank canvas must supply no _strong_discs candidates of "
+      f"its own, so the two synthetic white-disc hits are the whole pool; "
+      f"got {_strong!r}")
+check(_admitted is False,
+      f"two candidates on the SAME slot (no other slot represented) must NOT "
+      f"admit the fan -- only one distinct slot has evidence, below "
+      f"FIT_MIN_DISCS ({lh.FIT_MIN_DISCS}); got admitted={_admitted!r}. A raw "
+      f"count over the pooled candidates (instead of the best cost PER SLOT) "
+      f"would wrongly admit this.")
+
 if fails:
     for f in fails:
         print("  FAIL:", f)

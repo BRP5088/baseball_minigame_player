@@ -612,6 +612,19 @@ def _fan_looks_present(img, strong, s):
     field (agreement.jsonl, never trusted for card VALUES but fine for "is this a
     five-card hand") confirms are genuine five-card fans that the old gate was
     dropping to the blind ungated path for no reason.
+
+    Reproduce: `agent_progress/issues/I-37/probe6_corpus_regression.py`, which
+    must crop the two I-37 fixtures through `orchestrator.crop_gameplay_regions`
+    before feeding them to either gate -- they are FULL 1920x1080 frames, not
+    hand crops. An earlier version of this script opened them directly with
+    `Image.open()` instead, at ~2x the calibration scale, where every raw-pixel
+    size gate in `_white_discs`/`find_tactics`/`circle_finder` silently rejects
+    real discs; both gates rejected both fixtures and the script never exercised
+    the fix at all (caught by an independent skeptic, 2026-09-21). Corrected and
+    re-run, it prints exactly:
+    `total files: 2400 both admit: 462 both reject: 1934
+    old-admits-new-rejects (BAD): 0 new-admits-old-rejects (newly fixed): 4`,
+    naming the four files above.
     """
     g = np.asarray(img.convert("L"), dtype=np.uint8)
     taken = [(c[0], c[1]) for c in strong]

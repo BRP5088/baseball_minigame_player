@@ -853,13 +853,19 @@ slots at or under `FIT_MAX` -- same two constants, nothing invented.
 resting cards read unchanged; a CONTROL fixture with no selection (`hand_cursor/
 cursor_on_1.png`) reads byte-identical digits to before the fix; a negative-control
 fixture (`overnight/local_hand/hand_1788963163511615000.png`, the same one I-32's
-neighbour test uses) is still rejected as a non-fan. Two mutants, both caught
-end to end (row count collapses to 4/3 and the file raises an IndexError): (1)
-reverting to the old strong-only gate; (2) keeping the broadened candidate pool
-but taking the FIRST candidate per slot instead of the best (min-cost) one --
-`strong`'s own bad candidate for the lifted slot is seen before the good
-white-disc one, so "first wins" reproduces the same stall the fix exists for.
-sha256-verified restored byte for byte between mutants.
+neighbour test uses) is still rejected as a non-fan. Three mutants, all caught:
+(1) reverting to the old strong-only gate and (2) keeping the broadened
+candidate pool but taking the FIRST candidate per slot instead of the best
+(min-cost) one -- both caught end to end, row count collapses to 4/3 and the
+file raises an IndexError (`strong`'s own bad candidate for the lifted slot is
+seen before the good white-disc one, so "first wins" reproduces the same stall
+the fix exists for); (3) replacing the per-slot dedup with a raw count over the
+pooled candidates (an independent skeptic's finding, 2026-09-21: this survived
+every local_hand test in the repo including this file's first version) --
+caught by check (e), two synthetic same-slot candidates >25px apart (so
+`_free`'s own dedup does not collapse them first) that a raw count wrongly
+admits and the deduped gate correctly refuses. sha256-verified restored byte
+for byte between all three mutants.
 
 **Regression check.** `agent_progress/issues/I-37/probe6_corpus_regression.py`
 (not part of the suite, too slow): over 2,396 archived hand crops
@@ -871,7 +877,27 @@ fixtures plus 2 archived corpus frames whose paid-model "vision" label in
 `agreement.jsonl` (never trusted for card VALUES, fine for card COUNT) confirms
 are genuine five-card fans the old gate was dropping for no reason.
 
-**Status.** Fixed in this worktree, not yet merged.
+**CORRECTED 2026-09-21, caught by an independent skeptic.** The probe's first
+version opened the two I-37 fixtures with `Image.open()` directly -- they are
+FULL 1920x1080 frames, not hand crops -- so at ~2x calibration scale every
+raw-pixel size gate rejected every disc on them and BOTH gates rejected BOTH
+fixtures; the script's own tally then said "2 newly-admitted", not 4, and never
+exercised the fixtures the fix targets at all (the fix itself, verified through
+`orchestrator.crop_gameplay_regions` the way `test_hand_read_two_lifted.py`
+and production both do, was never in question). Fixed by cropping the two
+fixtures through `orchestrator.crop_gameplay_regions(img)["hand"]` before
+either gate sees them, matching the test. Re-run, it prints exactly:
+
+    total files: 2400   both admit: 462   both reject: 1934
+    old-admits-new-rejects (BAD): 0   new-admits-old-rejects (newly fixed): 4
+
+naming the four files above (`agent_progress/issues/I-37/probe6_corrected_output.txt`).
+
+**Status.** Fixed in this worktree, not yet merged. Independent skeptic round
+2026-09-21 (`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH
+NOTES -- the fix itself was never in question; two write-up/coverage gaps were
+found and both fixed on this branch (the corpus-regression probe's fixture
+scale bug, and the missing per-slot-dedup mutant), see above.
 
 ## C. Costs wins
 
