@@ -7640,6 +7640,56 @@ def exclude_play_slot(idx):
     _PLAY_STALL["n"] = 0
 
 
+def note_slot_dealt(*indices):
+    """A confirmed play or discard means these hand_index slots hold a REAL new
+    card now -- I-29 (QA round 4). The stall identity is a VALUE tuple (kind,
+    power, secondary, type) and the roster has only ~18-24 distinct
+    (power, secondary) pairs (CLAUDE.md section 4 -- "DO CARD VALUES CHANGE
+    PER GAME? NO."), so a redeal that happens to draw the same value at the
+    same index compared EQUAL to the old one under _hand_identity_changed,
+    and the fresh card silently inherited the old card's refusal count or
+    exclusion. Dropping the index from both trackers' stored identity makes
+    "this card is new" true by construction, independent of its value --
+    call this at the two places a card is actually spent, right beside
+    forget_hand_slot.
+
+    Both breakers' running counts are also cleared here, not just the
+    exclusion. A confirmed spend always resolves whatever refusal streak was
+    in progress -- discard_stalled/play_stalled's own target is a
+    deterministic function of an UNCHANGED hand (the weakest card, or
+    best_batting_play/best_pitching_play's pick), so a nonzero count can only
+    belong to the slot that just succeeded, while nothing has excluded or
+    changed the pool in between.
+    # ponytail: clearing BOTH counts on every call, rather than tracking which
+    # tracker "owns" this particular spend, is the smaller diff -- and
+    # forgiving a count early is the safe direction this file already uses
+    # elsewhere (I-03's own comment: "falling through is the safe direction").
+    # Ceiling: an unrelated in-progress streak on a DIFFERENT slot is forgiven
+    # one cycle early in the rare case it overlaps a confirm on this slot;
+    # upgrade to per-slot counts if that is ever measured to matter.
+
+    I-27's merge semantics (agent_progress/census-20260920, section 5) mean an
+    index absent from `hand` for many polls -- occluded, never re-read -- never
+    contradicts the stored value there, so it is never independently reset by
+    the comparison alone. That is fine for a slot NOTHING has spent: the card
+    behind it truly has not changed (a card only changes when WE play or
+    discard it -- see hand-memory's own comment block above), so keeping its
+    old identity, count and exclusion across the flicker is correct, not a
+    bug. It only becomes a bug at the slot we DID spend, which is exactly
+    where this function is called, so the index is gone from the stored
+    identity before the absence can ever begin.
+    """
+    idxs = {i for i in indices if i is not None}
+    if not idxs:
+        return
+    for tracker in (_DISCARD_STALL, _PLAY_STALL):
+        if tracker["sig"] is not None:
+            for i in idxs:
+                tracker["sig"].pop(i, None)
+        tracker["n"] = 0
+    _PLAY_STALL["excluded"] = _PLAY_STALL["excluded"] - idxs
+
+
 def reset_stall_counters():
     """Clear both stall breakers. Call this everywhere reset_hand_memory() is
     called -- both mark the same boundary (a new match, a new half's fresh
@@ -7826,6 +7876,12 @@ def play_one_turn(state_json: dict, batters_used: int):
             # SECOND of only two discards in the half.
             print("  discard NOT CONFIRMED — it may or may not have been thrown. "
                   "Re-reading the hand next poll rather than retrying blind.")
+        else:
+            # I-29: CONFIRMED -- player_idx is a real deal event. Forget it from
+            # both stall trackers so a redeal that happens to land the same
+            # (power, secondary) here is not mistaken for "no change" -- see
+            # note_slot_dealt.
+            note_slot_dealt(player_idx)
         # CAPTURE THE REDEAL, BUT ONLY WHEN A SLOT IS ALREADY UNREADABLE.
         #
         # A DISCARD IS A DEAL, and this path never treated it as one: wait_for_hand_deal
@@ -7944,6 +8000,11 @@ def play_one_turn(state_json: dict, batters_used: int):
             print("  play REFUSED — the selection could not be verified; nothing committed")
         pop_hand_baseline()
         return False, {"play_refused": True}
+
+    # I-29: CONFIRMED -- player_idx (and tactics_idx, when one was spent) are
+    # real deal events. Forget them from both stall trackers, same reason as
+    # the discard site above -- see note_slot_dealt.
+    note_slot_dealt(player_idx, tactics_idx)
 
     matchup_info = {
         # POPPED by run() before this dict can reach pending_matchup, so
