@@ -275,10 +275,13 @@ try:
 finally:
     o.log_matchup = real_log_matchup
 out = buf.getvalue()
-check(len(logged) == 0,
-      f"CONTROL: 3 consecutive genuinely-unreadable polls must still drop the "
-      f"pending row (pre-existing MAX_PENDING_READ_FAILURES behaviour), got "
-      f"{len(logged)} row(s) logged")
+# I-49: "drop" no longer means discard -- 3 consecutive genuinely-unreadable
+# polls (pre-existing MAX_PENDING_READ_FAILURES behaviour) still end the
+# pending matchup, but now as an UNSCORED row rather than nothing at all.
+check(len(logged) == 1 and logged[0].get("row_status") == "unscored"
+      and logged[0].get("outcome") is None,
+      f"CONTROL: 3 consecutive genuinely-unreadable polls must end the pending "
+      f"matchup with no outcome attributed, got {logged!r}")
 check("dropping the pending row" in out,
       "CONTROL: the drop message must still print for a genuinely unreadable screen")
 

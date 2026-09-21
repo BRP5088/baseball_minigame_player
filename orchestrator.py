@@ -8843,6 +8843,18 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                               f"unreadable screens — dropping the pending row "
                               f"for our_power "
                               f"{pending_matchup.get('our_power')}.")
+                        # I-49: "dropping" used to mean discarding outright. The
+                        # powers, kinds, bonuses and phase this at-bat already
+                        # carries (12 of 21 traced orphans died here) are real
+                        # data even with no outcome -- append the row instead of
+                        # losing it, with the outcome fields null so no consumer
+                        # can mistake it for a scored one.
+                        log_matchup({**pending_matchup, "outcome": None,
+                                     "runs_scored": None, "margin": None,
+                                     "outcome_basis": None,
+                                     "row_status": "unscored",
+                                     "drop_reason":
+                                         f"{pending_read_failures}_consecutive_unreadable_screens"})
                     pending_matchup = None
                 if stuck_count >= MAX_STUCK_ATTEMPTS:
                     print("Stuck too long on unreadable screens — stopping. Check the game manually.")
@@ -8898,7 +8910,8 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             len(new_runners))
                         log_matchup({**pending_matchup, "outcome": outcome,
                                      "runs_scored": runs, "margin": margin,
-                                     "outcome_basis": basis})
+                                     "outcome_basis": basis,
+                                     "row_status": "scored"})
                     else:
                         # No `else` here until 2026-09-01. A follow-up read that
                         # comes back without a score cannot have its outcome
@@ -8908,6 +8921,16 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                               f"missing from the follow-up read; dropping the "
                               f"pending row for our_power "
                               f"{pending_matchup.get('our_power')}.")
+                        # I-49: 9 of 21 traced orphans died here. The at-bat's
+                        # powers, kinds, bonuses and phase are real even without
+                        # a score -- append the row with null outcome fields
+                        # instead of discarding it.
+                        log_matchup({**pending_matchup, "outcome": None,
+                                     "runs_scored": None, "margin": None,
+                                     "outcome_basis": None,
+                                     "row_status": "unscored",
+                                     "drop_reason":
+                                         f"outcome_unscorable:{score_field}_missing"})
                 except Exception as e:
                     print(f"Matchup logging failed ({e}) — skipping this row, continuing the real loop.")
                 pending_matchup = None

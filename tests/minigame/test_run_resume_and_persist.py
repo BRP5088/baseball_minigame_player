@@ -619,10 +619,15 @@ check(len(_survived) == 1,
       "which is what cost ~76% of the 2026-08-26 run's rows")
 
 _dropped = _rows_after(6)
-check(not _dropped,
-      "a play followed by SIX failed reads still logged a row — the outcome "
-      "is being attributed across a gap long enough for the opponent to act, "
-      "so the row may be silently mislabeled rather than merely missing")
+# I-49: the row no longer vanishes on this streak -- it is appended UNSCORED,
+# with no outcome attributed. That still satisfies the concern this check was
+# written for (a mislabeled OUTCOME across a stale gap): the row's outcome,
+# runs_scored, margin and outcome_basis are all null, not a guess.
+check(len(_dropped) == 1 and _dropped[0].get("row_status") == "unscored"
+      and _dropped[0].get("outcome") is None,
+      "a play followed by SIX failed reads must not have an outcome attributed "
+      f"across a gap long enough for the opponent to act, got {_dropped!r} — "
+      "expected exactly one row, appended unscored with outcome=None")
 
 
 # --- runners on base must not cost the row (WIRING, not just the helper) ---
