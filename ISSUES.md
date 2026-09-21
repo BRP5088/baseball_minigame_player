@@ -432,6 +432,49 @@ nothing this match (pitch boosts would have attached; I-14 says a boost changes 
 
 **Status.** Merged.
 
+### I-23  The reset's dialog detector missed a visible "Load Last Save" dialog three times   P0  loop
+
+**Evidence.** overnight/run_live_20260920e.log lines 72-87: `selected: Load Last Save`, then
+`no dialog yet (delta 2.4 / 2.8 / 2.1) — the commit press did not land, retrying (1..3/3)`,
+then `ResetError: no confirmation dialog appeared (delta 2.1)`. The frame captured right
+after (`test_fixtures/load_last_save_dialog_live_20260920.png`) shows the dialog fully up:
+"Load Last Save — NO (circle) / YES (cross)". The same routine had succeeded four minutes
+earlier on attempt 1.
+
+**Root cause (ASSUMED, to trace).** `reset_env.reset_environment` detects the dialog by a
+frame DELTA against a baseline; if the first Cross landed before the baseline was taken, the
+dialog is already in the baseline and every later delta is idle-animation noise (2-3), so a
+present dialog reads absent, and each "retry" presses Cross at a dialog whose YES is Cross.
+Alternative: three consecutive dropped presses (P ~ 0.152 x 0.25 x 0.25 = 1%).
+
+**Proposed fix.** Detect the dialog by CONTENT, not by delta: a small template/OCR reader
+for the "Load Last Save" panel (dark flat panel, the two button glyphs), gated the way
+`give_up_dialog` is, and used both before pressing (already up -> do not press again) and
+after. Keep the delta as a secondary signal only.
+
+**Verify.** Fixture above must read as the dialog; the pause menu without the dialog, a
+world frame, the give-up dialog and a ban screen must not. Mutation: drop the content
+check, the fixture reads absent.
+
+**Status.** Open, blocks unattended resets.
+
+### I-24  `ensure_stream.looks_like_ui` fires on the game's own dark dialog panel          P1  reader
+
+**Evidence.** On the same frame `looks_like_ui(img)` returned True with `capture (1920, 1080)`.
+The heuristic looks for flat fills and full-width exact runs (Qt draws them, H.264 does
+not); this in-game panel is flat enough to pass.
+
+**Consequence.** `streaming()` pairs `find_bar` with `looks_like_ui`, so a reader that asks
+"is the stream up" while this dialog is open can be told no and fall through to the slow
+heartbeat path; CLAUDE.md §1's three tells would misclassify this screen as chiaki's UI.
+
+**Proposed fix.** Add the fixture to `test_fixtures/not_streaming/`'s NEGATIVE side (it IS
+streaming) and re-derive the flatness/row-run gates against it; if the populations no
+longer separate, `streaming()` needs a game-content signal (compass strip or notebook
+edge) rather than a flatness one. Do not move the constants without the census.
+
+**Status.** Open.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
