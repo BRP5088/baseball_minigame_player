@@ -2091,9 +2091,11 @@ this is PRE-EXISTING and unrelated to this diff; not investigated further here
 failing check gets the same suspicion as a passing one, not a free pass to fix
 opportunistically on someone else's ticket).
 
-**Status.** N-2 CLOSED for the sub-case it names (a target already blind at
-its operation's own start); the harder, read-identical misread case is
-correctly left open above rather than claimed closed. Awaiting skeptic.
+**Status.** N-2 merged 69e77a4, skeptic CONFIRMED (narrow: the baseline gate
+was already present, now named and tested; the hard case -- baseline-readable
+target, dropped press, coincidentally blind post-press read -- still commits
+and is OPEN: needs per-row digit corroboration from orchestrator or a
+post-commit detector; 0/28 archived inference events affected).
 
 ## C. Costs wins
 
