@@ -37,13 +37,27 @@ TWO FIXES, BOTH IN `_clear_strays` (and the callers that hand it `blind_before`)
       proven "lifted by us" later just because it went to None.
   (2) A slot that goes unreadable mid-operation and was NOT already
       untrustworthy gets ONE re-look after `SELECT_RETRY_CONFIRM_SEC` (the same
-      settle this file already waits out a swallowed press with) before
-      refusing, and refuses only if it is STILL unreadable AND nothing else
-      says the fan is at rest (the row count is unchanged and nothing outside
-      what the engine chose is lifted). A genuinely lifted stray -- a real,
-      measured rise past `SELECTED_MIN_RISE` -- is untouched: it is not `None`
-      at all, so neither fix's code path ever runs for it, and the existing
-      clear-or-refuse logic still refuses when it cannot be put back down.
+      settle this file already waits out a swallowed press with). If it reads
+      back as measurable, proceed on the fresh data. If it is STILL `None`,
+      REFUSE, full stop -- a genuinely lifted stray is what this refusal
+      exists to catch.
+
+FIRST SHIP OF THIS FILE HAD A THIRD RULE -- "refuse unless the rest of the fan
+looks at rest" -- AND A SKEPTIC REFUTED IT IN THE DANGEROUS DIRECTION. A stray
+that OUR OWN PRESS lifts also reads `y=None` (this file's own docstring: a
+raised card's disc shrinks out of `DISC_MIN_R`), and `selected_cards` SKIPS a
+`None` row -- so `set(sel) - want` is EMPTY for a lifted-and-still-blind stray
+exactly as it is for a slot nothing ever touched. The "at rest" fallback could
+not tell the two apart and let the dangerous one through: baseline readable,
+our press lifts it, `None` on the check-look AND the re-look, and the old code
+returned `ok=True` with the card still up. It is deleted. The only slot this
+guard now lets through unread is one proven untrustworthy at BASELINE
+(`_untrustworthy_slots`, case (b)) -- never one that went blind DURING the
+operation, however calm the rest of the fan looks. A genuinely lifted stray
+that stays readable -- a real, measured rise past `SELECTED_MIN_RISE` -- is a
+separate, untouched code path: it is never `None`, so neither of the two fixes
+above ever runs for it, and the existing clear-or-refuse logic still refuses
+when it cannot be put back down (case (c)).
 
 Uses the same check(cond, msg) shape as tests/minigame/test_verified_selection.py
 and tests/minigame/test_select_stops_when_lift_unreadable.py (checked with
@@ -182,6 +196,48 @@ try:
         ic._walk_cursor_to = _old_walk
     check(ok is False, f"a real stray that cannot be walked-to-and-cleared must "
           f"still refuse; got {ok!r}")
+
+    # =====================================================================
+    print("(d) our OWN press lifts a stray and it is None on the check-look "
+          "AND the re-look -- refused, exactly one extra look")
+    # =====================================================================
+    # THE SKEPTIC'S CASE. Baseline was readable (not in blind_before), a press
+    # of ours raised slot 0, and the lift made its disc unreadable -- SAME
+    # shape as the flicker in (a), but this time the card genuinely moved and
+    # stays unreadable both times it is checked. The old "at rest" fallback
+    # could not tell this from (a) and committed with the stray still up.
+    _slept.clear()
+    want = {2}
+    look1 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
+    look2 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
+    scr = ScriptedLook([look1, look2])
+    ok = ic._clear_strays(want, scr.look, blind_before=set())
+    check(ok is False, f"a slot that stays unreadable after the re-look must "
+          f"refuse, even though the rest of the fan looks unchanged -- our own "
+          f"press could be the reason it is still None; got {ok!r}")
+    check(scr.calls == 2, f"exactly one extra look past the first -- got "
+          f"{scr.calls} look() calls")
+    check(len(_slept) == 1 and abs(_slept[0] - ic.SELECT_RETRY_CONFIRM_SEC) < 1e-9,
+          f"the one sleep must be SELECT_RETRY_CONFIRM_SEC ({ic.SELECT_RETRY_CONFIRM_SEC}); "
+          f"got {_slept!r}")
+
+    # =====================================================================
+    print("(e) a slot goes unreadable then the re-look finds it back at rest "
+          "with a real y -- commits")
+    # =====================================================================
+    # The mirror of (d): whatever caused the mid-operation None, the re-look
+    # is what decides, not a guess about the rest of the fan. A real,
+    # measured position -- not selected -- is proof enough to proceed.
+    _slept.clear()
+    want = {2}
+    look1 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
+    look2 = (_flat_glow({2}), [REST[0], REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
+    scr = ScriptedLook([look1, look2])
+    ok = ic._clear_strays(want, scr.look, blind_before=set())
+    check(ok is True, f"a slot readable again on the re-look, at rest and not "
+          f"selected, must not block the commit; got {ok!r}")
+    check(scr.calls == 2, f"exactly one extra look past the first -- got "
+          f"{scr.calls} look() calls")
 finally:
     ic.time.sleep = _old_sleep
 
@@ -190,5 +246,7 @@ if fails:
         print("  FAIL:", f)
     _sys.exit(1)
 print("  a flickered read settles and commits with one extra look, a slot "
-      "untrustworthy from the start commits with none, and a genuinely lifted "
-      "stray that cannot be cleared is still refused")
+      "untrustworthy from the start commits with none, a genuinely lifted "
+      "stray that cannot be cleared is still refused, and a slot that stays "
+      "unreadable after the re-look is refused even when nothing else looks "
+      "wrong")

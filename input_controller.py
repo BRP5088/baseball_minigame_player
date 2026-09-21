@@ -1330,22 +1330,25 @@ def _clear_strays(want, look, blind_before=frozenset()):
             return False
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
         _new_blind = _blind_now - set(blind_before)
-        # AT REST: nothing was committed (still a full fan) and nothing outside
-        # what the engine chose is sitting lifted -- the only two things this
-        # layer can check without a measured position for the flickering slot
-        # itself, and both are already in hand from the re-look.
-        _at_rest = n == MAX_HAND_SIZE and not (set(sel) - want)
-        if _new_blind and not _at_rest:
+        # NO "AT REST" FALLBACK (I-26, skeptic-refuted). A slot WE genuinely
+        # lift and then cannot read looks IDENTICAL to a flicker at this point:
+        # a raised card's disc shrinks out of DISC_MIN_R, so its y goes None
+        # too, and selected_cards SKIPS a None row -- so `set(sel) - want`
+        # is empty for a lifted-and-blind stray exactly as it is for a
+        # never-touched one. Scripted: baseline readable, our own press lifts
+        # it, None on the check-look AND the re-look -- the old fallback let
+        # `ok=True` through with the card still up. One re-look is the whole
+        # allowance; still unreadable after it is refused, full stop. The
+        # only slots this never refuses are ones proven untrustworthy at
+        # BASELINE (`blind_before`, case b above) -- never a slot that turned
+        # blind during this operation.
+        if _new_blind:
             print(f"  [cursor] slot(s) {sorted(_new_blind)} still unreadable after "
                   f"the re-look ({_ys}) — refusing. They were measurable when this "
                   "operation started, so something we pressed lifted them, and a "
                   "raised card would go in with the commit.")
             invalidate_cursor()
             return False
-        if _new_blind:
-            print(f"  [cursor] slot(s) {sorted(_new_blind)} are still unreadable "
-                  "but the rest of the fan is unchanged and nothing unexpected is "
-                  "lifted — treating as already blind rather than refusing forever")
     if _blind_now:
         print(f"  [cursor] slot(s) {sorted(_blind_now)} were ALREADY unreadable before "
               "this operation began — proceeding. We cannot have raised them, and "
