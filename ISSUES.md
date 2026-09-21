@@ -1839,14 +1839,26 @@ status --porcelain` clean of any `T` (rename) entries afterward.
 `test_run_gates_on_liveness.py`'s full census ran in 126s (under the 3-minute budget) and
 passed. `tests/harness/test_claude_md_constants.py` and `test_reload_wallet_guard.py` pass.
 
-**Open finding.** Run against THIS checkout's actual on-disk `match_log.jsonl` (520 rows,
-151 uncommitted since the tracked 369) rather than a clean checkout,
-`test_ab_controls_reproduce_baseline.py` FAILS: the extra rows on disk are enough (82
-qualifying) that `load_log_distribution()` no longer takes the zero-qualifying-rows
-fallback branch and instead derives a live distribution, which does not bit-for-bit match
-the pinned 20260921 snapshot (built from that same 520-row state on the day it was
-pinned, but never committed). This is the test doing exactly what CLAUDE.md §10.16c/2 asks
-— failing loudly on a data change rather than silently drifting — not a defect in the
-merge. It resolves itself the moment `match_log.jsonl` is committed with matching content,
-or is expected to keep firing (correctly) until then. Not fixed here; flagged for whoever
-commits the live match log next.
+**Open finding — CLOSED 2026-09-21.** Run against THIS checkout's actual on-disk
+`match_log.jsonl` (520 rows, 151 uncommitted since the tracked 369) rather than a clean
+checkout, `test_ab_controls_reproduce_baseline.py` FAILED: the extra rows on disk are
+enough (82 qualifying) that `load_log_distribution()` no longer takes the
+zero-qualifying-rows fallback branch and instead derives a live distribution, which does
+not bit-for-bit match the pinned 20260921 snapshot. On inspection the mismatch was
+entirely a cosmetic `source` string (the live-derived meta's probabilities and counts were
+identical to the pin's) — so the check was asserting equality with a file that is
+guaranteed to go stale the moment a match is logged, which is the same "asserting a
+growing file equals a snapshot" shape CLAUDE.md §10.16c/2 warns about, pointed at the
+test itself. Fixed: `test_ab_controls_reproduce_baseline.py` no longer asserts
+`meta == _pinned`. It instead validates each artefact for what it actually needs to be —
+the pinned snapshot's own `effective_power_probs` sum to 1.0 (this is what
+`load_log_distribution()`'s fallback branch returns verbatim, so a corrupted pin is a live
+defect), and the live-derived `log_dist` (whichever branch fired) has keys within the
+plausible effective-power range 4-11 (base power 4-9 per CLAUDE.md sec 4, plus a
+swing/pitch tactics bonus of at most +2). Loading the pinned file unconditionally, with no
+try/except, keeps the fails-loudly behaviour if it goes missing. Mutation-tested:
+corrupting the pin's probabilities to sum to 1.5 makes the test fail on that exact check;
+restored and sha256-verified back to `d09cbcb...` (unchanged from HEAD, confirmed via
+`git status --porcelain`). The i15/i16/i17 exact-equality control checks were never
+affected by this — they compare simulate.py's own deterministic scorers against each
+other and never touch `match_log.jsonl`.

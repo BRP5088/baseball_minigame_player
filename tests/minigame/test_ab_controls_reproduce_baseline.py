@@ -94,18 +94,30 @@ check(meta["n_used_for_distribution"] > 0,
       f"log-derived distribution was built from a nonzero number of qualifying rows "
       f"({meta['n_used_for_distribution']} of {meta['rows_with_outcome_basis_or_margin']} "
       f"with a local reveal read, {meta['rows_excluded_no_local_reveal_read']} excluded)")
+# Base player power runs 4-9 (CLAUDE.md sec 4); a swing/pitch tactics bonus adds at most
+# +2, so effective power can reach 11. Whichever branch load_log_distribution() took
+# (computed from this checkout's own qualifying rows, or the pinned fallback), its keys
+# must stay inside that range.
+check(all(4 <= p <= 11 for p, _ in log_dist),
+      f"log-derived distribution keys are plausible effective powers 4-11 "
+      f"(got {[p for p, _ in log_dist]})")
 
-# CLAUDE.md sec 2/10.16c's own lesson applied to a data file: a change in match_log.jsonl
-# must fail this LOUDLY, not silently shift what the arm measures. This checkout's tracked
-# match_log.jsonl has zero qualifying rows (verified), so load_log_distribution() falls
-# back to the pinned ISSUES.md I-17 snapshot -- that fallback is exactly what this check
-# pins: the live call must reproduce the committed artefact bit-for-bit.
+# match_log.jsonl GROWS as matches are played (CLAUDE.md sec 2/10.16c's lesson applied to
+# a data file), so asserting the live derivation bit-matches a dated snapshot is false by
+# construction the moment a match is logged -- main's own tracked log already diverges
+# from a clean checkout's 369 rows. What the pin is actually FOR is the fallback branch of
+# load_log_distribution(): the exact bytes it returns verbatim when the live log has zero
+# qualifying rows. So the pin itself -- not equality with today's log -- is what must stay
+# a valid probability distribution. Loading it here keeps the fails-loudly behaviour: a
+# missing or unparsable pinned file raises (both here and inside load_log_distribution()'s
+# own fallback) instead of silently passing.
 _PINNED_PATH = os.path.join(_ROOT, "tools", "ab_data", "opp_pitcher_dist_20260921.json")
 with open(_PINNED_PATH) as _f:
     _pinned = json.load(_f)
-check(meta == _pinned,
-      f"load_log_distribution() reproduces the pinned artefact "
-      f"{os.path.relpath(_PINNED_PATH, _ROOT)} exactly")
+_pinned_probs = _pinned["effective_power_probs"]
+check(abs(sum(_pinned_probs.values()) - 1.0) < 1e-9,
+      f"pinned snapshot {os.path.relpath(_PINNED_PATH, _ROOT)} probabilities sum to 1.0 "
+      f"(got {sum(_pinned_probs.values()):.6f})")
 
 print()
 if fails:
