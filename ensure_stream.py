@@ -476,6 +476,13 @@ def ensure_live(log=print, restarts=2):
     heartbeat, and a heartbeat continues through a decoder stall. A five-run
     measurement was lost on 2026-09-02 because every reset in it probed a still
     picture and concluded the input was dead.
+
+    I-05a: a live, updating picture is STILL not proof the game will take
+    input -- the PS5 Control Center can sit on top of it, heartbeating and
+    updating the whole time. This now PROPAGATES _dismiss_overlay_if_blocking's
+    verified result instead of discarding it: True only once a game reader
+    actually answers, False if the overlay budget (two presses) ran out and
+    the console is still not showing the game.
     """
     if _refuse_under_test("probe or RESTART the stream"):
         return False
@@ -483,8 +490,7 @@ def ensure_live(log=print, restarts=2):
 
     for attempt in range(restarts + 1):
         if ensure(log=log) and not is_frozen():
-            _dismiss_overlay_if_blocking(log=log)
-            return True
+            return _dismiss_overlay_if_blocking(log=log)
 
         # A FROZEN PICTURE IS USUALLY SOMETHING SITTING ON TOP OF THE STREAM,
         # not a dead stream — and restarting cannot fix any of them:
@@ -582,6 +588,161 @@ def _clear_blocking_ui(log=print):
     return True
 
 
+# I-05a, WIDENED after the skeptic's refutation of the first version. The
+# original four-reader set (world/pause/table/reset-dialog) missed every
+# RESULT and REVEAL screen: on real 1920x1080 fixtures where looks_like_ui is
+# True (ban_digits/midscroll_video_1920.jpg, result_screens/heldout_loser_b.jpg
+# and heldout_loser_flat.jpg, reveal_episode/loser_t0225.30.jpg and
+# loser_t0231.38.jpg, reveal_occlusion/reveal10_edge075.jpg,
+# streaming_real/screenshot_log__run_20260828_135528__...035.jpg) none of the
+# four answered, so a gate built on them alone would fire mid-match and
+# ensure_live's overlay dismiss would toggle the PS5 overlay open and closed
+# for nothing. The FULL set, all cheap enough to run every poll:
+#
+#     compass.read_bearing         -- the world
+#     pause_menu.is_pause_screen   -- the pause book
+#     table_prompt.at_table        -- the dealer's Play prompt
+#     reset_env.load_save_dialog   -- the reset's own confirm dialog
+#     orchestrator.read_ban_counter        -- the ban screen
+#     local_hand.read_hand(hand crop) >= 3 rows  -- a dealt hand
+#     local_state.read_result(img)["is_result"]  -- the WINNER/LOSER/DRAW banner
+#     local_state.read_result_card(img)          -- the same, off the end-card
+#     orchestrator.center_card_edge_fraction >= REVEAL_EDGE_THRESHOLD
+#                                           -- a reveal (or the loser screen;
+#                                              CLAUDE.md's own reveal-watcher
+#                                              comment records that this
+#                                              statistic overlaps the two --
+#                                              harmless here, since either one
+#                                              means "the game", which is all
+#                                              this function answers)
+#
+# MEASURED (agent_progress/issues/I-05a/, full_sweep3.py): every 1920x1080
+# image under test_fixtures/ that trips looks_like_ui -- 8 of 659 -- is now
+# caught by at least one reader, ZERO false negatives. The same sweep run
+# against five synthetic solid-colour 1920x1080 frames (which all trip
+# looks_like_ui by construction) confirms zero readers answer True on any of
+# them -- the widened set costs nothing on the negative side.
+#
+# `orchestrator` is imported LAZILY and defensively: it is the heaviest module
+# in the project (it requires PERSONAL_ANTHROPIC_API_KEY at import time,
+# section 3), and ensure_stream.py is also used by standalone rig tools
+# (tools/doctor.py) that may never have loaded it. If the import itself fails,
+# those four readers are simply skipped -- same shape as every reader call
+# below, which never lets one broken check call a live stream dead.
+def _game_visible(img):
+    """True if a reader that only ever answers on the GAME recognises `img`.
+
+    Used by BOTH _dismiss_overlay_if_blocking (below) and orchestrator's own
+    liveness gate (orchestrator._screen_shows_the_game) -- deliberately the
+    SAME function, so a false positive on ANY of these readers cannot trip one
+    gate and not the other.
+
+    SKEPTIC HOLE 3 (2026-09-21): every reader below sat in a bare
+    `except Exception: pass`, which made "no reader answered" indistinguishable
+    from "every reader RAISED" -- a broken numpy/cv2/tesseract install would
+    make every one of them throw, this function would return False on every
+    frame, and the caller would read that as a real overlay: two blind
+    ps_button presses at a live match, then a stopped run. CLAUDE.md 10.1's
+    family, one level in. Fixed by counting how many readers actually RAN
+    (returned an answer, right or wrong, without raising); zero means the
+    environment itself is broken, not that chiaki's chrome is on screen, so
+    this answers True (fail open, the safe direction here -- see the module
+    docstring's own "never let this turn into a reason to call a live stream
+    dead") and prints once so the failure is not silent.
+    """
+    import compass
+    import pause_menu as pm
+    import table_prompt as tp
+    import reset_env
+    ran = 0
+    try:
+        hit = compass.read_bearing(img) is not None
+        ran += 1
+        if hit:
+            return True
+    except Exception:
+        pass
+    try:
+        hit = pm.is_pause_screen(img)
+        ran += 1
+        if hit:
+            return True
+    except Exception:
+        pass
+    try:
+        hit = tp.at_table(img)
+        ran += 1
+        if hit:
+            return True
+    except Exception:
+        pass
+    try:
+        hit = reset_env.load_save_dialog(img)
+        ran += 1
+        if hit:
+            return True
+    except Exception:
+        pass
+    # The five readers below live in orchestrator (directly, or via a crop it
+    # produces) -- imported lazily and defensively, same reasoning as the
+    # module comment above this function. A failed import skips all five
+    # (they cannot run at all) without touching `ran`; it does NOT short-
+    # circuit the whole function, unlike the old version, because the four
+    # readers above may still have executed and answered.
+    _o = None
+    try:
+        import orchestrator as _o
+    except Exception:
+        _o = None
+    if _o is not None:
+        try:
+            hit = _o.read_ban_counter(img) is not None
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_hand as _lh
+            crops = dict(_o.crop_gameplay_regions(img))
+            hit = len(_lh.read_hand(crops["hand"])) >= 3
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_state as _ls
+            res = _ls.read_result(img)
+            hit = bool(res.get("is_result"))
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_state as _ls
+            card, _raw = _ls.read_result_card(img)
+            hit = card is not None
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            hit = _o.center_card_edge_fraction(img) >= _o.REVEAL_EDGE_THRESHOLD
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+    if ran == 0:
+        print("  [stream] _game_visible: every reader raised -- treating "
+              "this as the game (fail open), not a blocked overlay.")
+        return True
+    return False
+
+
 def _dismiss_overlay_if_blocking(log=print):
     """Close the PS5 home overlay if it is sitting on top of the game.
 
@@ -591,20 +752,57 @@ def _dismiss_overlay_if_blocking(log=print):
     stays — hiding the compass and the pause book from everything downstream.
     Observed repeatedly on 2026-09-02.
 
-    Escape is mapped to the PS button in chiaki, which closes it.
+    I-05a: this used to send ONE ps_button press and return True unconditionally
+    -- never checking whether the press actually cleared anything. Evidence
+    2026-09-20: after ensure_live() woke a sleeping console, the PS5 Control
+    Center was STILL up after that one press; a second press, by hand, cleared
+    it. Now it LOOKS after every press -- a fresh capture, judged by
+    _game_visible() above -- and returns True only once a game reader actually
+    answers (including the very first look: nothing to dismiss IS the game
+    being visible). Escape is mapped to the PS button in chiaki, which closes
+    the overlay; it is a TOGGLE (CLAUDE.md section 1), so this is bounded at
+    TWO presses -- a blind third could reopen whatever the first two closed.
+    ensure_live() propagates this return value: False now means "still
+    blocked", not "nothing needed doing".
+
+    RESIDUAL RISK (round-3 skeptic, 2026-09-21, NOT fixed here -- reachable
+    only on a false fire, and the false-fire rate is measured at ~0, see
+    orchestrator.LIVENESS_MISS_SEC's comment). This function has NEITHER a
+    looks_like_ui pre-filter NOR any debounce of its own: it takes ONE fresh
+    capture and, if no reader answers, presses -- so if the caller's 6.0s of
+    evidence was itself a false alarm, a single unlucky frame here is enough
+    to press ps_button. Two outcomes follow a false fire: two presses is an
+    even TOGGLE (~6s, net no change, harmless); one press then a reader
+    answers through the freshly-opened overlay leaves the overlay OPEN while
+    this function reports True. Whether that second outcome is reachable
+    depends on whether any of the nine _game_visible readers can answer
+    THROUGH an open PS5 Control Center -- it is a bar along the bottom of the
+    screen, the compass sits at the top of the HUD -- which is UNTESTABLE
+    OFFLINE: no fixture of an overlay-over-game frame exists anywhere in
+    test_fixtures/. Do not build a fix for this without one.
     """
     import compass
-    import pause_menu as pm
 
     try:
         img = compass.fast_capture()
-        if compass.read_bearing(img) is not None or pm.is_pause_screen(img):
-            return False          # the game is visible; nothing to dismiss
-        pid = _pid()
-        if pid is None:
-            return False
-        log("  compass unreadable and no pause menu — dismissing the PS5 overlay")
-        _key(pid, 53, after=3.0)
-        return True
     except Exception:
         return False
+    if _game_visible(img):
+        return True           # the game is visible; nothing to dismiss
+    pid = _pid()
+    if pid is None:
+        return False
+    for attempt in range(2):
+        log(f"  compass unreadable and no pause menu — dismissing the PS5 "
+            f"overlay (press {attempt + 1}/2)")
+        try:
+            _key(pid, 53, after=3.0)
+        except Exception:
+            return False
+        try:
+            img = compass.fast_capture()
+        except Exception:
+            continue
+        if _game_visible(img):
+            return True
+    return False

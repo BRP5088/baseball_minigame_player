@@ -138,9 +138,37 @@ class Harness:
     def __init__(self, screens, play_results=None, balance=500,
                  wins=0, losses=0, draws=0, logger_stop=None, motion=None,
                  revealed=None, opp_local=None, frozen=False, ban_counter=3,
-                 ban_collection=None, ban_cursor=None, drop_presses=None):
+                 ban_collection=None, ban_cursor=None, drop_presses=None,
+                 liveness_frame=None):
         self.screens = list(screens)
         self.idx = 0
+        self.next_state_calls = 0
+        # I-05a HOLE 2/M5: how many times the liveness gate actually captured
+        # a frame (_fast_grab), counted separately from next_state_calls --
+        # this is what distinguishes "ensure_live was tried once" (which
+        # liveness_recovery_tried alone already guarantees) from "the reader
+        # sweep was SKIPPED for the rest of the stall because ensure_live
+        # returned False" (liveness_recovery_failed). See
+        # test_run_gates_on_liveness.py's M5 scenario.
+        self.fast_grab_calls = 0
+        # I-05a: orchestrator._screen_shows_the_game() runs before EVERY read,
+        # even before the ones _fast_grab's blank default frame satisfies
+        # harmlessly (read_result etc.) -- unpatched, a solid-colour frame
+        # reads as chiaki UI (looks_like_ui: one exact RGB value over the
+        # whole frame) with no game reader answering, which would fire the
+        # gate on literally every poll of every OTHER test in this suite.
+        # Default: stub it to always say "yes, the game". A test that wants
+        # the REAL gate (test_run_gates_on_liveness.py) passes a PIL image,
+        # or a LIST of them, here instead, and the real function runs against
+        # them unstubbed. A list is consumed one frame per poll; once it runs
+        # out the LAST frame repeats forever -- so a single-element list
+        # models "never changes" and a longer one models a transition partway
+        # through (mirrors tests/rig/test_overlay_dismiss_is_verified.py's
+        # fake_capture, which pins the same shape one module over).
+        self._liveness_frames = (list(liveness_frame)
+                                 if isinstance(liveness_frame, list)
+                                 else None)
+        self.liveness_frame = liveness_frame
         # I-11: run()'s close_result and start_match go through
         # input_controller.press_verified, which LOOKS after every press. Two
         # things follow for this harness.
@@ -227,6 +255,7 @@ class Harness:
         return "ban" if "start_match" in self.landed else "prompt"
 
     def _next_state(self):
+        self.next_state_calls += 1
         self.landed.clear()
         self.checks_per_read.append(self.motion_checks - self._checks_at_last_read)
         self._checks_at_last_read = self.motion_checks
@@ -240,6 +269,23 @@ class Harness:
         # Minimal well-formed payload; branches that need more get a dict.
         return {"screen": s, "phase": "batting", "your_score": 0,
                 "opp_score": 0, "hand": [], "runners": [], "discards_left": 2}
+
+    def _next_liveness_frame(self):
+        """The next frame for _fast_grab when liveness_frame is a LIST.
+
+        Consumes from the front; once one element remains it repeats forever
+        (mirrors test_overlay_dismiss_is_verified.py's fake_capture).
+        """
+        self.fast_grab_calls += 1
+        seq = self._liveness_frames
+        if len(seq) > 1:
+            return seq.pop(0)
+        return seq[0] if seq else self.liveness_frame
+
+    def _single_liveness_frame(self):
+        """_fast_grab when liveness_frame is a single (non-list) image."""
+        self.fast_grab_calls += 1
+        return self.liveness_frame
 
     def _frame_bytes(self):
         """Stand-in for a captured crop, feeding the frame-identity guard.
@@ -385,6 +431,20 @@ class Harness:
             "save_progress": fake_save,
             "time": self.clock,
         }
+        if self.liveness_frame is None:
+            # Default: never fire the I-05a liveness gate for tests that are
+            # not about it -- see the constructor's comment on liveness_frame.
+            patches["_screen_shows_the_game"] = lambda *a, **k: True
+        else:
+            # Real gate: fed the scripted frame(s) instead of the blank
+            # default, with "_screen_shows_the_game" left OUT of patches so
+            # its own logic (looks_like_ui, ensure_stream._game_visible) runs
+            # unstubbed against them. A list is consumed one per poll (see
+            # _next_liveness_frame); a single image repeats forever.
+            if self._liveness_frames is not None:
+                patches["_fast_grab"] = lambda *a, **k: self._next_liveness_frame()
+            else:
+                patches["_fast_grab"] = lambda *a, **k: self._single_liveness_frame()
         for name, fn in patches.items():
             saved[name] = getattr(o, name)
             setattr(o, name, fn)
