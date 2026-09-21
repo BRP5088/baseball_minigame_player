@@ -2489,9 +2489,192 @@ dropping `d["fallback"] = True` from the fallback branch (stderr line left intac
 F3's `meta["fallback"] is True` check die with `KeyError: 'fallback'`. Both restored;
 `git status --porcelain` shows no source diff.
 
-### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
+### I-48  A failed TACTICS select burns every batter before the loop plays anything    P1  play
 
-I-48 is not in this checkout's ISSUES.md yet — this entry is placed directly after I-47.
+**Evidence.** Census over every `overnight/run_live_2026092*.log` in the main checkout
+(23 files), counting `[cursor] select_card never landed after 5 attempts — refusing`:
+
+    file                       events  path    target       slot(s) already    slot UNKNOWN/    resolution
+                                                              selected           occluded
+    run_live_20260920d.log       1     PLAY    batter (1)    none               none at the time  1 refusal, then I-21 blinded
+                                                                                                    slot 1's own disc on the
+                                                                                                    retries, 2 more refusals on
+                                                                                                    "position unreadable", then
+                                                                                                    excluded as UNREADABLE (3x);
+                                                                                                    next turn played hand_index 4
+    run_live_20260921e.log       1     DISCARD slot0         none               none               "discard NOT CONFIRMED";
+                                                                                                    re-read next poll, the
+                                                                                                    discard HAD landed; no
+                                                                                                    exclusion, one turn's delay
+    run_live_20260921n.log       3     DISCARD slot3 (x3)    none               none               each "discard NOT CONFIRMED";
+                                                                                                    after the 3rd, the EXISTING
+                                                                                                    discard-stall breaker played
+                                                                                                    the hand instead of looping
+    run_live_20260921r.log       6     PLAY    TACTICS       none               slot 2 UNKNOWN     2 batters excluded in turn
+                                                              (slot 1, swing_                       (hand_index 4, then 3) before
+                                                              boost) every                          hand_index 0 finally worked
+                                                              time; batter                          (0->1 is one step, no
+                                                              varies 3,4,4,3,3,3                     crossing); ~5 min lost,
+                                                                                                    one hand played on a worse
+                                                                                                    card than the engine chose
+
+11 events total. 4 (20260921e, 20260921n) are on the DISCARD path (`select_and_discard`
+/ `_DISCARD_STALL`), a different tracker with its own re-read-next-poll and
+play-instead-of-looping breakers already built — out of scope here, unaffected by this
+fix. Of the 7 PLAY-path events, 1 (20260920d) is a genuine BATTER failure with no
+occlusion in sight, which escalates through I-21's own "selecting is what blinds the
+disc" mechanism to a legitimate permanent exclusion — also out of scope, and correctly
+handled by the existing code. The other 6 (20260921r, one match) are the shape this
+ticket is about: the BATTER's own walk+select lands cleanly every single time
+("`[cursor] verified on <batter> after N press(es)`" then a landed `select_card`), the
+cursor then walks to the TACTICS slot (1, POWER SWING / swing_boost) and verifies
+there too, and `select_card` never lands on slot 1 after 5 attempts — every time the
+batter sits at slot 3 or 4, on the far side of slot 2 (UNKNOWN all hand, occluded by a
+home-plate runner's card). The one instance where the tactics select landed easily
+(1 retry) is the batter=0 case, where the walk to slot 1 is a single adjacent step and
+never crosses slot 2 (`run_live_20260921r.log:746-751`).
+
+**Root cause**, traced in the code (not guessed):
+
+1. **The exclusion keys on the wrong target.** `orchestrator.py:8384-8401` calls
+   `exclude_play_slot(player_idx, _reason)` on any refused `select_and_play(player_idx,
+   tactics_idx, ...)` — always the BATTER's hand_index, because `select_and_play`
+   returns a single bool for the whole call
+   (`input_controller._verified_select_and_play_inner`, ~:1919-1994) and orchestrator
+   has no way to see whether it was `card_index` (the batter) or `tactics_index` (the
+   tactic) that actually failed to verify inside it. `_slot_position_readable` (used to
+   pick `PLAY_REFUSAL_UNREADABLE` vs `PLAY_REFUSAL_TRANSIENT`) also only ever inspects
+   `player_idx`'s own `y_measured`, never the tactic's. So on a tactics-select failure
+   the code excludes a batter whose own selection worked perfectly, learns nothing
+   about the actual problem (slot 1 / slot 2), and burns through every batter until one
+   happens to be reachable without crossing the occluded slot.
+2. **What the walk from slot 3/4 to slot 1 does when slot 2 is occluded.** The WALK
+   itself is fine — `_walk_cursor_to` already dead-reckons across one occluded slot
+   (I-32) and every failing turn logs `verified on 1 after N press(es)`, proving the
+   walk lands. The failure is specifically in the SUBSEQUENT `_select_verified(1,
+   look)` call: `select_card` is pressed and re-read up to `SELECT_ATTEMPTS` (5) times,
+   and every attempt reports "did not land" (the plain "readable, not in `sel`, retry"
+   branch, not the I-21 blind-disc rescue — `ys[1]` stays readable throughout every
+   failing turn's log). The log evidence supports a correlation between the crossing
+   and the subsequent select failing, not a proven mechanism for WHY the select itself
+   (as opposed to the walk) is what fails — that would need a live screen to settle
+   (which mode this task is confined off of). What IS established: it is never the
+   batter's own select that fails in this match, only the tactic's, and only when the
+   batter sits on the far side of the occlusion.
+
+**Fix**, two parts, both in `input_controller._verified_select_and_play_inner`
+and `orchestrator.py`:
+
+1. **`input_controller.py`**: the per-target loop (`for target in (card_index,
+   tactics_index): ...`) now tells the two targets apart. A BATTER failure is
+   unchanged — same unwind, same `return False`. A TACTICS failure (only reachable
+   once the batter has already succeeded, since it is always processed first) unwinds
+   ONLY the tactics attempt (`_unwind_selection(before_all, look, {tactics_index},
+   ys0=_ys0)`, never touching the batter's own already-verified selection), drops
+   `tactics_index` to `None`, and falls through to the SAME commit path every
+   successful play already uses (`want`/`_clear_strays`/`press_verified`) — so a
+   boost that cannot be verified costs nothing but the boost (~+0.6 runs/half,
+   CLAUDE.md §4) instead of the batter, the hand, and the exclusion budget.
+2. **`orchestrator.py`**: `record_refused_select` (new, beside `record_money_read_
+   frame`) keeps one frame + why.json per refused `select_and_play` call under
+   `diagnostics/deal_frames/refused_select_<ns>/` — `target`, `kind` ("player" or
+   "player+tactics", since orchestrator still cannot see which of the two failed
+   inside a single bool), `already_selected` (from a fresh `hand_cursor_look()`, not
+   a stale decision-time snapshot) and `attempt` (`play_stalled`'s own running
+   count). Same shape as `record_local_hand`/`record_reveal_kind`/
+   `record_money_read_frame`: never raises into the turn loop, writes nothing under
+   `BASEBALL_TEST_RUN` unless a test hands it `out_dir`, REFUSES past 200 dirs
+   rather than pruning (OPEN-24's lesson). None of the six I-48 refusals in
+   `run_live_20260921r.log` had a kept frame before this — this is what would have
+   let a human see slot 2's occlusion at the moment of failure instead of
+   re-deriving it from the log.
+
+**Verify.** `tests/minigame/test_tactics_select_fallback.py` (new): cases A (tactics
+never lands -> batter alone committed, one confirm press, tactics attempt unwound,
+log names the fallback), B (tactics lands -> both committed, control, unchanged), C
+(batter itself never lands -> refused exactly as before, control), D
+(`record_refused_select` writes nothing under `BASEBALL_TEST_RUN`), E
+(`record_refused_select` writes the dir + all four why.json fields with an explicit
+`out_dir`, same seam `record_reveal_kind` uses). Three mutants, each a REAL edit to
+`input_controller.py`/`orchestrator.py` on disk with `__pycache__` cleared and the
+module reloaded, sha256-verified restored afterward: dropping the batter-alone commit
+(the fallback's `continue` -> `return False`) makes case A refuse; dropping the
+`_unwind_selection` call in the fallback makes case A's unwind-spy record zero calls;
+dropping `kind`/`already_selected`/`attempt` from `record_refused_select`'s
+`json.dump` makes case E's field checks fail. All three caught; all three restored
+(`git status --porcelain` clean; sha256 matches HEAD).
+
+Also green: `tests/minigame/test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_i22_pitch_boost_slot3.py`,
+`test_hand_memory_persists.py`, `test_run_debit_and_scoring.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py` (the emission census — the new
+frame keeper does a screen GRAB, no press, and was not flagged as a new input site).
+
+**Skeptic round (`agent_progress/issues/I-48/skeptic.md`): CONFIRMED WITH NOTES, three
+edits.**
+
+- **S-2 (defect, latent).** The fallback guard was `target == tactics_index and target
+  != card_index`, true when `card_index` is `None` — a tactics-only call (the signature
+  allows it; no production caller passes it today) whose select never lands took the
+  fallback, `want` became `set()`, and `_clear_strays` passed vacuously — confirm_play
+  sent on an EMPTY fan, reporting True. Fixed: `and card_index is not None` added to the
+  guard. Case F pins it (`tests/minigame/test_tactics_select_fallback.py`).
+- **S-3 (defect, real, unmeasured before this).** The batter-alone fallback committed a
+  play with NO WAY for `play_one_turn` to learn the tactics card was dropped:
+  `note_slot_dealt(player_idx, tactics_idx)` claimed a slot that was never spent, and
+  `matchup_info["our_tactics_bonus"/"our_tactics_kind"]` still recorded
+  `decision.tactics_card`'s own bonus/kind — what the ENGINE CHOSE, not what was
+  actually played. `match_log.jsonl` would have recorded a boost that never went in, on
+  exactly the field OPEN-24 calls this project's only non-circular tactics ground truth,
+  and `record_reveal_kind` would have kept a labelled reveal frame for a reveal with no
+  tactics card in it — poisoning the `TACTICS_KIND_MIN` corpus. Fixed: a module flag
+  beside `_MAYBE_LIFTED` (`input_controller._LAST_PLAY_DROPPED_TACTICS`, cleared at the
+  top of every `_verified_select_and_play_inner` call, set only in the fallback branch;
+  read via `tactics_dropped_last_play()`). `orchestrator.play_one_turn` reads it right
+  after `select_and_play(...)` returns True, before `note_slot_dealt`/`matchup_info`:
+  drops `tactics_idx` from `note_slot_dealt`, zeroes `our_tactics_bonus`/sets
+  `our_tactics_kind` to `None` (which also makes `record_reveal_kind`'s own `if not
+  kind: return None` gate skip the frame — one field change closes both holes), and adds
+  `"tactics_dropped": true` so a later census can tell "no tactics card was ever chosen"
+  apart from "one was chosen and dropped". Case G pins it, driving the REAL
+  `play_one_turn`/`hand_to_cards`/`best_batting_play` (not a scripted `matchup_info` —
+  `tests/minigame/_run_harness.py`'s `Harness` stubs `play_one_turn` out entirely via
+  `play_results=[...]`, so it cannot exercise a fix that lives inside that function).
+- **S-4 (defect, in the guard's own proof).** Case D's two checks passed even with the
+  `_running_under_test()` guard stripped, whenever `_grab_settle_regions` happened to
+  raise (any headless box, or chiaki down) — `record_refused_select`'s own
+  `except Exception: return None` supplied the same answer the guard would have, so the
+  test proved nothing about the guard specifically. Fixed: case D now stubs
+  `_grab_settle_regions`/`hand_cursor_look` to WORK, the same as case E, so the write is
+  what the mutant actually has to survive.
+
+Re-ran the skeptic's own M1-M4 against the fixed code (real file mutation,
+`__pycache__` cleared, sha256-verified restore, scratchpad script, not shipped):
+M1 (fallback fires for the batter too) CAUGHT, M2 (`_clear_strays`'s `want <= lifted`
+dropped — pre-existing code, unchanged by this fix) CAUGHT by
+`test_commit_refuses_unseen_strays.py` (confirmed directly against that file, EXIT=1,
+3 checks fail), M3 (unwind the full target set instead of `{tactics_index}`) CAUGHT,
+M4 (strip the `BASEBALL_TEST_RUN` guard, capture stubbed to succeed) CAUGHT. Plus the
+three mutants above (case A/A/E). All seven caught; both files restored byte-for-byte.
+
+**LATER (not fixed now, per the skeptic and the coordinator's call): the tactics slot
+is NOT excluded after the fallback fires.** Only the batter is spared exclusion —
+`note_play_refused()`/`exclude_play_slot` are never reached because `select_and_play`
+returns True. Nothing marks tactics_idx as unreliable, so the NEXT turn re-offers the
+same tactics attachment, and if the same occlusion-crossing problem recurs it burns
+`SELECT_ATTEMPTS` (5) presses again — roughly 5 x (0.60 + 1.60)s ≈ 11s — before falling
+back a second time. This converts I-48's deadlock into a per-turn TAX rather than
+removing it; not a stall (the play still commits every time), just a repeated cost.
+Fixing it would mean tracking a per-slot-per-reason exclusion for TACTICS attachments
+separate from `_PLAY_STALL` (which is keyed on the player_idx the play command
+targets, not the tactics_idx) — new state, not a one-line change, and deliberately
+deferred.
+
+**Status.** Fixed on branch (skeptic round applied, `--no-verify`), CONFIRMED WITH
+NOTES.
+
+### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
 
 **Evidence.** `agent_progress/census/reveal_orphans_trace/` traced 42 fully-readable
 reveal frames (36 class-A + 6 class-C) that produced no `match_log.jsonl` row, by

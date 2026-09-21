@@ -7423,6 +7423,64 @@ def record_money_read_frame(frame, answer, out_dir=None):
         return None
 
 
+# I-48: keep a frame per refused SELECT so a human can eyeball what the cursor read at
+# the moment a play refused, without re-deriving it from the log every time. Same shape
+# as record_money_read_frame / _save_dropped_hand: never raises into the turn loop,
+# writes nothing under BASEBALL_TEST_RUN unless a test hands it out_dir (or sets
+# REFUSED_SELECT_DIR_ENV), and REFUSES past the cap rather than pruning -- OPEN-24 is
+# the record of a pruned corpus losing the rows that needed it. Lives under
+# DEAL_FRAME_DIR itself (a sibling of the dropped_*/deal_* dirs already there), not a
+# directory of its own, because it is the same "a hand-crop-plus-why.json for one
+# moment of the deal gate" shape those two already use.
+REFUSED_SELECT_DIR_ENV = "BASEBALL_REFUSED_SELECT_DIR"
+REFUSED_SELECT_MAX_DIRS = 200
+
+
+def record_refused_select(target, kind, attempt, out_dir=None):
+    """Keep the frame + why.json a refused select_and_play() call left behind.
+
+    Grabs its own frame rather than reusing a decision-time one, because the
+    population a human wants here is whatever the reader can still see AFTER
+    the refusal -- the same look select_and_play presses against
+    (hand_cursor_look), so `already_selected` is not stale.
+
+    `target` is the hand_index select_and_play was asked to play, `kind` says
+    whether a tactics card was also attempted this turn ("player" or
+    "player+tactics" -- select_and_play returns one bool for the whole call, so
+    orchestrator cannot see which of the two targets inside it actually failed
+    to verify; see ISSUES.md I-48), and `attempt` is play_stalled's own running
+    count of refusals on this exact hand.
+
+    Never raises into the turn loop. Returns the directory written, or None.
+    """
+    try:
+        d = out_dir or os.environ.get(REFUSED_SELECT_DIR_ENV)
+        if d is None and _running_under_test():
+            return None
+        d = d or DEAL_FRAME_DIR
+        os.makedirs(d, exist_ok=True)
+        existing = [n for n in os.listdir(d) if n.startswith("refused_select_")]
+        if len(existing) >= REFUSED_SELECT_MAX_DIRS:
+            print(f"  [play] {d} already holds {REFUSED_SELECT_MAX_DIRS} refused-select "
+                  "dirs -- NOT keeping this one. Nothing is pruned here on purpose.")
+            return None
+        hand_img = _grab_settle_regions(("hand",))["hand"]
+        if hand_img is None:
+            return None
+        _glow, _ys, _n, sel = hand_cursor_look()
+        out = os.path.join(d, f"refused_select_{time.time_ns()}")
+        os.makedirs(out, exist_ok=True)
+        hand_img.save(os.path.join(out, "hand.png"))
+        with open(os.path.join(out, "why.json"), "w") as fh:
+            json.dump({"target": target, "kind": kind,
+                       "already_selected": list(sel), "attempt": attempt},
+                      fh, indent=1)
+        print(f"  [play] kept the frame this refusal happened on -> {out}")
+        return out
+    except Exception:
+        return None
+
+
 def read_balance_from_pause_menu() -> int:
     """
     Open the pause menu, read the money total off it via vision, then
@@ -8383,6 +8441,9 @@ def play_one_turn(state_json: dict, batters_used: int):
     forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
+        record_refused_select(
+            player_idx, "player+tactics" if tactics_idx is not None else "player",
+            _PLAY_STALL["n"])
         if play_stalled(state_json.get("hand")):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
@@ -8404,9 +8465,22 @@ def play_one_turn(state_json: dict, batters_used: int):
         pop_hand_baseline()
         return False, {"play_refused": True}
 
+    # I-48 SKEPTIC S-3: the batter-alone fallback inside select_and_play can commit a
+    # play whose tactics card was NEVER spent -- select_and_play still only returns one
+    # bool, so this is the one place that finds out. Checked BEFORE note_slot_dealt and
+    # the matchup_info below, which is why it must not move: both were about to record a
+    # tactics card as played when it was dropped on the floor.
+    _tactics_dropped = input_controller.tactics_dropped_last_play()
+    if _tactics_dropped:
+        print(f"  [play] tactics slot {tactics_idx} was dropped by the batter-alone "
+              "fallback (I-48) — logging this turn as the batter alone")
+        tactics_idx = None
+
     # I-29: CONFIRMED -- player_idx (and tactics_idx, when one was spent) are
     # real deal events. Forget them from both stall trackers, same reason as
-    # the discard site above -- see note_slot_dealt.
+    # the discard site above -- see note_slot_dealt. tactics_idx is already None
+    # above when I-48's fallback dropped it, so this never claims a slot that was
+    # not actually spent.
     note_slot_dealt(player_idx, tactics_idx)
 
     matchup_info = {
@@ -8418,13 +8492,24 @@ def play_one_turn(state_json: dict, batters_used: int):
         "our_card_name": decision.player_card.name,
         "our_power": decision.player_card.power,
         "our_secondary": decision.player_card.secondary,
-        "our_tactics_bonus": decision.tactics_card.bonus if decision.tactics_card else 0,
+        # I-48: zero, not decision.tactics_card's own bonus/kind, when the fallback
+        # dropped the tactic -- decision.tactics_card describes what the ENGINE CHOSE,
+        # not what was actually played, and this row is the log's only non-circular
+        # tactics ground truth (CLAUDE.md OPEN-24). "our_tactics_kind": None also makes
+        # record_reveal_kind (its own gate is `if not kind: return None`) skip keeping a
+        # reveal frame for a tactics card that was never on the table.
+        "our_tactics_bonus": (0 if _tactics_dropped else
+                               decision.tactics_card.bonus if decision.tactics_card else 0),
         # The TYPE, not just the bonus. power_bonus() (simulate.py:97) only
         # counts SWING_BOOST/PITCH_BOOST toward power — a speed or fielding
         # tactic has a nonzero bonus that adds NO power. Logging the bonus
         # alone left effective power uncomputable on 20 of 39 logged rows,
         # which is most of the signal this log exists to measure.
-        "our_tactics_kind": decision.tactics_card.kind.value if decision.tactics_card else None,
+        "our_tactics_kind": (None if _tactics_dropped else
+                              decision.tactics_card.kind.value if decision.tactics_card else None),
+        # I-48: named so a later census can tell "no tactics card was ever chosen"
+        # apart from "one was chosen and dropped" without re-deriving it from the log.
+        "tactics_dropped": _tactics_dropped,
         "runners_before": len(runners),
         "score_before": state_json["your_score"] if state_json["phase"] == "batting" else state_json["opp_score"],
     }

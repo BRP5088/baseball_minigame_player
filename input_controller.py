@@ -1481,6 +1481,26 @@ def _reconcile_maybe_lifted(ys, sel):
             _MAYBE_LIFTED.discard(slot)
 
 
+# I-48 SKEPTIC S-3: whether the LAST _verified_select_and_play_inner call committed a
+# play with its tactics attachment DROPPED (the batter-alone fallback fired). Same
+# shape as _MAYBE_LIFTED: module-local, because select_and_play returns one bool and
+# this is the one extra bit orchestrator needs to keep match_log.jsonl honest about
+# what actually went into the hand. Set False at the top of every
+# _verified_select_and_play_inner call (so a call that never reaches the fallback, or
+# refuses before it, reports False -- not a stale True from a PREVIOUS call), set True
+# only inside the fallback branch. play_one_turn reads it via tactics_dropped_last_play()
+# immediately after select_and_play returns True, before anything else touches state.
+_LAST_PLAY_DROPPED_TACTICS = False
+
+
+def tactics_dropped_last_play() -> bool:
+    """True when the most recent _verified_select_and_play_inner call committed the
+    batter alone after its tactics attachment could not be verified (I-48). Read this
+    right after select_and_play(...) returns True -- the NEXT call resets the flag at
+    its own top, so it answers only for the play that was just committed."""
+    return _LAST_PLAY_DROPPED_TACTICS
+
+
 def _unwind_selection(before, look, ours, ys0=None):
     """Put back down anything raised since `before`. Best effort; never raises.
 
@@ -1931,6 +1951,8 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     A FALSE ALSO LEAVES THE BOARD AS IT FOUND IT, as far as it can. See
     _unwind_selection: an early refusal used to keep whatever it had already lifted.
     """
+    global _LAST_PLAY_DROPPED_TACTICS
+    _LAST_PLAY_DROPPED_TACTICS = False
     # THE BOARD AS WE FOUND IT. Anything already up belongs to a previous caller and
     # is not ours to clear; the commit path below handles a stray that is still there.
     _g0, _ys0, n0, before_all = _look_settled(look)
@@ -1951,16 +1973,45 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
         if target is None:
             continue
         ok, _sel = _walk_cursor_to(target, look)
-        if not ok:
-            _unwind_selection(before_all, look, targets, ys0=_ys0)
+        if ok:
+            ok, _sel = _select_verified(target, look)
+        if ok:
+            _inferred_targets |= getattr(_sel, "inferred", frozenset())
+            continue
+        if target == tactics_index and target != card_index and card_index is not None:
+            # I-48: THE TACTIC FAILED TO VERIFY, NOT THE BATTER -- card_index's own
+            # walk+select already succeeded above, or this loop would never have
+            # reached the tactics target at all. ISSUES.md I-48's census shows the
+            # tactics select failing repeatedly whenever the cursor walk to it is
+            # forced to cross an occluded slot (a home-plate runner's card, e.g.),
+            # never the batter's own selection. `orchestrator.exclude_play_slot`
+            # can only exclude the BATTER's hand_index on a refusal here (this
+            # function returns one bool for the whole call, so the caller cannot
+            # see which target failed) -- so refusing the whole play burns every
+            # batter in turn for a boost worth ~+0.6 runs/half (CLAUDE.md §4)
+            # against a stalled half. Unwind the tactic attempt ALONE and commit
+            # the batter without it instead.
+            #
+            # `card_index is not None` (I-48 skeptic S-2): without it this guard is
+            # also true on a TACTICS-ONLY call (card_index=None, which the signature
+            # allows and no production caller passes today, orchestrator.py:8400 is
+            # always an int) -- the premise in the paragraph above ("card_index's own
+            # walk+select already succeeded") is exactly what is false there, and
+            # `want` would become `set()`, committing confirm_play on an EMPTY fan
+            # and reporting True. Reproduced offline (skeptic's probe_none.py): a
+            # tactics-only call whose select never lands returned True having pressed
+            # confirm_play with nothing lifted -- 10.1's "a success path and a no-op
+            # path with identical output". A card_index=None call must still refuse.
+            print(f"  [cursor] tactics slot {tactics_index} could not be verified "
+                  "— dropping the boost and playing the batter alone (I-48)")
+            _unwind_selection(before_all, look, {tactics_index}, ys0=_ys0)
             invalidate_cursor()
-            return False
-        ok, _sel = _select_verified(target, look)
-        if not ok:
-            _unwind_selection(before_all, look, targets, ys0=_ys0)
-            invalidate_cursor()
-            return False
-        _inferred_targets |= getattr(_sel, "inferred", frozenset())
+            tactics_index = None
+            _LAST_PLAY_DROPPED_TACTICS = True
+            continue
+        _unwind_selection(before_all, look, targets, ys0=_ys0)
+        invalidate_cursor()
+        return False
 
     # COMMIT ONLY WHAT THE ENGINE CHOSE.
     #
