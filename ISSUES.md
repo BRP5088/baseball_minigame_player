@@ -3283,4 +3283,5 @@ dead-reckon behind it. Also green, unchanged: `test_verified_selection.py`,
     skip the walk-back (`continue` -> `return True, sel` on a found-but-unconfirmed cur)
         -> test_walk_crosses_occluded_slot.py: (A)/(C) FAIL (press counts, wrong "arrived")
 
-**Status.** fixed on branch, awaiting skeptic.
+**Status.** merged 39f160a; Sonnet skeptic CONFIRMED (moves only, bounded at
+PRESS_VERIFY_TRIES, I-33/nudge cannot double-fire, worst observed 7 presses).
