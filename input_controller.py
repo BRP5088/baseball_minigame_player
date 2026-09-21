@@ -1012,6 +1012,16 @@ def _walk_cursor_to(target, look):
     steps = 0
     excluded = set()
     first_cur = cur
+    # DEAD-RECKONING ACROSS AN OCCLUDED SLOT (I-32). `cursor_glow` returns 0.0 BY
+    # CONSTRUCTION for any row whose y was never measured (CLAUDE.md 10.28's fan
+    # occlusion: one card's power disc sits under its neighbour, `y_measured: False`
+    # forever for that hand). Walking from slot 0 to slot 4 across an occluded slot 1
+    # made `cursor_slot` read None mid-walk -- indistinguishable from a dropped press
+    # by glow alone -- and refused after one press, excluding the whole play. The
+    # bound below is deliberately ONE consecutive step: two occluded slots in a row
+    # (or an occluded slot right next to a genuinely dropped press) still refuse: see
+    # the `dead_reckoned_last` check below, and I-32's task note.
+    dead_reckoned_last = False
     while cur != target:
         if steps >= CURSOR_MAX_STEPS:
             # EIGHT LANDED PRESSES CANNOT LEAVE THE CURSOR IN PLACE (I-25). Section 5
@@ -1055,7 +1065,38 @@ def _walk_cursor_to(target, look):
             print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) — refusing")
             return False, sel
         cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+        was_dead_reckoned, dead_reckoned_last = dead_reckoned_last, False
         if cur is None:
+            expected = prev + 1 if prev < target else prev - 1
+            # CROSSING AN OCCLUDED SLOT MID-WALK (I-32), CHECKED BEFORE THE I-02
+            # PROBE BELOW SO "never dead-reckon onto the target" IS A REAL GUARD,
+            # NOT DEAD CODE. `expected == target` is exactly the `abs(prev - target)
+            # == 1` condition the I-02 branch tests (both mean "the press just moved
+            # one step toward target"), so checking that branch first would make
+            # `expected != target` here unreachable -- a mutant deleting it would
+            # change nothing. Ordered this way, an occluded TARGET falls straight
+            # through to `_probe_select_blind_target`, which already refuses without
+            # a press when `ys[target] is None` -- that is the only place a target
+            # the lift reader can't see is allowed to be trusted, never a guess here.
+            #
+            # For every OTHER slot the walk merely crosses: `cursor_glow` returns 0.0
+            # BY CONSTRUCTION for a row whose y was never measured (CLAUDE.md 10.28's
+            # fan occlusion -- a card's power disc hidden under its neighbour,
+            # `y_measured: False` for the rest of that hand), so "nothing lit" on
+            # exactly the row `ys[expected] is None` names is the EXPECTED reading,
+            # not a lost cursor. Dead-reckon across it for one step and let the next
+            # press prove the walk is still live. `was_dead_reckoned` caps this at
+            # ONE consecutive step -- a second dark slot right after a dead-reckoned
+            # one still refuses below, whether or not IT is occluded too (two
+            # occluded slots in a row is the mirror case and stays a refusal; no
+            # code chains guesses to cover it).
+            if (not was_dead_reckoned and expected != target
+                    and 0 <= expected < len(ys) and ys[expected] is None):
+                print(f"  [cursor] slot {expected} is occluded (y unmeasured) — its "
+                      "glow cannot read; dead-reckoning one step across it")
+                cur = expected
+                dead_reckoned_last = True
+                continue
             # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
             # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
             # structurally blind at some slots (e.g. slot 4, CLAUDE.md 10.35), so
