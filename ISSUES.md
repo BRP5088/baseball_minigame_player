@@ -1463,8 +1463,8 @@ unchanged hand, and slot readability is unlikely to flip in that window — but 
 a narrow gap the skeptic did not demonstrate misfiring live. Worth a live frame pair
 if a future exclusion is ever classified wrong.
 
-**Status.** Fixed on branch (both this ticket and the skeptic's counter-reset defect),
-confirmed by skeptic, ready to merge.
+**Status.** merged bedd4ca; skeptic CONFIRMED WITH NOTES (counter reset on re-offer
+added and pinned).
 
 ### I-40  A reload's local money read disagreed with the known wallet and was trusted   P1  money
 
@@ -1628,7 +1628,8 @@ a vacuous knob. **Decisively worse, not a wash — CLOSED: do not ship.** INFLIG
 holding a card is not banking it — it sits out a round it could have hit, and 5 rounds per
 half (RULES.md §1) means "runners on or round>=4" often never arrives while the bases stay
 empty, so the policy trades a certain at-bat for a maybe-better one that frequently never
-comes. See GRAVEYARD.md's Engine table. **Status.** Closed.
+comes. See GRAVEYARD.md's Engine table. **Status.** closed (measured 2026-09-21,
+merged 7d9d198).
 
 ### I-16  The discard threshold is a fixed 6 and deck-blind                          P2  engine
 
@@ -1660,7 +1661,7 @@ do not ship any of the four.** Scope note: this arm conditions only on the curre
 VISIBLE hand, not on every card seen earlier in the half (a fuller tracker would need a
 mutable per-half accumulator threaded through `simulate_batting_half`), so it bounds a
 weaker version of the proposed policy from above — re-open with that fuller tracker if
-this is ever revisited. **Status.** Closed.
+this is ever revisited. **Status.** closed (measured 2026-09-21, merged 7d9d198).
 
 ### I-17  The opponent model is our card pool, not the log                            P2  engine
 
@@ -1703,7 +1704,7 @@ distribution is plugged in. **CLOSED as not actionable: the knob changes nothing
 this consumer, so there is no ship decision to make from this experiment.** Re-open only
 if the opponent distribution is ever wired into a DIFFERENT consumer (e.g. a direct
 power-margin threshold) where a boundary crossing is more plausible, or if the log grows
-well past n=82. **Status.** Closed.
+well past n=82. **Status.** closed (measured 2026-09-21, merged 7d9d198).
 
 ---
 
