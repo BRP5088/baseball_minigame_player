@@ -473,7 +473,13 @@ streaming) and re-derive the flatness/row-run gates against it; if the populatio
 longer separate, `streaming()` needs a game-content signal (compass strip or notebook
 edge) rather than a flatness one. Do not move the constants without the census.
 
-**Status.** Open.
+**Status.** CENSUS DONE 2026-09-20 (bd06795, agent_progress/issues/I-24/): over 616
+streaming frames the widest-row-run quantity saturates at 1.0 on genuine game dialogs and
+ban-counter frames, tied with the host list's 1.0, and 11 of 67 in-game fixtures outside
+the test's glob are rejected today. NO threshold on these two quantities separates the
+populations; constants untouched; the false negative is pinned in
+test_streaming_rejects_chiaki_ui.py so a fix flips it deliberately. Fix wanted: a
+game-content signal (compass strip, or pause_menu's page/menu-text pair). Open.
 
 ## C. Costs wins
 
