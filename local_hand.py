@@ -1235,6 +1235,24 @@ def _read_ungated(img, strong):
 #     reading; logging the glow vector every turn is what widens it, and until
 #     then a true card that reads under 10.0 refuses again.
 CURSOR_GLOW_MIN = 10.0         # between 8.4 (fixture false MAX) and 12.4 (live true)
+# CURSOR_GLOW_MAX -- A CEILING, NOT A FLOOR (I-25, 2026-09-20). CURSOR_GLOW_MIN answers
+# "is anything lit at all"; nothing above it ever asked "is this reading even PLAUSIBLE
+# as a cursor halo". CLAUDE.md 10.35 measured why a ceiling is needed: "any box placed
+# ON a card reads 60-88% bright whether or not the cursor is there", because the cards
+# are white cartoon art and the glow window is brightness-only. `cursor_slot`'s own
+# docstring gives the TRUE population over 74 labelled frames: 20.7 .. 36.1. Reproduced
+# live on test_fixtures/hand_reads/i25_false_cursor_slot0_live_20260920.png -- slot 0's
+# disc finder locked onto a blob low on the card (its digit never read and its y sat at
+# 259 against the fan's measured 139-205) and its glow window landed ON the card,
+# scoring 68.6; the TRUE cursor at slot 4 read 22.8, inside the docstring's 20.7-36.1.
+# No sweep of this specific window's false-on-card population is on disk (grepped
+# test_fixtures/ and agent_progress/ for a glow census json -- none exists; tools/
+# glow_census.py measures a DIFFERENT quantity, lift-labelled glow at CURSOR_GLOW_MIN's
+# geometry, not this ceiling), so the two anchors above -- 36.1 true max, 60 on-card min
+# -- are what CLAUDE.md 10.35 and cursor_slot's docstring actually measured, and the gate
+# is their midpoint: 36.1 + (60 - 36.1) / 2 = 48.05, rounded to the whole number below it
+# so the true side keeps its full margin.
+CURSOR_GLOW_MAX = 48.0
 GLOW_WHITE = 190               # a grey level, so NOT scaled
 GLOW_XL, GLOW_XR = 80, 0       # the box sits on the card's own top-left RIM, where the
 GLOW_DY0, GLOW_DY1 = 55, 35    # halo shows -- NOT in the backdrop above it
@@ -1308,14 +1326,42 @@ def cursor_glow(hand_img, rows=None, _boxes=None):
         glow.append(round(float((p > GLOW_WHITE).mean() * 100), 1) if p.size else 0.0)
     if not glow:
         return None, glow, rows
-    i = int(np.argmax(glow))
-    return (i if glow[i] >= CURSOR_GLOW_MIN else None), glow, rows
+    # THE ARGMAX MUST NOT WIN ON A ROW WHOSE DISC WAS FOUND BUT NEVER READ A DIGIT
+    # (I-25). y_from == "disc" means a circle sized and positioned like a real digit
+    # disc WAS found there, so the box is anchored on it -- but digit is None means
+    # nothing on it matched a digit template, which read_hand's own docstring already
+    # names as one reading of "a card element". The fixture this fixes is exactly
+    # that: slot 0's disc finder locked onto a blob low on the occluded card, never
+    # read a digit off it, and the box it anchored scored 68.6 -- the highest slot on
+    # screen, while the real cursor at slot 4 read 22.8. A row with NO disc read at
+    # all (y_from == "fallback", where digit is always None) is untouched by this --
+    # every tactics-slot-0 fixture on disk wins the argmax that way and must keep
+    # doing so (tactics_selected_slot0.png, cursor_on_slot0_faint.png, ...).
+    # `eligible` is a SEPARATE array so the raw `glow` returned to the caller for
+    # diagnostics is unchanged.
+    eligible = [
+        g if (g <= CURSOR_GLOW_MAX and not (r.get("y_from") == "disc" and r.get("digit") is None))
+        else 0.0
+        for g, r in zip(glow, rows)
+    ]
+    i = int(np.argmax(eligible))
+    return (i if eligible[i] >= CURSOR_GLOW_MIN else None), glow, rows
 
 
-def cursor_slot(glow, lifted):
+def cursor_slot(glow, lifted, exclude=None):
     """Which slot the cursor is on, from every card's glow. None means NOT READ.
 
-    ONE RULE: the brightest card, if it clears CURSOR_GLOW_MIN.
+    ONE RULE: the brightest card, if it clears CURSOR_GLOW_MIN and does not clear
+    CURSOR_GLOW_MAX (I-25) -- a box that lands ON a card's own white art reads
+    60-88% (CLAUDE.md 10.35) and must not win, because this function sees only the
+    raw glow numbers `cursor_glow` returns for diagnostics, never the rows, so the
+    digit/y_from check `cursor_glow` applies to its OWN argmax cannot run again
+    here; the ceiling is what still catches the same false reading at this layer,
+    which is the one `input_controller._walk_cursor_to` actually navigates by.
+
+    `exclude` is a set of indices to treat as unlit regardless of their glow --
+    for a slot `_walk_cursor_to` has confirmed is a FALSE cursor (pressed toward
+    and away from with the reading never changing), so a walk can route around it.
 
     Two further rules lived here -- subtract the SELECTED cards, then require the winner to
     beat its runner-up by 2.0x -- and BOTH were describing a badly placed window rather
@@ -1338,8 +1384,11 @@ def cursor_slot(glow, lifted):
     """
     if not glow:
         return None
-    i = int(np.argmax(glow))
-    return i if glow[i] >= CURSOR_GLOW_MIN else None
+    exclude = exclude or ()
+    eligible = [g if (i not in exclude and g <= CURSOR_GLOW_MAX) else 0.0
+                for i, g in enumerate(glow)]
+    i = int(np.argmax(eligible))
+    return i if eligible[i] >= CURSOR_GLOW_MIN else None
 
 
 # WHICH CARDS ARE SELECTED, WITHOUT A BASELINE. lifted_cards needs a before/after pair,
