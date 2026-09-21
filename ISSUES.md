@@ -1765,6 +1765,246 @@ main: `tests/harness/test_cursor_labels_capture_gap.py` prints 16/16 checks, and
 wrong) against the survivors. Both real runs re-scanned end to end offline, no
 console, no live change.
 
+### I-43  A stray left lifted by a refused attempt survives into the NEXT operation's baseline-blind exemption   P0  guard
+
+**Evidence.** QA6 finder, read-only, main checkout HEAD a277f46
+(`agent_progress/qa6/interactions/progress.md`, Q4), reproduced against the real
+`input_controller._clear_strays` (the finder's own repro script did not survive
+on disk; reconstructed from its precise write-up in
+`tests/minigame/test_commit_refuses_unseen_strays.py` case (A)).
+
+**Root cause.** `_verified_select_and_play_inner`/`select_and_discard` capture
+`blind_before` from ONE `_look_settled` at the very top of the call, before any
+press. When an EARLIER, unrelated attempt's `_unwind_selection` could not even
+read the fan ("cannot read the fan to unwind — leaving the board as is") its
+target may still be genuinely lifted. That slot then reads unreadable at the
+NEXT operation's own baseline too — indistinguishable, from `blind_before`
+alone, from a card that has been chronically occluded the whole hand and was
+never touched by anyone. I-26/I-28's own accepted exemption ("slot(s) [..] were
+ALREADY unreadable before this operation began — proceeding") then waves it
+through: `selected_cards()` also skips a None-y row, so the stray is invisible
+to `lifted = set(sel) | _want_inferred` too, and `_clear_strays` returns `True`
+believing the board is clean when a card the engine never chose is still up.
+
+**Fix.** A process-local `_MAYBE_LIFTED` set in `input_controller.py`, reset by
+`orchestrator.reset_hand_memory()` (every match/half boundary — a stray cannot
+survive a hand that no longer exists on screen). Every return-False site across
+`_unwind_selection` and `_clear_strays` that leaves the board's clean state
+UNPROVEN now records the implicated slot(s) via `_mark_maybe_lifted`, listed
+here (the trace the fix is built from):
+
+    _unwind_selection   fan unreadable at all            marks `ours`
+                        a slot in `extra` could not be
+                          walked-to/deselected            marks that slot and
+                                                          every slot after it
+                                                          in that loop (unproven)
+                        any exception mid-unwind          marks `ours`
+    _clear_strays       top: fan unreadable before
+                          committing                      marks `want`
+                        re-look: fan unreadable            marks `_new_blind`
+                        still blind after the one
+                          allowed re-look                  marks `_new_blind`
+                        a stray in `extra` could not be
+                          cleared                          marks that slot and
+                                                          every slot after it
+                                                          in the clearing loop
+                        still bad after clearing           marks the implicated
+                                                          blind/lifted slots
+    select_and_discard   the pre-select walk/select fail
+                          (no _unwind_selection safety
+                          net on this path)                marks `card_index`
+                        the post-clear walk-back fails     marks `card_index`
+                        confirm_discard pressed but its
+                          result is unverified (four
+                          distinct branches)                marks `card_index`
+
+`_clear_strays`'s baseline-blind exemption (`_untouched_blind`) now refuses,
+naming the slot(s), whenever it intersects `_MAYBE_LIFTED` — a tracked slot
+must be SEEN DOWN (a real y, not risen) before it can be waved through as a
+chronic occlusion. `_reconcile_maybe_lifted(ys, sel)` clears a tracked slot the
+moment a fresh read proves exactly that, at every `_look_settled` inside
+`_clear_strays`. A genuinely chronic occlusion nobody ever failed to clear is
+never in `_MAYBE_LIFTED` and is unaffected (control-a).
+
+**Verify.** `tests/minigame/test_commit_refuses_unseen_strays.py`: case (A) is
+the reconstructed QA6 Q4 repro (refuses, was `True` pre-fix); control (a) shows
+a genuine chronic occlusion (I-28's own live case) is still exempted, never
+walked to or deselected, never marked; control (d) is the full lifecycle —
+attempt 1 refuses while the stray is still up, attempt 2 commits once a later
+read proves it down, and `_MAYBE_LIFTED` is cleared for it. Mutant (i), drop the
+`_MAYBE_LIFTED` intersection check, caught by case (A) and control-d's attempt
+1. sha256-verified restored byte for byte.
+
+**ROUND 1 REFUTED by an independent Opus skeptic**
+(`agent_progress/issues/I-43-44/skeptic.md`, S-2, S-3). The fix as shipped
+missed its own PRIMARY path and had a second silent-unmarking hole:
+
+- **S-2.** `_unwind_selection`'s `extra` is computed from `sel` (risen rows
+  only, via `selected_cards()`), so a slot that is BOTH lifted AND blind
+  (I-21's own mechanism) can never appear in it. The function's SUCCESS path
+  (`if not extra: return True`) then returned `True` having put nothing down
+  and — because every marking site round 1 added was on a FAILURE exit — proved
+  nothing and recorded nothing. The I-43 bug survived the I-43 fix.
+  Reproduced by the skeptic against the real `_select_verified` ->
+  `_unwind_selection` -> `_clear_strays` chain (an odd `SELECT_ATTEMPTS`=5
+  leaves the card physically up when the I-36-skeptic tactics gate declines
+  the inference and the retries run out).
+- **S-3.** `_reconcile_maybe_lifted` at one of its three call sites ran on
+  `_look_settled`'s FAILURE return (`(glow, ys, 0, [])`) — the LAST bad frame's
+  `ys` (real-looking numbers) with `sel` deliberately EMPTIED. Both of the
+  reconcile conditions (`ys[slot] is not None`, `slot not in sel`) are then
+  satisfied by construction, so a read that saw NOTHING silently "proved" a
+  tracked slot down.
+
+**Fix v2 (this worktree).** `_unwind_selection` now takes an optional `ys0`
+(both production callers already have it) and, before EITHER return path,
+marks `{s for s in ours if _ys[s] is None and (readable at ys0 or ys0
+unavailable)}` — the `ys0` gate is deliberately NARROWER than the skeptic's own
+one-line suggestion ("mark every blind `ours` slot, unconditionally"): marking
+a slot that was ALREADY blind at this operation's own start (never pressed,
+e.g. a genuine chronic occlusion the engine merely chose) would reintroduce
+the exact I-26/I-28 deadlock the exemption exists to prevent, because such a
+slot's `ys` can never later read non-None and `_reconcile_maybe_lifted` could
+then never clear it. `_reconcile_maybe_lifted`'s unguarded call site was moved
+below its own `n != MAX_HAND_SIZE` guard, matching the other two.
+
+**Verify (round 2).** New cases in the same test file: (S-2) drives the real
+`_unwind_selection` with a lifted-and-blind `ours` slot, confirms it still
+reports success AND now marks the slot, and chains into a following
+`_clear_strays` call that correctly refuses; (S-2 control) the SAME slot blind
+at `ys0` too (never touched) is NOT marked, proving the deadlock is avoided;
+(S-3) forces the post-clear look to fail and confirms a pre-existing mark
+SURVIVES rather than being wrongly cleared. Two new mutants (M1, M2, from the
+skeptic's own round): M1 makes `_reconcile_maybe_lifted` UNCONDITIONALLY clear
+everything (the opposite failure direction from mutant iii, which made it a
+no-op) — caught by (S-2)/(d); M2 drops the new mark on `_unwind_selection`'s
+fan-unreadable exit — caught by case (A)/(d). A third (M3, the skeptic's own):
+drop the mark on `select_and_discard`'s "the counter never answered ...
+UNVERIFIED" exit — SURVIVED round 1's suite (the fix was present, nothing
+exercised that specific branch); caught now by a dedicated case driving
+`select_and_discard` through it directly. All sha256-verified restored,
+`__pycache__` cleared between mutants.
+
+**The one exit the skeptic flagged as still unmarked** (`_clear_strays`'s
+final `if not want <= lifted:`, reachable with a `want` slot genuinely lifted
+whenever `_select_verified` proved it selected against ITS OWN, later
+baseline look while this operation's earlier `ys0` read the same slot as
+already blind — the two windows can disagree) is now marked too:
+`_mark_maybe_lifted(set(want) - lifted)` at that exit, rather than argued
+unreachable, since the argument for unreachability does not hold in that one
+narrow window.
+
+**Status.** Redone after REFUTED skeptic round 1; awaiting skeptic round 2.
+
+### I-44  `_clear_strays`'s commit-time inference asks for no real corroboration   P0  guard
+
+**Evidence.** QA6 finder (`agent_progress/qa6/interactions/progress.md`, Q2),
+reproduced against the real `_clear_strays` (script not on disk; reconstructed
+in `tests/minigame/test_commit_refuses_unseen_strays.py` case (B)): `want={3}`,
+baseline readable, a look() where the card never lifts, ever (`sel` permanently
+empty, the slot's own y permanently `None`) — `_clear_strays` still returned
+`True` and `confirm_play` would fire.
+
+**Root cause.** `_want_inferred`'s commit-time re-application of I-21's
+inference asks only three facts, all derivable from the CALLER's own
+`ys0`/`kinds0`/`blind_before` book-keeping with no reference to a real,
+geometric read: readable at baseline, blind now, not tactics-typed. Nothing
+requires that `sel` (the fresh look `_clear_strays` itself just took) or
+`_select_verified`'s own retry loop EVER actually saw the target selected. A
+dropped press plus a transient disc misread produce the identical three facts
+a genuine lift does, and I-36's own write-up already named this as an accepted,
+unmeasured gap for a player-baseline target.
+
+**Fix.** `_select_verified`'s existing inference branch (I-21) now reports
+WHICH slot it inferred, via a new `_InferredSel(list)` subclass carrying
+`.inferred` (behaves as a plain list to every existing consumer — `in`,
+`sorted()`, `set()`, `==` all defer to `list`, the same trick `orchestrator.
+_CursorSel.kinds` already uses for `kinds0`, chosen specifically so the
+existing 2-tuple `ok, sel = _select_verified(...)` unpacking at both call
+sites, and in every sibling test, needs no changes). Both callers
+(`_verified_select_and_play_inner`, `select_and_discard`) accumulate
+`getattr(sel, "inferred", frozenset())` across their select step(s) into an
+`inferred_targets` set and thread it into `_clear_strays` the same way
+`ys0`/`kinds0` already are. `_want_inferred`'s gate gains a fourth condition:
+`inferred_targets is None or k in inferred_targets` — `None` (no caller
+support) is PERMISSIVE, the unchanged pre-I-44 behaviour, matching the exact
+convention `kinds0` already established for the identical reason (every test
+and caller written before this needs no changes); a caller that supplies a
+real set (even empty, meaning "the select step ran and reported nothing")
+requires the SAME slot to have been actually inferred by `_select_verified` on
+THIS operation. A target that ends up neither in `sel` nor in `inferred_targets`
+is refused with a line naming it ("target not seen selected — refusing to
+commit"), falling through to the existing "not all lifted" refusal. I-36's own
+baseline-kind gate (`kinds0`) is untouched and still applies independently.
+
+**Verify.** `tests/minigame/test_commit_refuses_unseen_strays.py`: case (B)
+shows `inferred_targets=None` still commits (unchanged) while
+`inferred_targets=set()` (empty, real) now refuses the identical never-lifts
+scenario; control (b) a genuine geometric selection commits regardless;
+control (c) drives `_select_verified` for real against a `LiftScreen` harness,
+takes its actual `.inferred` report, threads it into `_clear_strays`, and
+confirms the commit — proving the plumbing end to end, not just the gate in
+isolation. Mutant (ii), `_corroborated` always returns `True`, caught by case
+(B)'s fix check. sha256-verified restored byte for byte. Sibling
+`test_lifted_discard_row_rescued.py` case (5) (I-36's own kinds0-threading
+test, a tactics-baseline target whose commit-time look glitches) passes
+unmodified and is now ALSO caught by this gate independently of I-36's own —
+both must agree the target was never seen selected.
+
+**ROUND 1 REFUTED by an independent Opus skeptic**
+(`agent_progress/issues/I-43-44/skeptic.md`, S-1 — BLOCKING). `_InferredSel.
+inferred` was set on EXACTLY ONE of `_select_verified`'s four success paths:
+the I-21 inference branch. The other three — `target in before` ("already
+selected", no press at all) and `target in sel` (the three real, geometric
+"it landed" checks, including the COMMONEST case, an immediate attempt-1
+landing that `_select_verified` prints nothing for) — are STRONGER evidence
+than the inference, not weaker, yet reported no corroboration at all. So a
+target verified by a real read and then gone blind by commit time — I-21's own
+stated premise, "selecting a card is what blinds its own disc" — fell out of
+`_want_inferred` and refused, and the retry re-refused on `_select_verified`'s
+own "position is unreadable... refusing rather than pressing a TOGGLE blind"
+guard: a HARD STALL, not one lost turn.
+
+**Measured against the archived logs** (main checkout, `overnight/run_live_
+*.log`, gitignored and absent from this worktree by design — read there,
+per-operation pairing on `_clear_strays`'s own `_want_blind` print matched
+against `_select_verified`'s own inference print in the same "Decision:"
+block): of **34** want-blind commit events, only **24** carried an inference
+print; the other **10 (29%)** would have refused under round 1's fix, every
+one inspected and legitimate (5 of the 10 in one run,
+`run_live_20260921n.log`; the model excerpt is `run_live_20260921q.log:
+326-330`, which reads "verified on 3 after 1 press(es)" — a real, silent
+read — then "WIN #62 logged"). **This reconstruction reproduces the
+skeptic's own reported numbers (34/24/10, 5-in-one-run) exactly.**
+
+**Fix v2 (this worktree).** ALL FOUR of `_select_verified`'s success returns
+now carry `_InferredSel.inferred = frozenset({target})` — the class's own
+semantics widened from "selected by I-21's inference specifically" to
+"confirmed selected on THIS operation, by a real read OR by inference"
+(`_clear_strays`'s gate and both callers' plumbing are unchanged; only what
+`_select_verified` reports is wider). No new hole: `_clear_strays` only ever
+runs `_want_inferred`'s check on a `want` slot AFTER `_select_verified`
+returned `True` for it THIS operation, so every want-blind slot is now
+corroborated by construction — `would_now_REFUSE` is **0 of 34** by this
+structural argument, not merely by re-running the same 34 events (the
+archived logs cannot be replayed byte-for-byte offline; the argument is
+verified directly instead, below).
+
+**Verify (round 2).** New cases (S-1a, S-1b) drive the REAL `_select_verified`
+through the "already selected" and "immediate real-read landing" paths (the
+two the skeptic named), confirm each returns an `_InferredSel` carrying the
+target, then thread that into a `_clear_strays` call where the target is blind
+at commit — both must and do COMMIT, reproducing the exact archived shape.
+Mutant (S-1 bonus): drop the `.inferred` marking from JUST the `target in
+before` path — caught by (S-1a). A new mutant M4 (the skeptic's own): drop
+`_corroborated(k)` from the POST-CLEAR `_want_inferred` computation only (the
+second occurrence, reached whenever a real stray also needs clearing) —
+survived round 1's suite entirely; caught now by a dedicated case that forces
+the post-clear branch to run with an uncorroborated want-blind target present.
+All sha256-verified restored, `__pycache__` cleared between mutants.
+
+**Status.** Redone after REFUTED skeptic round 1; awaiting skeptic round 2.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
