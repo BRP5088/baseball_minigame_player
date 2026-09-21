@@ -1561,6 +1561,120 @@ press/grab behind `<NAME>_DRIVE_IN_TESTS`, scanner widened to `.pop`.
 
 **Status.** Merged.
 
+### I-42  `cursor_labels_from_lifts.py`'s labels were 28/81 wrong, from a cursor caught mid-travel   P2  evidence
+
+**Evidence, from an independent census (`agent_progress/census/cursor_vlm/notes.md`,
+main checkout, read-only, 2026-09-21).** 81 lift-derived labels from two real runs
+(`screenshot_log/run_20260921_080311`, `run_20260921_075118`) were checked against
+`local_hand.cursor_slot`'s own read: 53 agreed, 28 did not. Every one of the 28 has
+the same signature (`scripts/investigate_mismatches.py`): the target slot's own glow
+is under 5% in the labelled frame — nowhere near `CURSOR_GLOW_MIN` (10.0) or the
+reader's documented true-cursor floor (20.7-36.1) — and the rise fires the very next
+captured frame, ~100ms later. That is a cursor caught MID-TRAVEL between slots, not
+one that was parked and then pressed select: the tool's core assumption ("the frame
+before a rise is a frame whose cursor slot is known") is violated whenever the
+pre-select cursor travel crosses the ~100ms gap between two captures. 9 of the 28 are
+a second, separate artefact — one selection's rise flickering near
+`SELECTED_MIN_RISE`, re-triggering "newly risen" several times for one event.
+
+**Root cause.** `tools/cursor_labels_from_lifts.py`'s HOLD=3 persistence filter
+catches a lift that never becomes a real selection; it has nothing to say about a
+real selection reached by a cursor that was already moving, or about the same
+selection's rise flickering across the detector's edge.
+
+**Fix, two independent checks, neither consulting `cursor_slot` or `cursor_glow`**
+(CLAUDE.md 10.22 — an independent label cannot mark its own homework; both are pure
+geometry from `selected_cards`, same as the original signal):
+
+  1. CAPTURE GAP: the frame immediately before the labelled frame must show the SAME
+     selected-set as the labelled frame — evidence the fan was already quiet for
+     >=2 frames before the rise, not mid a fast cursor jump.
+  2. NO-FLICKER: the rising slot must not have been risen at all in the
+     `FLICKER_WINDOW` (10) frames before the labelled frame — a re-rise right after a
+     drop is the same selection flickering, not a new one.
+
+`labels_for()` now returns `(kept, rejected)` with a reason per rejection
+(`capture_gap`, `flicker`, or the original `transient`) instead of silently dropping
+candidates, and `main()` prints both lists per run.
+
+**Verify, re-run on the same two real corpora the census used** (frame paths matched
+by basename against `agent_progress/census/cursor_vlm/joined.jsonl`'s 81 ground-truth
+rows, main checkout, read-only):
+
+    of 28 known-bad (A != C)    28 rejected (100%)    0 wrongly kept
+    of 53 known-good (A == C)   44 correctly kept (83%)  9 wrongly rejected (17%)
+
+Every one of the 28 bad labels is now caught — 16 by flicker alone, 11 by
+capture_gap+flicker together, 1 by capture_gap alone. The cost is real and reported
+rather than tuned away: 9 of 53 good labels (17%) are also rejected, all by the same
+two checks, because a genuine parked-and-selected cursor can occasionally sit inside
+a fan that had *other* recent activity or a near-window flicker on the same slot. No
+threshold here was chosen to hit a number (CLAUDE.md 10.4) — `FLICKER_WINDOW=10` and
+the 2-frame capture-gap requirement are the literal reading of the two checks' own
+definitions, not a fit to this data.
+
+**Tests.** `tests/harness/test_cursor_labels_capture_gap.py`, originally 4 synthetic
+frame-sequence cases (8 checks): a clean selection (kept), a rise one frame after a
+move (rejected, capture_gap), a flicker re-rise (rejected, flicker), and the original
+HOLD filter still firing on its own (rejected, transient).
+
+**Skeptic round 1: CONFIRMED WITH NOTES.** Independently re-derived the diff, the
+verification table (exact match: 28/28 known-bad rejected, 44/53 known-good kept) and
+the caller census (`labels_for` has exactly two callers, both already unpack the new
+`(kept, rejected)` return). Ran its OWN four mutants against the original 4-case
+suite and found two coverage gaps the fixer's two mutants (`gap_ok = True`,
+`flickered = False`) never probed: a wrong-pair swap (`hist[-3] == hist[-2]` in place
+of `hist[-2] == hist[-1]`) escaped by fixture coincidence (this test's case 2 happens
+to have `hist[-3] != hist[-2]` exactly where `hist[-2] != hist[-1]`, so the mutant's
+wrong condition gives the same answer as the right one on that one fixture), and a
+flicker-window off-by-one (`hist[-(fw+1):-1]` shrunk to `hist[-fw:-1]`) escaped
+structurally (case 3's flicker gap sits 4 frames inside a 10-frame window, far from
+the boundary a one-frame shrink would clip). Both are coverage gaps in the TEST, not
+correctness defects in the shipped code — confirmed by tracing the correct logic by
+hand, independent of any test.
+
+**Four cases added to close both gaps, none touching the shipped mechanism:**
+case 5 (`hist[-3]==hist[-2]` while `hist[-2]!=hist[-1]`, so the correct pair
+disagrees but the adjacent wrong pair agrees), case 6 (the analogous
+`hist[-3]==hist[-1]` swap), case 7 (the rising slot last risen EXACTLY
+`FLICKER_WINDOW` frames before the labelled frame — inside the window, REJECTED)
+and case 8 (EXACTLY `FLICKER_WINDOW + 1` frames before — one frame outside, KEPT).
+8 cases, 16 checks total, all green on unmodified code.
+
+**All four of the skeptic's named mutants re-run, this time against the full
+16-case suite, `__pycache__` deleted and sha256 verified identical
+(`b727bb7ed7760555ec0204df2d9f821430ed19daa26d4ecf7e11a9c1f1fd7481`) before, between
+and after every one:**
+
+    force gap_ok = True                                  case 2, 5, 6 FAIL
+    force flickered = False                              case 3, 7 FAIL
+    hist[-2]==hist[-1] -> hist[-3]==hist[-2] (literal)    CRASHES (IndexError) at
+                                                          case 2's own n=2 candidate,
+                                                          before case 5 is even
+                                                          reached -- the SAME literal
+                                                          substitution the skeptic
+                                                          used, unearthing that its
+                                                          own len(hist)<2 guard is
+                                                          now one index too short.
+                                                          A crash is a harder failure
+                                                          than a printed FAIL: no
+                                                          "all green", nonzero exit.
+    hist[-2]==hist[-1] -> hist[-3]==hist[-2] (guarded,
+      len(hist)<3, so it cannot crash)                    case 5 FAILS, nothing else
+    hist[-(fw+1):-1] -> hist[-fw:-1] (flicker off-by-one) case 7 FAILS, nothing else
+    reasons discarded to None (unconditionally)           already caught by cases
+                                                          2 and 3 (unchanged)
+
+All four fail as required; the two that escaped before are now caught cleanly
+(cases 5 and 7), and the wrong-pair mutant is caught in BOTH the literal form the
+skeptic used (a crash) and a hypothetical better-guarded form (a clean FAIL),
+so the guard isn't accidentally load-bearing for the catch.
+
+**Status.** Fixed on this branch (`tools/cursor_labels_from_lifts.py`,
+`tests/harness/test_cursor_labels_capture_gap.py`), skeptic round 1 CONFIRMED WITH
+NOTES and both named coverage gaps closed in round 2, awaiting re-review. Both real
+runs re-scanned end to end offline, no console, no live change.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
