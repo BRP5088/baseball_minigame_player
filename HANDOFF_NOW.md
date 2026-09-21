@@ -170,6 +170,13 @@ Verbatim from the facts file's LATER list, plus what accumulated after it:
   from slot 0 it's one step and works. Recovered by the loop alone today, no
   hand assist needed — but cost a worse batter played and ~5 minutes.
 
+### Snoopy jobs (one at a time; VLM text reading and grunt work only)
+- Label the kept reveal frames (test_fixtures/reveal_kind_truth/auto/): opponent card name + power per frame -> ground truth for the reveal-miss rate and for reveal_cards.TACTICS_KIND_MIN (OPEN-24).
+- Type Brian Coker and Zachary Lee from their ban-grid type banners (the roster's two untyped cards; simulate.UNTYPED).
+- Second-opinion the 34 I-46 new raised-card digits (agent_progress/issues/I-46/skeptic.md lists the frames/slots).
+- Mutation sweeps for I-48 once built, if the console is live (Snoopy_testing.md).
+Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter -- local scripts, seconds.
+
 ## 6. OPEN QUESTIONS
 
 Verbatim from the facts file, plus two new ones from today's close:
