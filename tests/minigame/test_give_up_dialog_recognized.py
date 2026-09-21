@@ -87,7 +87,9 @@ class Harness:
         self.idx = 0
         self.presses = []
         self.give_up_looks = 0
-        self.give_up_seen_press = False
+        self.give_up_calls = []   # sequence number of each frame give_up_dialog() saw
+        self._frame_seq = 0       # bumped on every captured frame -- proves freshness
+        self._press_seq = None    # frame seq as of the moment Circle was pressed
         self.seed = {"wins": 0, "losses": 0, "draws": 0, "balance": balance,
                      "match_in_progress": match_in_progress}
         self.clock = _Clock()
@@ -110,16 +112,30 @@ class Harness:
                 "opp_score": 0, "hand": [], "runners": [], "discards_left": 2}
 
     def _full_frame(self):
+        # Every capture is tagged with a fresh, monotonically increasing sequence
+        # number -- this is what lets _give_up_dialog answer from the FRAME it is
+        # given rather than from a flag toggled elsewhere. A mutant that re-checks
+        # a stale (already-seen) frame instead of taking a new capture hands back
+        # an object whose tag does not advance, and that is exactly what the
+        # freshness assertions below catch.
         from PIL import Image
-        return Image.new("RGB", (1920, 1080), (0, 0, 0))
+        self._frame_seq += 1
+        img = Image.new("RGB", (1920, 1080), (0, 0, 0))
+        img._bb_seq = self._frame_seq
+        return img
 
     def _give_up_dialog(self, img):
-        # True on the first look at a GIVE_UP entry (the pre-press check), False on
-        # every look after a Circle press has been sent -- one press clears it.
+        # Answers from the frame's own sequence tag: True (dialog still up) for a
+        # frame captured before the Circle press, False (dialog cleared) only for
+        # a frame captured strictly AFTER it. A press with no fresh look afterward
+        # -- i.e. the same frame object/tag reused -- reads as "still up", which is
+        # what a re-read of the stale pre-press frame should mean.
         self.give_up_looks += 1
-        if self.give_up_seen_press:
-            return False
-        return True
+        seq = getattr(img, "_bb_seq", None)
+        self.give_up_calls.append(seq)
+        if self._press_seq is None:
+            return True
+        return seq is not None and seq <= self._press_seq
 
     def run(self, **kwargs):
         real_save = o.save_progress
@@ -132,7 +148,7 @@ class Harness:
         def _press_and_track(key, *a, **kw):
             self.presses.append(key)
             if key == "moon":
-                self.give_up_seen_press = True
+                self._press_seq = self._frame_seq
 
         patches = {
             "read_game_state": lambda *a, **k: self._next_state(),
@@ -198,6 +214,25 @@ check("cross" not in h.presses,
 check(h.give_up_looks >= 2,
       f"the dialog must be looked at again after the press, to confirm it cleared "
       f"(before-press + after-press); only {h.give_up_looks} look(s) were made")
+# Exactly two captures for one give-up event: the pre-press look and the
+# post-press confirm. Anything else means the handling took more or fewer
+# fresh looks than the recipe calls for.
+check(len(h.give_up_calls) == 2,
+      f"expected exactly 2 give_up_dialog() captures for one give-up event "
+      f"(fresh look before the press, fresh look after); got {h.give_up_calls}")
+# The mutant this pins: orchestrator.py re-reading the STALE pre-press frame
+# (_gu_img) for the post-press confirm instead of taking a fresh _fast_grab().
+# A reused frame's sequence tag does not advance, so the second call's tag
+# would equal (never exceed) the first's -- catch that here, not by inferring
+# it from run()'s behaviour, which presses "moon" and continues either way.
+if len(h.give_up_calls) == 2:
+    pre_seq, post_seq = h.give_up_calls
+    check(post_seq is not None and pre_seq is not None and post_seq > pre_seq,
+          f"the post-press confirm read a STALE frame -- its capture sequence "
+          f"({post_seq!r}) did not advance past the pre-press look's ({pre_seq!r}). "
+          f"orchestrator.py must take a fresh _fast_grab() for the post-press "
+          f"give_up_dialog() check, not reuse the frame captured before Circle "
+          f"was pressed")
 check(final["match_in_progress"] is True,
       "answering the Give-up dialog's NO must not itself end the match — "
       f"match_in_progress={final['match_in_progress']!r}")
