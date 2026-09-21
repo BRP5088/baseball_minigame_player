@@ -1536,6 +1536,19 @@ ship on plausibility (§10.2).
 
 **Verify / brief / status.** As for I-13. Open.
 
+**RESULT 2026-09-21 (agent_progress/issues/I-15-16-17/, 12,000 halves x 3 seeds an arm
+vs `ALWAYS_BOOST`; the hold=False control reproduces the shipped baseline's per-match
+score array exactly).** Baseline (`CURRENT` vs `ALWAYS_BOOST`): **1.9879 runs/half,
+48.34% win, n=36,000.** Arm (hold the best batter back unless a runner is on or
+`batters_used >= 4`): **1.7438 runs/half, 42.96% win — delta -0.2441, 24.85 sigma**, and
+it changed the played card on 37.5% of 4,000 sampled (hand, state) pairs, so this is not
+a vacuous knob. **Decisively worse, not a wash — CLOSED: do not ship.** INFLIGHT.md's
++0.015/1.5-sigma figure does not reproduce at this n; the sign is the opposite. Mechanism:
+holding a card is not banking it — it sits out a round it could have hit, and 5 rounds per
+half (RULES.md §1) means "runners on or round>=4" often never arrives while the bases stay
+empty, so the policy trades a certain at-bat for a maybe-better one that frequently never
+comes. See GRAVEYARD.md's Engine table. **Status.** Closed.
+
 ### I-16  The discard threshold is a fixed 6 and deck-blind                          P2  engine
 
 **Evidence.** `decision_engine.py:227 REDRAW_POWER_THRESHOLD = 6`, swept once. The roster
@@ -1546,6 +1559,27 @@ known, so P(draw > current max) is computable per turn.
 discard, from the live deck composition. Control: the fixed 6.
 
 **Verify / brief / status.** As for I-13. Open.
+
+**RESULT 2026-09-21 (agent_progress/issues/I-15-16-17/, 12,000 halves x 3 seeds an arm
+vs `ALWAYS_BOOST`; the fixed-6 control reproduces the shipped baseline exactly).** Swept
+P(a fresh draw beats the current hand's max power), computed from the role-filtered
+33-card pool minus the cards currently visible in hand (no bans modelled; I-13's own
+arms are closed), over {0.3, 0.4, 0.5, 0.6}:
+
+    threshold   runs/half   delta      sigma    decisions changed
+    control(6)     1.9879       --        --     --
+    0.3             1.9840   -0.0038    -0.39    98/2662
+    0.4             1.9838   -0.0041    -0.41    91/2662
+    0.5             1.9298   -0.0581    -5.92    470/2662
+    0.6             1.8269   -0.1609   -16.53    605/2662
+
+0.3/0.4 are statistically flat (<1 sigma, the tie_w "changes no decision" shape at the
+low end); 0.5/0.6 are significantly WORSE. No swept threshold beats the fixed 6. **CLOSED:
+do not ship any of the four.** Scope note: this arm conditions only on the currently
+VISIBLE hand, not on every card seen earlier in the half (a fuller tracker would need a
+mutable per-half accumulator threaded through `simulate_batting_half`), so it bounds a
+weaker version of the proposed policy from above — re-open with that fuller tracker if
+this is ever revisited. **Status.** Closed.
 
 ### I-17  The opponent model is our card pool, not the log                            P2  engine
 
@@ -1559,6 +1593,36 @@ problem in I-18.
 `CURRENT` (the earlier negative result used the pool).
 
 **Verify / brief / status.** As for I-13. Open; better after I-18 refreshes the rows.
+
+**RESULT 2026-09-21 (agent_progress/issues/I-15-16-17/, 12,000 halves x 3 seeds,
+`expected_runs_play`-style batting vs `CURRENT`; the pool-dist control reproduces the
+shipped `expected_runs_play`'s per-match score array exactly).** Built the opponent
+pitcher distribution from `match_log.jsonl` in the MAIN CHECKOUT (read-only): of **520**
+total rows, **151** carry a local reveal read (`outcome_basis` or `margin` present, the
+withdrawn score-went-up classifier's **369** rows excluded), and of those, **82** are
+`phase == "batting"` (we bat, opponent pitching against us — the distribution wanted).
+Effective power = `opp_power + opp_tactics_bonus` when `opp_tactics_kind` is a swing or
+pitch boost, verified by hand against the log's own `margin` field on six bonus rows.
+
+    pool-derived   (4:4.0%  5:24.2%  6:22.7%  7:14.6%  8:12.1%  9:12.1%  10:10.1%)
+    log-derived    (4:14.6% 5:24.4%  6:20.7%  7:17.1%  8:14.6%  9:7.3%   10:1.2%)  n=82
+
+Swapping the log distribution into `expected_runs_play`'s scorer gave a **bit-identical**
+per-match score array to the pool-derived control (1.6641 runs/half, 36.90% win, both
+arms, delta +0.0000, sigma +0.00) and **0 of 4,000** sampled (hand, state) pairs picked a
+different (card, tactics). The swap IS reaching the scorer — spot-checked by hand on an
+8/9/5-power hand, EV 0.510 (pool) vs 0.598 (log), same chosen card — it just never crosses
+an argmax boundary for hands drawable from this 33-card pool, despite the two
+distributions genuinely differing in shape (log puts more mass at power 4, less at 9-10).
+`expected_runs_play` itself still loses decisively to `CURRENT` either way (36.90% win,
+consistent with the documented 39.8%/35.5% negative result at a different n) — the
+opponent-model swap does not rescue it, because the losing mechanism (a myopic per-at-bat
+EV, see `simulate.expected_runs_play`'s own docstring) is unrelated to which pitcher
+distribution is plugged in. **CLOSED as not actionable: the knob changes nothing inside
+this consumer, so there is no ship decision to make from this experiment.** Re-open only
+if the opponent distribution is ever wired into a DIFFERENT consumer (e.g. a direct
+power-margin threshold) where a boundary crossing is more plausible, or if the log grows
+well past n=82. **Status.** Closed.
 
 ---
 

@@ -258,3 +258,16 @@ could report that. The user said "the images don't look right" and was correct
 before either number was. **A control that renders the same pipeline from a
 CONSTANT image costs two minutes and would have killed this on day one.** Run it
 before believing any result that accumulates frames into a canvas.
+
+---
+
+## Engine (card play) — NOT part of the 13 navigation/rig changes above
+
+Card-play heuristic changes, measured the same way (offline simulation, control
+reproduces the shipped baseline exactly, n large enough). Kept separate from the
+navigation/rig table on purpose, so the "13" count at the top of this file and in
+CLAUDE.md §9 stays in sync with itself.
+
+| Change | Result | n | State today |
+|---|---|---|---|
+| **I-15: hold the best batter back** (`GameState.batters_used`/`runners` are plumbed and read by no decision function) — arm held the single strongest batter unless a runner was on base or it was the last round (`batters_used >= 4`), so a home run scores more with the bases loaded. | **-0.2441 runs/half, 24.85 sigma against the shipped best-first control** (12,000 halves x 3 seeds vs `ALWAYS_BOOST`; control reproduces the baseline's per-match score array exactly). Changed the played card on 37.5% of 4,000 sampled hands, so not a vacuous knob. Mechanism: a held card is not banked, it just sits out a round it could have hit, and 5 rounds/half means "later" often never arrives with the bases still empty. | 36000/arm | `decision_engine.best_batting_play` unchanged — never ships `batters_used`-aware sequencing of this shape. ISSUES.md I-15, `agent_progress/issues/I-15-16-17/`. |
