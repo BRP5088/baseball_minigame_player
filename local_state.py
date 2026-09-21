@@ -155,14 +155,12 @@ def _phase_templates():
     return _phase_cache
 
 
-def player_discs(img):
-    """[(x, y) or None] x5 -- where each fan slot's PLAYER disc is, or None.
+def _fan_discs(img):
+    """[(rank_key, x, y, kind) or None] x5 -- one slot assignment per fan position, or
+    None for the whole hand on the short-hand / empty-table path.
 
-    This is local_hand._read_fan's own slot assignment, kept because read_hand throws the
-    y away and the banner sits above the disc. It returns None on the short-hand /
-    empty-table path, exactly where read_hand falls back to the ungated search and there
-    is no fan to hang a banner box on. IT MUST STAY IN STEP WITH _read_fan: the check is
-    that it reports the same kind and the same x as read_hand on every frame.
+    The shared candidate pool behind player_discs AND (I-31) read_phase's tactics votes,
+    so there is exactly one place that decides which slot a disc belongs to.
     """
     strong = lh._strong_discs(img)
     if len(strong) < lh.FIT_MIN_DISCS:
@@ -189,6 +187,21 @@ def player_discs(img):
             continue
         if best[i] is None or (rank, key, -cost) > best[i][0]:
             best[i] = ((rank, key, -cost), x, y, kind)
+    return best
+
+
+def player_discs(img):
+    """[(x, y) or None] x5 -- where each fan slot's PLAYER disc is, or None.
+
+    This is local_hand._read_fan's own slot assignment, kept because read_hand throws the
+    y away and the banner sits above the disc. It returns None on the short-hand /
+    empty-table path, exactly where read_hand falls back to the ungated search and there
+    is no fan to hang a banner box on. IT MUST STAY IN STEP WITH _read_fan: the check is
+    that it reports the same kind and the same x as read_hand on every frame.
+    """
+    best = _fan_discs(img)
+    if best is None:
+        return None
     return [None if b is None or b[3] != "player" else (b[1], b[2]) for b in best]
 
 
@@ -246,12 +259,26 @@ def phase_banner_vector(img, cx, cy):
     return None if nn < 1e-6 else v / nn
 
 
+# I-31: a readable TACTICS KIND is a phase vote too. SWING_BOOST and SPEED_BOOST exist
+# only in a batting hand; PITCH_BOOST and FIELDING_BOOST only in a pitching hand
+# (decision_engine.TacticsType, CLAUDE.md section 4: "Only SWING_BOOST and PITCH_BOOST
+# add power" names the same four-way split). A hand that reads no BATTER/PITCHER banner
+# at all -- e.g. every player slot occluded or lifted -- still carries this signal.
+TACTICS_PHASE = {"swing_boost": "batting", "speed_boost": "batting",
+                 "pitch_boost": "pitching", "fielding_boost": "pitching"}
+_BANNER_PHASE = {"batter": "batting", "pitcher": "pitching"}
+
+
 def read_phase(img, bank=None):
     """('batting'|'pitching', detail) for a hand strip, or (None, detail) when unsure.
 
     None means NOT READ and the caller must ask the paid model -- an abstention costs one
     paid call, a wrong answer plays the wrong card type for $50. It never guesses: the
     whole value of this reader is that its answer can be trusted without a second opinion.
+
+    Votes come from two sources, pooled: the player banner text (BATTER/PITCHER) and,
+    since I-31, each readable tactics card's KIND. All votes must agree -- one dissenting
+    vote is still an abstention, never a majority decision on a $50 path.
 
     `detail` carries {"votes", "cards", "scores"} so a caller or a log can see WHY.
     """
@@ -260,23 +287,36 @@ def read_phase(img, bank=None):
     if bank is None:
         return None, detail
     vecs, banners = bank
-    discs = player_discs(img)
-    if discs is None:
+    best = _fan_discs(img)
+    if best is None:
         return None, detail                     # a short hand: no fan to hang a box on
-    for d in discs:
-        if d is None:
+    for b in best:
+        if b is None or b[3] != "player":
             continue
-        v = phase_banner_vector(img, d[0], d[1])
+        _, x, y, _ = b
+        v = phase_banner_vector(img, x, y)
         if v is None:
             continue
         scores = vecs @ v
         k = int(scores.argmax())
-        detail["votes"][banners[k]] = detail["votes"].get(banners[k], 0) + 1
+        phase = _BANNER_PHASE[banners[k]]
+        detail["votes"][phase] = detail["votes"].get(phase, 0) + 1
         detail["scores"].append(round(float(scores[k]), 3))
+        detail["cards"] += 1
+    for i, b in enumerate(best):
+        if b is None or b[3] != "tactics":
+            continue
+        _, x, y, _ = b
+        t, score = lh.read_tactics_type(img, i, x, y)
+        if t is None:
+            continue
+        phase = TACTICS_PHASE[t]
+        detail["votes"][phase] = detail["votes"].get(phase, 0) + 1
+        detail["scores"].append(round(float(score), 3))
         detail["cards"] += 1
     if detail["cards"] < PHASE_MIN_CARDS or len(detail["votes"]) != 1:
         return None, detail                     # too few cards, or they disagree
-    return {"batter": "batting", "pitcher": "pitching"}[next(iter(detail["votes"]))], detail
+    return next(iter(detail["votes"])), detail
 
 
 # --------------------------------------------------------------------------------------
