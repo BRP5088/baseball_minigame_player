@@ -447,6 +447,12 @@ dialog is already in the baseline and every later delta is idle-animation noise 
 present dialog reads absent, and each "retry" presses Cross at a dialog whose YES is Cross.
 Alternative: three consecutive dropped presses (P ~ 0.152 x 0.25 x 0.25 = 1%).
 
+**MEASURED 2026-09-20, and it is neither:** chiaki's log shows every Cross tap accepted and
+TRANSMITTED (`[btnedge] id=1 DOWN TRANSMITTED`); the game ignored four taps at 0.05 s in a
+row and accepted ONE Cross held 0.6 s at once, the world reloading 3 s later. **This dialog
+wants a HELD confirm.** The reset's confirm press must hold; the content-based detector
+stays needed because the delta rule cannot tell "dialog up, press ignored" from "no dialog".
+
 **Proposed fix.** Detect the dialog by CONTENT, not by delta: a small template/OCR reader
 for the "Load Last Save" panel (dark flat panel, the two button glyphs), gated the way
 `give_up_dialog` is, and used both before pressing (already up -> do not press again) and
