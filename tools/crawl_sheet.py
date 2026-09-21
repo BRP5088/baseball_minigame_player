@@ -12,7 +12,6 @@ import os, sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
-os.environ.pop("BASEBALL_TEST_RUN", None)
 
 from PIL import Image, ImageDraw, ImageFont
 import orchestrator as o
@@ -20,6 +19,25 @@ import local_hand as lh
 import local_state as ls
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "agent_progress/crawl_sheet.png"
+
+# THIS USED TO `os.environ.pop("BASEBALL_TEST_RUN", None)` AT IMPORT, unconditionally --
+# CLAUDE.md 10.1's guard-that-disables-itself: any module that imports this one (e.g.
+# tools/match_crawl.py, at line ~753/804) while BASEBALL_TEST_RUN=1 silently switched off
+# the offline input lockout for the REST OF THAT PROCESS. It never touches the flag now.
+# A test exercising this module's own logic (the tile layout, the labels) sets
+# CRAWL_SHEET_DRIVE_IN_TESTS = True and stubs the capture call directly -- the same
+# opt-in shape as match_crawl.CRAWL_DRIVE_IN_TESTS / FOCUS_PRESS_IN_TESTS elsewhere.
+CRAWL_SHEET_DRIVE_IN_TESTS = False
+
+
+def _refuse_if_test_run():
+    if os.environ.get("BASEBALL_TEST_RUN") and not CRAWL_SHEET_DRIVE_IN_TESTS:
+        raise RuntimeError(
+            "REFUSING: BASEBALL_TEST_RUN is set and no frame was supplied to build(). "
+            "Grabbing a fresh frame here would reach the live console under the offline "
+            "flag -- see CLAUDE.md §5. Pass build(img=...) with a frame you already "
+            "have, or set tools.crawl_sheet.CRAWL_SHEET_DRIVE_IN_TESTS = True and stub "
+            "orchestrator._fast_grab to exercise this module's own logic.")
 
 
 def font(sz):
@@ -46,6 +64,7 @@ def build(img=None, out=None):
     one here would label a step with pixels it never saw, which is the exact mistake this
     tool exists to prevent (CLAUDE.md 10.15)."""
     if img is None:
+        _refuse_if_test_run()
         img = o._fast_grab()
     crops = dict(o.crop_gameplay_regions(img))
     hand = crops.get("hand")

@@ -740,9 +740,9 @@ def build_contact_sheet(session_dir):
 
     Reuses crawl_sheet's own thumbnail resizer (`panel`) rather than a second,
     independently-tuned one -- and deliberately does NOT call crawl_sheet.build()
-    here: that function pops BASEBALL_TEST_RUN unconditionally (out of this
-    file's edit scope), which would silently disable the suite's own input
-    lockout for the rest of the process if this were ever reached from a test.
+    here: that function grabs a fresh frame (and now refuses to under
+    BASEBALL_TEST_RUN) when none is supplied, which this function has no frame
+    to give it -- it only tiles PNGs already on disk.
     """
     if not os.path.isabs(session_dir):
         session_dir = os.path.join(_ROOT, session_dir)
@@ -797,15 +797,12 @@ def main():
         except Exception as e:
             print(f"  annot          : could not render ({type(e).__name__}: {e})")
         # A LABELLED SHEET FOR EVERY STEP, rendered from THIS step's frame. crawl_sheet
-        # pops BASEBALL_TEST_RUN unconditionally (out of this file's edit scope); the
-        # flag is saved and restored around the call so one sheet render cannot
-        # silently disable the lockout for the rest of the process.
+        # no longer touches BASEBALL_TEST_RUN at all (it used to pop it unconditionally
+        # at import) -- passing `img` here means build() never reaches its own capture
+        # guard, so no save/restore dance is needed any more.
         try:
             import crawl_sheet
-            saved_flag = os.environ.get("BASEBALL_TEST_RUN")
             sheet = crawl_sheet.build(img, os.path.join(OUT, f"{step:03d}_sheet.png"))
-            if saved_flag is not None:
-                os.environ["BASEBALL_TEST_RUN"] = saved_flag
             r["sheet"] = sheet
             print(f"  sheet          : {sheet}")
         except Exception as e:
