@@ -1153,23 +1153,25 @@ def _walk_cursor_to(target, look):
             # exactly the row `ys[expected] is None` names is the EXPECTED reading,
             # not a lost cursor. Dead-reckon across it for one step and let the next
             # press prove the walk is still live. `was_dead_reckoned` caps this at
-            # ONE consecutive step -- a second dark slot right after a dead-reckoned
-            # one still refuses below, whether or not IT is occluded too (two
-            # occluded slots in a row is the mirror case and stays a refusal; no
-            # code chains guesses to cover it).
+            # ONE consecutive step -- a GUESS never follows a guess, so a second dark
+            # slot right after a dead-reckoned one is never itself dead-reckoned.
+            # It is no longer a hard refusal, though (I-53): the branch below this
+            # one presses and RE-READS for real, up to PRESS_VERIFY_TRIES times, so
+            # two occluded slots in a row can still be walked through -- just never
+            # by a second guess.
             if (not was_dead_reckoned and expected != target
                     and 0 <= expected < len(ys) and ys[expected] is None):
                 print(f"  [cursor] slot {expected} is occluded (y unmeasured) — its "
                       "glow cannot read; dead-reckoning one step across it")
                 cur = expected
                 dead_reckoned_last = True
-                # NOT cur_confirmed_blind = True (I-33). I-32's own bound above is
-                # STRICTER than I-33's retry -- "no code chains guesses to cover
-                # it" means not even one retry press after a dead-reckon, which
-                # `tests/minigame/test_walk_crosses_occluded_slot.py` cases (2) and
-                # (2b) pin exactly (2 presses, refuse, nothing further). Flagging a
-                # dead-reckoned `cur` as blind here would have the I-33 retry add a
-                # press I-32 deliberately refuses to send.
+                # NOT cur_confirmed_blind = True (I-33). A dead-reckoned `cur` was
+                # never read at all, so it is not "trusted" in I-33's sense either --
+                # but flagging it True here would feed I-33's SINGLE-retry branch,
+                # not I-53's PRESS_VERIFY_TRIES one, on the very next lost read. I-53's
+                # own `was_dead_reckoned` check already covers that read, and takes
+                # priority over I-33 (see its comment below), so nothing is lost by
+                # leaving this alone.
                 continue
             # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
             # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
@@ -1185,6 +1187,56 @@ def _walk_cursor_to(target, look):
                 first_cur, steps = cur, 0
                 cur_confirmed_blind = True
                 continue
+            # LOST RIGHT AFTER A DEAD-RECKON (I-53). `prev` itself was never
+            # confirmed by a read -- it is I-32's guess, `expected`, believed only
+            # because the slot it crossed was occluded. A read that fails on the
+            # VERY NEXT press is therefore not "the walk is stuck": it is as
+            # likely that the dead-reckon press itself was dropped (so the real
+            # cursor is still sitting on the occluded slot, still unreadable by
+            # construction) as that anything is actually wrong. Moving again is
+            # free -- select_card is the only toggle, this is move_left/move_right
+            # -- so retry for real presses-and-looks rather than refuse on the
+            # first one.
+            #
+            # Reproduced live 2026-09-21 (I-48, overnight/run_live_20260921t.log
+            # ~584-593): hand `[5/2, UNKNOWN(occluded), 4/3, speed_boost, 4/3]`,
+            # walking toward the tactics slot (3) crossed occluded slot 1, dead-
+            # reckoned across it, and the very next press read
+            # glow=[0.9, 0.0, 0.1, 0.0, 0.0] -- nothing above the gate anywhere --
+            # and refused, which dropped the tactics attachment via the I-48
+            # fallback. The occluded slot was correctly named; the walk gave up
+            # one press too early rather than pressing again.
+            #
+            # THIS IS NOT A SECOND DEAD-RECKON. A dead-reckon assigns `cur` a
+            # value with NO read at all. This presses for real and only accepts
+            # `cur` when a real look names it -- so it cannot "chain guesses";
+            # it can only chain CONFIRMATIONS or run out of budget and refuse.
+            # Bounded at PRESS_VERIFY_TRIES (reused, not invented) rather than
+            # CURSOR_BLIND_NUDGES: this is recovering ONE specific lost read, not
+            # searching the whole fan for an unlocated cursor.
+            if was_dead_reckoned:
+                for _extra in range(1, PRESS_VERIFY_TRIES + 1):
+                    print(f"  [cursor] lost the cursor right after dead-reckoning "
+                          f"across an occluded slot (glow={glow}) — pressing once "
+                          f"more toward {target} rather than refusing "
+                          f"({_extra}/{PRESS_VERIFY_TRIES})")
+                    press("move_right" if prev < target else "move_left")
+                    steps += 1
+                    time.sleep(MOVE_SETTLE_SEC)
+                    glow, ys, n, sel = _look_settled(look)
+                    if n != MAX_HAND_SIZE:
+                        print(f"  [cursor] the fan stopped reading mid-walk "
+                              f"(rows={n}) — refusing")
+                        return False, sel
+                    cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                    if cur is not None:
+                        cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
+                        break
+                if cur is not None:
+                    continue
+                print(f"  [cursor] lost the cursor after {steps} press(es) "
+                      f"(glow={glow}) — refusing")
+                return False, sel
             # (I-33) `prev` was ITSELF only known by an UNRELIABLE confirmation --
             # the I-02 probe above landing on a DIFFERENT slot than the call's own
             # target, a marginal glow crossing, or the top-of-function lift
@@ -1214,9 +1266,11 @@ def _walk_cursor_to(target, look):
             # and that case already returned above via the I-02 probe branch,
             # never reaching here.
             #
-            # DELIBERATELY NOT SET AFTER AN I-32 DEAD-RECKON (see that branch's own
-            # comment above): I-32's bound is one guess and no chaining at all, and
-            # a retry press here would be exactly the chain it refuses to add.
+            # NEVER REACHED WHEN `was_dead_reckoned` IS TRUE (I-53 branch above
+            # returns or continues first) -- so this retry now fires only for a
+            # lost cursor that did NOT follow a dead-reckon, which is exactly
+            # what CONTROL (4)/(D) in tests/minigame/test_walk_crosses_occluded_
+            # slot.py pins: unchanged press counts when nothing was occluded.
             if prev_blind:
                 print(f"  [cursor] the press left blind slot {prev} and nothing "
                       "reads — a dropped press looks identical; pressing once more "
