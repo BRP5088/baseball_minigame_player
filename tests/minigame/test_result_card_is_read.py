@@ -26,10 +26,20 @@ veto:
     false positives on the 1,450
       non-result frames before it    0
 
-HONEST LIMIT: only DEFEAT is confirmed by a frame. WINNER and DRAW come from that
-comment and have never been seen by this reader. They are included because omitting
-them makes a win unreadable in exactly the way this loss was -- but the first live win
-or draw must be checked against this rather than assumed.
+HONEST LIMIT WAS: only DEFEAT was confirmed by a frame. WINNER is now confirmed too
+(2026-09-20, WIN #41, run_20260920_194419) -- see section 5 below. DRAW still comes
+from that comment alone and has never been seen by this reader.
+
+WINNER'S CONFIRMATION LOOKS DIFFERENT FROM DEFEAT'S, AND THAT IS WORTH SAYING PLAINLY.
+The winning match's result screen never dropped into the notebook card in the ~5s of
+frames captured before the process exited (the wallet was too low to continue) -- it
+sat on the ARCHED "WINNER" banner over the diamond, which the template bank in
+RESULT_TEMPLATES already reads correctly (score 0.912-0.932, clear of RESULT_MIN).
+So read_result()'s full pipeline answers this frame from the TEMPLATES, not the card,
+same as every other archived winner. What IS new: read_result_card() itself, called
+directly, independently reads WINNER off this same frame (raw OCR 'WINNER Y') -- the
+card path works on the word, it is just not the path THIS match's screen happened to
+need. That is the confirmation section 5 pins.
 """
 import os as _os
 import sys as _sys
@@ -121,9 +131,43 @@ else:
         check(_o is None,
               f"an early match frame must NOT name a result word; got {_o!r} ({_r!r})")
 
+# --- 5. THE FIRST CONFIRMED WIN -----------------------------------------------------
+# 2026-09-20, WIN #41, run_20260920_194419/20260920_194917_198.jpg. Unlike DEFEAT,
+# this frame's arched templates ALREADY clear RESULT_MIN, so the full pipeline answers
+# from result_scores(), not from the card -- that is asserted below rather than hidden.
+# What this pins is read_result_card() ITSELF: called directly, it independently reads
+# WINNER off this frame (raw OCR 'WINNER Y'), which is the confirmation I-04 asked for.
+WIN_FIX = _os.path.join(_ROOT, "test_fixtures", "result_screens", "winner_live_20260920.png")
+check(_os.path.exists(WIN_FIX), f"fixture missing: {WIN_FIX}")
+if _os.path.exists(WIN_FIX):
+    wimg = Image.open(WIN_FIX)
+
+    _wout, _wraw = ls.read_result_card(wimg)
+    check(_wout == "win",
+          f"the card reader must read the WINNER band as win; got {_wout!r} from {_wraw!r}")
+    check("WINNER" in _wraw,
+          f"the raw OCR text should contain WINNER; got {_wraw!r}")
+
+    # the full pipeline also reads win end to end -- via the arched banner this time
+    _wres = ls.read_result(wimg)
+    check(_wres["is_result"] is True and _wres["outcome"] == "win",
+          f"the WIN frame must be read as win end to end; got is_result="
+          f"{_wres['is_result']!r} outcome={_wres['outcome']!r}, why={_wres['why']!r}")
+
+    # HONESTY CHECK, the mirror of section 2's control: on THIS frame the templates DO
+    # clear RESULT_MIN, so the pipeline verdict above came from result_scores(), not
+    # from the card -- unlike DEFEAT. If this ever goes False without the fixture
+    # changing, something about the template bank regressed, not the card reader.
+    _wsc = ls.result_scores(wimg)
+    check(max(_wsc.values()) >= ls.RESULT_MIN,
+          f"expected the arched bank to already answer this frame "
+          f"({max(_wsc.values()):.3f} against RESULT_MIN {ls.RESULT_MIN}); if it no "
+          f"longer does, re-check why 'why' above still says win.")
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
 print("  the DEFEAT! card reads as a loss, the arched bank does not, an ambiguous "
-      "band refuses, and a non-result frame names nothing")
+      "band refuses, a non-result frame names nothing, and the WINNER card word is "
+      "now confirmed by a live frame too")
