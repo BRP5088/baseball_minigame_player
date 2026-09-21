@@ -72,6 +72,11 @@ WHAT THIS FILE PINS:
       (slots 3, 2) intervene, then a LATER unrelated drop -- must refuse immediately,
       proving the blind flag was actually CLEARED by the intervening reads and not
       just left set from four steps back.
+  (8) THE len(sel) == 1 BOUNDARY (a v2 skeptic note, progress_v2.md Q C): TWO cards
+      selected, glow naming nothing at the top of a fresh call -- the lift fallback
+      requires EXACTLY one selected card and must NOT fire with two, so `cur` stays
+      None and the (pre-existing, unmodified) blind-nudge loop refuses exactly as it
+      would with none selected.
 
 Uses a ScriptedLook stub rather than the position-tracking fakes in the sibling I-02/
 I-32 files, because this fix keys on WHICH look() answers "nothing reads" and which
@@ -360,6 +365,35 @@ try:
           s.sent == ["move_left"] * 3)
     check("(7) no frames left unconsumed", s.frames == [])
 
+    # --- (8) THE len(sel) == 1 BOUNDARY (v2 skeptic, progress_v2.md Q C's named
+    #         coverage gap): TWO cards selected, glow naming nothing at the top
+    #         of a fresh call. The lift fallback requires EXACTLY one selected
+    #         card -- with two, there is no way to tell which one, if either,
+    #         the cursor is on -- so it must NOT fire here. `cur` stays None from
+    #         the top-of-function read, same as before I-33 existed, and the
+    #         (pre-existing, unmodified) blind nudge loop runs and exhausts its
+    #         budget with nothing ever reading, refusing exactly as it would
+    #         with zero cards selected. --------------------------------------
+    frames = [([0.0, 0.0, 0.0, 0.0, 0.0], [4, 2])]  # top-of-function: two lifted,
+                                                     # glow names nothing
+    frames += [(LOW, [4, 2])] * ic.CURSOR_BLIND_NUDGES  # nudge loop: never reads
+    s = ScriptedLook(frames)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(0, s.look)
+    out = buf.getvalue()
+    check("(8) refuses -- two selected cards must not name a cursor", ok is False)
+    check("(8) the lift fallback never fired (len(sel) == 2, not 1)",
+          "already selected" not in out)
+    check("(8) the I-33 retry never fired (cur was never confirmed at all)",
+          "pressing once more" not in out)
+    check("(8) the pre-existing blind-nudge refusal line fires",
+          "cannot see the cursor" in out)
+    check("(8) exactly CURSOR_BLIND_NUDGES move_left presses sent, nothing more",
+          s.sent == ["move_left"] * ic.CURSOR_BLIND_NUDGES)
+    check("(8) no frames left unconsumed", s.frames == [])
+
     # --- no bare-bool checks slipped in (CLAUDE.md 5's nine check() signatures) --
     check("CURSOR_MAX_STEPS untouched by this file's fix", ic.CURSOR_MAX_STEPS == 8)
     check("CUR_TRUSTED_GLOW_MIN sits between the measured populations "
@@ -377,5 +411,6 @@ print("  a press off a blind-confirmed slot is retried once before refusing, a "
       "second drop still refuses cleanly, a target one step away is left to the "
       "I-02 probe untouched, a press off a glow-confirmed slot still hits the old "
       "refusal with no extra press, both cross-call mechanisms (a marginal top-of-"
-      "call glow crossing and a card already selected) retry and arrive, and an "
-      "intervening genuine read clears a stale blind flag before a later drop")
+      "call glow crossing and a card already selected) retry and arrive, an "
+      "intervening genuine read clears a stale blind flag before a later drop, and "
+      "two selected cards never name a cursor from the lift alone")

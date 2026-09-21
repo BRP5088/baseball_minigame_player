@@ -923,10 +923,9 @@ select.py` (I-02), `tests/minigame/test_walk_crosses_occluded_slot.py` (I-32),
 `tests/rig/test_no_real_input_under_test_run.py`, `tests/harness/
 test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
 
-**Status.** v1 REFUTED 2026-09-21 (scoped to the I-02 probe only, missed the cross-call
-case that motivated the ticket). v2 fixed on branch `i33-blind-slot-retry`, addresses
-both mechanisms the skeptic named plus a mutant-B hole in the same round; awaiting
-re-review.
+**Status.** merged c335d42a673f2a7fc92f31642172887e183b2342; skeptic CONFIRMED WITH NOTES
+(v1 refuted: the flag was call-local and the live case was a fresh call; v2 covers it via
+the selected-card fallback); notes folded in.
 
 ### I-34  A second substring matcher scored a phantom draw from a card name (JOHNNY DRAWERS)   P0  reader
 
@@ -1145,11 +1144,8 @@ either gate sees them, matching the test. Re-run, it prints exactly:
 
 naming the four files above (`agent_progress/issues/I-37/probe6_corrected_output.txt`).
 
-**Status.** Fixed in this worktree, not yet merged. Independent skeptic round
-2026-09-21 (`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH
-NOTES -- the fix itself was never in question; two write-up/coverage gaps were
-found and both fixed on this branch (the corpus-regression probe's fixture
-scale bug, and the missing per-slot-dedup mutant), see above.
+**Status.** merged 3bd69d56c183d7cc1dff2fc49f7f4853758d70e0; skeptic CONFIRMED WITH
+NOTES (probe corrected, dedup pinned).
 
 ### I-38  An occluded target card cannot be selected, so the engine plays second-best   P1  input
 

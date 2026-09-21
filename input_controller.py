@@ -878,6 +878,16 @@ def _look_settled(look):
 # is this case verbatim: a FRESH call's own top-of-function read names cur=4 at
 # glow 10.5, no I-02 probe involved, and the shipped fix (scoped to "confirmed
 # via the I-02 probe") could not see it -- see `cur_confirmed_blind` below.
+#
+# NOT A FLOOR OF EVERY MEASURED TRUE READING (v2 skeptic, progress_v2.md Q B).
+# local_hand.py ~1160-1236 documents a single live true-cursor reading of 12.4
+# -- below this constant -- and CURSOR_GLOW_MIN (10.0) was deliberately set to
+# "clear 8.4 AND admit 12.4", i.e. to treat 12.4 as genuine. This constant does
+# not contradict that: a true reading landing in [10.0, 20.7) is merely
+# TREATED AS UNRELIABLE here, not rejected -- the cost is at most one extra,
+# bounded retry press (see `cur_confirmed_blind` below), and it can never
+# produce a false arrival, since every arrival still requires a later genuine
+# glow-confirmed read or the pre-existing I-02 probe.
 CUR_TRUSTED_GLOW_MIN = 20.7
 
 # How many blind nudges may be spent finding a cursor the glow reader cannot see.
