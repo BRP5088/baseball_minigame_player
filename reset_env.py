@@ -113,6 +113,19 @@ CONFIRM_WAIT_SEC = 4.0        # how long the dialog gets to animate in before
                               # its absence is called a dropped press
 LOAD_TIMEOUT_SEC = 45.0
 
+# I-23, measured live 2026-09-20 with the "Load Last Save" dialog on screen: a
+# TAPPED Cross (hold_seconds=0.05, the default) was accepted by chiaki and
+# TRANSMITTED to the console (chiaki's own [btnkey]/[btnedge] log) and the
+# GAME ignored it — four times running, three of them reset_environment's own
+# retries. One Cross HELD 0.6s was accepted immediately and the world
+# reloaded 3s later. So this confirm wants a HELD button, not a tap; nothing
+# else in this project already holds a button confirm (grep "hold_seconds"
+# across orchestrator.py/reset_env.py/input_controller.py: the only holds are
+# camera-probe sticks at 0.3s, a different purpose), so there is no existing
+# value to reuse. n=1 accepted vs 4 taps ignored is thin — raise this if a
+# larger sample says otherwise.
+CONFIRM_HOLD_SEC = 0.6
+
 
 # The centre of the "Give up?" dialog. OCRs cleanly at every threshold tried
 # (110/140/170) on a live 1920x1080 window capture.
@@ -136,6 +149,40 @@ def give_up_dialog(img):
     for thr in (110, 140, 170):
         b = c.point(lambda p, t=thr: 0 if p < t else 255)
         if "give up" in pytesseract.image_to_string(
+                b, config="--psm 7").strip().lower():
+            return True
+    return False
+
+
+# I-23: the "Load Last Save" confirmation was found on screen (fixture
+# test_fixtures/load_last_save_dialog_live_20260920.png) while
+# reset_environment's DELTA-only gate had just raised "no confirmation dialog
+# appeared" against it three times. Same box position and same mechanism as
+# GIVE_UP_BOX/give_up_dialog above — one dark panel, one OCR read of its
+# title band. OCRs cleanly at every threshold tried (110/140/170) on the live
+# 1920x1080 fixture, and reads False on all 656 other 1920x1080 fixtures in
+# this tree plus the 1867x1050 "Load Last Save" HIGHLIGHTED-in-the-menu
+# fixture (pause_menu/load_last_save_selected.png) that has the same three
+# words on screen in a different place — see agent_progress/issues/I-23/.
+LOAD_SAVE_BOX = (0.30, 0.40, 0.70, 0.50)
+
+
+def load_save_dialog(img):
+    """True if the "Load Last Save" confirmation dialog is on screen.
+
+    Mirrors give_up_dialog: same dark-panel-with-title shape, same OCR-a-crop
+    approach, so the reset has ONE mechanism for "is a confirmation dialog up"
+    rather than two. Content-based, so it does not depend on the screen having
+    CHANGED (which is what a frame-delta gate needs and what failed here — see
+    reset_environment's commit step).
+    """
+    w, h = img.size
+    x0, y0, x1, y1 = LOAD_SAVE_BOX
+    c = img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))).convert("L")
+    c = c.resize((c.width * 3, c.height * 3), Image.LANCZOS)
+    for thr in (110, 140, 170):
+        b = c.point(lambda p, t=thr: 0 if p < t else 255)
+        if "load last save" in pytesseract.image_to_string(
                 b, config="--psm 7").strip().lower():
             return True
     return False
@@ -423,48 +470,100 @@ def reset_environment(log=print, progress_file=None, reason=None):
     log("  selected: Load Last Save")
 
     # --- 3. commit, gated on the dialog actually appearing ---------------
-    before = _grey(cap())
-    ic.press("cross")
-    # POLL for the dialog rather than sleeping a fixed 1.2s and measuring once.
-    # Measured live 2026-08-31: the dialog animated in slower than 1.2s, so the
-    # single reading caught 2.7 — noise, but above CONFIRM_DELTA_MIN — and the
-    # code walked on to send its YES into a screen with no dialog on it yet.
-    # That YES became the press that OPENED the dialog, and the reset then sat
-    # in front of it for the full 45s waiting for a world nobody had asked for.
+    # I-23 (2026-09-20): three retries all logged "no dialog yet" and the
+    # function then raised ResetError — against a frame
+    # (test_fixtures/load_last_save_dialog_live_20260920.png) that shows the
+    # dialog FULLY UP. TRACED: the delta baseline IS taken before the first
+    # press (not the stale-baseline hypothesis) — the bug is that the LAST
+    # retry press this loop ever sends was never polled again. Each iteration
+    # polled the PREVIOUS press, then — only if that came up short — sent the
+    # NEXT one; on the final iteration (`_attempt == COMMIT_PRESS_ATTEMPTS-1`)
+    # that "next" press is the last one the loop will ever send, `for
+    # _attempt in range(COMMIT_PRESS_ATTEMPTS)` then exhausts, and control
+    # fell straight into `if delta < CONFIRM_DELTA_MIN: raise` using the delta
+    # from BEFORE that press — the one press whose result decided whether the
+    # dialog the fixture shows was actually there. `_poll_dialog` below is now
+    # called immediately after EVERY press, including that last one, so the
+    # final raise always reflects the press that just happened.
     #
-    # A real dialog reads ~78. Polling costs nothing when it is already up
-    # (first sample returns), and the threshold stays where the fixture-backed
-    # test pins it rather than being raised to paper over the timing.
-    # THE OPENING PRESS IS RETRIED, not just the YES below. A dropped press
-    # here failed three separate runs on 2026-09-01 with "no confirmation
-    # dialog appeared (delta 2.4/3.0)" while the very next manual cross opened
-    # it at delta 83.8 — the press was lost, not the detector wrong. The YES
-    # press has been retried since it first failed; this one never was.
-    #
-    # Retrying is safe HERE because the precondition is re-checked: the menu
-    # must still be showing 'Load Last Save'. If the dialog did open and this
-    # merely missed it, the screen is no longer the pause menu and no further
-    # press is sent.
-    delta = 0.0
-    for _attempt in range(COMMIT_PRESS_ATTEMPTS):
-        _t0 = time.time()
-        while time.time() - _t0 < CONFIRM_WAIT_SEC:
+    # It is also now CONTENT-based as well as delta-based, mirroring
+    # give_up_dialog's own approach (load_save_dialog above): delta is fast
+    # and is checked on every 0.4s tick; the content reader is asked once,
+    # on the last frame of each press's poll window, as a FALLBACK for
+    # whatever a flat delta cannot see — a genuinely still-animating dialog,
+    # or (see below) a dialog that was already up before this section's own
+    # baseline was captured.
+    def _poll_dialog(baseline):
+        """Poll one press's result for CONFIRM_WAIT_SEC.
+
+        Returns (delta, via_content). Measured live 2026-08-31: the dialog
+        animated in slower than 1.2s, so a single reading caught 2.7 — noise,
+        but above CONFIRM_DELTA_MIN — and the code walked on to send its YES
+        into a screen with no dialog on it yet. Polling costs nothing when the
+        dialog is already up (the first tick returns).
+        """
+        d, img = 0.0, None
+        t0 = time.time()
+        while time.time() - t0 < CONFIRM_WAIT_SEC:
             time.sleep(0.4)
-            delta = float(np.abs(_grey(cap()) - before).mean())
-            if delta >= CONFIRM_DELTA_MIN:
+            img = cap()
+            d = float(np.abs(_grey(img) - baseline).mean())
+            if d >= CONFIRM_DELTA_MIN:
+                return d, False
+        if img is not None and load_save_dialog(img):
+            return d, True
+        return d, False
+
+    img0 = cap()
+    before = _grey(img0)
+    delta, via_content = 0.0, False
+    if load_save_dialog(img0):
+        # The dialog is ALREADY up — ISSUES.md's other hypothesis, and the one
+        # this guards against directly: pressing again here would be a second,
+        # unwanted YES-adjacent commit into a dialog that is already open.
+        log("  confirmation dialog already up before the commit press — not "
+            "pressing again")
+        delta, via_content = CONFIRM_DELTA_MIN, True
+    else:
+        # THE OPENING PRESS IS RETRIED, not just the YES below. A dropped
+        # press here failed three separate runs on 2026-09-01 with "no
+        # confirmation dialog appeared (delta 2.4/3.0)" while the very next
+        # manual cross opened it at delta 83.8 — the press was lost, not the
+        # detector wrong. The YES press has been retried since it first
+        # failed; this one was not, until now.
+        #
+        # Retrying is safe HERE because the precondition is re-checked: the
+        # menu must still be showing 'Load Last Save'. If the dialog did open
+        # and this merely missed it, the screen is no longer the pause menu
+        # and no further press is sent.
+        #
+        # HELD, not tapped — CONFIRM_HOLD_SEC, measured live (see its own
+        # comment): a tap on this dialog was transmitted and ignored four
+        # times running; a 0.6s hold was accepted immediately.
+        ic.press("cross", hold_seconds=CONFIRM_HOLD_SEC)
+        delta, via_content = _poll_dialog(before)
+        for _attempt in range(COMMIT_PRESS_ATTEMPTS):
+            if delta >= CONFIRM_DELTA_MIN or via_content:
                 break
-        if delta >= CONFIRM_DELTA_MIN:
-            break
-        if not pm.is_pause_screen(cap()):
-            break            # something changed; do not press into the unknown
-        if _read_selection() != "Load Last Save":
-            break            # no longer on Load Last Save; pressing is unsafe
-        log(f"  no dialog yet (delta {delta:.1f}) — the commit press did not "
-            f"land, retrying ({_attempt + 1}/{COMMIT_PRESS_ATTEMPTS})")
-        ic.press("cross")
-    if delta < CONFIRM_DELTA_MIN:
-        raise ResetError(f"no confirmation dialog appeared (delta {delta:.1f})")
-    log(f"  confirmation dialog up (delta {delta:.1f}) -> YES")
+            if not pm.is_pause_screen(cap()):
+                break            # something changed; do not press into the unknown
+            if _read_selection() != "Load Last Save":
+                break            # no longer on Load Last Save; pressing is unsafe
+            log(f"  no dialog yet (delta {delta:.1f}, and the content reader "
+                f"load_save_dialog also says no — the delta is only a "
+                f"fallback here) — the commit press did not land, retrying "
+                f"({_attempt + 1}/{COMMIT_PRESS_ATTEMPTS})")
+            ic.press("cross", hold_seconds=CONFIRM_HOLD_SEC)
+            # EVERY press gets polled, including the last one — that is what
+            # was missing before I-23.
+            delta, via_content = _poll_dialog(before)
+    if delta < CONFIRM_DELTA_MIN and not via_content:
+        raise ResetError(
+            f"no confirmation dialog appeared (delta {delta:.1f}, and the "
+            f"content reader load_save_dialog also did not read 'Load Last "
+            f"Save' on the last frame checked)")
+    log(f"  confirmation dialog up (delta {delta:.1f}"
+        f"{', via the content reader' if via_content else ''}) -> YES")
 
     # The YES press gets VERIFIED like every other step. Unverified, it was the
     # one blind press left in the sequence, and it duly failed live: the dialog
@@ -473,7 +572,10 @@ def reset_environment(log=print, progress_file=None, reason=None):
     # indistinguishable from a slow load unless the screen is checked.
     for attempt in range(CONFIRM_PRESS_ATTEMPTS):
         pre = _grey(cap())
-        ic.press("cross")
+        # HELD, not tapped — see CONFIRM_HOLD_SEC. This IS the press the live
+        # measurement was taken against: a tapped Cross on this exact dialog
+        # was transmitted and ignored four times running.
+        ic.press("cross", hold_seconds=CONFIRM_HOLD_SEC)
         time.sleep(1.5)
         if float(np.abs(_grey(cap()) - pre).mean()) >= CONFIRM_DELTA_MIN:
             break
