@@ -227,6 +227,78 @@ check(o.play_excluded_slots(_hand(power2=7)) == frozenset(),
 
 
 # =============================================================================
+# (f) SKEPTIC'S FIND: un-excluding a slot via the readability path must give
+#     it a FRESH PLAY_STALL_MAX budget, exactly like exclude_play_slot's own
+#     docstring promises. `_PLAY_STALL["n"]` is ONE SHARED counter for
+#     "whatever is currently offered" -- reviewer confirmed live 2026-09-21
+#     that the readability un-exclude path (added by I-39, unlike the
+#     identity-change branch and exclude_play_slot itself) left it untouched:
+#     slot A (UNREADABLE) excluded; slot B refused twice on the SAME hand
+#     while A is excluded (n=2, still short of PLAY_STALL_MAX); A becomes
+#     readable and is re-offered; ONE further refusal on A read n=3 and
+#     re-excluded A after a single fresh refusal, not three.
+# =============================================================================
+_reset()
+H_F_SLOTS = [
+    {"kind": "player", "name": None, "power": 9, "secondary": 0,
+     "hand_index": 0, "y_measured": False},   # slot A -- unreadable
+    {"kind": "player", "name": None, "power": 8, "secondary": 0,
+     "hand_index": 1, "y_measured": True},    # slot B -- readable
+]
+
+
+def _hand_f(a_readable):
+    return [dict(H_F_SLOTS[0], y_measured=a_readable), dict(H_F_SLOTS[1])]
+
+
+H_F = _hand_f(False)
+o.play_excluded_slots(H_F)
+for _ in range(o.PLAY_STALL_MAX):
+    o.note_play_refused()
+o.exclude_play_slot(0, o.PLAY_REFUSAL_UNREADABLE)
+check(o.play_excluded_slots(H_F) == frozenset({0}),
+      "setup: slot A (unreadable) must be excluded")
+
+# Slot B is refused TWICE on the same (still-excluded-A) hand -- short of
+# PLAY_STALL_MAX, so it must not itself be stalled yet.
+o.note_play_refused()
+o.note_play_refused()
+check(o.play_stalled(H_F) is False,
+      "setup: slot B's count must be 2, not yet stalled")
+check(o._PLAY_STALL["n"] == 2,
+      f"setup: the shared counter must read 2 before A becomes readable, "
+      f"got {o._PLAY_STALL['n']}")
+
+# Slot A becomes readable and is re-offered -- THE BUDGET RESET UNDER TEST.
+H_F_READABLE = _hand_f(True)
+check(o.play_excluded_slots(H_F_READABLE) == frozenset(),
+      "slot A must be un-excluded once it reads")
+check(o._PLAY_STALL["n"] == 0,
+      f"un-excluding via the readability path must reset the shared counter "
+      f"to 0, exactly like exclude_play_slot's own 'fresh PLAY_STALL_MAX "
+      f"budget' promise -- got n={o._PLAY_STALL['n']}")
+
+# ONE refusal on the freshly-un-excluded slot must NOT re-exclude it.
+o.note_play_refused()
+check(o.play_stalled(H_F_READABLE) is False,
+      f"one refusal right after un-excluding must not re-stall the slot -- "
+      f"n={o._PLAY_STALL['n']}")
+check(o.play_excluded_slots(H_F_READABLE) == frozenset(),
+      "one refusal must not re-exclude the freshly-un-excluded slot")
+
+# A second refusal: still short of PLAY_STALL_MAX (3).
+o.note_play_refused()
+check(o.play_stalled(H_F_READABLE) is False,
+      f"two refusals must still not stall it -- n={o._PLAY_STALL['n']}")
+
+# The THIRD refusal, on its fresh budget, must finally stall it.
+o.note_play_refused()
+check(o.play_stalled(H_F_READABLE) is True,
+      f"exactly PLAY_STALL_MAX (3) fresh refusals must stall it -- "
+      f"n={o._PLAY_STALL['n']}")
+
+
+# =============================================================================
 # 5. END TO END, through the REAL play_one_turn, reproducing the live shape:
 #    slot 3 unreadable -> refused 3x -> excluded -> slot 1 (8) played; next
 #    poll slot 1 is UNKNOWN (I-27) and slot 3 is STILL unreadable -> the 6

@@ -1419,7 +1419,52 @@ Restored byte-for-byte (sha256) after each mutant. Siblings re-run green:
 `test_no_undefined_names.py`. `test_stall_counters_reset_with_hand_memory.py` updated for
 the new `"reasons": {}` key in `_PLAY_STALL`'s exact-dict-equality check.
 
-**Status.** Fixed on branch, awaiting skeptic.
+**Skeptic review (CONFIRMED WITH NOTES, agent_progress/issues/I-39-skeptic/progress.md):
+one defect found and fixed before merge.** The readability un-exclude path
+(`play_excluded_slots`, the "reads again" loop) did NOT reset `_PLAY_STALL["n"]` --
+`n` is a SINGLE SHARED counter for whatever the decision currently offers, and
+`exclude_play_slot`'s own docstring promises "whatever is played next its own fresh
+PLAY_STALL_MAX budget", a promise the identity-change branch and `exclude_play_slot`
+itself both keep but this second way an exclusion clears did not. Reproduced: exclude
+slot A (unreadable); refuse slot B twice on the same hand (n=2, A still excluded); A
+becomes readable and is re-offered; ONE further refusal on A read n=3 and re-excluded
+it after a single fresh refusal, not PLAY_STALL_MAX (3).
+
+**Fix.** Reset the SHARED counter (`_PLAY_STALL["n"] = 0`) whenever the readability
+path un-excludes at least one slot — not a per-slot counter. Only one target is ever
+"current" (the decision recomputes its single best pick every poll), and every other
+reset in this module already treats `n` as belonging to that one pick, not to a
+specific hand_index; a per-slot counter would be more precise but is a second
+bookkeeping structure for a shape this file already declined to build once
+(`note_slot_dealt`'s own comment: clearing both breakers' counts on every spend "is
+the smaller diff... forgiving a count early is the safe direction this file already
+uses elsewhere"). Same tolerance applies here — if a different slot was mid-streak
+when the un-exclude fires, its count is forgiven one cycle early in the rare case the
+decision keeps offering it anyway; never the direction that excludes something short
+of its own fresh PLAY_STALL_MAX.
+
+**Verify (added).** `test_refusal_exclusion_by_reason.py` scenario (f) reproduces the
+skeptic's exact sequence (slot A excluded unreadable; two refusals on slot B; A reads
+again and is re-offered; one refusal on A must not re-exclude it; three must). Mutant:
+drop the `_PLAY_STALL["n"] = 0` reset — caught (n reads 2 instead of 0 immediately
+after un-exclusion, then 3 and 4 on what should be a fresh 1-refusal and 2-refusal
+count). Restored byte-for-byte (sha256:
+9f2d8d1c1b816608dd01ea5aba3e4eaf796d6cf0d0897627240777efccadc349) after the mutant.
+All 7 named sibling tests re-run green at that same sha.
+
+**Open note from the skeptic, not itself a defect.** The reason inference
+(`play_one_turn`, `_slot_position_readable(state_json.get("hand"), player_idx)`) is
+computed against the hand read taken at POLL START (`read_state_for_turn`), which is
+captured BEFORE `select_and_play`'s own internal press/verify loop runs its fresh
+`hand_cursor_look` reads (`input_controller.py` ~1244-1400). So the reason is an
+indirect proxy from a slightly earlier snapshot, not the walker's own per-attempt
+refusal cause. Directionally right — the two reads are seconds apart on an otherwise
+unchanged hand, and slot readability is unlikely to flip in that window — but this is
+a narrow gap the skeptic did not demonstrate misfiring live. Worth a live frame pair
+if a future exclusion is ever classified wrong.
+
+**Status.** Fixed on branch (both this ticket and the skeptic's counter-reset defect),
+confirmed by skeptic, ready to merge.
 
 ### I-40  pause_menu.read_money misreads the wallet and refuses a legible one   P1  money record
 

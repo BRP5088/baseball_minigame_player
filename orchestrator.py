@@ -7881,10 +7881,38 @@ def play_excluded_slots(hand) -> frozenset:
         i for i in _PLAY_STALL["excluded"]
         if _PLAY_STALL["reasons"].get(i) != PLAY_REFUSAL_UNREADABLE
         or not _slot_position_readable(hand, i))
-    for i in sorted(_PLAY_STALL["excluded"] - _still_excluded):
+    _newly_offered = _PLAY_STALL["excluded"] - _still_excluded
+    for i in sorted(_newly_offered):
         print(f"  [play] hand_index {i} reads again — un-excluding "
               "(was unreadable)")
         _PLAY_STALL["reasons"].pop(i, None)
+    # THE SKEPTIC'S FIND (I-39): `n` IS A SINGLE SHARED COUNTER FOR WHATEVER IS
+    # "THE CURRENT TARGET", AND THIS PATH LEFT IT ALONE. exclude_play_slot's own
+    # docstring promises "whatever is played next its own fresh PLAY_STALL_MAX
+    # budget" -- and it keeps that promise on the identity-change branch above
+    # (`_PLAY_STALL["n"] = 0`) and in exclude_play_slot itself, but this SECOND
+    # way an exclusion clears (a slot becoming readable again, with no identity
+    # change at all) skipped it. Reproduced: exclude slot A unreadable, refuse
+    # slot B twice on the same hand (n=2), A becomes readable and is re-offered
+    # -- ONE more refusal on A then reads n=3 and re-excludes it, not
+    # PLAY_STALL_MAX (3) fresh ones.
+    #
+    # RESET THE SHARED COUNTER, NOT A PER-SLOT ONE. Only one target is ever
+    # "current" -- the decision recomputes its single best pick every poll, and
+    # every other reset in this module (exclude_play_slot, the identity-change
+    # branch above, note_slot_dealt) already treats `n` as belonging to that one
+    # pick, not to a specific hand_index. A per-slot counter would be the more
+    # precise fix, but it is a second bookkeeping dict for a shape this file has
+    # already chosen NOT to build once (note_slot_dealt's own comment: clearing
+    # both breakers' counts on every spend, rather than tracking which tracker
+    # "owns" a count, "is the smaller diff -- forgiving a count early is the
+    # safe direction this file already uses elsewhere"). The same tolerance
+    # applies here: if B was mid-streak when A un-excludes, B's count is
+    # forgiven one cycle early in the rare case the decision keeps offering B
+    # anyway -- never the direction that closes early, so B is never excluded
+    # short of its own PLAY_STALL_MAX.
+    if _newly_offered:
+        _PLAY_STALL["n"] = 0
     _PLAY_STALL["excluded"] = _still_excluded
     return _PLAY_STALL["excluded"]
 
