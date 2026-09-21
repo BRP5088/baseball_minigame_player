@@ -922,6 +922,69 @@ doing.
 REMOVED per the same skeptic's refutation), redo complete, awaiting a second skeptic pass on
 the redo.
 
+### I-35  Two post-reveal screens are unrecognised, dropping the at-bat log row   P2  evidence
+
+**Evidence.** `agent_progress/reveal-drops/progress.md` (ESTABLISHED): the "NEW INNING"
+half-boundary banner and the settled reveal-recap tableau (cards on the diamond, no hand
+fan) both fall through `local_game_state()` to UNRECOGNISED SCREEN; `MAX_PENDING_READ_
+FAILURES=2` drops the pending match_log row on the 3rd poll; 5 rows dropped in
+`run_live_20260921i.log`, more in 21j/21n.
+
+**Root cause.** No named screen case for either.
+
+**Impact.** Logging loss only (nothing downstream reads the pending row).
+
+**Proposed fix.** A named "new_inning"/"reveal_recap" screen case so the pending row waits
+through a recognised transition.
+
+**Status.** Open.
+
+### I-36  The half's second discard is refused three times, then the stall breaker plays   P1  input/loop
+
+**Evidence.** `run_live_20260921j.log` ~592-618 ("confirm_discard did not register —
+discards_left is still 1") and `run_live_20260921n.log` (the last "the discard was
+REFUSED 3x on this exact hand" block: "select_card did not land (attempt 1..4)", "never
+landed after 5 attempts", three polls). Both in the pitching half with 1 discard left; the
+first discard of the same half worked.
+
+**Root cause.** UNKNOWN, under offline investigation with the 21n screenshot log
+(`agent_progress/issues/I-36/`).
+
+**Status.** Investigating.
+
+### I-38  An occluded target card cannot be selected, so the engine plays second-best   P1  input
+
+**Evidence.** `run_live_20260921l.log`: hand "fielding_boost +1 | 8/0 | 6/0 | 9/0 | 6/0",
+the 9 at slot 3 read its digit but its position was unmeasured; "slot 3's position is
+unreadable, so whether it is already selected cannot be told — refusing rather than
+pressing a TOGGLE blind" x3; the 8 was played.
+
+**Root cause.** Not established beyond the Evidence above — the refusal is deliberate
+(a TOGGLE is not pressed blind on an unpositioned target), but no frames yet show whether
+a select would actually land there.
+
+**Proposed fix.** (candidate, needs frames) Verify a select on an unpositioned target by
+its disc becoming READABLE after the press (a lifted card rises above its occluder; the
+inverse of I-21's inference).
+
+**Status.** Open.
+
+### I-39  The play-refusal exclusion is keyed on the exact hand and over-persists   P2  loop
+
+**Evidence.** Same run: after the 8 was played and a new card dealt into slot 1,
+"hand_index [3] refused 3x running on this hand — excluded" fired again and the 6 was
+played over the 9.
+
+**Root cause.** Not established beyond the Evidence above — the exclusion key is not
+traced here; the user's steer below names the fix without confirming the mechanism.
+
+**Proposed fix.** User's steer (2026-09-21 08:02): key the exclusion GENERALLY on the slot
+and its reason, not an exact hand identity — a slot excluded because its position/lift
+cannot be read stays excluded while it is unreadable, whatever is dealt around it, and is
+offered again the moment it reads.
+
+**Status.** Open.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
