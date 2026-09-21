@@ -4,17 +4,19 @@ discard leaves its slot in _MAYBE_LIFTED.
 Evidence: `run_live_20260921t.log` ~386-420 (main checkout). A discard was
 decided, its confirm_discard press was not confirmed on the poll right after
 it, and the FUNCTION GAVE UP -- it pressed exactly once and then only polled
-the counter (never retried the press itself). The NEXT poll's hand read then
-showed the discard HAD landed (discards_left dropped 2 -> 1), one poll too
-late to have been believed the first time. Because the discarded slot's
-replacement card read UNKNOWN at that moment, the slot stayed in
+the counter (never retried the press itself). A SECOND, separate discard
+Decision was logged at line 392 (`_walk_cursor_to`'s print is gated `if
+steps:`, and the cursor needed none, so that attempt's own press landed
+SILENTLY), and discards_left fell one poll later. Because the discarded
+slot's replacement card read UNKNOWN at that moment, the slot stayed in
 `_MAYBE_LIFTED` and THREE SEPARATE plays were refused by the I-43 guard
 ("slot(s) [0] may still be physically lifted...") before hand_index 1 was
-excluded and a worse card committed. 21 of 26 archived `discard NOT CONFIRMED`
-lines across `overnight/run_live_2026092*.log` are this exact shape --
-discards_left proved to have fallen by the time play resumed -- and 5 are
-genuinely dropped attempts that never landed at all
-(`agent_progress/issues/I-52/discard_table.txt` has the full table).
+excluded and a worse card committed. 19 of 26 archived `discard NOT
+CONFIRMED` lines across `overnight/run_live_2026092*.log` eventually landed,
+via a later attempt, before play committed; 7 never landed at all
+(`agent_progress/issues/I-52/discard_table.txt` has the full table and a
+second breakdown: 21 of 26 reached confirm_discard at all, 5 refused earlier,
+at the cursor/select step).
 
 A second, independent false-refusal shape was found the same day in a PLAY
 commit (not a discard): a card legitimately lifted for the play occludes its
@@ -23,26 +25,38 @@ and gets marked by the commit guard's `_new_blind` path even though it was
 never touched -- `diagnostics/deal_frames/refused_select_1790029942849538000/`
 (main checkout), hand [swing+1, speed+1, 4/3, 4/3, 8/1], slot 1 (unselected,
 next to selected slot 0) refused for 8 straight polls, excluding the best card
-in the hand (the 8). Of the 11 "(I-43)" refusals in today's post-merge logs
-(`run_live_20260921[rst].log`), 0 are true positives: 3 are the discard shape
-above and 8 are this neighbour-occlusion shape.
+in the hand (the 8).
 
-Fix, two parts, both confined to `_MAYBE_LIFTED`/`_reconcile_maybe_lifted` and
-`select_and_discard` (see ISSUES.md I-52):
+**A first fix for the second shape -- an adjacency exemption in
+`_reconcile_maybe_lifted` -- was REFUTED by an independent skeptic**
+(`agent_progress/issues/I-52/skeptic.md`): it cleared the mark on the
+STRONGEST evidence this system makes (readable at baseline, blind after our
+own press -- I-21's own lift signature), with no measurement separating it
+from a genuine stray, and it WIDENED `ISSUES.md` I-48d (OPEN). It is gone.
+The replacement, `resolve_neighbour_occlusion`, presses nothing blind: it
+lowers the KNOWN-lifted neighbour, looks again, and only clears the mark on
+what it actually SEES -- see cases F2-F4 below. It is built and tested here
+but NOT WIRED into the commit path that needs it
+(`_verified_select_and_play_inner`, owned by a different branch this ticket).
+
+Fix, confined to `_MAYBE_LIFTED`/`_reconcile_maybe_lifted`/
+`resolve_neighbour_occlusion` and `select_and_discard` (see ISSUES.md I-52):
 
   1. confirm_discard is now verified with `press_verified`, the same helper
      I-11 uses for every other commit press: it retries the PRESS, not just
      the read, but ONLY while a fresh look still shows the slot lifted AND the
      counter unchanged. The moment the slot stops reading lifted with the
-     counter still unchanged (the late-landing shape above), it refuses to
-     press again rather than risk a second confirm_discard with nothing
-     selected.
-  2. `_reconcile_maybe_lifted` clears a tracked slot on two signals now, not
-     one: the original "seen down" (a real y, not selected) and, new, "an
-     unreadable slot immediately beside a currently-selected one" -- the
-     neighbour-occlusion shape. A landed discard additionally clears its OWN
-     slot directly the moment discards_left proves it (`_prove_maybe_lifted_
-     clean`), regardless of what the replacement card currently reads as.
+     counter still unchanged, it refuses to press again rather than risk a
+     second confirm_discard with nothing selected.
+  2. `_reconcile_maybe_lifted` is UNCHANGED from its original "seen down"
+     rule. A landed discard clears its OWN slot directly the moment
+     discards_left proves it (`_prove_maybe_lifted_clean`), regardless of
+     what the replacement card currently reads as -- a signal
+     `_reconcile_maybe_lifted` cannot see at all, since it only takes
+     `(ys, sel)`.
+  3. `resolve_neighbour_occlusion(m_slot, t_slot, look)`: a bounded,
+     press-and-look disambiguation for the neighbour-occlusion shape,
+     available for wiring into the commit path.
 
 `def check(name, cond)` name-first, matching this suite.
 """
@@ -122,6 +136,51 @@ class DiscardRig:
     def discards_look(self):
         self._counts_consumed += 1
         return next(self._counts)
+
+
+M_SLOT, T_SLOT = 1, 0
+
+
+class NeighbourRig:
+    """Drives resolve_neighbour_occlusion(M_SLOT, T_SLOT, look) in isolation.
+
+    Models the cursor as always sitting on T_SLOT -- the only slot this
+    function ever presses select_card against -- matching
+    _deselect_verified/_select_verified's own contract: they toggle whatever
+    the cursor already holds, no walking. `m_readable_when_t_down` decides
+    which real-episode shape this is: True is occlusion (F2), False is a
+    genuine stray (F3). `reraise_lands=False` models the re-raise itself
+    being swallowed (F4).
+    """
+
+    def __init__(self, m_readable_when_t_down, deselect_lands=True, reraise_lands=True):
+        self.t_lifted = True
+        self.m_blind = True
+        self.m_readable_when_t_down = m_readable_when_t_down
+        self.deselect_lands = deselect_lands
+        self.reraise_lands = reraise_lands
+        self.sent = []
+
+    def press(self, key, **kw):
+        self.sent.append(key)
+        if key != "select_card":
+            return
+        if self.t_lifted:
+            if self.deselect_lands:
+                self.t_lifted = False
+                if self.m_readable_when_t_down:
+                    self.m_blind = False
+        else:
+            if self.reraise_lands:
+                self.t_lifted = True
+
+    def look(self):
+        sel = [T_SLOT] if self.t_lifted else []
+        ys = list(REST)
+        if self.m_blind:
+            ys[M_SLOT] = None
+        glow = [0.0] * ic.MAX_HAND_SIZE
+        return glow, ys, ic.MAX_HAND_SIZE, sel
 
 
 def run_discard(rig):
@@ -242,16 +301,65 @@ try:
           ic._MAYBE_LIFTED == set(), str(ic._MAYBE_LIFTED))
 
     # =====================================================================
-    print("(F) a slot unreadable only because its NEIGHBOUR is lifted is "
-          "cleared -- the refused_select_1790029942849538000 shape")
+    print("(F2) resolve_neighbour_occlusion: M reads once T is lowered -- "
+          "occlusion proven, not guessed; T re-raised")
     # =====================================================================
     ic.clear_maybe_lifted()
-    ic._mark_maybe_lifted({1})          # slot 1, marked by an earlier (off-limits) commit guard
-    # slot 0 is currently selected (the play's tactics target); slot 1 reads
-    # unreadable purely from being beside it.
-    ic._reconcile_maybe_lifted([180, None, 160, 165, 168], [0, 4])
-    check("(F) the neighbour-occluded slot clears, letting the play through",
-          1 not in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=True)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F2) ok=True: the occlusion was proven by lowering T", ok is True, detail)
+    check("(F2) M's mark is cleared", M_SLOT not in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    check("(F2) T ends back up (re-raised)", rig.t_lifted is True, str(rig.t_lifted))
+    check("(F2) exactly 2 select_card presses -- one lower, one re-raise",
+          rig.sent.count("select_card") == 2, str(rig.sent))
+
+    # =====================================================================
+    print("(F3) resolve_neighbour_occlusion: M is STILL blind with T down -- "
+          "a genuine stray, refused, T left down, nothing re-raised")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=False)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F3) ok=False: T's lift was not the explanation", ok is False, detail)
+    check("(F3) M's mark SURVIVES -- a genuine stray, now with evidence",
+          M_SLOT in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    check("(F3) T is left DOWN -- nothing here re-raises a genuine stray's "
+          "neighbour", rig.t_lifted is False, str(rig.t_lifted))
+    check("(F3) exactly 1 select_card press -- the lower only, no re-raise "
+          "attempt (bounded: no loop chasing a stray)",
+          rig.sent.count("select_card") == 1, str(rig.sent))
+
+    # =====================================================================
+    print("(F4) resolve_neighbour_occlusion: the re-raise of T itself fails "
+          "-- refused, T left down, nothing committed")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=True, reraise_lands=False)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F4) ok=False: T would not come back up", ok is False, detail)
+    check("(F4) T is left DOWN -- nothing partially lifted for a caller to "
+          "mistakenly commit", rig.t_lifted is False, str(rig.t_lifted))
+    check("(F4) exactly 6 select_card presses -- 1 lower + SELECT_ATTEMPTS "
+          "failed re-raises, no more",
+          rig.sent.count("select_card") == 1 + ic.SELECT_ATTEMPTS, str(rig.sent))
 
     # =====================================================================
     print("(G) I-43 TRUE POSITIVE: an isolated stray, nothing selected beside "

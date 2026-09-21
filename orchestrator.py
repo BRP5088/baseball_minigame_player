@@ -8307,7 +8307,7 @@ def play_one_turn(state_json: dict, batters_used: int):
         # requires a forget within six lines above it, so prose goes here, never between.
         # WIRE THE SEAM. `look=` was passed and `discards_look=` was NOT, so
         # select_and_discard's whole post-press proof was skipped on the LIVE $50
-        # ladder: DISCARD_CONFIRM_TRIES, the retry loop and the refusing branch
+        # ladder: the retry loop (now press_verified, I-52) and the refusing branch
         # never executed, and the function returned True unconditionally. That proof
         # was built in response to the 2026-09-16 incident -- a swallowed Square
         # press, the card PLAYED instead of discarded -- and it was dead on the one
