@@ -2902,3 +2902,59 @@ now asserted to produce.
 **Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
+
+### I-50  A dropped select_card press on the ban grid is never retried; 15 of 37 matches start a ban short  P1  money
+
+**Evidence.** Census (`agent_progress/census/ban_shortfall/progress.md`, main
+checkout) over 37 matches: 15 started with fewer than 3 bans (2/3 x10, 1/3 x5). All
+20 missed targets are the same log line, `[ban] select_card at (r, c) placed no X
+anywhere — leaving it` (`input_controller.py`, `select_bans_verified`, was ~:2554).
+Re-ran the census's own grep to confirm before touching anything:
+`grep -nE "verified [0-9]+/3 bans placed|WARNING: only [0-9]+ of 3 bans registered|..."
+overnight/run_live_2026092*.log` -> 22x 3/3, 10x 2/3, 5x 1/3 (37 total, 15
+shortfall), and `grep -c "placed no X anywhere" overnight/run_live_2026092*.log` ->
+20 -- matches 10*1 + 5*2 exactly. Zero misses came from navigation, a blind cursor,
+or a stale-frame desync; only the press-after-arrival was ever wrong.
+
+**Root cause.** The verified navigator confirms the cursor is ON the target
+(`here == want`), presses `select_card` ONCE (a bare `press()`, not
+`press_verified`), diffs `banned_set()` before/after, finds no change, and moves on
+WITHOUT RETRYING. CLAUDE.md §5 measured the console ignoring 15.2% of presses,
+clustered -- a silently dropped press, exactly what `PRESS_VERIFY_TRIES` (5) already
+covers for `confirm_play`/`start_match` on the same screen via `press_verified`
+(~:3812). This was the one press on the ban path with no retry at all.
+
+**Fix.** `input_controller.select_bans_verified`, and ONLY that function (another
+branch is editing `_verified_select_and_play_inner` in the same file). The single
+press is now a loop of up to `PRESS_VERIFY_TRIES` (reused, no new constant),
+confined to the `banned_set`-diff branch the census implicates (the `confirm_ban`-
+only fallback, with no `banned_set`, is untouched -- zero misses came from it).
+Before every RETRY: re-`look()` and refuse to press again if the cursor has left
+`want` (a drifted cursor is never guessed at -- test case E); then re-`banned_set()`
+and, if `want` is now in it, accept as placed WITHOUT a further press (the selection
+splash can make a LANDED press's X invisible on the very next look, and
+`select_card` is a TOGGLE, so a blind retry there would un-ban it -- test case B).
+The `_gone` (un-banned) and WRONG-CARD checks, and the `toggled` press count, are
+unchanged. Exhausting all tries still logs "leaving it" and the run still moves on
+to the next target (test case C).
+
+**Verify.** `tests/minigame/test_ban_press_retried.py` (new): A (first press
+dropped, second lands -> 3/3 placed, 2 presses/cell), B (splash: X appears only on
+re-look -> 1 press, never toggled off), C (all tries dropped -> "leaving it",
+exactly `PRESS_VERIFY_TRIES` presses, run continues to the next target), D (control:
+everything lands first time, unchanged), E (cursor drifts after the dropped press ->
+retry refuses to press blind). Also green, unaffected: every
+`tests/minigame/test_*ban*.py` (16 files), `tests/rig/test_ban_nav_verified.py`,
+`test_scan_stops_are_honest.py`, `test_ban_fallback_is_honest.py`,
+`test_toggle_and_raise_leave_nothing.py`, `test_run_resume_and_persist.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`.
+
+**Mutants (3, `__pycache__` cleared each time, sha256-verified restore):** no retry
+at all (`range(1, PRESS_VERIFY_TRIES + 1)` -> `range(1, 1 + 1)`) caught by case A;
+the splash re-check removed (cursor check kept) caught by case B (press count 5 not
+1, placed stays empty); the cursor re-check removed (splash check kept) caught by
+case E (3 presses not 1, and a wrong cell -- `(0, 1)` -- ends up banned instead of
+nothing).
+
+**Status.** fixed on branch, awaiting skeptic (money path).
