@@ -2902,3 +2902,127 @@ now asserted to produce.
 **Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
+
+### I-48b  The batter-alone fallback fired before the batter was lifted    P1  play
+
+**Evidence.** `overnight/run_live_20260921s.log` ~369-400 (main checkout), the first
+live firing of I-48's batter-alone fallback. Hand `[swing_boost +2, UNKNOWN
+(occluded slot 1), 5/3 (card_index=2), speed_boost +1, 5/2]`, decision batter=2 +
+tactics=0:
+
+    [cursor] slot 1 is occluded (y unmeasured) — its glow cannot read; dead-reckoning one step across it
+    [cursor] probe-select raised nothing (attempt 1/2) — retrying once; ...
+    [cursor] probe-select raised nothing after 2 attempts — refusing
+    [cursor] tactics slot 0 could not be verified — dropping the boost and playing the batter alone (I-48)
+    [cursor] slot(s) [1] were ALREADY unreadable before this operation began — proceeding. ...
+    [cursor] the engine's cards [2] are not all lifted ([]) — refusing to commit a partial selection
+
+The whole play refused, having never re-attempted the batter. The refusal frame is
+`diagnostics/deal_frames/refused_select_1790025302210541000/` (main checkout). On
+the VERY NEXT poll the identical decision succeeded, via a different recovery path
+("fan reads but the cursor is nowhere above the gate ... nudging off the blind
+slot", "recovered on slot 0 after 1 nudge(s)").
+
+**Root cause, traced in `input_controller._verified_select_and_play_inner`
+(pre-fix ~:2027-2066).** The per-target loop is `for target in (card_index,
+tactics_index):` -- card_index is listed first, so by the time the
+`target == tactics_index` I-48 branch's own guard condition can even be reached,
+card_index's iteration MUST already have returned `ok=True` (if it had failed,
+`target == tactics_index` is false for `target == card_index`, and the loop falls
+straight to the generic `_unwind_selection(...); return False` without ever
+attempting the tactics target). That is airtight from control flow alone. So in
+this play: card_index=2 was walked to and selected (silently -- no log line, the
+"already selected" and "steps==0" success paths in `_walk_cursor_to`/
+`_select_verified` print nothing), THEN the walk to tactics_index=0 dead-reckoned
+across occluded slot 1 (which sits geometrically between 0 and 2, so a walk in
+EITHER direction between them crosses it), and the subsequent I-02 probe
+(`_probe_select_blind_target`, 2 attempts) failed twice.
+
+The probe presses `select_card` BLIND, hoping the cursor physically reached the
+tactics target. Its own success check, `new = [i for i in sel if i not in
+before]`, only asks "did anything NEW appear selected" -- it has no way to notice
+a slot that DISAPPEARED. If the navigation presses toward the tactics target were
+silently dropped (section 5's measured 15.20% ignore rate, clustered), the true
+cursor can still be sitting on card_index's own slot when the probe presses
+`select_card` -- toggling the BATTER's own, already-verified selection, with the
+probe reporting "raised nothing" either way. The exact press-by-press parity that
+produced the empty final `sel=[]` in this run is not recoverable from the log text
+alone (`agent_progress/issues/I-48b/progress.md` has the full trace and says so
+explicitly rather than guessing at it) -- what IS established, from the log lines
+above, is that card_index went from verified-selected to unselected somewhere
+between the tactics attempt starting and the commit-time `_clear_strays` check.
+
+The I-48 branch then commits to "batter alone" on that now-STALE belief
+("card_index's own walk+select already succeeded above" -- true when the branch
+was ENTERED, not necessarily still true by the time it decides), without
+re-checking, and the whole play refuses at the final gate having never retried the
+batter it could have recovered.
+
+**Fix**, in `input_controller._verified_select_and_play_inner`:
+
+1. **The batter is now processed first as a REAL invariant, not an assumed
+   position.** A `_batter_verified` flag is set True only when `target ==
+   card_index` succeeds; the I-48 fallback's guard now also requires
+   `_batter_verified`. Previously the branch's premise held only because
+   `card_index` happened to be listed first in the loop's source tuple --
+   nothing in the CODE enforced it, so a reordering (mutant 5) would have silently
+   let the fallback fire before the batter was ever attempted.
+2. **Before committing to "batter alone", re-read the fan.** If `card_index` is
+   still in the selected set, proceed as before (no extra cost on the common
+   case). If not, retry `_walk_cursor_to`+`_select_verified` on `card_index` once
+   -- the SAME calls the main loop already uses, so no new constant and no new
+   press budget. Only once the batter is genuinely confirmed (originally or via
+   the retry) does `tactics_index` get set to `None` and the commit proceed.
+3. If the retry also fails, refuse the whole play exactly as the pre-I-48 code
+   did: unwind the full original target set, invalidate the cursor, return False.
+   Never commits an unproven selection.
+
+I-43's `_MAYBE_LIFTED` contract is unchanged -- the retry-failure path reuses the
+same `_unwind_selection(...)` call (existing marking logic intact) that the
+generic refusal branch already used; only the argument passing was made
+keyword-explicit (`ours=targets`) to keep it textually distinct from
+`test_refusal_unwinds.py`'s own pre-existing mutation anchor on the identical
+call at the bottom of the loop.
+
+**Not fixed here, and named as a follow-up rather than guessed at:** whether the
+walk should prefer a NUDGE (moving off the current slot without assuming a
+direction) over dead-reckoning when the CURRENT slot is itself the occluded one,
+rather than only using the nudge as a last resort at the top of a fresh
+`_walk_cursor_to` call. The live log's own successful retry the next poll used
+exactly that nudge path ("nudging off the blind slot ... recovered on slot 0
+after 1 nudge(s)"), which is markedly cheaper and safer than dead-reckoning
+across the same slot and falling into a 2-attempt blind probe. Changing WHEN the
+nudge is preferred touches `_walk_cursor_to`'s core decision tree (interacts with
+I-32's dead-reckon bound and I-33's blind-confirmation retry, both of which are
+mutation-tested against specific press counts) -- a bigger change than one branch,
+and it changes the $50 play path, so it is not made unilaterally here.
+
+**Verify.** `tests/minigame/test_tactics_select_fallback.py`: new `OccludedPlayScreen`
+(models an occluded slot between the two targets, a one-shot dropped navigation
+press, and a "sabotage" hook that costs the batter's own selection the first time
+a blind `select_card` lands while the true cursor is inside the occlusion --
+reproducing the log's exact message sequence without asserting an unproven
+press-by-press count). Cases I (the live shape: tactics fails, the batter is found
+unselected, the retry recovers it, batter-alone commits), J (tactics fails AND the
+batter's retry also fails -> refused, nothing committed, no confirm_play), K
+(control: both land despite crossing the same occluded slot -> both committed,
+neither fallback fires). Seven mutants total in the file now (4 pre-existing +
+3 new for this fix), `__pycache__` cleared and sha256-verified restored around
+each:
+
+    mutant 5: reorder the loop to (tactics_index, card_index)
+        -> case I no longer succeeds as designed (the new _batter_verified gate
+           refuses the fallback outright instead of silently self-healing)
+    mutant 6: the re-check condition hardcoded to True (never actually looks)
+        -> case I's own "found NOT lifted, re-selecting" log line disappears
+    mutant 7: the retry forced to fail without ever pressing
+        -> case I refuses instead of recovering
+
+All seven caught; both `input_controller.py` and `orchestrator.py` restored
+byte-for-byte (sha256-verified) after every mutant. Also green:
+`test_refusal_unwinds.py`, `test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_inference_needs_baseline_read.py`,
+`test_i22_pitch_boost_slot3.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`.
+
+**Status.** fixed on branch, awaiting skeptic.

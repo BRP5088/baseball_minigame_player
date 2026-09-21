@@ -2023,6 +2023,12 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # own commit-time inference requires the SAME proof rather than
     # re-deriving it from ys0/kinds0 alone.
     _inferred_targets = set()
+    # I-48b: process card_index FIRST, ALWAYS -- the I-48 fallback below is only
+    # sound once the batter is actually known to have landed, and the tuple order
+    # alone is a position, not a proof (a reordering mutant leaves the fallback's
+    # own stated premise silently false). `_batter_verified` makes it a real gate
+    # instead of an assumption baked into iteration order.
+    _batter_verified = card_index is None
 
     for target in (card_index, tactics_index):
         if target is None:
@@ -2032,8 +2038,11 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
             ok, _sel = _select_verified(target, look)
         if ok:
             _inferred_targets |= getattr(_sel, "inferred", frozenset())
+            if target == card_index:
+                _batter_verified = True
             continue
-        if target == tactics_index and target != card_index and card_index is not None:
+        if (target == tactics_index and target != card_index
+                and card_index is not None and _batter_verified):
             # I-48: THE TACTIC FAILED TO VERIFY, NOT THE BATTER -- card_index's own
             # walk+select already succeeded above, or this loop would never have
             # reached the tactics target at all. ISSUES.md I-48's census shows the
@@ -2061,6 +2070,54 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
                   "— dropping the boost and playing the batter alone (I-48)")
             _unwind_selection(before_all, look, {tactics_index}, ys0=_ys0)
             invalidate_cursor()
+            # I-48b: THE TACTICS WALK ABOVE CAN COST THE BATTER'S OWN SELECTION,
+            # NOT JUST THE TACTIC'S. Dead-reckoning across an occluded slot (I-32)
+            # and the I-02 probe it can fall into both press BLIND, and the
+            # probe's own `new = [i for i in sel if i not in before]` check only
+            # notices a NEWLY raised slot, never one that DISAPPEARED -- so a
+            # select_card sent while the true cursor never reached the tactics
+            # target (its own navigation presses dropped, section 5's 15.20%
+            # ignore rate) can toggle whatever slot the cursor is REALLY on,
+            # including card_index's own, already-verified one, and the probe
+            # reports "raised nothing" without ever seeing the loss.
+            #
+            # Reproduced live 2026-09-21 (overnight/run_live_20260921s.log ~379):
+            # card_index=2 (power 5/3) was selected cleanly, the walk to
+            # tactics_index=0 (swing_boost) dead-reckoned across occluded slot 1
+            # between them, the probe then failed twice ("probe-select raised
+            # nothing after 2 attempts"), THIS branch fired on the belief that
+            # card_index was still lifted, and the commit-time `_clear_strays`
+            # found sel=[] -- card 2 was gone, and the whole play refused having
+            # never re-attempted the batter. The comment above this branch
+            # already states the premise ("card_index's own walk+select already
+            # succeeded above") -- true when this branch is ENTERED, not
+            # necessarily still true by the time it COMMITS, after more presses.
+            #
+            # Re-prove it rather than trust a stale verification: a plain re-read
+            # covers the common case for free, and only a genuine loss pays for a
+            # walk+select retry -- the SAME calls the main loop above already
+            # uses, so no new constant and no new press budget.
+            _g1, _ys1, n1, sel1 = _look_settled(look)
+            if n1 == MAX_HAND_SIZE and card_index in sel1:
+                print(f"  [cursor] batter slot {card_index} is still lifted "
+                      "— committing alone (I-48b)")
+            else:
+                print(f"  [cursor] batter slot {card_index} is no longer lifted "
+                      "after the tactics attempt — re-selecting before playing "
+                      "alone (I-48b)")
+                _rok, _rsel = _walk_cursor_to(card_index, look)
+                if _rok:
+                    _rok, _rsel = _select_verified(card_index, look)
+                if _rok:
+                    _inferred_targets |= getattr(_rsel, "inferred", frozenset())
+                else:
+                    print(f"  [cursor] batter slot {card_index} could not be "
+                          "re-verified after dropping the tactics attempt — "
+                          "refusing rather than committing an unproven "
+                          "selection (I-48b)")
+                    _unwind_selection(before_all, look, ours=targets, ys0=_ys0)
+                    invalidate_cursor()
+                    return False
             tactics_index = None
             _LAST_PLAY_DROPPED_TACTICS = True
             continue
