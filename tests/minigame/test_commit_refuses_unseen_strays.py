@@ -287,6 +287,239 @@ try:
     check("(d) attempt 2, slot 3 proven down, must commit", ok_d2 is True)
     check("(d) slot 3 must be cleared from _MAYBE_LIFTED once proven down",
           3 not in ic._MAYBE_LIFTED)
+
+    # =====================================================================
+    # ROUND 2 -- an independent Opus skeptic REFUTED the round-1 fix
+    # (agent_progress/issues/I-43-44/skeptic.md). Three findings, S-1
+    # (BLOCKING) through S-3, plus two of the skeptic's own four mutants
+    # (M3, M4) survived round-1's suite unnoticed. All five are covered
+    # below, each against the REAL, unmodified functions.
+    # =====================================================================
+    print("(S-1) SKEPTIC (BLOCKING): a target verified by a REAL geometric "
+          "read (not I-21's inference), then blind at commit -- must COMMIT, "
+          "not refuse. Round-1 marked ONLY the inference branch; reproduced "
+          "against overnight/run_live_*.log in the main checkout: 10 of 34 "
+          "archived want-blind commits (29%) would have refused, every one "
+          "a legitimate play already committed and won (e.g. "
+          "run_live_20260921q.log:326-330 -> WIN #62).")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+
+    # (a) "already selected" -- target in `before`, _select_verified's very
+    # first check, no press sent at all.
+    def _look_s1a():
+        return (_flat_glow({2}),
+                [REST[0], REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
+
+    ok_s1a, sel_s1a = ic._select_verified(2, _look_s1a)
+    check("(S-1a) an already-selected real read must succeed", ok_s1a is True)
+    check("(S-1a) must carry real corroboration for slot 2",
+          getattr(sel_s1a, "inferred", frozenset()) == {2})
+
+    def _look_s1a_commit():
+        # blind at commit time -- the disc lost its dark edge, I-21's own
+        # stated premise ("selecting a card is what blinds its own disc").
+        return _flat_glow({2}), [REST[0], REST[1], None, REST[3], REST[4]], N, []
+
+    ok_s1a_commit = ic._clear_strays(
+        {2}, _look_s1a_commit, blind_before=set(),
+        ys0=[REST[0], REST[1], REST[2], REST[3], REST[4]],
+        inferred_targets=getattr(sel_s1a, "inferred", frozenset()))
+    check("(S-1a) must COMMIT -- pre-round-2 this refused", ok_s1a_commit is True)
+
+    # (b) an ordinary select_card press that LANDS IMMEDIATELY (attempt 1) --
+    # the commonest case, and the one _select_verified prints NOTHING for
+    # (the archived logs' own "verified on N after K press(es)" line is the
+    # WALK's print, not the select's -- see the QA6 skeptic's own log read).
+    _sent_s1b = []
+    ic.press = lambda key: _sent_s1b.append(key)
+    try:
+        def _look_s1b():
+            if not _sent_s1b:
+                return (_flat_glow(),
+                        [REST[0], REST[1], REST[2], REST[3], REST[4]], N, [])
+            return (_flat_glow({1}),
+                    [REST[0], REST[1] - 44, REST[2], REST[3], REST[4]], N, [1])
+
+        ok_s1b, sel_s1b = ic._select_verified(1, _look_s1b)
+    finally:
+        ic.press = _real_press
+    check("(S-1b) an immediate real-read landing must succeed", ok_s1b is True)
+    check("(S-1b) must carry real corroboration for slot 1",
+          getattr(sel_s1b, "inferred", frozenset()) == {1})
+
+    def _look_s1b_commit():
+        return _flat_glow({1}), [REST[0], None, REST[2], REST[3], REST[4]], N, []
+
+    ok_s1b_commit = ic._clear_strays(
+        {1}, _look_s1b_commit, blind_before=set(),
+        ys0=[REST[0], REST[1], REST[2], REST[3], REST[4]],
+        inferred_targets=getattr(sel_s1b, "inferred", frozenset()))
+    check("(S-1b) must COMMIT -- the commonest real-read shape, previously "
+          "unmarked and the source of all 10 archived would-refuse events",
+          ok_s1b_commit is True)
+
+    # =====================================================================
+    print("(S-2) SKEPTIC: _unwind_selection's own SUCCESS path ('if not "
+          "extra: return True') must mark a slot that is lifted AND BLIND "
+          "-- `extra` is computed from `sel` (risen rows only) and can "
+          "never see it, so this function used to return True having put "
+          "NOTHING down and proved NOTHING")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+
+    def _look_s2():
+        # slot 3 is blind (None) and NOT in sel -- lifted-and-blind, the
+        # exact row `extra` cannot see.
+        return _flat_glow(), [REST[0], REST[1], REST[2], None, REST[4]], N, []
+
+    ys0_s2 = [REST[0], REST[1], REST[2], REST[3], REST[4]]
+    unwind_ok_s2 = ic._unwind_selection(set(), _look_s2, {3}, ys0=ys0_s2)
+    check("(S-2) _unwind_selection still reports SUCCESS (extra was empty, "
+          "correctly -- there was nothing it could walk to and put down)",
+          unwind_ok_s2 is True)
+    check("(S-2) but the lifted-and-blind slot must now be tracked",
+          3 in ic._MAYBE_LIFTED)
+
+    ok_s2_next = ic._clear_strays(
+        {1}, lambda: (_flat_glow({1}),
+                       [REST[0], None, REST[2], None, REST[4]], N, [1]),
+        blind_before={3}, ys0=[REST[0], REST[1], REST[2], None, REST[4]])
+    check("(S-2) the NEXT operation must refuse with the stray still up "
+          "(chains into I-43, case (A)'s own shape)", ok_s2_next is False)
+
+    print("(S-2 control) a CHRONICALLY occluded ours-slot (blind at THIS "
+          "operation's own baseline too, never touched) must NOT be marked "
+          "-- avoids reintroducing the I-26/I-28 deadlock on a card nobody "
+          "ever lifted")
+    ic.clear_maybe_lifted()
+    ys0_s2c = [REST[0], REST[1], REST[2], None, REST[4]]  # already blind at ys0
+    unwind_ok_s2c = ic._unwind_selection(set(), _look_s2, {3}, ys0=ys0_s2c)
+    check("(S-2 control) unwind still reports success", unwind_ok_s2c is True)
+    check("(S-2 control) a slot blind at ITS OWN operation baseline too "
+          "must NOT be marked -- nothing proves WE lifted a chronic "
+          "occlusion", 3 not in ic._MAYBE_LIFTED)
+
+    # =====================================================================
+    print("(S-3) SKEPTIC: _reconcile_maybe_lifted must not run on a read "
+          "that saw nothing. _look_settled's failure return hands back the "
+          "LAST bad frame's ys (real-looking numbers) with sel forced "
+          "EMPTY -- both of _reconcile_maybe_lifted's conditions are then "
+          "satisfied by construction, and the safety measure becomes the "
+          "false proof")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({2})
+    want_s3 = {1}
+    _s3_calls = {"n": 0}
+
+    def _look_s3():
+        _s3_calls["n"] += 1
+        if _s3_calls["n"] == 1:
+            # top-level look: slot 1 (want) genuinely selected; slot 2 a
+            # real stray, risen -- must be walked-to and cleared.
+            return (_flat_glow({1, 2}),
+                    [REST[0], REST[1] - 44, REST[2] - 44, REST[3], REST[4]],
+                    N, [1, 2])
+        # every call after that (the post-clear re-check) reports an
+        # UNREADABLE fan; _look_settled retries LOOK_RETRIES times and gives
+        # up, handing back THIS ys (a real-looking number for slot 2) with
+        # sel forced empty by its own failure path.
+        return (_flat_glow(),
+                [REST[0], REST[1] - 44, REST[2], REST[3], REST[4]], 3, [])
+
+    _old_walk_s3 = ic._walk_cursor_to
+    _old_deselect_s3 = ic._deselect_verified
+    ic._walk_cursor_to = lambda target, look: (True, [])
+    ic._deselect_verified = lambda target, look: (True, [])
+    try:
+        ok_s3 = ic._clear_strays(
+            want_s3, _look_s3, blind_before=set(),
+            ys0=[REST[0], REST[1], REST[2], REST[3], REST[4]])
+    finally:
+        ic._walk_cursor_to = _old_walk_s3
+        ic._deselect_verified = _old_deselect_s3
+    check("(S-3) refuses when the post-clear read cannot be settled",
+          ok_s3 is False)
+    check("(S-3) slot 2's mark must SURVIVE a read that saw nothing",
+          2 in ic._MAYBE_LIFTED)
+
+    # =====================================================================
+    print("(M3) select_and_discard's confirm_discard-unverified exit (the "
+          "counter never answers after the press) must mark card_index -- "
+          "the skeptic's own M3 dropped this and nothing in round-1's "
+          "suite noticed")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    _sent_m3 = []
+    ic.press = lambda key: _sent_m3.append(key)
+    _old_walk_m3 = ic._walk_cursor_to
+    _old_select_m3 = ic._select_verified
+    _old_clear_m3 = ic._clear_strays
+    ic._walk_cursor_to = lambda target, look: (True, [])
+    _m3_sel = ic._InferredSel([2])
+    _m3_sel.inferred = frozenset({2})
+    ic._select_verified = lambda target, look: (True, _m3_sel)
+    ic._clear_strays = lambda *a, **kw: True
+    _discards_calls_m3 = {"n": 0}
+
+    def _discards_look_m3():
+        _discards_calls_m3["n"] += 1
+        if _discards_calls_m3["n"] == 1:
+            return 2                # the pre-press read: 2 discards left
+        return None                 # every confirm-loop poll abstains
+
+    try:
+        ok_m3 = ic.select_and_discard(
+            2, look=lambda: (_flat_glow(), list(REST), N, []),
+            discards_look=_discards_look_m3)
+    finally:
+        ic.press = _real_press
+        ic._walk_cursor_to = _old_walk_m3
+        ic._select_verified = _old_select_m3
+        ic._clear_strays = _old_clear_m3
+    check("(M3) select_and_discard refuses (the counter never answered)",
+          ok_m3 is False)
+    check("(M3) confirm_discard was pressed", "confirm_discard" in _sent_m3)
+    check("(M3) card_index must be marked maybe-lifted", 2 in ic._MAYBE_LIFTED)
+
+    # =====================================================================
+    print("(M4) SKEPTIC: the POST-CLEAR `_want_inferred` computation must "
+          "apply the SAME corroboration gate as the pre-clear one -- "
+          "dropping it from JUST the post-clear computation (the "
+          "skeptic's own M4) lets an uncorroborated want-blind target "
+          "commit whenever a real stray also needed clearing")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    want_m4 = {1}
+    ys0_m4 = [REST[0], REST[1], REST[2], REST[3], REST[4]]
+    _m4_calls = {"n": 0}
+
+    def _look_m4():
+        _m4_calls["n"] += 1
+        if _m4_calls["n"] == 1:
+            # slot 1 (want) is blind, readable at baseline, not tactics --
+            # but inferred_targets is explicitly empty below: nothing has
+            # ever proven THIS operation selected it. Slot 2 is a genuine,
+            # real stray that must be cleared, forcing the post-clear
+            # computation to run at all.
+            return (_flat_glow({2}),
+                    [REST[0], None, REST[2] - 44, REST[3], REST[4]], N, [2])
+        # post-clear: slot 2 is now down (deselected); slot 1 unchanged.
+        return _flat_glow(), [REST[0], None, REST[2], REST[3], REST[4]], N, []
+
+    _old_walk_m4 = ic._walk_cursor_to
+    _old_deselect_m4 = ic._deselect_verified
+    ic._walk_cursor_to = lambda target, look: (True, [])
+    ic._deselect_verified = lambda target, look: (True, [])
+    try:
+        ok_m4 = ic._clear_strays(want_m4, _look_m4, blind_before=set(),
+                                  ys0=ys0_m4, inferred_targets=set())
+    finally:
+        ic._walk_cursor_to = _old_walk_m4
+        ic._deselect_verified = _old_deselect_m4
+    check("(M4) an uncorroborated want-blind target must REFUSE even after "
+          "a real stray was cleared", ok_m4 is False)
 finally:
     ic.press = _real_press
     ic.time.sleep = _old_sleep
@@ -300,4 +533,10 @@ print("  I-43: a stray left lifted by a prior refused attempt is refused until "
       "seen down, and a genuinely chronic occlusion nobody ever touched is still "
       "exempted. I-44: a commit-time inference now requires the select step's own "
       "real report, not a re-derivation from baseline snapshots alone, while a "
-      "genuine geometric selection and a genuine real inference both still commit.")
+      "genuine geometric selection and a genuine real inference both still commit. "
+      "ROUND 2 (skeptic REFUTED round 1): a target verified by a REAL read, then "
+      "blind at commit, now commits instead of stalling (S-1, the blocking find); "
+      "_unwind_selection's own success path marks a lifted-and-blind slot without "
+      "deadlocking a genuine chronic occlusion (S-2); a post-clear read that saw "
+      "nothing cannot clear a tracked mark (S-3); and both of the skeptic's "
+      "surviving mutants (M3, M4) are now caught.")

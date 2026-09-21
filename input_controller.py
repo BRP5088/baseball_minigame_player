@@ -1242,14 +1242,24 @@ def _walk_cursor_to(target, look):
 
 
 class _InferredSel(list):
-    """A `sel` returned by `_select_verified` when `target` was concluded
-    selected by INFERENCE (I-21: selecting a card is what blinds its own disc)
-    rather than a real geometric read finding it in the fan. Behaves as a plain
-    list to every existing consumer (`in`, `sorted()`, `set()`, `==` all defer
-    to `list`, same as orchestrator._CursorSel's `.kinds`) and additionally
-    carries `.inferred`, the slot(s) inferred on THIS call. `getattr(sel,
-    "inferred", frozenset())` is how a caller reads it; a plain list (any
-    non-inferred return, any test stub) supplies none (I-44).
+    """A `sel` returned by `_select_verified` when it has CONCLUDED `target` is
+    selected on THIS call -- whether by a real, geometric read (`target in
+    before`/`target in sel`, the common case) or by I-21's inference (a disc
+    that was readable and is now blind after our own press). Behaves as a
+    plain list to every existing consumer (`in`, `sorted()`, `set()`, `==` all
+    defer to `list`, same as orchestrator._CursorSel's `.kinds`) and
+    additionally carries `.inferred`, the slot(s) confirmed on THIS call.
+    `getattr(sel, "inferred", frozenset())` is how a caller reads it; a plain
+    list (any test stub predating this) supplies none (I-44).
+
+    S-1 (I-44 skeptic, round 1 REFUTED): a real read is STRONGER evidence than
+    the inference, not weaker, and the first version of this file marked
+    ONLY the inference branch -- so a target proven selected by a real read,
+    then gone blind at commit (I-21's own stated premise, "selecting a card
+    is what blinds its own disc"), refused, and the retry refused again: a
+    hard stall on the commonest shape, measured at 10 of 34 archived
+    want-blind commits (29%), every one a legitimate play. Every success path
+    in `_select_verified` now carries this marker for exactly that reason.
     """
     inferred = frozenset()
 
@@ -1287,7 +1297,16 @@ def _select_verified(target, look):
               "refusing rather than assuming the card is already up")
         return False, before
     if target in before:
-        return True, before
+        # I-44 SKEPTIC (S-1): a REAL geometric read is STRONGER evidence than
+        # I-21's inference, not weaker -- yet only the inference branch used
+        # to report corroboration, so a target proven selected THIS way still
+        # refused at commit once its disc went blind (I-21's own premise).
+        # Reproduced: 10 of 34 archived want-blind commits (29%) would have
+        # refused, every one a legitimate play that had already committed and
+        # won. Every success path below carries the SAME `.inferred` marker.
+        _sel = _InferredSel(before)
+        _sel.inferred = frozenset({target})
+        return True, _sel
     # AND IF THE TARGET'S POSITION IS UNKNOWN, REFUSE -- DO NOT PRESS.
     #
     # select_card is a TOGGLE. Pressing it at a card whose state cannot be read is
@@ -1320,7 +1339,11 @@ def _select_verified(target, look):
         if target in sel:
             if attempt > 1:
                 print(f"  [cursor] select_card landed on attempt {attempt}")
-            return True, sel
+            # S-1: a real, geometric read -- mark it the same as the
+            # inference branch below (see the `target in before` comment).
+            _sel = _InferredSel(sel)
+            _sel.inferred = frozenset({target})
+            return True, _sel
         new = [i for i in sel if i not in before]
         if new:
             # something that was NOT up before has gone up, and it is not the target.
@@ -1350,7 +1373,10 @@ def _select_verified(target, look):
             if target in sel:
                 print(f"  [cursor] select_card landed late, disc visible again "
                       f"({SELECT_RETRY_CONFIRM_SEC}s)")
-                return True, sel
+                # S-1: real read.
+                _sel = _InferredSel(sel)
+                _sel.inferred = frozenset({target})
+                return True, _sel
             if 0 <= target < len(_ys) and _ys[target] is None:
                 # I-36 SKEPTIC: THE INFERENCE MUST NOT FIRE ON A BASELINE
                 # TACTICS ROW. The garbled row this rescue exists for (I-36
@@ -1414,7 +1440,10 @@ def _select_verified(target, look):
                 return False, sel
             if target in sel:
                 print(f"  [cursor] select_card landed late ({SELECT_RETRY_CONFIRM_SEC}s)")
-                return True, sel
+                # S-1: real read.
+                _sel = _InferredSel(sel)
+                _sel.inferred = frozenset({target})
+                return True, _sel
             print(f"  [cursor] select_card did not land (attempt {attempt}) — retrying")
     print(f"  [cursor] select_card never landed after {SELECT_ATTEMPTS} attempts — refusing")
     return False, sel
@@ -1452,7 +1481,7 @@ def _reconcile_maybe_lifted(ys, sel):
             _MAYBE_LIFTED.discard(slot)
 
 
-def _unwind_selection(before, look, ours):
+def _unwind_selection(before, look, ours, ys0=None):
     """Put back down anything raised since `before`. Best effort; never raises.
 
     A REFUSAL THAT LEAVES A CARD UP IS NOT A CLEAN REFUSAL. The commit path already
@@ -1475,6 +1504,23 @@ def _unwind_selection(before, look, ours):
         _select_verified's own comment is explicit that "pressing again compounds it".
         test_verified_selection pins exactly one select press on that path -- a first
         version of this unwind pressed on the stray and took it to three.
+
+    S-2 (I-44 skeptic): `extra` IS COMPUTED FROM `sel`, WHICH IS RISEN ROWS ONLY. A
+    slot that is lifted AND BLIND (I-21's own mechanism: selecting a card is what
+    blinds its own disc) can never appear in `sel`, so it is invisible to `extra`
+    -- this function then returns `True` having put NOTHING down and having proved
+    NOTHING about it. That is the I-43 bug surviving the I-43 fix: the very next
+    operation's own baseline read finds the same slot blind, and with nothing
+    recorded here, `_clear_strays`'s I-26/I-28 exemption waves it through as a
+    chronic occlusion. `ys0`, when the caller has it (both production callers do,
+    it is the same operation-start snapshot threaded into `_clear_strays`), narrows
+    the mark to I-21's own signature -- readable at the OPERATION's start, blind
+    now -- so a target that was never even pressed (refused before any press, e.g.
+    a genuinely chronic occlusion) is not marked and cannot deadlock a later commit
+    that must wave it through. `ys0=None` (no caller support, e.g. the exception
+    wrapper's recovery call, which has no baseline to offer) is PERMISSIVE, the
+    same convention every other `ys0`/`kinds0`/`inferred_targets` gate in this file
+    uses.
     """
     try:
         _g, _ys, n, sel = _look_settled(look)
@@ -1486,6 +1532,14 @@ def _unwind_selection(before, look, ours):
             # into the next caller unless proven clean.
             _mark_maybe_lifted(ours)
             return False
+        _reconcile_maybe_lifted(_ys, sel)
+        # S-2: mark every `ours` slot that is blind right now and was READABLE
+        # at the operation's own start (or `ys0` is unavailable, permissive) --
+        # this is checked BEFORE `extra`'s early return, because that return is
+        # exactly the path S-2 found unguarded.
+        _mark_maybe_lifted({s for s in ours
+                             if s < len(_ys) and _ys[s] is None
+                             and (ys0 is None or (s < len(ys0) and ys0[s] is not None))})
         extra = sorted((set(sel) - set(before)) & set(ours))
         if not extra:
             return True
@@ -1769,8 +1823,16 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
                 _mark_maybe_lifted(_extra_sorted[_i:])
                 invalidate_cursor()
                 return False
+        # S-3 (I-44 skeptic): DO NOT reconcile against this read before its own
+        # `n != MAX_HAND_SIZE` guard, below. `_look_settled`'s failure return
+        # is `(glow, ys, 0, [])` -- it hands back the LAST bad frame's `ys`
+        # (which can be full of real-looking numbers) while deliberately
+        # EMPTYING `sel`. A tracked slot then satisfies both of
+        # `_reconcile_maybe_lifted`'s conditions (`ys[slot] is not None` and
+        # `slot not in sel`) purely because the read saw nothing -- the
+        # safety measure `_look_settled` exists for becomes the false proof.
+        # Reconciling happens only once this read is confirmed usable.
         _g, _ys, n, sel = _look_settled(look)
-        _reconcile_maybe_lifted(_ys, sel)
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
         _want_inferred = {k for k in want
                            if k in _blind_now
@@ -1784,6 +1846,7 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
             _mark_maybe_lifted((_blind_now - set(want)) | (lifted - want))
             invalidate_cursor()
             return False
+        _reconcile_maybe_lifted(_ys, sel)
     if not want <= lifted:
         # I-44: name a target that fell out purely because it lacked real
         # corroboration, separately from the generic "not all lifted" line --
@@ -1794,6 +1857,15 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
                 print(f"  [cursor] slot {k} was never selected by inference on "
                       "this operation (I-44) — target not seen selected — "
                       "refusing to commit")
+        # I-43 (skeptic, the one unmarked exit): a `want` slot that fails this
+        # check may still be genuinely, physically lifted -- e.g. `_select_
+        # verified` reported it selected against ITS OWN baseline look (taken
+        # after the walk), while this operation's earlier, top-of-function
+        # `ys0` read that same slot as already blind (a narrower window than
+        # `_select_verified`'s own, so the two can disagree) and `_want_
+        # inferred` then refuses to trust it. Whether it is up is genuinely
+        # unproven either way -- mark it rather than assume either answer.
+        _mark_maybe_lifted(set(want) - lifted)
         print(f"  [cursor] the engine's cards {sorted(want)} are not all lifted "
               f"({sel}) — refusing to commit a partial selection")
         invalidate_cursor()
@@ -1880,12 +1952,12 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
             continue
         ok, _sel = _walk_cursor_to(target, look)
         if not ok:
-            _unwind_selection(before_all, look, targets)
+            _unwind_selection(before_all, look, targets, ys0=_ys0)
             invalidate_cursor()
             return False
         ok, _sel = _select_verified(target, look)
         if not ok:
-            _unwind_selection(before_all, look, targets)
+            _unwind_selection(before_all, look, targets, ys0=_ys0)
             invalidate_cursor()
             return False
         _inferred_targets |= getattr(_sel, "inferred", frozenset())
