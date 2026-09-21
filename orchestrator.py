@@ -9216,6 +9216,17 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # This is the rung section 3's ladder was missing --
                             # without it every at-bat since 2026-09-12 raised and
                             # was dropped unlogged. See opponent_from_reveal.
+                            #
+                            # BOUND HERE, UNCONDITIONALLY. _ours_seen is read far
+                            # below (the "no opponent NAME" branch) whether or not
+                            # opponent_from_reveal found anything -- a local read
+                            # that returns None (no opponent card identified) used
+                            # to leave it unbound, and the *first* thing the else
+                            # branch touches downstream is _ours_seen, so the whole
+                            # turn died with UnboundLocalError instead of reaching
+                            # the "no OPPONENT card identified" message that
+                            # already exists for exactly this case.
+                            _ours_seen = None
                             _opp_local = opponent_from_reveal(
                                 reveal_img, matchup_info.get("phase"))
                             if _opp_local is not None:
