@@ -867,6 +867,19 @@ def _look_settled(look):
     return glow, ys, 0, []
 
 
+# (I-33) BELOW THIS, A CLEARED CURSOR_GLOW_MIN GATE IS NOT YET TRUSTED. Reused
+# directly from local_hand.cursor_slot's OWN measured populations -- "the card
+# with the cursor 20.7 .. 36.1; every other card 0.0 .. 8.4" -- rather than a new
+# number: a read at or above 20.7 is inside that genuine-cursor band, and a read
+# between CURSOR_GLOW_MIN (10.0) and this floor cleared the gate but is still
+# inside CLAUDE.md 10.35's own measured ceiling for slot 4 ("never exceeds 11.0
+# at ANY offset") -- exactly the gap a marginal, unreliable crossing sits in.
+# Refuted skeptic repro `agent_progress/issues/I-33-skeptic/repro_cross_call.py`
+# is this case verbatim: a FRESH call's own top-of-function read names cur=4 at
+# glow 10.5, no I-02 probe involved, and the shipped fix (scoped to "confirmed
+# via the I-02 probe") could not see it -- see `cur_confirmed_blind` below.
+CUR_TRUSTED_GLOW_MIN = 20.7
+
 # How many blind nudges may be spent finding a cursor the glow reader cannot see.
 # MAX_HAND_SIZE - 1 moves cross the whole fan; at section 5's measured 15.20%
 # press-drop rate that is ~4.7 presses, and the slack absorbs a clustered run of
@@ -965,6 +978,28 @@ def _walk_cursor_to(target, look):
     import local_hand
     glow, ys, n, sel = _look_settled(look)
     cur = local_hand.cursor_slot(glow, sel)
+    _cur_from_lift = False
+    # (I-33) A SELECTED card is where the cursor was the moment select_card was
+    # pressed, and nothing else can move the cursor without a press this call has
+    # not yet sent -- so if the fan's own glow cannot name ANY cursor but exactly
+    # one card is already lifted, that card names it. This closes a cross-call
+    # hole a skeptic found (agent_progress/issues/I-33-skeptic/progress.md,
+    # repro_cross_call.py): `_verified_select_and_play_inner` calls
+    # `_walk_cursor_to(4, ...)` then `_select_verified(4, ...)` (which leaves
+    # card 4 selected), then a FRESH `_walk_cursor_to(0, ...)`. That second
+    # call's own TOP-OF-FUNCTION read sees glow=[0.0, 0.4, 0.0, 0.0, 0.4] --
+    # `cursor_slot()` answers None (0.4 never clears CURSOR_GLOW_MIN, CLAUDE.md
+    # 10.35) -- and every belief the FIRST call built (`cur_confirmed_blind`,
+    # whether via I-02's probe or this same rule) is a local that resets to
+    # False at the top of every call, so it cannot carry over. Without this,
+    # the nudge loop below would move a cursor whose position is already known
+    # from the selection, and the retry further down could never fire for the
+    # cross-call event it exists to cover.
+    if cur is None and n == MAX_HAND_SIZE and len(sel) == 1:
+        cur = sel[0]
+        _cur_from_lift = True
+        print(f"  [cursor] the fan is blind but slot {cur} is already selected "
+              "— naming it the cursor from the selection, not the glow")
     # AN UNLOCATABLE CURSOR IS RECOVERABLE, BECAUSE MOVING COMMITS NOTHING.
     #
     # Refusing here is right when the FAN cannot be read -- there is nothing to
@@ -1012,6 +1047,17 @@ def _walk_cursor_to(target, look):
     steps = 0
     excluded = set()
     first_cur = cur
+    # (I-33) True once `cur` is known only by an UNRELIABLE confirmation --
+    # either inferred from a lift/I-02-probe rather than glow at all, or a glow
+    # read that cleared CURSOR_GLOW_MIN (10.0) but sits below CUR_TRUSTED_
+    # GLOW_MIN (20.7, local_hand.cursor_slot's own measured floor for a genuine
+    # cursor) -- squarely inside CLAUDE.md 10.35's slot-4 ceiling (never exceeds
+    # 11.0). `_cur_from_lift` covers the top-of-function case just above; a
+    # normal `cursor_slot()` read (here or after the nudge loop) is trusted only
+    # if it clears that floor by a healthy margin. NOT set after an I-32
+    # dead-reckon; see that branch's own comment for why. See the retry this
+    # feeds, below the I-02 probe branch.
+    cur_confirmed_blind = _cur_from_lift or glow[cur] < CUR_TRUSTED_GLOW_MIN
     # DEAD-RECKONING ACROSS AN OCCLUDED SLOT (I-32). `cursor_glow` returns 0.0 BY
     # CONSTRUCTION for any row whose y was never measured (CLAUDE.md 10.28's fan
     # occlusion: one card's power disc sits under its neighbour, `y_measured: False`
@@ -1052,11 +1098,15 @@ def _walk_cursor_to(target, look):
                 print(f"  [cursor] excluding slot {cur} finds the real cursor on "
                       f"{retried} — continuing the walk from there")
                 cur = first_cur = retried
+                # (I-33) a normal cursor_slot() read, so judged the same way as
+                # any other: trusted only above CUR_TRUSTED_GLOW_MIN.
+                cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
                 steps = 0
                 continue
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
         prev = cur
+        prev_blind = cur_confirmed_blind
         press("move_right" if cur < target else "move_left")
         steps += 1
         time.sleep(MOVE_SETTLE_SEC)
@@ -1066,6 +1116,13 @@ def _walk_cursor_to(target, look):
             return False, sel
         cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
         was_dead_reckoned, dead_reckoned_last = dead_reckoned_last, False
+        if cur is not None:
+            # (I-33, mutant-B fix) RE-EVALUATED on every genuine read, not just
+            # reset to a flat False -- a read that clears CURSOR_GLOW_MIN but
+            # stays under CUR_TRUSTED_GLOW_MIN is still not fully trusted, and a
+            # strong read here must actually CLEAR an earlier blind flag so a
+            # later, unrelated lost cursor does not inherit an old one's retry.
+            cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
         if cur is None:
             expected = prev + 1 if prev < target else prev - 1
             # CROSSING AN OCCLUDED SLOT MID-WALK (I-32), CHECKED BEFORE THE I-02
@@ -1096,6 +1153,13 @@ def _walk_cursor_to(target, look):
                       "glow cannot read; dead-reckoning one step across it")
                 cur = expected
                 dead_reckoned_last = True
+                # NOT cur_confirmed_blind = True (I-33). I-32's own bound above is
+                # STRICTER than I-33's retry -- "no code chains guesses to cover
+                # it" means not even one retry press after a dead-reckon, which
+                # `tests/minigame/test_walk_crosses_occluded_slot.py` cases (2) and
+                # (2b) pin exactly (2 presses, refuse, nothing further). Flagging a
+                # dead-reckoned `cur` as blind here would have the I-33 retry add a
+                # press I-32 deliberately refuses to send.
                 continue
             # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
             # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
@@ -1109,7 +1173,56 @@ def _walk_cursor_to(target, look):
                     return False, sel
                 cur = new_cur
                 first_cur, steps = cur, 0
+                cur_confirmed_blind = True
                 continue
+            # (I-33) `prev` was ITSELF only known by an UNRELIABLE confirmation --
+            # the I-02 probe above landing on a DIFFERENT slot than the call's own
+            # target, a marginal glow crossing, or the top-of-function lift
+            # fallback (see `cur_confirmed_blind` / `_cur_from_lift`, set at the
+            # top of this function) -- never a confidently-clear direct glow read.
+            # So a press off it that reads nothing is exactly what a DROPPED press
+            # looks like too: the cursor may never have left `prev`, and `prev`'s
+            # own glow cannot confirm that either way (CLAUDE.md 10.35's
+            # structurally-blind slot 4, ceiling 11.0 against CURSOR_GLOW_MIN
+            # 10.0). Reproduced live 2026-09-21 (I-33, overnight/
+            # run_live_20260921f.log): "lost the cursor" with
+            # glow=[0.0, 0.4, 0.0, 0.0, 0.4] -- slot 4 still reading exactly its
+            # blind ceiling -- but NOT via this call's own I-02 probe. Traced
+            # precisely (an independent skeptic's repro,
+            # agent_progress/issues/I-33-skeptic/progress.md): this is a BRAND
+            # NEW `_walk_cursor_to(0, ...)` call, made after a SEPARATE
+            # `_walk_cursor_to(4, ...)` confirmed slot 4 by a normal read (the log
+            # shows "verified on 4 after 6 press(es)" -- steps nonzero, which only
+            # a direct read leaves behind) and `_select_verified(4, ...)` left it
+            # selected. That belief cannot cross the call boundary -- a local
+            # resets to False at the top of every call -- so THIS call's own
+            # top-of-function read is what names `cur=4`, from the lift fallback
+            # (`sel == [4]`, glow 0.4 never clears the gate). One retry in the
+            # same direction absorbs a single dropped press (section 5: 15.20% of
+            # presses are ignored) without risking an overshoot -- the one place a
+            # second press COULD run past `target` is abs(prev - target) == 1,
+            # and that case already returned above via the I-02 probe branch,
+            # never reaching here.
+            #
+            # DELIBERATELY NOT SET AFTER AN I-32 DEAD-RECKON (see that branch's own
+            # comment above): I-32's bound is one guess and no chaining at all, and
+            # a retry press here would be exactly the chain it refuses to add.
+            if prev_blind:
+                print(f"  [cursor] the press left blind slot {prev} and nothing "
+                      "reads — a dropped press looks identical; pressing once more "
+                      "before refusing")
+                press("move_right" if prev < target else "move_left")
+                steps += 1
+                time.sleep(MOVE_SETTLE_SEC)
+                glow, ys, n, sel = _look_settled(look)
+                if n != MAX_HAND_SIZE:
+                    print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) "
+                          "— refusing")
+                    return False, sel
+                cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                if cur is not None:
+                    cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
+                    continue
             print(f"  [cursor] lost the cursor after {steps} press(es) "
                   f"(glow={glow}) — refusing")
             return False, sel
