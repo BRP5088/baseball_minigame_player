@@ -9,6 +9,18 @@ I-19b: `deal_timeouts` used to grep only the pre-I-09 combined message
 (orchestrator.wait_for_hand_deal). Both old and new wordings are counted here
 so old and new logs agree. Also adds the refusal-shape columns the 2026-09-20
 census (agent_progress/census-20260920/progress.md) had to count by hand.
+
+QA round 4 / I-26: `stray_guard` used to grep only "went unreadable DURING
+this", which I-26 (commit cb5f26d, merged 67f3851) reworded away -- a census
+run against a post-I-26 log would silently score zero stray-guard events
+forever, the same dead-pattern shape I-19b already fixed once for
+`deal_timeouts`. `_clear_strays` (input_controller.py) now prints two
+different lines: one re-look after a slot reads unreadable ("re-looking once
+before refusing"), and, only if it is STILL unreadable afterwards, a refusal
+("still unreadable after"). The refusal is counted under `stray_guard`
+alongside the old wording (so old and new logs still agree); the re-look gets
+its own `stray_relook` column, so a flicker that recovered on the re-look is
+visible instead of invisible.
 """
 import argparse
 import glob
@@ -19,8 +31,8 @@ import sys
 COLUMNS = [
     "log", "hands_read", "decisions", "plays_confirmed", "plays_refused",
     "discards_refused", "stall_breaks", "cursor_blind", "nudges",
-    "false_cursor", "stray_guard", "pre_press_guard", "inferred_select",
-    "excluded", "confirm_verify_fail",
+    "false_cursor", "stray_guard", "stray_relook", "pre_press_guard",
+    "inferred_select", "excluded", "confirm_verify_fail",
     "deal_timeouts", "deal_timeouts_with_edge", "reveals_not_logged",
     "unreadable_polls", "stop_reason",
 ]
@@ -78,8 +90,12 @@ def census_one(path):
         # (agent_progress/census-20260920/progress.md, I-25/I-21 shapes).
         if "presses — refusing" in line:            # input_controller.py:1047
             row["false_cursor"] += 1
-        if "went unreadable DURING this" in line:    # input_controller.py:1295
+        if "went unreadable DURING this" in line:    # pre-I-26 wording (old logs)
             row["stray_guard"] += 1
+        if "still unreadable after" in line:         # I-26's refusal, :1346
+            row["stray_guard"] += 1
+        if "re-looking once before refusing" in line:  # I-26's re-look, :1322-3
+            row["stray_relook"] += 1
         if "position is unreadable, so whether it is" in line:  # :1116
             row["pre_press_guard"] += 1
         if "selected by inference" in line or "inferred" in line:  # :1171

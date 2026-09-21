@@ -20,6 +20,18 @@ one of the three that actually contains a post-I-09 "no motion seen" line --
 h.log has zero deal-timeout lines of any wording, verified by direct grep, so its
 own deal_timeouts pin cannot by itself discriminate the fix from the pre-fix
 tool; d.log and the synthetic CONTROL below are what actually catch that mutant).
+
+QA round 4 / I-26 (commit cb5f26d, merged 67f3851): `stray_guard`'s pattern went
+dead the same way `deal_timeouts` did in I-19b -- I-26 reworded
+`_clear_strays`'s refusal from "went unreadable DURING this" to "still
+unreadable after" (the re-look), and added a *second* line, "re-looking once
+before refusing", for the re-look itself, which recovers on a flicker and is
+not a refusal at all. `stray_guard` now counts EITHER the old wording (for logs
+that predate I-26) or the new refusal wording; the new re-look line gets its
+own `stray_relook` column. h.log PREDATES I-26 (its refusals are what I-26's
+own ISSUES.md entry cites as evidence), so it only ever carries the old
+wording -- its `stray_guard` pin is unchanged at 4 and it has no `stray_relook`
+lines to pin.
 """
 import json
 import os
@@ -166,6 +178,11 @@ if len(rows3) == 3:
           f"(got {h.get('deal_timeouts')}, expected {expected_h_deal})",
           h.get("deal_timeouts") == expected_h_deal)
     check(f"h.log: 4 stray_guard (got {h.get('stray_guard')})", h.get("stray_guard") == 4)
+    # h.log predates I-26 (see module docstring): it only ever carries the OLD
+    # "went unreadable DURING this" wording, never the new re-look line, so it
+    # has no re-looks to count.
+    check(f"h.log: 0 stray_relook -- it predates I-26's re-look line "
+          f"(got {h.get('stray_relook')})", h.get("stray_relook") == 0)
     check(f"h.log: 3 pre_press_guard (got {h.get('pre_press_guard')})",
           h.get("pre_press_guard") == 3)
     check(f"h.log: 3 inferred_select (got {h.get('inferred_select')})",
@@ -185,11 +202,23 @@ else:
     check(f"one row per d/h log plus a TOTAL row (got {len(rows3)})", False)
 
 # --- CONTROL: one line of each new wording, exactly one hit per column -----
+#
+# I-26 wording, exact strings from input_controller.py's own print()s (grepped
+# above the module docstring, not retyped from memory): the re-look
+# (":1322-3", recovers on a flicker) and the refusal that follows only when
+# the slot is STILL unreadable after it (":1346-9"). One line of each, plus
+# the pre-I-26 wording kept below for old-log backward compatibility.
 
 _CONTROL_LOG = (
     '    [cursor] still at 2 after 8 presses — refusing\n'
     '    [cursor] slot(s) [3] went unreadable DURING this operation ([None]) '
     '— refusing.\n'
+    '    [cursor] slot(s) [1] read unreadable ([None, 100, 100, 100, 100]) — '
+    're-looking once before refusing\n'
+    '    [cursor] slot(s) [1] still unreadable after the re-look ([None, '
+    '100, 100, 100, 100]) — refusing. They were measurable when this '
+    'operation started, so something we pressed lifted them, and a raised '
+    'card would go in with the commit.\n'
     "    [cursor] slot 4's position is unreadable, so whether it is already "
     'selected cannot be told — refusing rather than pressing a TOGGLE blind\n'
     "    [cursor] 2's disc is unreadable after the press and was readable "
@@ -203,9 +232,9 @@ _CONTROL_LOG = (
     '20s — a reader problem. Threshold 15, biggest delta 40.0.\n'
 )
 _CONTROL_EXPECTED = {
-    "false_cursor": 1, "stray_guard": 1, "pre_press_guard": 1,
-    "inferred_select": 1, "excluded": 1, "confirm_verify_fail": 1,
-    "deal_timeouts": 2, "deal_timeouts_with_edge": 1,
+    "false_cursor": 1, "stray_guard": 2, "stray_relook": 1,
+    "pre_press_guard": 1, "inferred_select": 1, "excluded": 1,
+    "confirm_verify_fail": 1, "deal_timeouts": 2, "deal_timeouts_with_edge": 1,
 }
 
 with tempfile.TemporaryDirectory() as tmpdir:

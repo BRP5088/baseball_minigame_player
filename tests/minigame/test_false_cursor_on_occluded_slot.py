@@ -25,6 +25,15 @@ TWO LAYERS, TWO FIXES:
 Uses the same check(cond, msg) shape as tests/minigame/test_verified_selection.py
 and tests/rig/test_blind_slot_probe_select.py (checked with
 `grep -m1 -o "def check(.*)"` on both before writing this one).
+
+QA round 4 (F2): part (c) above exercises ONE false slot with a genuinely
+reachable target. `input_controller.FALSE_CURSOR_EXCLUDE_MAX` (4) bounds how
+many slots one walk may write off as false in total, and nothing pinned what
+happens when the reader is false EVERYWHERE, including at the target's own
+slot -- deleting the `len(excluded) < FALSE_CURSOR_EXCLUDE_MAX` clause left
+this file green. Part (d) covers it: a reader false at every other slot and
+genuinely blind (not merely false) at the target must still refuse in
+bounded time, never loop.
 """
 import os as _os
 import sys as _sys
@@ -220,6 +229,113 @@ try:
           f"CONTROL: exactly 4 presses cross the whole fan from slot 0 to slot "
           f"4 -- no exclusion budget spent; got {r.sent.count('move_right')} "
           f"in {r.sent!r}")
+
+    # =====================================================================
+    print("(d) _walk_cursor_to: a false cursor at EVERY slot ends bounded, "
+          "never loops forever (QA round 4)")
+    # =====================================================================
+    # FALSE_CURSOR_EXCLUDE_MAX (4) == MAX_HAND_SIZE - 1 (5 - 1), so excluding
+    # every OTHER slot in turn is exactly enough to reach the target's own
+    # slot by elimination -- which would make this scenario a disguised
+    # SUCCESS rather than the refusal it is meant to exercise. So the
+    # target's own row must never win the argmax at all: it reads a glow of
+    # 0.0, below CURSOR_GLOW_MIN, on every look, exactly like I-25's
+    # genuinely-occluded cursor (CLAUDE.md 10.35: "slot 4 never exceeds
+    # 11.0"). The other four slots are false, never-moving winners that
+    # decrease in glow, so excluding each in turn reveals the next.
+    check(ic.FALSE_CURSOR_EXCLUDE_MAX == 4,
+          f"CLAUDE.md 10.11: a test must not assert only against the "
+          f"constant it is guarding -- pin the literal too; got "
+          f"{ic.FALSE_CURSOR_EXCLUDE_MAX!r}")
+    check(ic.MAX_HAND_SIZE == 5,
+          f"the elimination arithmetic below (4 false slots, 1 genuinely "
+          f"blind target) assumes a 5-slot fan; got {ic.MAX_HAND_SIZE!r}")
+
+    class AllFalseScreen:
+        """Every slot the walk could land on reads a false, never-moving
+        glow (or, at the target itself, no glow at all) -- the real cursor
+        is nowhere the reader can see it, which is the genuinely-occluded
+        shape I-25 was built for. Nothing here ever changes in response to
+        a press."""
+
+        def __init__(self, glow):
+            self.glow = list(glow)
+            self.sent = []
+
+        def selected(self):
+            return []
+
+        def look(self):
+            return self.glow, [100] * N, N, self.selected()
+
+        def press(self, key):
+            self.sent.append(key)
+
+    TARGET = 4
+    # slots 0-3 false and decreasing (each under the ceiling, over the
+    # floor); slot 4 (the target) never lights up at all.
+    all_false = AllFalseScreen([40.0, 30.0, 20.0, 10.5, 0.0])
+    ic.press = all_false.press
+    ok3, sel3 = ic._walk_cursor_to(TARGET, all_false.look)
+    check(ok3 is False,
+          f"a reader with no real cursor anywhere -- every slot false, the "
+          f"target itself never lit -- must refuse, not report a success "
+          f"it never verified; got {ok3!r}")
+    _presses = len(all_false.sent)
+    _bound = ic.FALSE_CURSOR_EXCLUDE_MAX * ic.CURSOR_MAX_STEPS
+    check(_presses == _bound,
+          f"exactly {ic.FALSE_CURSOR_EXCLUDE_MAX} exclusion rounds of "
+          f"{ic.CURSOR_MAX_STEPS} presses each ({_bound} total) before "
+          f"refusing -- not fewer (giving up early) and not more (looping "
+          f"past the exclusion budget); got {_presses} presses "
+          f"({all_false.sent!r})")
+    check(_presses <= ic.FALSE_CURSOR_EXCLUDE_MAX * ic.CURSOR_MAX_STEPS,
+          f"the press count must be BOUNDED by the exclusion budget, so a "
+          f"reader that is false everywhere cannot press forever; got "
+          f"{_presses} against a ceiling of {_bound}")
+
+    # THE SHIPPED BUDGET (4) EQUALS MAX_HAND_SIZE - 1, SO THE CHECKS ABOVE
+    # ALONE DO NOT ISOLATE THE CLAUSE FROM THE FAN'S OWN NATURAL EXHAUSTION.
+    # Excluding every OTHER slot always leaves exactly one candidate, so
+    # "nothing lit" (or arriving at the target) fires at the same press
+    # count whether or not `len(excluded) < FALSE_CURSOR_EXCLUDE_MAX` is
+    # checked -- deleting that clause changes NOTHING in the check above (a
+    # scratch-copy mutant of it was run by hand and reproduced the identical
+    # 32-press refusal). To prove the CLAUSE itself is what stops the walk,
+    # lower the budget below the fan's natural limit and confirm the walk
+    # cuts off there instead of running on toward exhaustion.
+    _real_max = ic.FALSE_CURSOR_EXCLUDE_MAX
+    try:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = 2
+        capped = AllFalseScreen([40.0, 30.0, 20.0, 10.5, 0.0])
+        ic.press = capped.press
+        ok4, sel4 = ic._walk_cursor_to(TARGET, capped.look)
+        check(ok4 is False,
+              f"a lowered exclusion budget must still refuse; got {ok4!r}")
+        _capped_presses = len(capped.sent)
+        # With the budget at 2, exactly 2 exclusions are allowed (slots 0
+        # and 1, at len(excluded) 0 and 1, both < 2) -- 2 rounds of
+        # CURSOR_MAX_STEPS presses -- and the THIRD round's exclusion check
+        # (len(excluded) == 2, not < 2) fails outright, so it refuses
+        # PLAINLY after one more round rather than excluding a 3rd slot: 3
+        # rounds, 24 presses. Without the clause (the mutant) there is no
+        # length check to fail, so the walk keeps excluding through slots 2
+        # and 3 and only stops at the fan's natural exhaustion -- 4 rounds,
+        # 32 presses, the SAME count the shipped budget of 4 produces above.
+        # That equality is exactly why the earlier checks (at the shipped
+        # budget) cannot tell the clause apart from the fan running out on
+        # its own, and why this lowered-budget probe is the one that can.
+        check(_capped_presses == 3 * ic.CURSOR_MAX_STEPS,
+              f"with FALSE_CURSOR_EXCLUDE_MAX lowered to 2, the walk must "
+              f"stop after 3 rounds ({3 * ic.CURSOR_MAX_STEPS} presses: 2 "
+              f"allowed exclusions plus the round whose exclusion check "
+              f"fails) -- NOT run on to the fan's natural exhaustion at 4 "
+              f"rounds ({4 * ic.CURSOR_MAX_STEPS} presses), which is what "
+              f"deleting the `len(excluded) < FALSE_CURSOR_EXCLUDE_MAX` "
+              f"clause would do; got {_capped_presses} presses "
+              f"({capped.sent!r})")
+    finally:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = _real_max
 finally:
     ic.press = _real_press
 
@@ -228,5 +344,7 @@ if fails:
         print("  FAIL:", f)
     _sys.exit(1)
 print("  a false on-card glow reading cannot win the argmax, the live fixture "
-      "reads slot 4 instead of slot 0, and a walk pinned on a false slot "
-      "excludes it and reaches the real cursor rather than deadlocking")
+      "reads slot 4 instead of slot 0, a walk pinned on a false slot "
+      "excludes it and reaches the real cursor rather than deadlocking, and "
+      "a reader false at every slot refuses in bounded time rather than "
+      "looping forever")
