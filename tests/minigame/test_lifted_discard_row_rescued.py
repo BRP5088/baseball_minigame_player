@@ -307,6 +307,71 @@ check(len(_skeptic_queue) == 0,
       f"returned early and left frames in the queue; {len(_skeptic_queue)} "
       f"unconsumed")
 
+# =========================================================================
+print("(5) THE kinds0 THREADING ITSELF: a genuinely-lifted tactics TARGET "
+      "whose banner glitches at COMMIT time (inside _clear_strays's own "
+      "re-look, well after _walk_cursor_to/_select_verified already "
+      "returned) must not be inferred selected -- driven through the real "
+      "production caller, _verified_select_and_play_inner, so this exercises "
+      "the _kinds0 CAPTURE-AND-THREAD, not just _clear_strays's own gate in "
+      "isolation.")
+# =========================================================================
+REST_Y5 = lh.SLOT_TACTICS[2][1]
+LIFT_Y5 = REST_Y5 - lh.SELECTED_MIN_RISE - 25
+
+# Slot 2 is ALREADY selected (genuinely lifted, banner reads fine) on every
+# look before the commit check -- so _walk_cursor_to and _select_verified
+# both succeed with ZERO presses ("already selected is a success, not a
+# press"), and the ONLY look that matters is _clear_strays's own, taken
+# after both of those have already returned.
+BASELINE_LIFTED_ROWS5 = [
+    _row("player", "5", 203, "disc"),
+    _row("player", "6", 152, "disc"),
+    _row("tactics", None, LIFT_Y5, "fallback", type_="fielding_boost"),  # slot 2, target
+    _row("player", "5", 156, "disc"),
+    _row("player", "6", 208, "disc"),
+]
+# The COMMIT-TIME glitch: same target, its banner misreads (type=None) on
+# this one look -- the null rule fires regardless of the numeric y, exactly
+# the shape _clear_strays's own docstring describes ("a fresh look taken at
+# commit time ... can ALSO find a target's tactics row transiently blind").
+COMMIT_GLITCH_ROWS5 = list(BASELINE_LIFTED_ROWS5)
+COMMIT_GLITCH_ROWS5[2] = _row("tactics", None, REST_Y5, "fallback", type_=None)
+
+_queue5 = [BASELINE_LIFTED_ROWS5, BASELINE_LIFTED_ROWS5, BASELINE_LIFTED_ROWS5,
+           COMMIT_GLITCH_ROWS5]
+
+
+def _fake_cursor_glow5(hand_img, rows=None, _boxes=None):
+    return None, [0.0] * 5, _queue5.pop(0)
+
+
+_presses5 = []
+try:
+    orch._grab_settle_regions = lambda names: {"hand": _hand_img, "home_plate": None}
+    lh.cursor_glow = _fake_cursor_glow5
+    ic.press = lambda key: _presses5.append(key)
+    ok5 = ic._verified_select_and_play_inner(2, None, orch.hand_cursor_look)
+finally:
+    orch._grab_settle_regions = _real_grab
+    lh.cursor_glow = _real_cursor_glow
+    ic.press = _real_press
+
+check(ok5 is False,
+      f"a tactics-baseline target whose commit-time look glitches must be "
+      f"REFUSED, not inferred selected via the kinds0 threading from "
+      f"_verified_select_and_play_inner into _clear_strays; got {ok5!r}")
+check(_presses5 == [],
+      f"nothing should ever have been pressed -- the target was already "
+      f"selected on every look before the commit check, so a press here "
+      f"would itself be evidence the threading test is not isolating what "
+      f"it claims to; got {_presses5!r}")
+check(len(_queue5) == 0,
+      f"all four scripted looks (baseline, the walk's own look, the select's "
+      f"own look, and _clear_strays's commit-time look) must be consumed -- "
+      f"an early wrong return would leave frames unconsumed; {len(_queue5)} "
+      f"left")
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
