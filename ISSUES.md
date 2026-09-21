@@ -1208,11 +1208,8 @@ semantically correct discriminator on its own. Siblings run clean, unmodified:
 `tests/minigame/test_walk_retries_off_blind_slot.py` (I-33),
 `tests/harness/test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
 
-**Status.** v1 REFUTED 2026-09-21 (reachable inference on a tactics TARGET, not just a
-non-target stray). v2 fixed on branch (this worktree, merged with I-37 as
-`worktree-agent-ae8e1e3cee1e04f4a`): the baseline-kind gate closes the specific path the
-skeptic demonstrated; the player-baseline path (I-36's own reported bug) is unaffected
-and remains fixed. Awaiting a second skeptic pass on v2.
+**Status.** merged 87c683c409ca54de79f4bb41c9636068be89f43c; skeptic v1 REFUTED narrowly
+(tactics-target inference), v2 CONFIRMED WITH NOTES (kinds0 threading now pinned).
 
 ### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
 
