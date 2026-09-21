@@ -72,24 +72,30 @@ check(out2 == "home_run" and basis2 == "margin",
       f"...so the game's rule names it a HOME RUN on the MARGIN basis, "
       f"not the score delta -- got {out2}/{basis2}")
 
-# THE ABSTENTION, AND IT IS THE POINT. Their PITCH FOCUS +2 is a real read bonus
-# whose KIND did not clear TACTICS_KIND_MIN, and effective_power refuses to price
-# an unknown kind at zero -- so no margin, rather than a wrong one.
+# THE KIND NOW READS, AND THE MARGIN IS THE ONE RULES.md RECORDS. Until I-18(c)
+# (commit 8c99313) their PITCH FOCUS +2 did not clear TACTICS_KIND_MIN and this
+# block pinned the ABSTENTION. Two native-size templates cut from the live
+# fixtures made the kind readable, and RULES.md section 2 carries this exact
+# reveal by eye: ours 8 + POWER SWING +2 = 10 against their 6 + PITCH FOCUS +2
+# = 8, margin 2, a hit. So the pin moves from "abstains" to "reads pitch_boost
+# and prices it", with the old abstention kept as a control on the UNKNOWN path.
 row1 = {"phase": "batting", "our_power": 8, "our_tactics_bonus": 2,
         "our_tactics_kind": "swing_boost"}
 row1.update(o.opponent_from_reveal(F(T1), "batting"))
 check(row1["opp_power"] == 6, f"t1: the opponent reads as power 6, got {row1['opp_power']}")
 check(row1["opp_tactics_bonus"] == 2,
       f"...carrying a +2 badge, got {row1['opp_tactics_bonus']}")
+check(row1.get("opp_tactics_kind") == "pitch_boost",
+      f"...whose kind reads pitch_boost since 8c99313, got {row1.get('opp_tactics_kind')}")
 m1 = o.reveal_margin(row1)
-check(m1 is None,
-      f"and the margin ABSTAINS because their bonus's kind did not read, got {m1}")
+check(m1 == 2, f"and the margin is 2 (10 vs 6+2, RULES.md section 2), got {m1}")
 
-# CONTROL: the same row with the kind KNOWN does produce a margin, so the
-# abstention above is the kind reader's doing and not a dead code path.
-row1_known = dict(row1, opp_tactics_kind="pitch_boost")
-check(o.reveal_margin(row1_known) == 2,
-      f"CONTROL: told their kind, the margin is 2 (10 vs 6+2), got {o.reveal_margin(row1_known)}")
+# CONTROL: the same row with the kind UNKNOWN must still ABSTAIN -- effective_power
+# refuses to price an unknown kind at zero, and that refusal is what this test
+# used to pin directly.
+row1_unknown = dict(row1, opp_tactics_kind=None)
+check(o.reveal_margin(row1_unknown) is None,
+      f"CONTROL: with the kind unknown the margin abstains, got {o.reveal_margin(row1_unknown)}")
 
 print()
 if fails:
