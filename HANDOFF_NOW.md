@@ -1,170 +1,230 @@
-# HANDOFF — 2026-09-21, 02:00 EDT stop
+# HANDOFF — 2026-09-21, end of session
 
-## 1. READ THIS FIRST: console / money state
+## 1. STATE RIGHT NOW
 
-**NO MATCH IN PROGRESS.** `progress_testing.json`: 46W 12L 5D, balance 146,
-`match_in_progress: false`, `bans_done_this_match: true` (verified: `cat
-progress_testing.json`, this session).
+- `main` HEAD **`135552b`**.
+- Record (`progress_testing.json`, verified by `cat` this session): **67W 14L 8D**,
+  balance **46**, `match_in_progress: false`, `bans_done_this_match: true`.
+  The `true` flag is **harmless** — nothing is actually mid-match, it's just left
+  set from the last match; the **next reset clears it** (preflight only keys on
+  `match_in_progress`, not on this flag).
+- Console: left at the **dealer table**, **$46 in-game** (matches the tracked
+  balance). **Not put to sleep** — it auto-sleeps on its own when nothing
+  reaches it (CLAUDE.md §1). Assume it may be asleep by the time this is read;
+  confirm with the three tells before any press.
+- **Snoopy is OFF** (user turned it off ~14:00; nothing queued there). When it
+  returns: `llama-server` port changes per model load (was 61758 today,
+  re-discover via `/props`); model is `Qwen3-VL-8B-Instruct-GGUF`.
+- **Paid vision model is OFF** (`orchestrator.PAID_MODEL_ENABLED = False`, as always).
+- **No agent is running.** Nothing in flight.
 
-**Nothing has reached the console since WIN #46 logged at 01:37** (last line of
-`overnight/run_live_20260921f.log` before the spend-cap stop). Expect it
-**ASLEEP**. Confirm with the three tells in CLAUDE.md §1 before any press —
-`game_capture.grab()` size, `ensure_stream.looks_like_ui()`,
-`ensure_stream.streaming()` — and if it reads asleep, **do nothing**.
+## 2. TODAY'S RESULT vs THIS MORNING
 
-**NEVER save the game.** Resets and `Load Last Save` only (memory:
-never-save-the-game.md).
+**Yesterday, every run ended by Ctrl-C or on a stuck screen.** Today's
+12-match stall census — cycles 4, 5, 6 (runs 21p, 21q, 21r), on `main` with
+every fix from today merged — did not:
 
-This is an OFFLINE stop-procedure write-up: no presses were sent, no screen
-was captured, no run was started while producing this file.
+    10 W, 1 L, 1 unverified D
+    refusals: 7 (6 of them in one hand — the I-48-candidate stall, cleared BY
+               THE LOOP ITSELF, no hand assist)
+    hand-assisted stalls: 0
+    phantom results: 0 confirmed (draw #8 is unverifiable, not confirmed phantom)
+    runs ended by Ctrl-C or a stuck screen: 0
 
-## 2. What was merged tonight, and what the two live matches showed
+**The day's full tally**, from the record checkpoints stated in the facts file
+as the session progressed (each one a verbatim snapshot, not a computed diff):
 
-Merges/fixes on `main` since `a3419d0` (this session, filtered from `git log`):
+    07:15 morning start           46W 12L 5D   balance 146  (carried from last night)
+    after cycle 1 (21j+21k)       51W 12L 6D   balance 246  (incl. 1 phantom draw, I-34, pre-fix)
+    after cycle 2 (21l-21n)       54W 12L 7D   balance 246  (incl. 1 more phantom draw, I-34, pre-fix)
+    after cycle 3 (21o, I-34 merged)  57W 13L 7D   balance 246  (0 phantom draws — first cycle on fixed I-34)
+    after census cycles 4+5       65W 13L 7D   balance 246  (8 matches: 8W 0L, 1 refusal recovered)
+    after census cycle 6          67W 14L 8D   balance  46  (WIN #66, DRAW #8 unverified, LOSS #14, WIN #67)
 
-- `3b7c77f`/`3ef4447` — I-30 test follow-up (`_clear_strays` accepts I-28's `ys0`)
-- `e6fbcce` — **Merge I-30**: whole-word result reads; `close_result` only after
-  a fresh result read; two-frame confirm at the play floor; give-up dialog
-  answered NO, never Cross
-- `f8dfa34`/`49af1ca` — I-30 follow-ups (pin the fresh-check gate; phantom-draw
-  fixture)
-- `13a4f6a`/`dc47548` — QA round 4 (census wording, false-cursor exclusion bound)
-- `1abeb4e` — ISSUES.md: I-29 added/merged
-- `3149e8e`/`db96589` — **Merge I-28**: stray guard exempts the engine's own
-  target when it was readable at baseline and went blind after the press
-- `aed2468` — I-28 follow-up: narrow want-blind inference to I-21's own shape
-- `ed7e4ab`/`1babf0c` — **Merge I-29**: forget a spent hand slot's stall
-  identity on confirm, not on value change
-- `7b27ca6`/`41dd459` — **QA round 5**: give-up test reads the frame, not its
-  own press flag
-- `39d0eb8`/`e23e0f6` — **Merge I-31**: tactics kinds (swing/speed=batting,
-  pitch/fielding=pitching) vote on the phase; the match's own half is the
-  fallback when `read_phase` abstains on a readable hand
-- `4f5da6f` — redraw log names the incomplete-hand guard (was "strong enough"
-  at best 5 < 6)
-- `61b5d2a`/`a5e212a` — **Merge I-32**: `_walk_cursor_to` dead-reckons ONE step
-  across a known-occluded slot (`ys[expected] is None`) instead of refusing
-  the whole hand; bounded to one consecutive dead-reckoned step; never
-  dead-reckons onto the target itself
-- `ccdd46b` — I-32: fold skeptic's two coverage-gap tests (leftward walk, two
-  occlusions in a row) into the shipped test file
+Mid-morning checkpoint (~09:0x, before the I-37 fix landed): "13 matches
+scored (11 W, 1 L, 2 phantom D whose true outcomes are unknown), 3
+hand-assisted stalls (all I-37 shape, before its fix)." Every hand-assisted
+stall happened before I-37 merged; **zero since**.
 
-**WIN #45 — the parked I-32 match, resumed on main.** `overnight/run_live_20260921e.log`
-(verified by grep): the walk hit the same occluded slot 1 that had caused the
-00:52-00:56 stall (`run_live_20260921d.log`, three "every reachable card on
-this hand has been refused" stops) — this time logging `slot 1 is occluded (y
-unmeasured) — its glow cannot read; dead-reckoning one step across it`, then
-`verified on 4 after 4 press(es)`. Zero refusals. `WIN #45 logged. 954 to go.`
-Run then hit `Spend cap reached ($0/$0 spent this session)` (a resume, no new
-match bought) and stopped clean. This is I-32's first live exercise and it
-worked as designed.
+## 3. WHAT MERGED TODAY
 
-**WIN #46 — a fresh match, `run_live_20260921f.log` (max_spend=50).** Walk +
-bans + full match on `main`. Two things worth carrying forward:
+One line each, I-30 through I-47. "Skeptic" verdicts are from ISSUES.md status
+lines / the facts file.
 
-- I-02's probe-select answered YES live for the first time:
-  `[cursor] probe-select: 4 lifted — the cursor was there`, and the play
-  committed (`verified on 4 after 6 press(es)`). Slot 4 is confirmed reachable
-  as a target through the probe path.
-- One refusal, recovered on the next attempt. Pitching half: a card was played
-  and verified (`ours 8, theirs 4` in the reveal), then one press toward slot
-  0 for the pitch boost read `lost the cursor (glow=[0.0, 0.4, 0.0, 0.0, 0.4])`
-  and the walker unwound and refused (`run_live_20260921f.log:112`). Slot 4 is
-  structurally blind by glow (10.35 in CLAUDE.md), so a dropped press leaving
-  it reads exactly like a lost cursor — this is NOT an I-32 defect, it's a
-  gap I-32 doesn't cover (the blind slot here is the walk's *start*, not a
-  slot it's crossing). Candidate rule for next session, not built: when a
-  press leaves a structurally-blind slot (4) and the next look reads None,
-  press once more before refusing, since a dropped press there is
-  indistinguishable from a landed one.
+- **I-30** result reads whole-word; `close_result` only after a fresh read;
+  give-up dialog answered NO. Merged; live confirmation open.
+- **I-31** phase inferred from tactics kinds + match-state fallback. Merged;
+  live-confirmed today (used on the I-32 resume).
+- **I-32** `_walk_cursor_to` dead-reckons one step across a known-occluded
+  slot instead of refusing the whole hand. Merged `a5e212a`. Skeptic
+  CONFIRMED WITH NOTES. **Live-exercised today** — WIN #45, the previously
+  parked match.
+- **I-33** a press off a slot named without a genuine glow read is retried,
+  not refused (v2 adds `CUR_TRUSTED_GLOW_MIN=20.7` + a "single selected card
+  names the cursor" fallback). Merged `c335d42`. Skeptic CONFIRMED WITH NOTES.
+- **I-34** a second substring matcher scored a phantom draw from an opponent
+  card name ("JOHNNY DRAWERS"). Fixed (whole-token match + call-site veto,
+  round 2). Merged `d2cd052`. Skeptic CONFIRMED round 2 (0/33 roster names
+  hold a standalone result word; 7 mutants, one proven equivalent).
+- **I-35** two post-reveal screens (`new_inning`, `reveal_recap`) were
+  unrecognised, dropping the at-bat log row. Merged `26255bc`; follow-up
+  `29469b1` fixed 2 of 3 surviving mutants. Skeptic CONFIRMED WITH NOTES on a
+  9,966-frame census (2,525 firings, all on "other" screens, no money-path
+  change). **Never fired live yet** — see §6/§8.
+- **I-36** the half's second discard is refused three times before the stall
+  breaker plays (v2 gates the I-21 rescue on baseline kind). Merged
+  `87c683c`. Skeptic: v1 **REFUTED narrowly** (made a genuine tactics target
+  committable without selection), v2 fixed and merged.
+- **I-37** a selected card's own disc can be absent from `strong`, blinding
+  the fan-presence gate. Merged `3bd69d5`; follow-up (`local_state._fan_discs`
+  delegates to the same gate) merged `c5fd60b`. Skeptic CONFIRMED WITH NOTES
+  both rounds (round 2: 0 new wrong phases over 465 labelled hands).
+- **I-38** an occluded target card cannot be selected, engine plays
+  second-best. **Still open** — not fixed. Three genuine occlusion fixtures
+  now exist from a Snoopy archive search.
+- **I-39** the play-refusal exclusion was keyed on the exact hand and
+  over-persisted (now keyed on slot + reason). Merged `bedd4ca`. Skeptic
+  CONFIRMED WITH NOTES (counter-reset-on-re-offer fix folded in).
+- **I-40** a reload's local money read ($286) disagreed with the known wallet
+  and was trusted. Merged `aedc9ba` (money-read frame keeper +
+  `RELOAD_WALLET=246` guard). Skeptic CONFIRMED WITH NOTES.
+- **I-41** four offline tools popped `BASEBALL_TEST_RUN` at import, silently
+  disabling the input lockout. Merged.
+- **I-42** `cursor_labels_from_lifts.py`'s labels were 28/81 wrong (cursor
+  caught mid-travel). Merged `cf127a4` (capture-gap + flicker filters).
+  Skeptic CONFIRMED WITH NOTES. **Caveat: `FLICKER_WINDOW=10` is from the
+  ticket text, not measured** — 9/53 good labels wrongly rejected — LATER item.
+- **I-43** a stray left lifted by a refused attempt survives into the next
+  operation's baseline-blind exemption. Merged `2f18a73`. Skeptic round 1
+  **REFUTED** (would have refused 29% of healthy turns), round 2 CONFIRMED
+  WITH NOTES, 7/7 mutants.
+- **I-44** `_clear_strays`'s commit-time inference asks for no real
+  corroboration. **Status: PARTIAL**, merged `2f18a73`: the corroboration
+  gate is inert in production (every success path marks, so
+  `inferred_targets == want` always — N-1); the original hole (a dropped
+  press + a false inference corroborating itself) is **still open** — needs
+  corroboration the inference cannot manufacture. LATER item, live-watched.
+- **I-45** QA6 test hygiene (gitignored-JSON reads, `agent_progress/`
+  globs that crash a fresh clone). Merged `fd2c6cc`.
+- **I-46** a raised card's disc lands on the decorative icon and reads digit
+  None 8% of the time (position search recovers it). Merged `15cfac4`,
+  **narrow window kept** (17/23 recovered vs a wide window's 22/23, but the
+  wide window costs 2x runtime and reach — decision: keep narrow). Skeptic
+  CONFIRMED WITH NOTES.
+- **I-47** two silent permissive defaults in offline QA tools. Merged `3d0526c`.
 
-Run stopped clean at `Spend cap reached ($50/$50 spent this session)` after
-`WIN #46 logged. 953 to go.` Suite after both matches: **all green, 271 files,
-314s** (`overnight/suite_20260921_0140.log`, verified: `tail -3`). `main` HEAD
-is `ccdd46b`.
+## 4. HOW TO RUN THE NEXT CYCLE
 
-**NOT independently verified this session:** the outgoing notes state the
-auto-mode classifier declined a third paid-match start at ~01:38 as a
-real-money-transaction guard, after two starts had been allowed. I could not
-find any trace of this in `run_live_20260921f.log` or any other file on disk
-— that log's only stop is the ordinary `$50/$50` spend-cap message, which is
-consistent with exactly one match being bought in that run. If this refers to
-a decision made in the tool-permission layer above the game loop rather than
-anything the game loop itself logs, there's nothing in this repo that would
-show it either way. Treat it as reported by the outgoing session, not
-confirmed here.
+Before launching: `ensure_stream.ensure_live()`, then **read the frame by
+eye** and confirm the GAME is actually on screen (today the console woke onto
+the real pause menu — an ensure_live success does not by itself mean the game
+is up, see CLAUDE.md §3). Then:
 
-## 3. In flight / NOT merged: I-05a
+```
+BASEBALL_API_BUDGET=300 nohup .venv/bin/python -B -u -c "import run_cycles; print(run_cycles.cycle(7))" > overnight/run_live_20260921s.log 2>&1 &
+```
 
-Second attempt, worktree `.claude/worktrees/agent-a7613eff370917779`, branch
-`worktree-agent-a7613eff370917779`, commits `2b426fa` ("verify the PS5 overlay
-dismiss, and gate run() on liveness") + `3731b5e` ("widen the liveness reader
-set, debounce ambiguous misses"). Both commits confirmed to exist and to sit
-on that worktree's HEAD.
+(next log letter — today used d, e, f, h, i, j, k, l, n, o, p, q, r; `s` is
+next.) A cycle plays up to 4 matches on the $246 reload.
 
-The first I-05a attempt was refuted (reader set omitted `read_result`/
-`read_ban_counter`/`read_hand` — would have toggled the overlay mid-match).
-This redo uses the full reader set plus a 3-consecutive-miss debounce before
-`ensure_live()` fires.
+Monitor for milestones with:
 
-**Skeptic verdict: CONFIRMED WITH NOTES, NOT MERGED.** Full notes at
-`.claude/worktrees/agent-a7613eff370917779/agent_progress/issues/I-05a-skeptic/progress.md`
-(read in full this session). The closed half: the first attempt's hazard
-(false "not the game" on genuine frames) does not reproduce — a 659-fixture
-sweep at 1920x1080 found 0 false negatives, `_game_visible` alone (with
-`looks_like_ui` contributing nothing) answers on 96.5% of fixtures, and the
-one real PS5 game-card overlay on disk (`agent_progress/still_overlay.png`) is
-correctly rejected. The dismiss press itself (`ensure_stream.py:492` ->
-`_dismiss_overlay_if_blocking`, at most two `ps_button` presses, a fresh
-capture + `_game_visible` check after each) is verified.
+```
+grep -E "logged|WIN #|LOSS #|Draw logged|REFUSED|may still be physically lifted|Traceback|stop_reason" overnight/run_live_20260921s.log
+```
 
-**Three holes, from the skeptic's notes, verbatim in substance:**
+## 5. LATER (do not start without the user)
 
-1. `LIVENESS_MISS_STREAK = 3` is invented and its own comment's arithmetic is
-   wrong: `orchestrator.py` ~8404, a moving screen `continue`s with **no
-   sleep** (`settle_pause` 0.12s), so three consecutive misses can span under
-   a second *during an animation* — exactly when misses are expected. Fix:
-   measure the streak in TIME (misses on polls ≥N s apart), or measure the
-   real population of consecutive-miss lengths on archived deal/reveal frames
-   first (CLAUDE.md §10.4).
-2. Two mutants survived out of five: **M2** — the streak never resets on a
-   hit (turns a 3-consecutive-miss debounce into a 3-lifetime-miss trigger,
-   unpinned). **M5** — `ensure_live()`'s False return is ignored (the
-   existing test only asserts the call count, not that a failed recovery is
-   noticed). Both need tests before merge.
-3. `_game_visible` cannot tell "no reader answered" from "every reader
-   crashed" — all nine readers sit in bare `try/except: pass`. If a broken
-   numpy/cv2/tesseract makes every one raise, `_game_visible` returns False on
-   every frame, indistinguishable from a real overlay: two blind `ps_button`
-   presses at a live match, run stopped. Fix: count readers that actually
-   executed; return True (don't fire) when that count is zero.
+Verbatim from the facts file's LATER list, plus what accumulated after it:
 
-## 4. Open items for next session, in order
+- I-46 wide window: decide narrow (17/23) vs wide (22/23) from the skeptic's
+  false-read table; widen only at zero false reads.
+- I-35 live verification: `new_inning` / `reveal_recap` branches have never
+  fired live; confirm on the next matches' logs.
+- I-42 labels: `FLICKER_WINDOW=10` is from the ticket text, not measured;
+  9/53 good labels wrongly rejected. Measure if the label corpus is ever
+  needed at scale.
+- Full hand corpus re-check after I-46 merges (the 540-hand corpus, not just
+  the 2,409 turn frames).
+- Raised-card disc: 6/23 census frames still unread (5 jitter, 1 obscured) —
+  covered by the wide-window decision above.
+- The narrow I-46 window makes every slot it reads SELECTED by construction
+  (dy above `SELECTED_MIN_RISE` 25); fine today (32/34 were `y_from`
+  fallback), worth a line if `selected_cards` ever misfires.
+- I-44's N-2: the original hole (a dropped press + a false inference
+  corroborating itself) is STILL OPEN — needs corroboration the inference
+  cannot manufacture (selection-lift geometry or a post-commit read).
+- Log the evidence (template scores + OCR words + scoreboard) on every
+  result commit and keep the result frame — the reveal/money keepers exist,
+  the result screen has none. This is what would settle draw #8.
+- **I-48 candidate (new today, match-3 stall on cycle 6):** when the TACTICS
+  select is what's failing (not the batter select), the play-refusal
+  exclusion keys on the batter, so every batter gets burned in turn at 3
+  refusals each before the loop stumbles onto one whose adjacent-slot walk
+  happens to avoid the occluded slot. Fix direction: drop the tactics
+  attachment first and play the batter alone rather than burning batters —
+  the boost is worth ~+0.6 runs/half, a stalled half costs far more. Also
+  keep a frame per refused select (none were kept for this stall). Likely
+  mechanism: the cursor walk from slot 3/4 to slot 1 crosses the occluded
+  slot 2 (a home-plate runner card) and the walk/lift read goes wrong there;
+  from slot 0 it's one step and works. Recovered by the loop alone today, no
+  hand assist needed — but cost a worse batter played and ~5 minutes.
 
-1. **I-05a**: fix the three holes above (time-based or measured streak;
-   pin M2 and M5; zero-readers-executed fallback), get a fresh skeptic pass,
-   merge.
-2. **Candidate rule from WIN #46's one refusal**: at a structurally-blind slot
-   (4), a press-then-None reads the same whether the press landed or was
-   dropped — retry once before refusing. Not built; needs its own harness
-   test (bounded, cheap per the notes above).
-3. **I-04**: DRAW fixture still needs a live draw to capture.
-4. **P2 simulator A/Bs**: I-15, I-16, I-17 — none started.
+## 6. OPEN QUESTIONS
 
-Also note: the auto-mode classifier apparently declined a third paid-match
-start tonight (see §2's caveat) — worth asking the user about directly rather
-than assuming a mechanism, since it isn't visible in any log here.
+Verbatim from the facts file, plus two new ones from today's close:
 
-## 5. How to resume
+- Does a speed boost PERSIST on base? Two live runners read +1 over their
+  card (CLAUDE.md §4); worth one at-bat with a boosted batter then a later
+  hit. Low stakes (+0.046 runs/half).
+- Does the raised-card position search ever read a NEIGHBOUR's disc live?
+  Skeptic measures offline; the live check is one hand with the target in
+  slot 4 and a 9 in slot 3.
+- Is the 8% raised-disc miss the dominant cause of I-21 inference commits?
+  Count, over the next 10 matches, plays where the target read blind at
+  commit before vs after I-46.
+- Why do 5 of 23 raised digits land outside the narrow window (jitter): is
+  the disc position on a raised card a function of the lift height
+  (selection lift ~44 px) or of the fan phase? Measure dy vs SELECTED lift
+  per frame from the census json.
+- Do new_inning / reveal_recap ever appear on the live path, and how long do
+  they hold? No live sighting yet; the next matches' logs answer it.
+- Are the 9/53 good lift-labels rejected by I-42 a flicker-window size
+  effect? Sweep `FLICKER_WINDOW` 4..20 on `joined.jsonl` and report
+  kept/rejected by class.
+- **Was draw #8 (cycle 6, match 2) real?** The commit logged no evidence (no
+  score, no template score, no frame) and the next match's opening frames
+  aren't on disk (`run_cycles` logs no screenshots) — nothing to check
+  offline right now. Answered by building the result-commit evidence logging
+  in §5, then watching the next draw.
+- **Why 11–15 reveal misses per cycle ("no OPPONENT card identified"), and is
+  that the same rate as before today?** Cycle 4: 11 misses, cycle 5: 15
+  misses — stated in the facts as "not a regression" but never compared
+  against a pre-today baseline; worth a real before/after count.
 
-1. The three tells (CLAUDE.md §1) — confirm the console's actual state before
-   any press. If asleep, that's fine; leave it.
-2. To play: `.venv/bin/python` (or an interactive session) calling
-   `orchestrator.run(target_wins=999, progress_file='progress_testing.json',
-   max_spend=50, compare_local_reads=True, log_screenshots=True)`, logging to
-   a NEW `overnight/run_live_<date><letter>.log` (do not reuse `f`).
-3. Suite: `PATH="$PWD/.venv/bin:$PATH" ./run_tests.sh` (or `.venv/bin/python -B
-   tools/doctor.py` first if it's been more than a few hours since the last
-   console check).
-4. Read-only look without moving anything:
-   `.venv/bin/python -B tools/match_crawl.py --session new --action look`.
+## 7. RULES IN FORCE
+
+- **User rule, 2026-09-21 ~13:30: any NEW task or question found from here
+  goes on the LATER list — do not dispatch it to an agent.**
+- Manager delegates routine work (merges, tests, doc edits, log reading) to
+  Sonnet agents; the main model decides and dispatches.
+- Snoopy: one job at a time, grunt-work/labelling only, never wired into the
+  live ladder.
+- **Never save the game** — resets and `Load Last Save` only.
+- **Play the engine's pick, fix the engine** — never hand-override a card
+  choice; when a read looks wrong, check the reader first.
+- **Ask before pushing, opening a PR, or posting anywhere shared** — draft,
+  show, wait for a yes.
+
+## 8. LIVE WATCH ITEMS for the next cycle
+
+- **"may still be physically lifted" count** — 0 today, all clean (I-43's
+  live watch). Archive bound is 14 exemption events vs 51 refusals; more than
+  a handful on the next cycle means the single-frame `ys0` gate is admitting
+  transient blinds.
+- **Does `new_inning` / `reveal_recap` ever fire?** — Never seen live yet
+  (I-35). Grep the next log for those two screen names.
+- **I-46's first live effect** — raised-card position-search reads recovering
+  a digit that would otherwise have been None. Not yet observed live (today's
+  census was measured offline against the 2,409-frame corpus); watch for it
+  in the next cycle's hand reads.
