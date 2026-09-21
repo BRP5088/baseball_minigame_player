@@ -2005,6 +2005,96 @@ All sha256-verified restored, `__pycache__` cleared between mutants.
 
 **Status.** PARTIAL, merged 2f18a734dbd43828f4f6fbbafb8a20a947456e0e: the corroboration gate is inert in production (every success path marks, so inferred_targets == want always; N-1); the original QA6 Q2 hole (a dropped press + false inference supplies its own corroboration) is STILL OPEN and needs corroboration the inference cannot manufacture (selection-lift geometry or a post-commit read). Live watch: count 'may still be physically lifted' lines on the next matches; the archive bounds it at 14 exemption events vs 51 refusals.
 
+**N-2 closed on this branch by (2), NARROWLY — read before building anything on this
+entry.** Traced first, against the real, unmodified code, before writing anything
+(CLAUDE.md 10.32): candidate 1 (selection-lift geometry, `local_hand.selected_
+cards`) is UNAVAILABLE for validating this specific inference by construction —
+`selected_cards` requires `y is not None` and, for a non-tactics row, `y_from !=
+"fallback"` (a DISC-derived y), which is exactly what a target has already lost
+the moment its disc goes blind. Candidate 2 (baseline comparison) turned out to
+already be SHIPPED: `_want_inferred`'s `ys0[k] is not None` check (now extracted
+and named `_baseline_readable`, mirroring `_baseline_not_tactics`) already
+requires a `want` slot to have been readable at THIS OPERATION's true start
+before an inference is trusted at all, independent of whatever `_select_verified`'s
+own LATER look (taken after a walk, possibly after a sibling target's own
+selection) believed. Reversing QA6 Q2's own repro at the one axis it never
+tested — baseline UNREADABLE rather than baseline readable — reproduces a REFUSAL,
+not a commit, on the CURRENT code, with no change needed to close it. It was simply
+untested and therefore mutant-free.
+
+**What this DOES close.** A target that starts an operation already blind
+(chronically occluded, or one `_select_verified`'s own look disagreed with) can
+never self-corroborate via inference; it either shows up in `sel` on its own (a
+real, disc-readable rise — candidate 1 IS available for THIS sub-case, and
+already commits via direct `sel` membership, no new code) or the commit refuses.
+Cost, measured against the archived logs (`overnight/*.log` in the main
+checkout, per-operation, grepping every "selected by inference (disc unreadable
+after lift)" line and every "was never selected by inference on this operation"
+refusal line): 28 inference events across 11 files, **0** would-be refusals from
+`_baseline_readable` specifically (the refusal line itself never fires anywhere
+in the archive) — this fix is free in the historical record, because `_select_
+verified` structurally never presses against a target its OWN pre-press look
+already shows blind, so the operation-level `ys0` and `_select_verified`'s local
+check almost always agree; the one window where they can disagree (a sibling
+target's own selection transiently occludes this one) is exactly what
+`_baseline_readable` protects, and it has never fired historically either way.
+
+**What this does NOT close, and the skeptic's own N-2 repro is the harder case
+than the ticket's own hole description.** A target genuinely readable at `ys0`,
+genuinely pressed, and then MISREAD as blind by the same circle-fit noise I-21
+exists to tolerate (CLAUDE.md 10.26 — "the fitted circle alternated between
+r=19 and r=20") is READ-IDENTICAL to a real lift that blinds its own disc
+(I-21's own stated mechanism) — and `test_commit_refuses_unseen_strays.py`'s
+own (control-c) pins the LATTER as a MUST-COMMIT, driven for real through the
+same `_select_verified`. Nothing in `_clear_strays` — not `ys0`, not `kinds0`,
+not `inferred_targets` — can tell these two apart, because they are the SAME
+observation. Closing it needs either a post-commit read (candidate 3 — too
+late to prevent a wrong card, a detector not a fix) or per-row DIGIT
+corroboration threaded from `orchestrator.hand_cursor_look` (a `.digits`
+attribute alongside `_CursorSel.kinds`), which is out of this fix's scope
+(input_controller.py only) and is the next real lever if this is worth more
+than a detector.
+
+**Verify.** `tests/minigame/test_inference_needs_baseline_read.py`: (A) baseline
+readable, driven for real through `_select_verified` (LiftScreen), commits —
+CONTROL, unchanged. (B1) baseline blind, driven for real: `_select_verified`
+refuses BEFORE pressing, 0 presses sent. (B2) `_clear_strays` directly, with a
+(hypothetically wrong) `inferred_targets` naming the slot anyway: still
+refuses — `_baseline_readable` is the actual backstop, not `inferred_targets`
+alone. (C) `ys0` blind at operation start but the target's OWN later look is
+readable, driven for real through a screen whose disc stays legible through
+the rise (the common case, not I-21's blinding one): commits via direct `sel`
+membership, bypassing the inference path entirely. (D) I-26/I-28 regression:
+an untouched, chronically-occluded NON-want slot is still exempted, never
+walked to, never marked — `_baseline_readable` only touches `_want_inferred`,
+which the chronic-occlusion exemption never reads. Mutants (3, APFS-clone
+scratch copy per CLAUDE.md 10.16a, sha256-verified restored,
+`__pycache__/input_controller*` cleared between mutants): M1 `_baseline_
+readable` → unconditional `True` (accept the inference on a blind baseline) —
+CAUGHT, case (B2) fails, and `test_stray_guard_exempts_target.py` also breaks.
+M2 drop `set(sel)` from `lifted = set(sel) | _want_inferred` (candidate 1's own
+mechanism — existing code, not new; included because case C leans on it) —
+CAUGHT, case (C) fails, and four siblings break with it (`test_commit_refuses_
+unseen_strays.py`, `test_verified_selection.py`, both stray-guard tests). M3
+mark every untouched-blind slot unconditionally (drop the `& _MAYBE_LIFTED`
+narrowing) — CAUGHT, case (D) fails, and `test_commit_refuses_unseen_strays.py`
+plus both stray-guard tests break with it. `test_no_undefined_names.py` and
+`test_no_shadowed_module_defs.py` are unaffected by all three, confirming
+nothing structural broke. Full suite run (worktree, `BASEBALL_TEST_RUN=1`,
+`nice -n 10`): `test_verified_selection.py`, this file, `test_tactics_select_
+fallback.py`, `test_i22_pitch_boost_slot3.py`, both harness tests and
+`tests/rig/test_no_real_input_under_test_run.py` all EXIT 0.
+`test_refusal_unwinds.py` EXITS 1 with 4 failures — reproduced identically
+against `git show HEAD:input_controller.py` in an untouched scratch copy, so
+this is PRE-EXISTING and unrelated to this diff; not investigated further here
+(out of scope: it is not on this diff's file, and CLAUDE.md 10.9 says a
+failing check gets the same suspicion as a passing one, not a free pass to fix
+opportunistically on someone else's ticket).
+
+**Status.** N-2 CLOSED for the sub-case it names (a target already blind at
+its operation's own start); the harder, read-identical misread case is
+correctly left open above rather than claimed closed. Awaiting skeptic.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
