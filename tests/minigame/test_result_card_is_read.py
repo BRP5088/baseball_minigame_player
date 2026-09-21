@@ -172,6 +172,45 @@ if _os.path.exists(WIN_FIX):
           f"longer does, re-check why 'why' above still says win.")
 
 
+# --- 5b. THE FIRST CONFIRMED DRAW (I-04) --------------------------------------------
+# 2026-09-10, found by the Snoopy archive search (I-38's search doubled as I-04's
+# confirmation; see test_fixtures/hand_reads/README.md). Unlike DEFEAT, this frame's
+# arched DRAW template already clears RESULT_MIN, so -- like WINNER -- the full
+# pipeline answers from result_scores(), not from the card; asserted below rather than
+# hidden, mirroring section 5's own honesty check.
+DRAW_LIVE_FIX = _os.path.join(_ROOT, "test_fixtures", "result_screens",
+                              "draw_live_20260910.png")
+check(_os.path.exists(DRAW_LIVE_FIX), f"fixture missing: {DRAW_LIVE_FIX}")
+if _os.path.exists(DRAW_LIVE_FIX):
+    drimg = Image.open(DRAW_LIVE_FIX)
+
+    _drout, _drraw = ls.read_result_card(drimg)
+    check(_drout == "draw",
+          f"the card reader must read the DRAW band as draw; got {_drout!r} from "
+          f"{_drraw!r}")
+    check("DRAW" in _drraw,
+          f"the raw OCR text should contain DRAW; got {_drraw!r}")
+
+    # the full pipeline also reads draw end to end -- via the arched banner
+    _drres = ls.read_result(drimg)
+    check(_drres["is_result"] is True and _drres["outcome"] == "draw",
+          f"the DRAW frame must be read as draw end to end; got is_result="
+          f"{_drres['is_result']!r} outcome={_drres['outcome']!r}, why={_drres['why']!r}")
+
+    # the three scores, reported rather than just the pass/fail: draw ~0.984,
+    # winner ~0.659, loser ~0.494 -- draw clear of RESULT_MIN and clear of the
+    # runner-up by well over RESULT_MARGIN.
+    _drsc = ls.result_scores(drimg)
+    check(_drsc.get("draw", 0.0) >= ls.RESULT_MIN,
+          f"expected the arched DRAW template to already answer this frame "
+          f"({_drsc.get('draw', 0.0):.3f} against RESULT_MIN {ls.RESULT_MIN})")
+    print(f"  draw fixture scores: winner={_drsc.get('winner', 0.0):.3f} "
+          f"loser={_drsc.get('loser', 0.0):.3f} draw={_drsc.get('draw', 0.0):.3f}")
+
+    # MUTANT PROBE (not part of the pinned checks -- see the commit's mutation test):
+    # swapping this fixture path for the WINNER one must make the two checks above fail.
+
+
 # --- 6. I-30: A SUBSTRING MATCH SCORED A PHANTOM DRAW -------------------------------
 # 2026-09-20, live, round 1, 0-0. A batter card OCR'd as "JOHNNY DRAWERS" (see
 # test_fixtures/result_screens/phantom_draw_20260920.png -- the real frame, screenshot_log/

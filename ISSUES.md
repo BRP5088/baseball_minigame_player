@@ -195,9 +195,15 @@ is a veto, as for `at_table`).
 **Status.** WIN pinned 2026-09-20 (c994139): the live win screen is the ARCHED WINNER banner,
 answered by the template bank at 0.91-0.93; called directly the card reader also reads
 'WINNER'. 42 of 42 result frames read win, 0 wrong; 300 non-result frames from the same
-match read nothing. DEFEAT pinned by the other session. **DRAW still unconfirmed by a frame**
-for the card reader; the first live draw closes it. DRAW still unconfirmed by a frame; the
-one "draw" scored on 2026-09-20 was I-30's phantom.
+match read nothing. DEFEAT pinned by the other session. **DRAW is now pinned too (2026-09-21),
+found by the Snoopy archive search that also produced I-38's fixtures.** The live frame is
+`test_fixtures/result_screens/draw_live_20260910.png` (2026-09-10, sha256
+`c7f6fce5e75197b3...`); like WINNER it is the ARCHED DRAW banner, not the notebook card --
+`result_scores` reads winner 0.659 / loser 0.494 / draw 0.984, well clear of RESULT_MIN
+(0.80) and of RESULT_MARGIN against the runner-up, and `read_result_card` independently
+reads 'DRAW' off the same frame. Pinned in `test_result_card_is_read.py` section 5b,
+mirroring how WINNER is pinned in section 5. All three words -- DEFEAT, WINNER, DRAW -- are
+now confirmed by a live frame; nothing is left taken on the comment alone.
 
 ### I-21  `_select_verified` re-toggled a landed selection once its own disc went blind   P0  input
 
@@ -1367,7 +1373,16 @@ a select would actually land there.
 its disc becoming READABLE after the press (a lifted card rises above its occluder; the
 inverse of I-21's inference).
 
-**Status.** Open.
+**Status.** Open. Three genuine occlusion fixtures now exist, found by a Snoopy archive
+search 2026-09-21 (`test_fixtures/hand_reads/i38_occluded_target_1.png`, `_2.png`,
+`_3.jpg`; see `test_fixtures/hand_reads/README.md` for the read-off-each-frame detail).
+The same search sampled 60 candidates flagged by a local pre-filter and had a VLM
+(Snoopy, Qwen3-VL-8B) and a human eye each judge them: only 2 of 7 non-animation
+candidates inspected by eye were genuine physical occlusion. **The other 5 were RAISED
+(selected) cards whose disc was plainly visible on screen but still read `digit: None`**
+-- not occlusion at all, but the brightened-disc-defeats-`DARK_THRESHOLDS` gap CLAUDE.md
+section 10.23 already names. That is a distinct defect in the disc reader itself and is
+a candidate for its own issue rather than more of I-38's occlusion scope.
 
 ### I-39  The play-refusal exclusion is keyed on the exact hand and over-persists   P2  loop
 
