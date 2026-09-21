@@ -3,6 +3,12 @@
 
 Usage: run_census.py [<log> ...] [--json]
 Defaults to overnight/run_one_match_*.log, sorted by name.
+
+I-19b: `deal_timeouts` used to grep only the pre-I-09 combined message
+("no replacement card seen"), which commit 028e78f split in two
+(orchestrator.wait_for_hand_deal). Both old and new wordings are counted here
+so old and new logs agree. Also adds the refusal-shape columns the 2026-09-20
+census (agent_progress/census-20260920/progress.md) had to count by hand.
 """
 import argparse
 import glob
@@ -13,12 +19,16 @@ import sys
 COLUMNS = [
     "log", "hands_read", "decisions", "plays_confirmed", "plays_refused",
     "discards_refused", "stall_breaks", "cursor_blind", "nudges",
+    "false_cursor", "stray_guard", "pre_press_guard", "inferred_select",
+    "excluded", "confirm_verify_fail",
     "deal_timeouts", "deal_timeouts_with_edge", "reveals_not_logged",
     "unreadable_polls", "stop_reason",
 ]
 _COUNT_COLUMNS = [c for c in COLUMNS if c not in ("log", "stop_reason")]
 
 # "... Threshold 15, biggest delta 6.5: ..." -- both numbers on the same line.
+# Only the pre-I-09 combined "no replacement card seen" message needs this
+# arithmetic; the two post-I-09 messages below say which case it is directly.
 _EDGE_RE = re.compile(r"Threshold (\d+(?:\.\d+)?).*biggest delta (\d+(?:\.\d+)?)")
 
 
@@ -63,11 +73,37 @@ def census_one(path):
             row["cursor_blind"] += 1
         if "nudging off" in line:
             row["nudges"] += 1
+
+        # Refusal shapes the 2026-09-20 census counted by hand
+        # (agent_progress/census-20260920/progress.md, I-25/I-21 shapes).
+        if "presses — refusing" in line:            # input_controller.py:1047
+            row["false_cursor"] += 1
+        if "went unreadable DURING this" in line:    # input_controller.py:1295
+            row["stray_guard"] += 1
+        if "position is unreadable, so whether it is" in line:  # :1116
+            row["pre_press_guard"] += 1
+        if "selected by inference" in line or "inferred" in line:  # :1171
+            row["inferred_select"] += 1
+        if "x running on hand_index" in line:        # orchestrator.py:7907
+            row["excluded"] += 1
+        if "confirm_play: FAILED after" in line:     # press_verified give-up
+            row["confirm_verify_fail"] += 1
+
+        # Deal-gate timeouts. Pre-I-09 logs carry one combined message whose
+        # edge/no-edge split needs the delta-vs-threshold arithmetic; I-09
+        # (commit 028e78f) split it into two messages that say which case it
+        # is directly, so no arithmetic is needed for those.
         if "no replacement card seen" in line:
             row["deal_timeouts"] += 1
             m = _EDGE_RE.search(line)
             if m and float(m.group(2)) >= float(m.group(1)):
                 row["deal_timeouts_with_edge"] += 1
+        elif "no motion seen in" in line:
+            row["deal_timeouts"] += 1
+        elif "the hand never read stable" in line:
+            row["deal_timeouts"] += 1
+            row["deal_timeouts_with_edge"] += 1
+
         if "turn not logged" in line.lower():
             row["reveals_not_logged"] += 1
         if "Couldn't read the screen" in line:
