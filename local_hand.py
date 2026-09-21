@@ -1117,12 +1117,27 @@ def _read_fan(img, strong):
     # digit on every one of the 23 frames) -- the same shape as DIGIT_RADII searching
     # SCALE above. It runs ONLY where every candidate pass above still leaves a PLAYER
     # slot's digit unread, so it can add a reading and cannot change one.
+    #
+    # SKEPTIC NOTE (agent_progress/issues/I-46/skeptic.md): RAISED_SEARCH_DY (-60,-25)
+    # sits ENTIRELY above SELECTED_MIN_RISE (25, see below), so every slot this pass
+    # reads is thereby reported SELECTED by `selected_cards` -- it cannot produce a
+    # read-but-not-raised answer. That is a fact of the window's geometry, not a
+    # measurement, and it is load-bearing: on the 34 real hits checked, every card was
+    # genuinely raised, and it corrects cases where the icon-derived `y` (from the pass
+    # above, or a fallback) had `selected_cards` missing a real selection.
+    #
+    # MEASURED RUNTIME (median of 10 read_hand() calls, same frame, nice -n 10):
+    # 0 firing slots ~36ms (no-op, same as before this pass existed), 1 firing slot
+    # ~77ms, 2 firing slots (worst observed) ~138ms -- against a 150ms poll. Over 2,500
+    # random run frames, 87.9% fire zero times, 11.9% fire once, 0.2% fire twice; 3+ was
+    # never observed. A wider window (tried and rejected) reaches 274ms/539ms and
+    # recovers only 5 more census frames (22/23 vs 17/23) at 0 additional accuracy cost
+    # measured offline -- narrow is kept for the runtime margin.
     for r in out:
         if r.get("kind") != "player" or r.get("digit") is not None:
             continue
-        x = r.get("x")
         i = r.get("_slot_i")
-        if x is None or i is None or not (0 <= i < len(SLOT_PLAYER)):
+        if i is None or not (0 <= i < len(SLOT_PLAYER)):
             continue
         ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
         y0, y1 = int(ay + RAISED_SEARCH_DY[0] * s), int(ay + RAISED_SEARCH_DY[1] * s)
@@ -1138,7 +1153,11 @@ def _read_fan(img, strong):
         if best_d is not None:
             r["digit"], r["score"] = best_d, round(best_sc, 3)
             r["digit_from_raised_search"] = True
-            r["y"], r["y_from"] = best_xy[1], "disc"
+            # D1 (skeptic finding): write x ALONGSIDE y. Without this the row kept the
+            # x from whatever earlier pass produced it -- on 3 of 34 real hits that was
+            # the decorative icon, 50-67px from the digit actually read, so (x, y) was
+            # not one point.
+            r["x"], r["y"], r["y_from"] = best_xy[0], best_xy[1], "disc"
 
     return out
 

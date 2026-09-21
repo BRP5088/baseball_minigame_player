@@ -1930,4 +1930,22 @@ restored and sha256-verified. `tests/minigame/test_verified_selection.py`,
 `tests/harness/test_no_undefined_names.py`, and `test_claude_md_constants.py` all pass
 unchanged.
 
-**Status.** Fixed and merged. `local_hand.py` is the only production file touched.
+**Status.** skeptic CONFIRMED WITH NOTES, D1/D2 fixed, narrow window kept (wide table
+in skeptic.md), awaiting merge. Independent skeptic review
+(`agent_progress/issues/I-46/skeptic.md`) reproduced the regression check and the
+17/23 census result exactly, confirmed scaling and the "cannot overwrite a read
+digit" invariant by tracing, and found two small defects: D1, the search wrote `y`
+but not `x`, so 3 of 34 real hits checked offline kept the EARLIER pass's `x` (the
+icon's), up to 67px off; D2, a dead `x = r.get("x")` fetch. Both fixed here. A
+WIDE-vs-NARROW window comparison was run (WIDE recovers 22/23 census frames instead
+of 17/23, at 0 accuracy cost measured offline, but costs 274ms/one firing slot and
+539ms/two against a 150ms poll, versus NARROW's 77ms/138ms) -- NARROW is kept for the
+runtime margin; the full table is in skeptic.md. `local_hand.py` also now documents,
+where `SELECTED_MIN_RISE` sits, that the search window (dy -60..-25) lies entirely
+above it, so every slot this pass reads is reported SELECTED by construction (a fact
+of the window's geometry, not an independent measurement) -- and records the measured
+runtime (0/1/2 firing slots: ~36/77/138ms; 87.9% of frames fire zero times). The new
+test's (a2) section pins D1 against x positions measured independently of this fix's
+own output; mutation-tested (dropping the x write makes it fail, restored and
+sha256-verified). `local_hand.py` and the new test are the only files touched besides
+this entry.
