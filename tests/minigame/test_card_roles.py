@@ -60,11 +60,14 @@ check(min(c.secondary for c in bats) != 0, "...so no batter has speed 0")
 check(max(c.secondary for c in pits) != 3, "...and no pitcher has fielding 3")
 
 print("2. UNTYPED is named and small, so the residual is countable")
-check(s.UNTYPED == ("Brian Coker", "Zachary Lee"),
-      f"exactly the two cards never seen on a ban grid: {s.UNTYPED}")
-check(len(s.UNTYPED) == 2,
-      "if this grows, roles were lost; if it shrinks, two cards were typed — either way "
-      "re-derive, do not edit the literal")
+# Brian Coker and Zachary Lee were typed BATTER 2026-09-21 (ban-grid type-banner crops,
+# user-confirmed by eye: agent_progress/census/roster_type_vlm/crops/), so UNTYPED is now
+# empty. Re-derive this pin from s.UNTYPED, do not edit the literal by hand.
+check(s.UNTYPED == (),
+      f"all 33 cards are typed: {s.UNTYPED}")
+check(len(s.UNTYPED) == 0,
+      "if this grows, a role was lost — re-derive from the ban-grid evidence, do not edit "
+      "the literal")
 
 print("3. no hand is ever dealt a card of the wrong role")
 random.seed(7)

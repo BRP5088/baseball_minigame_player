@@ -95,6 +95,18 @@ need the card's banner.
 **Card values do not change between games.** *Measured:* 1,691 player cards
 across 540 hand crops on many days produced zero novel (power, secondary) pairs.
 
+### The collection / ban grid
+
+*From the user, 2026-09-21:*
+
+- **The ban grid shows ALL cards.** A LOCKED card is one the player has not
+  unlocked yet, not a missing one.
+- **Locked cards are NEVER dealt to the player**, so the draw pool is the OWNED
+  cards only (31 today: Coker and Lee are locked in this save).
+- **The game will not let you select a locked card as a ban** — a ban aimed at
+  one is simply lost, the press does nothing — so the ban chooser must skip
+  locked cards.
+
 ### Tactics cards
 
     POWER SWING     +1 60%   +2 40%

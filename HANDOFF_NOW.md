@@ -169,6 +169,12 @@ Verbatim from the facts file's LATER list, plus what accumulated after it:
   slot 2 (a home-plate runner card) and the walk/lift read goes wrong there;
   from slot 0 it's one step and works. Recovered by the loop alone today, no
   hand assist needed — but cost a worse batter played and ~5 minutes.
+- Exclude LOCKED cards from the simulator pool and from choose_bans
+  (RULES.md, user 2026-09-21). Ownership is readable per cell from the ban
+  scan the run already does (`ban_grid.is_locked`, 3.5x contrast gap);
+  persist it beside the roster and thread it into simulate's player_pool and
+  decision_engine.choose_bans. Then re-run the I-13 ban A/B on the 31-card
+  pool.
 
 ### Snoopy jobs (one at a time; VLM text reading and grunt work only)
 - Label the kept reveal frames (test_fixtures/reveal_kind_truth/auto/): opponent card name + power per frame -> ground truth for the reveal-miss rate and for reveal_cards.TACTICS_KIND_MIN (OPEN-24).
@@ -187,6 +193,7 @@ Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter
 - Brian Coker (8/1) and Zachary Lee (6/2) are BOTH BATTERS: 3 distinct ban-grid frames each, the type banner read "BATTER" by the agent's eye AND by the VLM on 6/6 crops. The NAME banner fades on a locked card; the TYPE banner survives.
 - Both cards are LOCKED (not owned) in this save: ban_grid.is_locked True at exactly those cells on all 29 frames that reach their rows, neighbours False.
 - PROPOSED EDIT, NOT APPLIED (user to approve): simulate.py PlayerCard("Zachary Lee", 6, 2, "") -> role "batter", same for Brian Coker; orchestrator.KNOWN_BAN_ROSTER entries (~:5679, :5691) role="batter"; test_known_ban_roster.py enforces the two tables agree. simulate.UNTYPED updates itself.
+- APPLIED 5afe7e0 after user confirmation; test_card_roles re-derived dc6ac98.
 
 ## 6. OPEN QUESTIONS
 
@@ -219,7 +226,9 @@ Verbatim from the facts file, plus two new ones from today's close:
   that the same rate as before today?** Cycle 4: 11 misses, cycle 5: 15
   misses — stated in the facts as "not a regression" but never compared
   against a pre-today baseline; worth a real before/after count.
-- **Locked cards in the pool?** Coker and Lee are LOCKED in this save. Does simulate's player_pool / choose_bans treat all 33 as owned? If locked cards are not in our deck, the pool is 31 and two ban targets could be wasted on cards we cannot draw. Check with `ban_grid.is_locked` per roster card and compare against the pool.
+- ~~Locked cards in the pool?~~ ANSWERED (RULES.md, user 2026-09-21): locked
+  cards are never dealt and can't be selected as a ban, so the draw pool is
+  31, not 33; wiring that into simulate/choose_bans is the §5 LATER item.
 
 ## 7. RULES IN FORCE
 

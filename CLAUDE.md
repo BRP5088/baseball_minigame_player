@@ -946,11 +946,12 @@ whether the hand they came from was batting or pitching:
     pitchers  fielding  0 x39   1 x23   2 x3     n=65   NEVER 3
 
 So secondary 0 implies PITCHER and 3 implies BATTER; 1 and 2 are shared and need the card's
-banner. 31 of 33 are typed from FOUR signals that never once disagreed: the ban-grid banner
+banner. 33 of 33 are typed from FOUR signals that never once disagreed: the ban-grid banner
 read by OCR, that range rule, the user reading cards off a ban grid, and **a card seen on a
 BASE is a batter** (runners belong to the batting side, so occupancy types a card for free).
-Brian Coker (8/1) and Zachary Lee (6/2) are still untyped; `simulate.UNTYPED` names them and
-keeps them in both pools, because dropping them biases the draw as surely as mistyping them.
+Brian Coker (8/1) and Zachary Lee (6/2) were typed BATTER on 2026-09-21, from three ban-grid
+frames each (the TYPE banner survives the locked-card fade even though the NAME banner does
+not), user-confirmed by eye. All 33 are typed now and `simulate.UNTYPED` is empty.
 
 Splitting the pools moved the model **1.7223 -> 1.7862 runs/half (+3.7%, 4.6 sigma** at
 n=20,000 per arm) -- the size of the error the unsplit pool was carrying.
