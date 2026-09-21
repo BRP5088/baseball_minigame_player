@@ -497,6 +497,46 @@ populations; constants untouched; the false negative is pinned in
 test_streaming_rejects_chiaki_ui.py so a fix flips it deliberately. Fix wanted: a
 game-content signal (compass strip, or pause_menu's page/menu-text pair). Open.
 
+### I-25  A false argmax on an occluded disc deadlocked a live match                P0  reader
+
+**Evidence.** `test_fixtures/hand_reads/i25_false_cursor_slot0_live_20260920.png`, a live
+mid-match frame: slot 0's power disc sat hidden under slot 1's card, `read_hand` returned
+`digit: None, y_from: "disc"` for that row (a circle WAS found, sized and positioned like a
+real digit disc, but nothing on it matched a digit template), and the glow window it
+anchored read 68.6 -- on the card's own white art, ahead of the true cursor at slot 4's
+22.8. `cursor_glow`/`cursor_slot` named slot 0; `_walk_cursor_to` pressed `move_right`
+eight times toward the target, never saw the reading move off 0, and refused; the
+play-stall fallback then excluded slots one at a time and every one refused the same way --
+total deadlock on a paid match.
+
+**Root cause.** `cursor_slot` takes an unqualified argmax over `cursor_glow`'s raw list, so
+a disc-shaped blob that never resolved to a digit can outscore the genuine cursor whenever
+its glow window lands on card art rather than backdrop (CLAUDE.md 10.35: any box placed ON
+a card reads 60-88% bright whether or not the cursor is there). No ceiling separated a
+false on-card reading from a true one, and `_walk_cursor_to` had no way to notice a target
+that never moves and try something else.
+
+**Fix.** MERGED 2026-09-20 (12e1d2f). `cursor_glow`/`cursor_slot` exclude a row whose
+`y_from == "disc"` and `digit is None` (a disc found, no digit matched -- occurs zero times
+elsewhere in the corpus, `probe_disc_none.py`, 20/22 fixtures checked) and cap the argmax at
+`CURSOR_GLOW_MAX = 48.0`, the midpoint between the measured true-cursor ceiling (36.1 over
+74 labelled frames, `cursor_slot`'s own docstring census) and the on-card false floor (60,
+CLAUDE.md 10.35). `_walk_cursor_to` now excludes a slot whose reading never changes across
+its full press budget and re-reads with `cursor_slot(exclude=...)`, bounded at 4 slots
+(`FALSE_CURSOR_EXCLUDE_MAX`).
+
+**Verify.** `tests/minigame/test_false_cursor_on_occluded_slot.py`: the live fixture reads
+slot 4, not 0; the digit/y_from rule and the glow ceiling are isolated with controls; a
+scripted walk reaches its target instead of refusing. Three mutants (drop the digit/y_from
+rule, drop the ceiling, drop the walk-level exclusion), each caught by a distinct assertion,
+restored clean. A skeptic's scan of 1,217 live hands the same night found zero genuine
+cursor readings above the new ceiling and 68 false ones, all `digit None` with
+`y_from "disc"` -- exactly the population the fix excludes. (The "142 mid-play" figure in
+HANDOFF_NOW.md is a pixel distance from the unrelated, unshipped vertical-bound patch, not
+a glow percentage -- do not conflate the two.)
+
+**Status.** Merged; live confirmation open: resume the parked match.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
