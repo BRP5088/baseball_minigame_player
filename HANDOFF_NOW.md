@@ -194,6 +194,7 @@ Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter
 - Both cards are LOCKED (not owned) in this save: ban_grid.is_locked True at exactly those cells on all 29 frames that reach their rows, neighbours False.
 - PROPOSED EDIT, NOT APPLIED (user to approve): simulate.py PlayerCard("Zachary Lee", 6, 2, "") -> role "batter", same for Brian Coker; orchestrator.KNOWN_BAN_ROSTER entries (~:5679, :5691) role="batter"; test_known_ban_roster.py enforces the two tables agree. simulate.UNTYPED updates itself.
 - APPLIED 5afe7e0 after user confirmation; test_card_roles re-derived dc6ac98.
+- I-30 coverage gap (from yesterday's skeptic, resurfaced 2026-09-21): deleting the fresh-read check in `orchestrator._close_result_safely` passes all 12 named tests. Verify whether a later commit closed it; if not, add a test that scripts `_result_screen_up` to go False right before the press and assert no press.
 
 ## 6. OPEN QUESTIONS
 
