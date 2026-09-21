@@ -1,0 +1,15 @@
+{
+  "effective_power_probs": {
+    "4": 0.14634146341463414,
+    "5": 0.24390243902439024,
+    "6": 0.2073170731707317,
+    "7": 0.17073170731707318,
+    "8": 0.14634146341463414,
+    "9": 0.07317073170731707,
+    "10": 0.012195121951219513
+  },
+  "n_used_for_distribution": 82,
+  "rows_with_outcome_basis_or_margin": 151,
+  "rows_excluded_no_local_reveal_read": 369,
+  "source": "match_log.jsonl, phase==batting, outcome_basis or margin present; effective_power = opp_power + opp_tactics_bonus when opp_tactics_kind in swing_boost/pitch_boost (ISSUES.md I-17, RESULT 2026-09-21)"
+}

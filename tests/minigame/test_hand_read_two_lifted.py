@@ -140,8 +140,8 @@ check(lh.selected_cards(_rowsC, _full.width / lh.ANCHOR_W) == [],
 # =========================================================================
 print("(d) CONTROL: a genuine non-fan is still rejected (not credulous)")
 # =========================================================================
-_NEG = _os.path.join(_ROOT, "overnight", "local_hand",
-                      "hand_1788963163511615000.png")
+_NEG = _os.path.join(_ROOT, "test_fixtures", "hand_reads",
+                      "i37_negative_control_not_a_fan.png")
 if _os.path.exists(_NEG):
     _nimg = Image.open(_NEG)
     _nrows = lh.read_hand(_nimg)

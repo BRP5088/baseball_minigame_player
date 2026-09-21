@@ -157,12 +157,22 @@ try:
     #    removed the save from the write site SURVIVED all of them -- the exact
     #    shape of the bug this whole change exists to fix: a feature that works
     #    and is not connected to the path that uses it (CLAUDE.md 10.9).
-    import glob as _glob
     from PIL import Image as _Image
-    crops = sorted(_glob.glob(os.path.join(_ROOT, "agent_progress/deal-frames",
-                                           "*", "loss_*", "f*.png")))
+    # NAMED fixtures under test_fixtures/, not a glob over agent_progress/ (gitignored,
+    # and a live crawl writes there -- CLAUDE.md sec 2's "a test must never glob a
+    # directory a live run writes to"). Two known-good crops, copied from
+    # agent_progress/deal-frames/20260908_235423_patch65_66_67/loss_0008448_slot4/
+    # (f0008425.png, f0008427.png), each independently verified to drive a player card
+    # through local_hand_cards.
+    crops = [os.path.join(_ROOT, "test_fixtures", "deal_frames", n)
+             for n in ("hand_memory_drive_01.png", "hand_memory_drive_02.png")]
+    for c in crops:
+        if not os.path.exists(c):
+            raise FileNotFoundError(
+                f"missing hand-memory fixture: {c} -- copy it from agent_progress/"
+                f"deal-frames/ again (see this test's own comment for the source path)")
     drove = False
-    for c in crops[::97]:
+    for c in crops:
         fresh_process()
         try:
             os.remove(o.HAND_MEMORY_FILE)

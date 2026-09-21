@@ -41,8 +41,13 @@ N_MATCHES = 12000
 SEEDS = (1, 2, 3)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_LOG_DIST_PATH = os.path.join(_HERE, "..", "agent_progress", "issues", "I-15-16-17",
-                               "opp_pitcher_dist.json")
+_MATCH_LOG_PATH = os.path.join(_HERE, "..", "match_log.jsonl")
+# Pinned fallback: the ISSUES.md I-17 RESULT (2026-09-21), reproduced bit-for-bit from
+# the main checkout's match_log.jsonl at the time (520 rows / 151 with a reveal read /
+# 82 batting). A fresh checkout's TRACKED match_log.jsonl has none of those rows yet
+# (verified: 0 qualify) -- agent_progress/ is gitignored, so that 520-row snapshot was
+# never committed. See tests/minigame/test_ab_controls_reproduce_baseline.py.
+_PINNED_LOG_DIST_PATH = os.path.join(_HERE, "ab_data", "opp_pitcher_dist_20260921.json")
 
 
 # ---------------------------------------------------------------------------------------
@@ -237,10 +242,66 @@ def i16_decisions_changed(threshold, n=4000, seed=11):
 # enters the distribution) and rerun expected_runs_play against CURRENT (the documented
 # earlier result, "39.8% vs 35.5%", used the pool and lost).
 def load_log_distribution():
-    with open(_LOG_DIST_PATH) as f:
-        d = json.load(f)
-    probs = d["effective_power_probs"]
-    return [(int(k), v) for k, v in sorted(probs.items(), key=lambda kv: int(kv[0]))], d
+    """Derive the opponent-pitcher effective-power distribution straight from
+    match_log.jsonl (tracked; ISSUES.md I-17's documented method) rather than reading a
+    gitignored one-off artifact (that used to crash with FileNotFoundError on a fresh
+    clone -- CLAUDE.md sec 2's "a test must never glob/open a directory a live run
+    writes to", the same lesson applied to a single file).
+
+    Method, exactly as ISSUES.md I-17's RESULT records it: rows with phase=="batting"
+    that carry a local reveal read (an "outcome_basis" or "margin" key present -- the
+    withdrawn score-went-up classifier's rows have neither), effective_power =
+    opp_power + opp_tactics_bonus when opp_tactics_kind is a swing or pitch boost, else
+    opp_power.
+
+    Falls back to the PINNED snapshot (ab_data/opp_pitcher_dist_20260921.json) when this
+    checkout's match_log.jsonl has zero qualifying rows -- a fresh clone's tracked
+    match_log.jsonl is the 369 legacy rows only, none of which carry outcome_basis or
+    margin. Once live play accumulates qualifying rows, this reproduces the pin only if
+    nothing changed since; a genuine divergence is the POINT (a change in match_log then
+    fails loudly instead of silently shifting the baseline), not a bug to suppress.
+    """
+    total = 0
+    qualifying = 0
+    counts = {}
+    with open(_MATCH_LOG_PATH) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            total += 1
+            row = json.loads(line)
+            if "outcome_basis" not in row and "margin" not in row:
+                continue
+            qualifying += 1
+            if row.get("phase") != "batting":
+                continue
+            power = row.get("opp_power")
+            if power is None:
+                continue
+            bonus = row.get("opp_tactics_bonus") or 0
+            kind = row.get("opp_tactics_kind")
+            effective = power + bonus if kind in ("swing_boost", "pitch_boost") else power
+            counts[effective] = counts.get(effective, 0) + 1
+
+    n_used = sum(counts.values())
+    if n_used == 0:
+        with open(_PINNED_LOG_DIST_PATH) as f:
+            d = json.load(f)
+        probs = d["effective_power_probs"]
+        return [(int(k), v) for k, v in sorted(probs.items(), key=lambda kv: int(kv[0]))], d
+
+    dist = sorted((p, c / n_used) for p, c in counts.items())
+    d = {
+        "effective_power_probs": {str(p): prob for p, prob in dist},
+        "n_used_for_distribution": n_used,
+        "rows_with_outcome_basis_or_margin": qualifying,
+        "rows_excluded_no_local_reveal_read": total - qualifying,
+        "source": "match_log.jsonl, phase==batting, outcome_basis or margin present; "
+                  "effective_power = opp_power + opp_tactics_bonus when opp_tactics_kind "
+                  "in swing_boost/pitch_boost (ISSUES.md I-17)",
+    }
+    return dist, d
 
 
 def make_expected_runs_play(dist):
