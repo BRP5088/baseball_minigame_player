@@ -1385,6 +1385,54 @@ offered again the moment it reads.
 
 **Status.** Open.
 
+### I-40  A reload's local money read disagreed with the known wallet and was trusted   P1  money
+
+**Evidence.** `overnight/run_live_20260921p.log:158-161` (main checkout): right after a
+Load Last Save, which CLAUDE.md section 4 says restores the wallet to $246 every time
+(and cycles 1-3 that same run read 246), `pause_menu.read_money` answered **$286**
+("[balance] read LOCALLY from the pause menu: $286"). `run_cycles` trusted it as
+`max_spend`, played four matches, and the fifth found the game's real wallet at $46:
+`start_match` failed 5 times and the run stopped with the record at balance 36 and a
+phantom $50 debit (no `save_progress` on that path). Separately, at 10:50 the pause book
+plainly showed **46** (`test_fixtures/pause_money_20260921.png`, copied from the main
+checkout, never symlinked) and `read_money` returned **None** on it.
+
+**Root cause, ESTABLISHED (`agent_progress/issues/I-40/progress.md`, step 1).** The $46
+fixture is a DIFFERENT failure from the live $286 misread, not the same one reproduced:
+`read_money` REFUSES on it (both OCR scales return the empty string at every PSM, both
+the `tesserocr` and `pytesseract` backends agree — verified bypassing `ocr_glyphs`'s
+handle cache entirely) rather than answering wrong. Diagnosed (not fixed): narrowing the
+crop recovers "46", but a too-narrow crop starts reading the coin badge as a spurious
+extra digit ("466") — the fixed-width `MONEY_BOX_FRAC`, calibrated for 3-4 digit
+right-aligned numbers, leaves enough blank space beside a 2-digit value to defeat
+tesseract's segmentation outright. No frame from the actual $286 misread exists anywhere
+on disk, so that specific mechanism (a 246-to-286 read, not a refusal) could not be
+reproduced or explained here — nothing had ever saved the frame a money read was made on.
+
+**Fix shipped on this branch, in two parts, NEITHER of which touches the reader:**
+
+  1. `orchestrator.record_money_read_frame()` keeps the frame every local money read
+     settles on (answer or refusal) at `diagnostics/money_reads/<epoch_ns>_<answer>.png`
+     — copies `record_reveal_kind`'s shape exactly (never raises, skipped under
+     `BASEBALL_TEST_RUN`, refuses past a 200-file cap rather than pruning). So the next
+     misread has its picture.
+  2. `run_cycles.RELOAD_WALLET = 246` (renamed from `RESET_BALANCE_FALLBACK`, same
+     value): `_read_balance()` now treats a read that DISAGREES with the known reload
+     constant, or that raised, identically — logs the disagreement loudly (names both
+     numbers) and returns `RELOAD_WALLET`, never the raw reading. `_reset_progress()`'s
+     `balance` — which is exactly what becomes `max_spend` — inherits this for free.
+
+**Tests.** `tests/harness/test_reload_wallet_guard.py`, 18 checks, all green; two
+mutants (the disagreement branch, the frame keeper's test-flag guard), both caught,
+files restored byte-for-byte (sha256-verified). Six sibling tests
+(`test_budget_reserve_fits`, `test_run_debit_and_scoring`,
+`test_stale_flag_never_presses_unpaid`, `test_no_shadowed_module_defs`,
+`test_no_undefined_names`, `test_no_real_input_under_test_run`) plus
+`test_pause_money_local` and `test_reveal_frame_kept` all still exit 0.
+
+**Status.** Fixed on branch (evidence + guard); the reader itself (`pause_menu.read_money`)
+is UNCHANGED — awaiting skeptic.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,

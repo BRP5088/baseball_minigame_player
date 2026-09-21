@@ -126,7 +126,7 @@ check(pm.MONEY_MIN == 0 and pm.MONEY_MAX == 9999,
 # This reader was built, measured on both capture geometries, fully tested -- and had
 # ZERO production callers. Both sites wanting a balance called
 # read_balance_from_pause_menu, which is a PAID call; with the paid model off it raises,
-# run_cycles swallows that and returns its hardcoded RESET_BALANCE_FALLBACK of 246 every
+# run_cycles swallows that and returns its hardcoded RELOAD_WALLET of 246 every
 # cycle. So the only thing able to reconcile the tracked balance against the game was a
 # constant, while "Load Last Save" keeps putting $246 back in the wallet and the tracked
 # figure only ever marches down. A measurement built and never wired (10.1).
