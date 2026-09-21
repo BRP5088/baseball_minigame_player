@@ -253,6 +253,11 @@ PS5 overlay up and confirm the cycle refuses rather than presses.
 
 **Status.** Open. Blocked on I-01 to I-04 landing first.
 
+**I-05a:** second attempt on branch worktree-agent-a7613eff370917779 (3731b5e);
+skeptic CONFIRMED WITH NOTES, NOT merged: three holes (streak counted in polls
+not time; two surviving mutants M2/M5; all-readers-crashed reads as an
+overlay) — see HANDOFF_NOW.md.
+
 ### I-06  A stalled match is abandoned by the next cycle with no record             P1  money
 
 **Evidence.** `reset_env.py:183 reset_environment`: `:270-276` answer the "Give up?" dialog
