@@ -424,7 +424,7 @@ RESULT_DRAW = dict(RESULT_WIN, your_score=4, opp_score=4, result_won=False)
 # A "result" screen is only BELIEVED once the match has plausibly finished,
 # and there are exactly two ways to get there. Both are exercised below:
 #
-#   * MIN_PLAYS_FOR_RESULT cards have been played this match  -> scores at once
+#   * past MIN_PLAYS_FOR_RESULT cards played this match       -> scores at once
 #   * the same result screen survives RESULT_CONFIRM_READS re-reads -> scores
 #
 # Until 2026-09-05 the confirm gate also required the scoreboard to read 0-0,
@@ -438,5 +438,16 @@ RESULT_DRAW = dict(RESULT_WIN, your_score=4, opp_score=4, result_won=False)
 # Which of the two a test uses is deliberate. A test about the confirm gate
 # itself repeats the overlay; a test about some OTHER guard plays a match, so
 # that it stays independent of RESULT_CONFIRM_READS.
-_PLAYED = ["turn"] * o.MIN_PLAYS_FOR_RESULT
+#
+# I-30, 2026-09-20: EXACTLY MIN_PLAYS_FOR_RESULT plays is no longer "past the
+# threshold" -- a phantom "JOHNNY DRAWERS" -> draw misread scored on a single
+# frame at that exact boundary, so run() now requires the SAME result read on
+# two CONSECUTIVE frames there too (see test_early_result_double_debit.py,
+# which exercises that boundary directly with its own local harness).
+# _PLAYED is +1 past it so every OTHER test in this file -- about C1, C2, C5,
+# N2, QA1, the motion gate, press verification -- keeps meaning what it always
+# meant: "played enough that a result scores on the first sighting, no
+# confirmation delay", independent of the boundary check as well as of
+# RESULT_CONFIRM_READS.
+_PLAYED = ["turn"] * (o.MIN_PLAYS_FOR_RESULT + 1)
 _CONFIRM = o.RESULT_CONFIRM_READS

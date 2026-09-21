@@ -38,6 +38,7 @@ anything else is a NAMED GAP rather than a guess.
 """
 import base64
 import os
+import re
 
 import cv2
 import numpy as np
@@ -801,6 +802,12 @@ def read_result_card(full_frame):
     Deliberately refuses when the band names MORE THAN ONE result word: two words
     in one title is not a result, it is a bad crop, and a wrong outcome is worse
     than no outcome (run() acts on it).
+
+    I-30, 2026-09-20: this used a bare SUBSTRING test (`k in up`), and a player
+    card reading "JOHNNY DRAWERS" -- OCR'd off a live TURN frame, not a result
+    screen at all -- contains "DRAW" as a substring of "DRAWERS". That scored a
+    phantom draw at round 1, 0-0. Match on a WHOLE WORD (word-boundary regex, so
+    "DRAW" cannot match inside "DRAWERS" but still matches "DRAW!" or "DRAW").
     """
     from PIL import Image                                    # noqa: F401
     import ocr_glyphs
@@ -809,7 +816,7 @@ def read_result_card(full_frame):
     crop = full_frame.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
     txt = (ocr_glyphs.image_to_text(crop, 6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ!") or "")
     up = txt.upper()
-    hits = [k for k in RESULT_CARD_WORDS if k in up]
+    hits = [k for k in RESULT_CARD_WORDS if re.search(rf"\b{k}\b", up)]
     if len(hits) != 1:
         return None, up.strip()
     return RESULT_CARD_WORDS[hits[0]], up.strip()

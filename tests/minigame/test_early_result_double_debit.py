@@ -39,13 +39,33 @@ that confirming it costs nothing real: a genuine finish still scores exactly
 once, two genuine matches still cost exactly $100, and a result that keeps
 saying the same thing still scores rather than hanging the loop.
 
-WHAT IT DOES NOT COVER — READ THIS BEFORE TRUSTING IT
------------------------------------------------------
-The gate is keyed on plays_this_match, so it is INERT once
-MIN_PLAYS_FOR_RESULT cards have been played. A transition overlay misread as a
-result at round 4-5 still double-debits, and `residual_round_4_is_still_open`
-below asserts exactly that so the hole is visible rather than assumed closed.
-Closing it needs positive evidence that no match is running before a debit
+I-30 UPDATE, 2026-09-20 — THE ROUND-4/5 HOLE THIS FILE USED TO PIN IS CLOSED
+-----------------------------------------------------------------------------
+A player card OCR'd as "JOHNNY DRAWERS" (a batter's name) scored a phantom
+DRAW at round 1, 0-0 -- plays_this_match was exactly MIN_PLAYS_FOR_RESULT (4),
+which is the boundary this file's "positive control" scenarios deliberately
+placed OUTSIDE the confirm-gate ("a finish at or past MIN_PLAYS_FOR_RESULT
+must score on the first sighting, with no confirmation delay"). That is
+exactly the hole: plays_this_match == MIN_PLAYS_FOR_RESULT was treated as far
+enough into the match to trust a single frame, and it is not -- a match is 5
+rounds A SIDE, so 4 plays is still the first half.
+
+Fixed with no new numeric threshold beyond "two consecutive frames": AT
+EXACTLY plays_this_match == MIN_PLAYS_FOR_RESULT, a "result" screen must be
+read as the SAME (outcome, your_score, opp_score) on the very next poll too
+before it scores -- see `last_result_read` in run(). It is cleared the moment
+any non-"result" screen is seen, so the two reads must be genuinely
+back-to-back, which is exactly what the live misread was not: the next poll
+read a turn screen. A genuine finish's banner holds for several seconds
+(CLAUDE.md: "sits fully opaque for a measured 4.0s at its shortest"), so this
+costs one extra poll for a real finish and refuses a one-frame fluke.
+
+WHAT IT STILL DOES NOT COVER
+-----------------------------
+The boundary check only fires AT plays_this_match == MIN_PLAYS_FOR_RESULT.
+Past it (5, 6, ... plays -- still short of a real match's 10) a "result" still
+scores on the first sighting with no confirmation, same as always. Closing
+THAT needs positive evidence that no match is running before a debit
 (_dealer_prompt_on_screen), which is instrumented in run() as audit output and
 deliberately NOT wired in — see the comment at the debit.
 """
@@ -293,12 +313,53 @@ check(final["balance"] == 450 and final["wins"] == 1,
 # --- the gate must not delay or suppress a GENUINE finish ---------------
 # Positive control. Without this the file would pass with the gate wired to
 # reject every result, which is a different and equally expensive bug.
-h = Harness(["match_start_prompt"] + ["turn"] * _N + [RESULT_WIN])
+#
+# I-30: AT the boundary (exactly _N plays) a genuine finish now needs the SAME
+# result read on two CONSECUTIVE frames -- one extra poll, not a rejection.
+h = Harness(["match_start_prompt"] + ["turn"] * _N + [RESULT_WIN, RESULT_WIN])
 final = h.run(target_wins=99, max_spend=500)
 check(final["wins"] == 1 and final["balance"] == 450,
-      f"a result after {_N} plays scored {final['wins']} win(s) — a finish at "
-      "or past MIN_PLAYS_FOR_RESULT must score on the first sighting, with no "
-      "confirmation delay")
+      f"a result confirmed on two consecutive frames after {_N} plays (the "
+      f"boundary) scored {final['wins']} win(s) — expected exactly 1, with no "
+      "more delay than the one extra confirming frame")
+
+# Past the boundary (_N + 1 plays) nothing changed: still scores on the first
+# sighting, no confirmation delay.
+h = Harness(["match_start_prompt"] + ["turn"] * (_N + 1) + [RESULT_WIN])
+final = h.run(target_wins=99, max_spend=500)
+check(final["wins"] == 1 and final["balance"] == 450,
+      f"a result after {_N + 1} plays (past the boundary) scored "
+      f"{final['wins']} win(s) — a finish past MIN_PLAYS_FOR_RESULT must still "
+      "score on the first sighting, with no confirmation delay")
+
+# --- I-30: THE EXACT INCIDENT, REPRODUCED AND CLOSED ---------------------
+# A single misread "result" at EXACTLY plays_this_match == MIN_PLAYS_FOR_RESULT
+# (the boundary the old code trusted outright) must not score and must not
+# re-arm the debit -- the live incident's next poll went straight to a turn
+# screen, never a second "result".
+h = Harness(["match_start_prompt"] + ["turn"] * _N + [RESULT_WIN, "turn"])
+final = h.run(target_wins=99, max_spend=500)
+check(final["wins"] == 0 and final["losses"] == 0 and final["draws"] == 0,
+      f"a single misread 'result' at exactly {_N} plays (the boundary) scored "
+      f"{final['wins']}W/{final['losses']}L/{final['draws']}D — a one-frame "
+      "read at the boundary must not score without a second consecutive read")
+check(final["match_in_progress"] is True,
+      "a single misread 'result' at the boundary cleared match_in_progress — "
+      "that flag is the only thing C5 has to go on")
+
+# ...and the streak must be genuinely CONSECUTIVE: the same misread seen twice
+# with ANYTHING else in between must not confirm it either. The gap screen is
+# match_start_prompt, not "turn" -- a "turn" screen calls play_one_turn and
+# would advance plays_this_match PAST the boundary itself (a confound: that
+# would pass the check below for the wrong reason, because past the boundary
+# nothing requires confirmation at all).
+h = Harness(["match_start_prompt"] + ["turn"] * _N
+            + [RESULT_WIN, "match_start_prompt", RESULT_WIN])
+final = h.run(target_wins=99, max_spend=500)
+check(final["wins"] == 0 and final["draws"] == 0,
+      f"two 'result' sightings at the boundary with a non-result screen "
+      f"between them scored {final['wins']}W/{final['draws']}D — a gap must "
+      "reset the confirmation, or 'consecutive' means nothing")
 
 # ...and an EARLY result that keeps saying the same thing is evidence, so it
 # must eventually score. Otherwise a genuinely short match hangs the loop with
@@ -311,8 +372,10 @@ check(final["wins"] == 1,
       "outright, or a short match deadlocks the run")
 
 # Two genuine matches still cost exactly $100 and score exactly twice: the
-# guard must not over-suppress into a deadlock after the first match.
-h = Harness((["match_start_prompt"] + ["turn"] * _N + [RESULT_WIN]) * 2)
+# guard must not over-suppress into a deadlock after the first match. Past the
+# boundary (_N + 1 plays) so this is not entangled with I-30's two-consecutive-
+# frame check above -- that one already has its own positive control.
+h = Harness((["match_start_prompt"] + ["turn"] * (_N + 1) + [RESULT_WIN]) * 2)
 final = h.run(target_wins=99, max_spend=500)
 check(final["wins"] == 2 and final["balance"] == 400,
       f"two genuine matches scored {final['wins']} win(s) for "
@@ -351,25 +414,27 @@ check(final["draws"] == 1,
       "expected 1")
 
 
-# --- RESIDUAL, PINNED ON PURPOSE: round 4-5 is STILL OPEN ---------------
-# The gate is keyed on plays_this_match, so once MIN_PLAYS_FOR_RESULT cards are
-# played it is inert BY DESIGN — that is what makes a genuine finish score
-# immediately. The price is that a transition overlay misread as a result at
-# round 4-5 still fabricates a result and still buys a second match.
-#
-# This asserts the CURRENT behaviour, not the desired one. It exists so the
-# hole is visible in the suite instead of being assumed closed, and so that
-# anything which genuinely closes it fails here loudly and gets this block
-# rewritten rather than silently widening the fix.
+# --- I-30 CLOSED, 2026-09-20: the boundary (round 4-5) no longer double-debits
+# This used to be "RESIDUAL, PINNED ON PURPOSE" -- a transition overlay
+# misread as a result exactly at MIN_PLAYS_FOR_RESULT plays fabricated a
+# result and bought a second match ($400, 2 start_match presses). This is the
+# live shape: a lone misread, then straight to the next dealer prompt with no
+# confirming second frame. The two-consecutive-frame boundary check refuses to
+# score it, match_in_progress survives, and C2's "match is running, don't
+# press" branch takes over instead of re-debiting.
 h = Harness(["match_start_prompt"] + ["turn"] * _N
             + [RESULT_WIN, "match_start_prompt"])
 final = h.run(target_wins=99, max_spend=500)
-check(final["balance"] == 400 and h.starts() == 2,
-      f"RESIDUAL CHANGED: a 'result' misread after {_N} plays followed by a "
-      f"match_start_prompt now ends at ${final['balance']} with {h.starts()} "
-      "start_match press(es). This block pinned the KNOWN-OPEN round-4/5 hole "
-      "($400, 2 presses). If something closed it, that is good news — rewrite "
-      "this block and the 'what it does not cover' note in the docstring.")
+check(final["balance"] == 450 and h.starts() == 1,
+      f"a 'result' misread after {_N} plays (the boundary) followed by a "
+      f"match_start_prompt ended at ${final['balance']} with {h.starts()} "
+      "start_match press(es) — expected $450 and 1 press: the misread must be "
+      "refused, not scored, and must not re-arm the debit")
+check(final["match_in_progress"] is True and final["wins"] == 0
+      and final["losses"] == 0 and final["draws"] == 0,
+      f"the boundary misread was scored or match_in_progress was cleared: "
+      f"match_in_progress={final['match_in_progress']!r}, "
+      f"{final['wins']}W/{final['losses']}L/{final['draws']}D")
 
 
 for f in failures:

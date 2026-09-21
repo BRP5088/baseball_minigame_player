@@ -6454,6 +6454,35 @@ def _result_screen_up():
         return None
 
 
+def _close_result_safely(log=print):
+    """Press close_result only if a fresh frame STILL shows a result screen.
+
+    I-30, 2026-09-20: a player card OCR'd as "JOHNNY DRAWERS" scored a phantom
+    draw at round 1, 0-0 (local_state.read_result_card's substring match on
+    "DRAW", fixed separately). By the time this ran, `press_verified`'s own
+    baseline read (`_result_screen_up()`) already came back False -- the
+    misread had already evaporated a poll later, because it was never real.
+    `press_verified` does not know that a False baseline means "there is
+    nothing to close"; it only refuses on a BLIND (None) baseline, so it
+    pressed close_result (Circle) five times at a live TURN screen. The game
+    answered with a "Give up?" dialog
+    (overnight/crawl/20260920_225626/001_before.png) -- one Cross away from
+    forfeiting a paid match.
+
+    A result that was read on one frame and is gone on the next is a FALSE
+    POSITIVE, not a dismissed result. Confirm it is STILL up, on THIS frame,
+    before pressing at all; refuse and log otherwise.
+    """
+    up = _result_screen_up()
+    if up is not True:
+        if log:
+            log(f"  [verify] close_result: a fresh frame reads is_result={up!r}, "
+                "not True -- nothing to close, and this is not a result screen. "
+                "Refusing to press rather than button-mash a live screen.")
+        return False, 0
+    return input_controller.press_verified("close_result", _result_screen_up, log=log)
+
+
 def _match_start_screen():
     """observe for start_match: "ban" / "prompt" / "other", or None if blind.
 
@@ -8129,6 +8158,10 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # from one at the end of match 3. See MIN_PLAYS_FOR_RESULT.
     plays_this_match = 0
     unconfirmed_result_reads = 0
+    # I-30: the previous poll's (outcome, your_score, opp_score) from a "result"
+    # screen, or None. Read only at plays_this_match == MIN_PLAYS_FOR_RESULT --
+    # see the boundary check below, right after the RESULT_CONFIRM_READS block.
+    last_result_read = None
     # C5: True from the moment a match fee is debited until a result is scored.
     # Guards the one double-debit path acted_screen cannot see — see the C5
     # block in the match_start_prompt branch.
@@ -8243,6 +8276,50 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
             try:
                 state_json = read_state_for_turn()
             except Exception as e:
+                # I-30: the "Give up?" dialog is a RECOGNISED screen, not one more
+                # unreadable poll. Live 2026-09-20: a phantom "JOHNNY DRAWERS" ->
+                # draw misread led run() to press close_result FIVE TIMES at a
+                # live turn screen (see _close_result_safely above), and the game
+                # answered with this dialog -- which then burned all 15
+                # "Couldn't read the screen" retries and stopped the run before a
+                # human noticed and pressed Circle by hand
+                # (overnight/crawl/20260920_225626/001_before.png).
+                #
+                # One look (already have it -- this poll's own gap), one Circle
+                # press, one look to confirm it cleared. NEVER Cross here: Cross
+                # is YES, and it forfeits a paid match for nothing (CLAUDE.md
+                # section 4: NO = circle, YES = cross). Does not touch
+                # stuck_count -- recognising the screen is progress, not another
+                # failed poll.
+                if match_in_progress:
+                    try:
+                        _gu_img = _fast_grab()
+                    except Exception:
+                        _gu_img = None
+                    _gu_up = False
+                    if _gu_img is not None:
+                        try:
+                            import reset_env
+                            _gu_up = reset_env.give_up_dialog(_gu_img)
+                        except Exception:
+                            _gu_up = False
+                    if _gu_up:
+                        print("  [give-up] the \"Give up?\" dialog is up mid-match "
+                              "-- answering NO (Circle) once. Never Cross here.")
+                        input_controller.press("moon")
+                        wait_for_screen_to_settle(max_wait=5.0)
+                        try:
+                            _gu_after_img = _fast_grab()
+                            _gu_after = reset_env.give_up_dialog(_gu_after_img)
+                        except Exception:
+                            _gu_after = None
+                        if _gu_after is False:
+                            print("  [give-up] dialog cleared.")
+                        else:
+                            print(f"  [give-up] still up after one Circle press "
+                                  f"(read: {_gu_after!r}) — will look again next poll, "
+                                  "not pressing again blind.")
+                        continue
                 stuck_count += 1
                 record_observation(screen="<read failed>", error=str(e)[:200],
                                    stuck=stuck_count, motion_skips=motion_skips)
@@ -8477,6 +8554,14 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
             if screen != acted_screen and screen != "other":
                 acted_screen = None
 
+            # I-30: the boundary check below requires the SAME result on two
+            # CONSECUTIVE polls. A poll that reads anything else in between --
+            # a real turn screen, a misread "other" -- breaks that streak, the
+            # same way it broke live: the "JOHNNY DRAWERS" misread was a single
+            # frame, and the very next poll was back to a turn screen.
+            if screen != "result":
+                last_result_read = None
+
             if screen == "result":
                 # C1 GUARD: this branch persists win/loss/draw counts, so acting on
                 # the same result screen twice permanently corrupts progress.json —
@@ -8495,7 +8580,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("Result screen never dismissed — stopping. Check the game manually.")
                         stop_reason = "result_never_dismissed"
                         break
-                    input_controller.press_verified("close_result", _result_screen_up, log=print)
+                    _close_result_safely(log=print)
                     wait_for_screen_to_settle(max_wait=8.0)
                     continue
                 # N12: everything below indexes a model-produced dict and writes
@@ -8529,7 +8614,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("Result screen never cleared — stopping.")
                         stop_reason = "result_never_cleared"
                         break
-                    input_controller.press_verified("close_result", _result_screen_up, log=print)
+                    _close_result_safely(log=print)
                     wait_for_screen_to_settle(max_wait=8.0)
                     continue
 
@@ -8580,10 +8665,41 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     wait_for_screen_to_settle(max_wait=5.0)
                     continue
 
+                # I-30, 2026-09-20: a player card OCR'd as "JOHNNY DRAWERS" scored a
+                # phantom draw at round 1, 0-0 -- plays_this_match was exactly
+                # MIN_PLAYS_FOR_RESULT (4), so the block above's `<` never triggered
+                # and the single misread frame scored with NO confirmation at all.
+                # That gap is real: a match is 5 rounds a half, so 4 plays is still
+                # early, just not as early as the block above's own suspicion zone.
+                #
+                # Fixed with no new numeric threshold beyond "two consecutive
+                # frames": at exactly the boundary, require the SAME (outcome,
+                # your_score, opp_score) to be read on the frame right after this
+                # one before it scores. A genuine finish's banner holds for several
+                # seconds (CLAUDE.md: "sits fully opaque for a measured 4.0s at its
+                # shortest"), so this costs one extra poll for a real finish and
+                # refuses a one-frame fluke. `last_result_read` is cleared above the
+                # moment any non-"result" screen is seen, so the two reads must be
+                # truly back to back, the same way the live misread was NOT: the
+                # very next poll read a turn screen, not another "result".
+                if plays_this_match == MIN_PLAYS_FOR_RESULT:
+                    this_read = (state_json.get("result_outcome"),
+                                 state_json.get("your_score"),
+                                 state_json.get("opp_score"))
+                    if last_result_read != this_read:
+                        last_result_read = this_read
+                        print(f"  {state_json.get('your_score')}-"
+                              f"{state_json.get('opp_score')} result at exactly "
+                              f"{plays_this_match} plays (the boundary) — reading "
+                              "it again on the next frame before trusting it.")
+                        wait_for_screen_to_settle(max_wait=5.0)
+                        continue
+
                 try:
                     acted_screen = "result"
                     stuck_count = 0
                     unconfirmed_result_reads = 0
+                    last_result_read = None
                     your_score = state_json.get("your_score")
                     opp_score = state_json.get("opp_score")
                     # Prefer the actual score comparison over result_won, since
@@ -8635,7 +8751,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # Dismiss regardless of whether scoring succeeded — leaving the
                 # overlay up would strand the loop on a screen it has already
                 # decided not to re-score.
-                input_controller.press_verified("close_result", _result_screen_up, log=print)
+                _close_result_safely(log=print)
                 wait_for_screen_to_settle(max_wait=8.0)
                 continue
 
@@ -8796,6 +8912,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 match_in_progress = True
                 plays_this_match = 0
                 unconfirmed_result_reads = 0
+                last_result_read = None
                 bans_done_this_match = False   # new match, bans are due again
                 # QA-L5: reset the half-tracking too. turns_this_half only
                 # resets when `phase` CHANGES, and last_phase persists across
