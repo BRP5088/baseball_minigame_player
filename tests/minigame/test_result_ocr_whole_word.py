@@ -93,9 +93,13 @@ for seen, want in (("WINNER", "win"), ("WINER", "win"),       # one dropped lett
 got, _ = result_ocr.match_word([("WIE", 1.0)])
 check(got is None, f"three dropped letters (WIE for WINNER) must not match (got {got!r})")
 
-# --- 3. tokenisation: the result word can sit beside other words and still be found -----
-got, detail = result_ocr.match_word([("THE WINNER", 1.0)])
-check(got == "win", f"'THE WINNER' still finds WINNER as one of its tokens (got {got!r})")
+# --- 3. tokenisation: the result word can sit beside a SHORT neighbour and still be found
+# I-54 CHANGED THIS: it used to read "THE WINNER" here. Section 6 below now refuses that
+# input on purpose (a second REAL word, "THE", beside the vocab word) -- shown and reasoned
+# about there rather than silently dropped. "A" is not a real word by that rule (under 3
+# letters), so it still demonstrates the tokeniser finding a word beside other text.
+got, detail = result_ocr.match_word([("A WINNER", 1.0)])
+check(got == "win", f"'A WINNER' still finds WINNER as one of its tokens (got {got!r})")
 
 # --- 4. the RECALL REGRESSION the skeptic found and the joined-candidate fix for it ------
 # The old reader joined every alpha char of a text into ONE string before matching, so it
@@ -163,6 +167,112 @@ check(got is None, f"wiring: read_banner given a stubbed 'JOHNNY DRAWERS' read m
 got, detail = _read_banner_via_stub([("DRAW!", 1.0)])
 check(got == "draw", f"wiring: read_banner given a stubbed 'DRAW!' read must score a "
       f"draw (got {got!r}, detail {detail!r})")
+
+# --- 6. I-54: OCR TRUNCATED A CARD NAME TO A LONE VOCAB WORD ----------------------------
+# "JOHNNY DRAWERS" OCR'd with its trailing letters dropped reads "JOHNNY DRAW" -- and once
+# split on the space, "DRAW" is not a substring of anything, it IS the whole vocab word.
+# I-34's whole-token fix cannot see this: `_similar` is correctly being asked about "DRAW"
+# alone. Live evidence: overnight/run_live_20260921t.log ~634 (main checkout, read-only):
+# "[state] the templates missed this banner; OCR read it: 'JOHNNY DRAW'" -> a phantom draw
+# logged mid-match (9 total), immediately followed by close_result refusing to press because
+# a fresh read says is_result=False -- the match was still live, no banner had appeared.
+#
+# THE FIX: a candidate is refused when the OCR TEXT it came from also contains another
+# alphabetic run of 3+ letters -- a real banner's text is the word alone (plus punctuation
+# noise); a card name is two words. Checked PER OCR TEXT ENTRY, never pooled across the
+# whole band crop -- the pooled form is what an earlier I-34 draft tried and reverted the
+# same day, because the matchbox-ring lettering around the medallion is ALWAYS present
+# SOMEWHERE in the crop, in its own separate detected text region.
+got, detail = result_ocr.match_word([("JOHNNY DRAW", 1.0)])
+check(got is None,
+      f"the exact I-54 bug: a card name truncated by OCR to 'JOHNNY DRAW' must NOT score "
+      f"a draw (got {got!r}, detail {detail!r})")
+
+# the untruncated form stays refused too (I-34's own control, re-asserted here so a change
+# to _similar/match_word cannot pass this file while breaking that one)
+got, _ = result_ocr.match_word([("JOHNNY DRAWERS", 1.0)])
+check(got is None, f"I-34 control, still refused (got {got!r})")
+
+# a genuine banner, alone or with its own punctuation noise, is unaffected
+for seen, want in (("DRAW", "draw"), ("DRAW!", "draw"), ("DRAWI", "draw")):
+    got, _ = result_ocr.match_word([(seen, 1.0)])
+    check(got == want,
+          f"a real banner word must still read: {seen!r} -> {got!r} (wanted {want!r})")
+
+# the mechanism generalises: ANY second real word (3+ letters) in the same OCR text refuses
+# the match, even a filler like "THE" that is not itself a card name -- a real result
+# banner's OCR text is the word alone. This is a DELIBERATE behaviour change from section 3
+# above, which used to assert "THE WINNER" -> win; that assertion now reads "A WINNER"
+# instead (a short filler that does not trip the guard), and the old input is re-asserted
+# here as the new, correct answer -- shown and adjusted, per the ticket's own instruction,
+# rather than silently dropped.
+got, detail = result_ocr.match_word([("THE WINNER", 1.0)])
+check(got is None,
+      f"I-54: a second real word beside the vocab word refuses the match, even 'THE' "
+      f"(got {got!r}, detail {detail!r})")
+
+# THE LENGTH FLOOR IS A DECIDED, KNOWN LIMIT, PINNED RATHER THAN LEFT IMPLICIT. A run under
+# 3 letters ("JO", "A", "TH") does not count as a second real word, so it cannot trip the
+# guard -- which is what lets "A WINNER" above still match. The same rule means a card name
+# truncated on BOTH halves down to 2-letter fragments ("JO DRAW") is not caught by this fix;
+# nothing observed (this file's own module docstring, the live incident) has ever shown OCR
+# truncate a card's FIRST word that hard while leaving the second at a clean vocab length, so
+# this is recorded as a known residual rather than chased with an arbitrary lower floor
+# (CLAUDE.md 10.4: a threshold must sit between two MEASURED populations, and no population of
+# 1-2 letter OCR fragments has been measured here).
+got, detail = result_ocr.match_word([("JO DRAW", 1.0)])
+check(got == "draw",
+      f"I-54 known limit, decided and pinned: a 2-letter fragment does not count as a "
+      f"second word, so 'JO DRAW' still reads as draw (got {got!r}, detail {detail!r})")
+
+# the guard is scoped to ONE OCR text entry, never pooled across the whole band -- a second,
+# SEPARATE text (e.g. matchbox-ring lettering elsewhere in the crop) must not block a
+# lone-word entry. This is exactly the shape the reverted I-34 call-site veto got wrong;
+# pinning it here catches a regression back to the pooled form.
+got, detail = result_ocr.match_word([("CAMEL BURN", 0.95), ("DRAW!", 1.0)])
+check(got == "draw",
+      f"a second, SEPARATE OCR text entry must not block a lone-word entry elsewhere in "
+      f"the same band (got {got!r}, detail {detail!r})")
+
+# --- 7. I-54: THE NEGATIVE FIXTURE -- A REAL REVEAL FRAME WITH JOHNNY DRAWERS ON SCREEN --
+# test_fixtures/reveal_kind_truth/auto/speed_boost_1790029528372177000.jpg (main checkout),
+# the frame nearest the incident's own timestamp, copied to
+# test_fixtures/result_screens/negative_johnny_drawers_20260921.jpg. Real PaddleOCR output
+# on its BAND crop (agent_progress/issues/I-54/progress.md) -- Johnny Drawers' own card sits
+# BELOW the BAND region, so its name is not what OCR reads here; the real crop instead holds
+# two OTHER cards' banners. Pinned as a literal for the same reason I-34's own
+# phantom_draw_20260920.png fixture is: raw OCR output is not reproducible offline without a
+# live paddle_venv call (see that fixture's own comment in test_result_card_is_read.py).
+NEG_FIX = os.path.join(_ROOT, "test_fixtures", "result_screens",
+                       "negative_johnny_drawers_20260921.jpg")
+check(os.path.exists(NEG_FIX), f"fixture missing: {NEG_FIX}")
+NEG_TEXTS = [("PITCH FOCUS", 0.99), ("PITCHER", 0.98)]
+got, detail = result_ocr.match_word(NEG_TEXTS)
+check(got is None,
+      f"the negative fixture's real OCR text must not score a result "
+      f"(got {got!r}, detail {detail!r})")
+
+# ...and through read_banner's FULL wiring, on the real fixture file, worker stubbed to the
+# recorded real texts -- same pattern as I-34's own wiring test, same reason: deterministic,
+# no paddle_venv needed to run it.
+got, detail = _read_banner_via_stub(NEG_TEXTS)
+check(got is None,
+      f"wiring: read_banner on the negative fixture must not score a result "
+      f"(got {got!r}, detail {detail!r})")
+
+# --- 8. I-54: THE THREE LIVE RESULT FIXTURES STILL READ ----------------------------------
+# Measured via real PaddleOCR (agent_progress/issues/I-54/progress.md), before AND after
+# this fix -- identical both times, so the new guard costs nothing on a genuine banner.
+LIVE_CASES = [("heldout_winner_a.jpg", "WINNER", "win"),
+              ("heldout_loser_a.jpg", "LOSER", "loss"),
+              ("heldout_draw_768.jpg", "DRAW!", "draw")]
+for name, real_text, want in LIVE_CASES:
+    p = os.path.join(_ROOT, "test_fixtures", "result_screens", name)
+    check(os.path.exists(p), f"fixture missing: {p}")
+    got, detail = _read_banner_via_stub([(real_text, 0.99)])
+    check(got == want,
+          f"{name}: the real OCR text {real_text!r} must still read as {want!r} "
+          f"(got {got!r}, detail {detail!r})")
 
 if fails:
     print(f"\n{len(fails)} FAILED")

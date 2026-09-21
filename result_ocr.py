@@ -120,15 +120,47 @@ def match_word(texts):
     "JOHNNYDRAWERS" or a lone "DRAWERS" is LONGER than every vocab word, so `_similar`
     refuses it exactly as it refuses the split tokens -- verified below in
     `tests/minigame/test_result_ocr_whole_word.py`.
+
+    I-54: THE WHOLE-TOKEN FIX DOES NOT CATCH A TRUNCATED CARD NAME. OCR sometimes drops a
+    card name's trailing letters rather than running them together -- "JOHNNY DRAWERS" read
+    as "JOHNNY DRAW" -- and the truncated form's second half is no longer a substring, it
+    IS the vocab word once split on the space. `_similar` cannot refuse it; it is being
+    asked about "DRAW" alone and "DRAW" alone is correct to accept.
+
+    So a candidate token is refused when the OCR TEXT IT CAME FROM also contains another
+    alphabetic run of 3+ letters -- a real banner's OCR text is the word alone, plus
+    trailing punctuation noise ("DRAW!", "DRAWI"), never a second word, while a card name is
+    two. This is checked PER OCR TEXT ENTRY (`t`), never pooled across the whole band crop.
+    That distinction is load-bearing: an I-34 draft tried the pooled form ("refuse a match
+    if the band has any other long alphabetic token") and it was reverted the same day --
+    the matchbox-ring lettering around the medallion (CAMEL BURN, SPARK-D, SAFETY MATCHES,
+    SPIKE-D...) is ALWAYS present somewhere in the crop, on every class including the
+    phantom-draw frame itself, so a whole-band veto refused every genuine read. But that
+    lettering is PaddleOCR's OWN separate detected text region -- `tools/read_banner_
+    paddle.py` returns one `texts` entry per detected line (`rec_texts`/`rec_scores`
+    zipped), not one entry for the whole crop -- so a card name's two words landing in ONE
+    entry is what the per-entry version catches, without ever seeing the matchbox text at
+    all. Verified against real PaddleOCR output (agent_progress/issues/I-54/progress.md):
+    0 false positives added or removed across 185 reveal-card frames and the three live
+    WINNER/DRAW/LOSER fixtures that already read.
+
+    No confidence floor from the template reader is added here -- CLAUDE.md 10.32: no such
+    floor has been measured, and inventing one on the money path is exactly the mistake this
+    file's own history warns against.
     """
     seen = []
     for t, conf in texts:
         if conf is None or conf < MIN_CONF:
             continue
         candidates = _TOKEN_RE.findall(t.upper())
+        significant = [c for c in candidates if len(c) >= 3]
         joined = "".join(candidates)
         if joined and joined not in candidates:
             candidates = candidates + [joined]
+        if len(significant) > 1:
+            # a second real word in the same OCR text -- a card name, not a banner.
+            seen.extend(candidates)
+            continue
         for tok in candidates:
             seen.append(tok)
             for word, outcome in VOCAB.items():
