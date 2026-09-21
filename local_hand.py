@@ -149,6 +149,18 @@ def read_digit(img, circle):
 # can add a reading but never change one.
 SELECTED_DARK_MAX = 150        # between the selected p05 of 119 and the card face above it
 RAISED_DARK_MAX = 150          # a raised card's disc only fits at this threshold, see _read_fan
+
+# I-46: ON A RAISED CARD THE TRUE DIGIT OFTEN NEVER BECOMES A CIRCLE-FINDER CANDIDATE AT
+# ALL, so neither the DARK_THRESHOLDS/_strong_discs pass nor the RAISED_DARK_MAX pass above
+# has anything correct to pick from -- see the position search below `_read_fan`'s
+# RAISED_DARK_MAX loop, and agent_progress/issues/I-46/progress.md for the measurement.
+# The rise is fairly consistent (a selected card lifts as one piece): over the 22 of 23
+# I-46 census frames whose digit an exhaustive grid search recovered, dy ran -49..-34
+# anchor px and dx -10..+14. These margins are generous around that, not fitted to it.
+RAISED_SEARCH_DY = (-60, -25)   # anchor-relative y band to search, ANCHOR_W px
+RAISED_SEARCH_DX = 20           # anchor-relative x half-width to search, ANCHOR_W px
+RAISED_SEARCH_STEP = 3          # px, ANCHOR_W scale
+RAISED_SEARCH_R = 18            # passed to read_digit, which searches DIGIT_RADII around it
 TACTICS_PROMOTE_MIN = 0.80     # above the 0.695 max seen on any PLAYER slot; see _read_fan
 
 
@@ -1084,6 +1096,49 @@ def _read_fan(img, strong):
                 # reported the shield's position, so the card read as NOT selected.
                 r["y"], r["y_from"] = int(c[1]), "disc"
             break
+
+    # I-46: A THIRD PASS, because the circle above still finds nothing on a raised card
+    # 8.0% of the time (23 of 287 in the census). MEASURED: on all 23 census frames a
+    # small decorative icon (a baseball-seam on PITCHER, a bat on BATTER) sits over the
+    # disc's rim, and on a RAISED card the true digit's own ink either never clears any
+    # of DARK_THRESHOLDS/RAISED_DARK_MAX (too bright) or MERGES with the brightened ring
+    # into a blob too big for circle_finder's DIGIT_W/DIGIT_H gates (measured merged
+    # blobs 37x34 and 57x59, against a digit's 6-26 x 10-32) -- while the icon, a
+    # separate and unbrightened sprite, stays an isolated blob of exactly digit size and
+    # wins every candidate pass, reading nothing (0.09-0.793, all under MIN_SCORE 0.80).
+    # `_white_discs` cannot rescue it either: its own digit-in-disc extraction lands on
+    # the SAME icon in 22 of 22 cases where it fires at all (within 23px), because the
+    # icon is genuinely the most prominent dark blob inside the disc's box on a raised
+    # card -- there is no discarded CORRECT candidate for a selection-logic fix to
+    # prefer; the true digit is simply never proposed.
+    #
+    # So this searches POSITION directly, scored ONLY by read_digit's own MIN_SCORE gate
+    # (untouched, and the one thing already proven to separate the icon from a real
+    # digit on every one of the 23 frames) -- the same shape as DIGIT_RADII searching
+    # SCALE above. It runs ONLY where every candidate pass above still leaves a PLAYER
+    # slot's digit unread, so it can add a reading and cannot change one.
+    for r in out:
+        if r.get("kind") != "player" or r.get("digit") is not None:
+            continue
+        x = r.get("x")
+        i = r.get("_slot_i")
+        if x is None or i is None or not (0 <= i < len(SLOT_PLAYER)):
+            continue
+        ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
+        y0, y1 = int(ay + RAISED_SEARCH_DY[0] * s), int(ay + RAISED_SEARCH_DY[1] * s)
+        x0, x1 = int(ax - RAISED_SEARCH_DX * s), int(ax + RAISED_SEARCH_DX * s)
+        step = max(1, int(round(RAISED_SEARCH_STEP * s)))
+        rad = int(round(RAISED_SEARCH_R * s))
+        best_d, best_sc, best_xy = None, 0.0, None
+        for cy in range(y0, y1 + 1, step):
+            for cx in range(x0, x1 + 1, step):
+                d, sc2 = read_digit(img, (cx, cy, rad))
+                if sc2 > best_sc:
+                    best_d, best_sc, best_xy = d, sc2, (cx, cy)
+        if best_d is not None:
+            r["digit"], r["score"] = best_d, round(best_sc, 3)
+            r["digit_from_raised_search"] = True
+            r["y"], r["y_from"] = best_xy[1], "disc"
 
     return out
 
