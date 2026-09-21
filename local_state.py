@@ -929,3 +929,180 @@ def read_result(full_frame):
     out["outcome"] = RESULT_CLASSES[best]
     out["why"] = f"{best} -> {out['outcome']} ({top:.3f} against the next word at {other:.3f})"
     return out
+
+
+# ---------------------------------------------------------------------------------------
+# TWO MORE SCREENS local_game_state() HAD NO BRANCH FOR (I-35, 2026-09-21).
+#
+# Between a reveal resolving and the next hand's 5-card fan appearing, the game shows a
+# sequence of transitional screens: the settled REVEAL-RECAP tableau (the pitcher/batter/
+# tactics cards sitting motionless on the diamond, no hand fan), and -- once per half --
+# a "NEW INNING" banner. Both sat on screen long enough (6-14s, `overnight/run_live_
+# 20260921n.log`) to exhaust `MAX_PENDING_READ_FAILURES` and silently drop the pending
+# match_log row. Full investigation: `agent_progress/reveal-drops/progress.md`.
+#
+# THERE ARE MORE CAPTIONS THAN JUST "NEW INNING" IN THIS GAP, found by viewing frames --
+# "PLAY BALL!", "ROUND N", "PLAY AS THE BATTER/PITCHER", even a fleeting "HOME RUN!" --
+# and none of them is named here. is_new_inning() deliberately answers only the one word
+# CLAUDE.md 10.30/10.31 warn against widening past what is measured; is_reveal_recap()
+# answers the other (cards-with-no-fan) shape generically, which happens to cover most of
+# the caption screens too since they share it, but that is a side effect, not a promise --
+# it is not measured against every caption and none is claimed as covered.
+def is_new_inning(full_frame):
+    """Is the "NEW INNING" half-boundary banner on screen right now.
+
+    OCR on the fixed caption band, requiring "NEW" and "INNING" as WHOLE WORDS (I-30's
+    "JOHNNY DRAWERS" lesson: a substring match on "DRAW" fired on "DRAWERS"; the same
+    trap exists here against any card or scenery text that merely contains those
+    letters). Native template matching (CLAUDE.md 10.30) was tried first and dropped: the
+    caption band also carries "PLAY BALL!", "ROUND N" and "PLAY AS THE X", so a bank of
+    templates would need one entry per rendering of EVERY caption to avoid matching the
+    wrong one, while OCR only has to spell two words right.
+
+    Measured, `agent_progress/issues/I-35/measure_screens.py`:
+
+        NEW_INNING_BAND (0.30, 0.42, 0.72, 0.56) OCR'd at PSM 6, letters + "! " only
+
+        positives (2 genuine sightings, 3 frames, test_fixtures/screens/new_inning_*.jpg)
+            3 of 3 read both words
+        negatives (n=51: every OTHER caption in the same gap -- PLAY BALL!, ROUND N,
+            PLAY AS THE PITCHER -- the reveal-recap tableau, the required turn/result/
+            ban/prompt/pause fixtures, and every world/navigation frame sampled)
+            0 of 51 read both words
+
+    False means "the band does not spell NEW INNING", never "not a game screen" -- the
+    caller is expected to try `is_reveal_recap` next.
+    """
+    import ocr_glyphs
+    w, h = full_frame.size
+    x0, y0, x1, y1 = NEW_INNING_BAND
+    crop = full_frame.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    txt = (ocr_glyphs.image_to_text(crop, 6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ! ") or "").upper()
+    return bool(re.search(r"\bNEW\b", txt)) and bool(re.search(r"\bINNING\b", txt))
+
+
+NEW_INNING_BAND = (0.30, 0.42, 0.72, 0.56)
+
+
+# Copy of orchestrator.REVEAL_CENTER_REGION / _REVEAL_GRADIENT_CUTOFF / REVEAL_EDGE_
+# THRESHOLD (orchestrator.py ~2939-2940, ~2969) -- the source is the authority.
+# Duplicated rather than imported so this stays a LEAF module: orchestrator imports
+# local_state (deferred, inside local_game_state()), and local_state importing
+# orchestrator back would make every caller of this reader also load the whole
+# orchestrator module, pyautogui included, for one 8-line numpy function.
+_REVEAL_CENTER_REGION = (0.42, 0.28, 0.58, 0.58)
+_REVEAL_GRADIENT_CUTOFF = 28.0
+REVEAL_RECAP_EDGE_MIN = 0.065  # == orchestrator.REVEAL_EDGE_THRESHOLD
+
+
+def _center_card_edge_fraction(img):
+    w, h = img.size
+    x0, y0, x1, y1 = _REVEAL_CENTER_REGION
+    crop = img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1))).convert("L")
+    a = np.asarray(crop, dtype=float)
+    gy, gx = np.gradient(a)
+    return float((np.hypot(gx, gy) > _REVEAL_GRADIENT_CUTOFF).mean())
+
+
+# Copy of orchestrator.GAMEPLAY_REGIONS_FRAC["hand"] (orchestrator.py:1761) plus the
+# ANCHOR_W normalisation crop_gameplay_regions applies to it (orchestrator.py:1822-1825)
+# -- same leaf-module reason as above.
+_HAND_REGION_FRAC = (0.250, 0.716, 0.760, 1.000)
+
+
+def _hand_crop_for_fan_check(full_frame):
+    w, h = full_frame.size
+    x0, y0, x1, y1 = _HAND_REGION_FRAC
+    crop = full_frame.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    if crop.width != int(lh.ANCHOR_W):
+        tw = int(lh.ANCHOR_W)
+        crop = crop.resize((tw, max(1, round(crop.height * tw / crop.width))), Image.LANCZOS)
+    return crop
+
+
+# THE BAN SCREEN IS A BRIGHT NOTEBOOK PAGE; THE DIAMOND SCENE IS NOT (CLAUDE.md section
+# 3, "THE BAN SCREEN IS A NOTEBOOK PAGE TOO" -- the pause book is the same shape, at
+# `pause_menu.page_fraction`). `center_card_edge_fraction` alone cannot tell a ban
+# screen's row of card thumbnails from cards resting on the diamond -- both are dense
+# edges in the centre of the frame (one live ban fixture scored 0.1134, inside the recap
+# range). Brightness is what actually differs, and it is a fact this project already
+# established for a different reader, reused here rather than re-derived.
+_BRIGHT_PAGE_MIN_FRAC = 0.20
+
+
+def _bright_page_fraction(img, thr=170):
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    return float((g > thr).mean())
+
+
+def is_reveal_recap(full_frame):
+    """Is the settled REVEAL-RECAP tableau on screen: cards resting on the diamond after
+    a play resolves, before the next 5-card hand is dealt.
+
+    `center_card_edge_fraction` (orchestrator.py, the reveal watcher's own signal for
+    "cards are visible at the diamond's centre") ALONE overlaps badly with a result
+    screen's medallion, the dealer prompt's text box, and the ban screen's row of card
+    thumbnails -- all show plenty of edge in that region too. Measured,
+    `agent_progress/issues/I-35/measure_screens.py`:
+
+        edge alone (n=32 required negatives: genuine result/prompt frames filtered by
+                    `read_result`/`table_prompt.at_table` themselves, not by folder name
+                    -- CLAUDE.md 10.15; result_screens/ and table_prompt_cases/ each also
+                    hold a DIFFERENT reader's hard negatives, which are not genuine
+                    members of either category and are excluded from this count)
+            recap (this reader's positives, n=3 pinned)      0.0974 - 0.1067
+            genuine result screens scoring >= 0.065          5 of 11 (up to 0.110)
+            genuine dealer-prompt-on-screen scoring >= 0.065 3 of 9 (up to 0.095)
+            ban screens scoring >= 0.065                     1 of 7 (0.1134)
+            pause book / turn-with-fan                       0 of 5
+
+        bright-page fraction (pixels > 170/255)
+            recap / new-inning / other caption screens / turn-with-fan   max 0.152
+            ban screens (n=7)                                            min 0.269
+            pause book (n=3)                                             min 0.373
+
+    Edge alone sits INSIDE three other populations (CLAUDE.md 10.4) -- it cannot ship
+    alone. Composed with the readers that already own two of those screens (`read_result`,
+    `table_prompt.at_table`) as exclusions, the brightness gate for the ban/pause page
+    shape, and "no 5-card fan" (`local_hand._fan_looks_present`, the same evidence
+    `read_hand` itself reads), it separates cleanly on every required negative (turn with
+    fan, result, ban, dealer prompt, pause book) -- see
+    `tests/minigame/test_transition_screens_recognised.py`.
+
+    NOT SAFE AGAINST, AND NOT CLAIMED SAFE: arbitrary world/navigation frames (the bar,
+    a doorway, an NPC) and the OTHER readers' own hard negatives (a "top negative" that
+    exists to stress `read_result`, a "no_prompt" frame that exists to stress
+    `table_prompt.at_table` -- neither is a genuine result screen or a genuine prompt,
+    so neither is excluded by those two checks). Measured, `agent_progress/issues/
+    I-35/measure_screens.py`: 7 of 11 such frames score True. `local_game_state()` --
+    the only caller -- runs exclusively inside the live-match turn loop, never during
+    world navigation (a separate code path, graph_walk), so that population is out of
+    scope for what this function is ever actually shown; it is not fixed because it is
+    not reachable, not because it was not tried. If this reader is ever called from
+    outside that loop, or fed a frame from a different capture pipeline, re-measure
+    against that population before trusting it there.
+
+    This is deliberately AFTER `read_result`/`table_prompt.at_table` in local_game_
+    state()'s own ordering too -- a turn or result screen must still be named as such
+    first; this is a fallback for what neither of those, nor the hand reader, could
+    place.
+    """
+    try:
+        if read_result(full_frame).get("is_result"):
+            return False
+    except Exception:
+        pass
+    try:
+        import table_prompt
+        if table_prompt.at_table(full_frame):
+            return False
+    except Exception:
+        pass
+    if _bright_page_fraction(full_frame) >= _BRIGHT_PAGE_MIN_FRAC:
+        return False
+    hand_img = _hand_crop_for_fan_check(full_frame)
+    strong = lh._strong_discs(hand_img)
+    s = hand_img.width / lh.ANCHOR_W
+    if lh._fan_looks_present(hand_img, strong, s):
+        return False
+    return _center_card_edge_fraction(full_frame) >= REVEAL_RECAP_EDGE_MIN

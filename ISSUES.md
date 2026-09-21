@@ -1064,10 +1064,48 @@ FAILURES=2` drops the pending match_log row on the 3rd poll; 5 rows dropped in
 
 **Impact.** Logging loss only (nothing downstream reads the pending row).
 
-**Proposed fix.** A named "new_inning"/"reveal_recap" screen case so the pending row waits
-through a recognised transition.
+**FIXED, offline worktree, 2026-09-21.** Two new local readers, `local_state.
+is_new_inning` (OCR on a fixed caption band, requiring "NEW" and "INNING" as whole
+words) and `local_state.is_reveal_recap` (`center_card_edge_fraction` + "no 5-card
+fan", composed with `read_result`/`table_prompt.at_table` as exclusions plus a
+bright-page gate for the ban/pause notebook shape -- edge alone overlapped badly
+with result/prompt/ban screens, CLAUDE.md 10.4; see the docstrings for the measured
+populations). Wired into `local_game_state()` AFTER result/ban/prompt/turn, returning
+named `"new_inning"`/`"reveal_recap"` states instead of the UNRECOGNISED SCREEN gap.
 
-**Status.** Open.
+`run()`'s pending-matchup resolution now skips (rather than "unscorable"-drops) on
+these two screens, so the row waits for the next real "turn"/"result" read instead of
+being dropped on the very poll that correctly identified the gap. Bounded:
+`TRANSITION_SCREEN_MAX_SEC` (30s, over 2x the longest measured dwell of 6.6-13.7s) --
+a transition that never advances is still treated as stuck and the row is dropped, so
+a frozen or misidentified screen cannot wait forever.
+
+**Found while building this:** the gap also shows "PLAY BALL!", "ROUND N", "PLAY AS
+THE BATTER/PITCHER" captions and a fleeting "HOME RUN!", none of which either detector
+promises to cover (`is_reveal_recap` catches most of them as a side effect of its
+geometric signal, not as a claim). Two `test_fixtures/screens/turn__0.jpg` /
+`turn__1.jpg` fixtures are mislabelled -- viewed directly, they are the HOME RUN!
+caption family, not turn screens (CLAUDE.md 10.15) -- left as-is since nothing here
+owns that directory, noted in `agent_progress/issues/I-35/measure_screens.py`.
+
+**Tests.** `tests/minigame/test_transition_screens_recognised.py`: both detectors
+against pinned positives and the five required negatives (turn with fan, result, ban,
+dealer prompt, pause book, each filtered by the reader that already owns its
+category, not by folder name); `local_game_state()` end to end; a pending row
+surviving 6 polls of each transition screen and being logged on the next turn; a
+CONTROL proving 3 genuinely-unreadable polls (the pre-existing, unmodified
+`MAX_PENDING_READ_FAILURES` path) still drop the row; the 30s bound firing. 9
+mutants across three categories (each detector forced True, the bound dropped, the
+recognised screens routed through the old unrecognised-screen path), each caught by
+a different assertion, files restored byte-for-byte (sha256) between mutants.
+`tests/minigame/_run_harness.py` gained one additive capability (a scripted screen
+entry that is an `Exception` now makes `read_state_for_turn` raise it, mirroring
+`play_results`' existing shape) -- no existing test passes an `Exception` there, so
+this is backward compatible.
+
+**Status.** Fixed, awaiting live verification (this ticket is offline-only; a live
+run is what would confirm the measured 6.6-13.7s dwell and the 30s bound against a
+real match rather than a scripted one).
 
 ### I-36  The half's second discard is refused three times, then the stall breaker plays   P1  input/loop
 
