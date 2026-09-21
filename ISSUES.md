@@ -3311,3 +3311,174 @@ dead-reckon behind it. Also green, unchanged: `test_verified_selection.py`,
 
 **Status.** merged 39f160a; Sonnet skeptic CONFIRMED (moves only, bounded at
 PRESS_VERIFY_TRIES, I-33/nudge cannot double-fire, worst observed 7 presses).
+### I-52  confirm_discard is verified once, immediately, and a late-landing discard leaves its slot in _MAYBE_LIFTED (three false I-43 refusals)   P1  input/loop
+
+**Evidence.** `overnight/run_live_20260921t.log` ~386-420 (main checkout). Decision
+"discarding the weakest (power 4)" at slot 0; `[discard] confirm_discard did not
+register — discards_left is still 2. REFUSING to press confirm_play...`; `discard
+NOT CONFIRMED — it may or may not have been thrown. Re-reading the hand next poll`;
+NEXT poll: `[hand] 0: UNKNOWN ...`, `1 discard(s) left` -- the discard HAD landed and
+the count was read one poll too early. Slot 0 then stayed in `_MAYBE_LIFTED` (its
+position unreadable/animating), and THREE plays were refused by the I-43 guard
+("slot(s) [0] may still be physically lifted...") before hand_index 1 was excluded
+and a worse card (batter 3) committed. Cost ~75s and a worse card. Frames:
+`diagnostics/deal_frames/dropped_1790029230537281000/`,
+`refused_select_1790029233140573000/`, `_1790029235068215000/`,
+`_1790029236869044000/`.
+
+**The 26-row table.** Every `discard NOT CONFIRMED` line across
+`overnight/run_live_2026092*.log`, method and full detail in
+`agent_progress/issues/I-52/discard_table.txt` (scripted, verified against a manual
+read of `t.log:388-400`, `j.log:444-460`/`598-625`, `o.log:715-735`,
+`r.log:288-312`/`428-452`, `s.log:230-513`). "LATE" = discards_left had decreased by
+the time the engine gave up trying to discard and moved to playing instead (proof it
+landed, read late); "DROPPED" = the count never moved before that point (the press
+genuinely never registered, at least not yet).
+
+```
+ #  file                            line before  after     status  play@  I-43@
+ 1  run_live_20260920i.log           95      1      0       LATE    100   -
+ 2  run_live_20260921b.log           42      1      0       LATE     50   -
+ 3  run_live_20260921e.log          134      2      1       LATE    139   -
+ 4  run_live_20260921j.log          450      2      2    DROPPED    455   -
+ 5  run_live_20260921j.log          608      1      1    DROPPED    619   -
+ 6  run_live_20260921j.log          612      1      1    DROPPED    619   -
+ 7  run_live_20260921j.log          616      1      1    DROPPED    619   -
+ 8  run_live_20260921j.log          802      2      0       LATE    810   -
+ 9  run_live_20260921n.log           84      1      0       LATE     89   -
+10  run_live_20260921n.log          485      1      1    DROPPED    506   -
+11  run_live_20260921n.log          493      1      1    DROPPED    506   -
+12  run_live_20260921n.log          501      1      1    DROPPED    506   -
+13  run_live_20260921o.log          721      2      0       LATE    733   -
+14  run_live_20260921o.log          728      1      0       LATE    733   -
+15  run_live_20260921p.log          237      1      0       LATE    242   -
+16  run_live_20260921p.log          406      1      0       LATE    411   -
+17  run_live_20260921p.log          540      2      0       LATE    548   -
+18  run_live_20260921p.log          612      1      0       LATE    617   -
+19  run_live_20260921q.log          565      2      0       LATE    577   -
+20  run_live_20260921q.log          838      2      1       LATE    845   -
+21  run_live_20260921r.log          294      2      1       LATE    299   -
+22  run_live_20260921r.log          434      2      0       LATE    441   -
+23  run_live_20260921s.log          236      2      1       LATE    241   -
+24  run_live_20260921s.log          283      1      0       LATE    288   -
+25  run_live_20260921s.log          499      1      0       LATE    504   -
+26  run_live_20260921t.log          390      2      1       LATE    397   399
+```
+
+**21 of 26 are LATE, 5 are genuinely DROPPED** (rows 4-7, 10-12 -- j.log 07:49 and
+n.log 08:17, both well before the I-43 merge). Only **1 of 26** was followed by an
+`(I-43)` refusal (row 26): in every other LATE case the redealt card happened to
+read cleanly on the very next poll, so the stray mark was never exercised — this one
+is the exception, and it is exactly the shape the fix targets.
+
+**A second, independent false-refusal shape**, found in today's logs while counting
+true positives (see below): a card legitimately lifted for a PLAY commit (not a
+discard) occludes its UNSELECTED neighbour's own disc/badge read, so the neighbour
+reads unreadable and the commit guard's `_new_blind` path (in
+`_verified_select_and_play_inner`, out of this ticket's scope) marks it as a stray.
+`run_live_20260921t.log` ~906-996: hand [swing+1, speed+1, 4/3, 4/3, 8/1], slot 0
+(tactics) and slot 4 (the 8, the play target) legitimately selected, slot 1 (speed,
+untouched) reads unreadable purely from sitting beside slot 0 -- `[cursor] slot(s)
+[1] read unreadable ([152, None, 139, 159, 168]) — re-looking once before refusing`
+-> `still unreadable ... something we pressed lifted them` -> marked, refused for 8
+STRAIGHT POLLS, excluding hand_index 4 -- the best card in the hand -- from every
+attempt (`diagnostics/deal_frames/refused_select_1790029942849538000/`, `why.json`:
+`{"target": 4, "already_selected": [0, 4]}`). The frame shows slot 1's "SPEED BOOST"
+banner plainly legible to the eye; the reader's narrow disc-position window is what
+misses it, matching CLAUDE.md's own I-36 finding elsewhere in this file ("pixel
+overlap between adjacent cards, which only occurs once a card is physically raised
+above its fan neighbours").
+
+**I-43 true-positive count, today's logs (`run_live_20260921[rst].log`, the three
+files after the I-43 merge `2f18a734`, 2026-09-21 13:31:34 — verified by the epoch in
+each file's own frame-directory names, 13:53/17:10/18:20).** All 11 `(I-43)`
+refusals in these three files are in `t.log`: 3 at lines 399/406/413 (the discard
+shape, row 26 above) and 8 at lines 922-996 (the neighbour-occlusion shape).
+**0 of 11 are true positives.**
+
+**Root cause, two parts.**
+
+1. `select_and_discard`'s confirm_discard was pressed exactly ONCE and then only
+   POLLED the counter for `DISCARD_CONFIRM_TRIES` reads (`input_controller.py`,
+   pre-fix) — unlike every other commit press (I-11's `press_verified`), a press the
+   console dropped (CLAUDE.md section 5: ~1 in 6, and they cluster) could only ever
+   be REPORTED, never retried within the same call. Recovery instead depended on the
+   caller (`orchestrator.play_one_turn`) looping back on the NEXT poll and re-running
+   the whole select-and-discard sequence from scratch — ~15-20s per cycle, and the
+   count sometimes proved the landing one poll later than that too (row 26).
+2. `_reconcile_maybe_lifted(ys, sel)` only ever cleared a tracked slot on a real,
+   readable `y` that was not currently selected ("seen down"). A slot whose true
+   state was proven a DIFFERENT way — discards_left measurably falling, or a
+   neighbour's lift explaining its own unreadability — had no path to clearing, so
+   it stayed marked until its OWN position happened to read cleanly, however many
+   polls that took.
+
+**Fix**, confined to `input_controller.py`'s `select_and_discard` and the
+`_MAYBE_LIFTED`/`_reconcile_maybe_lifted` helpers (no other function touched):
+
+1. `select_and_discard` now verifies confirm_discard with `press_verified`, the
+   SAME helper I-11 uses for `confirm_play`/`close_result`/`start_match` — no new
+   constants, `tries`/`settle` are its own defaults (`PRESS_VERIFY_TRIES`,
+   `PRESS_VERIFY_SETTLE`). Its `observe()` (`_discard_landed`) answers with the NEW
+   count the moment discards_left measurably falls (decisive proof, however the
+   replacement currently reads) and otherwise with the unchanged baseline —
+   UNLESS a fresh read shows card_index is no longer lifted while the count is
+   still unchanged, which is the "landed late" shape (row 26) and is answered with
+   None, press_verified's own signal to STOP rather than press again. **This is the
+   guard against a second confirm_discard with nothing selected**: the code was read
+   and RULES.md checked (`select_and_discard presses select_card then
+   confirm_discard`, i.e. confirm_discard, like confirm_play, commits whatever is
+   CURRENTLY selected) — nothing in this codebase exercises a bare confirm_discard
+   with nothing selected, so its effect is untested, and the fix simply never sends
+   one. The first `observe()` call answers `before` directly (no fresh read) rather
+   than re-deriving it, so a caller whose counter never answers on any subsequent
+   poll — `discards_look` abstaining forever, `tests/minigame/
+   test_commit_refuses_unseen_strays.py`'s M3 — still gets its one owed press
+   (press_verified refuses to press AT ALL when it cannot see a baseline; re-reading
+   the baseline the second time would have regressed that case).
+2. `_reconcile_maybe_lifted` clears on a SECOND signal now: an unreadable slot
+   immediately beside one that IS currently selected is explained by the neighbour's
+   lift, not proof of its own, and clears on that basis alone. A slot not beside
+   anything currently selected gets no such pass (I-43's true-positive shape, an
+   isolated stray, still refused). A new sibling helper, `_prove_maybe_lifted_clean`,
+   clears a slot directly on the discards_left proof from (1) — a THIRD, independent
+   signal, since it isn't expressible in terms of `ys`/`sel` at all.
+
+**Verify.** `tests/minigame/test_discard_confirm_verified.py` (new): (A) a dropped
+press a retry lands — 2 presses, ok=True, the (pre-marked) slot cleared; (B) the
+press lands but the count reads one poll late — exactly 1 press, no second
+confirm_discard, ok=False (UNVERIFIED, the safe label), and the mark clears on the
+NEXT poll's ordinary "seen down" read with no new machinery; (C) every retry dropped
+— retries up to `PRESS_VERIFY_TRIES`, ok=False, the mark SURVIVES a next-poll check
+that is still unresolved (the safe direction, unchanged); (D) `_prove_maybe_lifted_
+clean` clears a mark directly, and a landed discard's own success path uses it on a
+PRE-MARKED slot (not a trivially-already-clear one); (E) I-26/I-28 control:
+reconciliation never MARKS an untracked slot, only ever clears one; (F) the
+neighbour-occlusion shape — a marked slot beside a currently-selected one clears;
+(G) the I-43 true-positive control — an isolated marked slot with nothing selected
+beside it survives, including with an unrelated NON-adjacent selection elsewhere in
+the hand (adjacency, not "anything is selected", is the gate). `def check(name,
+cond)`, name-first.
+
+**Mutants (5, `__pycache__` cleared and sha256-verified restored between each,
+`1a93bae086f599bdd2e04d867f3d0aac63bcf595059d5642769db088faf96a14`):**
+
+    force press_verified tries=1 (drop the retry)
+        -> case A FAILS: only 1 press, never lands, ok=False
+    drop the fresh-count/fan re-check inside _discard_landed (retry blind)
+        -> case B FAILS: 2 presses sent, not 1 -- the guarded double-press happens
+    drop _prove_maybe_lifted_clean from the landed branch
+        -> cases A and D FAIL: a pre-marked slot stays marked despite a proven drop
+    drop the neighbour-occlusion clause from _reconcile_maybe_lifted entirely
+        -> case F FAILS: the neighbour-occluded slot stays marked
+    widen the neighbour clause to "any selection, not just adjacent"
+        -> case G FAILS: a non-adjacent selection wrongly rescues an isolated stray
+
+**Run.** `test_discard_confirm_verified.py`, `test_discard_is_proven.py`,
+`test_verified_selection.py`, `test_commit_refuses_unseen_strays.py`,
+`test_verified_presses_on_match_path.py`, `test_hand_memory_persists.py`,
+`test_run_debit_and_scoring.py`, `test_i22_pitch_boost_slot3.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py` — all exit 0.
+
+**Status.** Fixed on branch, awaiting skeptic.
