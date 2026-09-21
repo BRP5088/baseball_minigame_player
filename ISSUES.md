@@ -2488,3 +2488,123 @@ case 10 (the 2-prior-frames control) FAIL as insufficient_history instead of KEP
 dropping `d["fallback"] = True` from the fallback branch (stderr line left intact) makes
 F3's `meta["fallback"] is True` check die with `KeyError: 'fallback'`. Both restored;
 `git status --porcelain` shows no source diff.
+
+### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
+
+I-48 is not in this checkout's ISSUES.md yet — this entry is placed directly after I-47.
+
+**Evidence.** `agent_progress/census/reveal_orphans_trace/` traced 42 fully-readable
+reveal frames (36 class-A + 6 class-C) that produced no `match_log.jsonl` row, by
+walking each frame's own run log for the drop signature. 21 of the 36 class-A frames
+had already been STAGED (`pending_matchup = matchup_info` — powers, kinds, bonuses,
+phase all known) and were then dropped by a LATER poll's own failure, not by the
+staging turn itself:
+
+    12   `pending_read_failures > MAX_PENDING_READ_FAILURES` -- "N consecutive
+         unreadable screens" (orchestrator.py ~:8845)
+     9   the follow-up read came back with no score -- "outcome unscorable:
+         <field> missing from the follow-up read" (~:8907)
+
+Both sites read `if pending_matchup is not None: print(...); pending_matchup = None`
+— the row was discarded outright, with nothing but a print line marking that it ever
+existed. CLAUDE.md §4 already says the outcome comes from the REVEAL's margin (a
+wrong score is worse than no score); these two paths were the DATA equivalent —
+a real at-bat's cards, thrown away because the SCORE could not be attributed, when
+the cards alone are real evidence for the margin/secondary questions
+`analyze_match_log.py` already answers powers-only.
+
+**Fix.** Both sites now `log_matchup()` the row instead of discarding it, with the
+outcome-dependent fields explicitly null (`outcome`, `runs_scored`, `margin`,
+`outcome_basis`) so no consumer can mistake it for a scored verdict, plus
+`row_status: "unscored"` and a `drop_reason` string naming which of the two killed
+it (`"<N>_consecutive_unreadable_screens"` or
+`"outcome_unscorable:<field>_missing"`). The successful scoring call (the ONE other
+`log_matchup` call site in the file) is unchanged except for `row_status: "scored"`,
+added so any consumer can filter by status without inferring it from which fields
+are null. classify_outcome/reveal_margin/the margin rule are untouched — nothing
+about how an outcome is DECIDED changed, only what happens when it cannot be.
+
+**Out of scope, deliberately.** A third drop site (~:9091,
+`TRANSITION_SCREEN_MAX_SEC` outlasting a stuck `new_inning`/`reveal_recap`) has the
+identical `pending_matchup = None` shape and is not touched: 0 of the 42 traced
+frames died there, it sits outside the ticket's named line ranges
+(orchestrator.py ~8840-8915 / ~10150-10245), and `test_transition_screens_recognised.py`
+section 5 already pins `len(logged) == 0` for it — left alone rather than guessed at.
+Also out of scope: the give-up/abandon row producer in `reset_env.py`
+(`tests/rig/test_abandoned_match_is_recorded.py`), a different code path with no
+`row_status` field at all; not touched.
+
+**Consumer decisions**, one per file that reads `match_log.jsonl` (found via
+`find . -name '*.py' -not -path './.venv/*' -print0 | xargs -0 grep -l match_log`,
+excluding `agent_progress/` and `drafts/`):
+
+    analyze_match_log.py        NO CHANGE. has_outcome_basis(row) is
+                                `bool(row.get("outcome_basis"))`, and an unscored
+                                row's outcome_basis is None -- it already excludes
+                                itself from `outcome_rows`/the outcome tally/the
+                                baseline, the same bucket legacy pre-classify_outcome
+                                rows already fall into. The margin/secondary analysis
+                                (the `usable` list) is legacy-inclusive BY DESIGN
+                                (reads *_power/*_tactics_bonus/*_tactics_kind, never
+                                `outcome`) and effective_power() does not consult
+                                row_status -- so an unscored row's REAL powers are
+                                usable there with zero changes, which is the "MAY use
+                                the power distribution" half of the ticket.
+    tactics_effect.py           NO CHANGE. Same has_outcome_basis() gate, one line:
+                                `rows = [r for r in rows if aml.has_outcome_basis(r)]`
+                                before any win-rate arithmetic runs. Every statistic
+                                in this file is scored on `outcome`, so it is the
+                                right file to exclude unscored rows from entirely,
+                                and it already does.
+    tools/ab_engine_i15_16_17.py NO CHANGE. load_log_distribution()'s qualifying
+                                (load_log_distribution)   test is `"outcome_basis" not in row and
+                                "margin" not in row: continue` -- KEY PRESENCE, not
+                                truthiness. An unscored row carries both keys (value
+                                None), so it is NOT excluded; its real opp_power feeds
+                                the opponent-pitcher-power distribution exactly as the
+                                ticket allows ("the power is real"). Verified directly
+                                against the real function (not re-implemented) with a
+                                synthetic 3-row log: a scored row and an unscored row
+                                both count toward `n_used_for_distribution` (2), a
+                                genuinely legacy row with NEITHER key is excluded (see
+                                test scenario E).
+    reset_env.py (a DIFFERENT   NOT TOUCHED -- out of scope, see above. Its rows carry
+    producer, not this ticket) no row_status at all; a future ticket could add one.
+
+**Verify.** `tests/minigame/test_unscored_reveal_rows_kept.py` (new, this ticket):
+scenario A (streak drop -> unscored + drop_reason, plus an A-control proving a
+streak one poll SHORTER than the bound still resolves normally), B (outcome-
+unscorable drop -> unscored + drop_reason), C (control: a normally scored row is
+row_status="scored" with its outcome intact and no drop_reason), D (the two
+has_outcome_basis()-gated consumers need no code change), E (the key-presence
+consumer, driven through the real `load_log_distribution()` against a synthetic
+log). Also green: `test_run_debit_and_scoring.py`,
+`test_stale_flag_never_presses_unpaid.py`, `test_run_resume_and_persist.py`
+(one assertion updated — see below), `test_ab_controls_reproduce_baseline.py`,
+`test_reveal_frame_kept.py`, `test_transition_screens_recognised.py` (one assertion
+updated — see below), `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `test_claude_md_constants.py`.
+
+**Two pre-existing tests pinned the OLD (discard) behaviour on the exact two paths
+this ticket changes, and both needed their assertion updated, not their mechanism**:
+`test_run_resume_and_persist.py`'s `_dropped = _rows_after(6)` control used to assert
+`not _dropped` (zero rows after six failed reads); it now asserts exactly one row,
+`row_status == "unscored"`, `outcome is None` — the actual concern that check
+existed for (no OUTCOME attributed across a stale gap) still holds, because the
+outcome fields are null, not guessed. `test_transition_screens_recognised.py`
+section 4's control (the same streak, its own scripted `ValueError`) got the same
+treatment. Neither test's SCENARIO changed; only what a correct implementation is
+now asserted to produce.
+
+**Mutants (3, `__pycache__` cleared before/after each, sha256-verified restore to
+`994655cc2f0685b49beadfe56296d6c947bc09e6dd99daf0849fe0df01a8b0fb`):**
+
+    revert the append on the streak path (`log_matchup(...)` -> `pass`)
+        -> test_unscored_reveal_rows_kept.py: scenario A FAILS (0 rows, expected 1)
+    mislabel the outcome-unscorable append's row_status as "scored"
+        -> test_unscored_reveal_rows_kept.py: scenario B FAILS (row_status check)
+    drop the `drop_reason` field from the streak append
+        -> test_unscored_reveal_rows_kept.py: scenario A FAILS (drop_reason check)
+
+**Status.** Fixed on this branch (`agent_progress/issues/I-49/progress.md` carries
+the trace). Suite green as listed above; not yet merged to main.
