@@ -31,6 +31,7 @@ wired, and it replaces a 35 s stall.
 import atexit
 import json
 import os
+import re
 import select
 import subprocess
 import threading
@@ -47,17 +48,33 @@ MIN_CONF = 0.55
 
 # A CLOSED VOCABULARY OF THREE. Fuzzy, because OCR drops letters ('WINER' was observed at
 # 0.87) -- but never so loose that a card banner counts: "PITCHER" appears on a turn screen
-# and must NOT match. The rule is a prefix/containment test on words of length >= 4, which
-# 'WINER' passes against WINNER and 'PITCHER' fails against all three.
+# and must NOT match. Matching is WHOLE-WORD ONLY (I-34, 2026-09-21): a player card OCR'd
+# as "JOHNNY DRAWERS" on a live TURN frame -- not a result screen -- used to score a phantom
+# draw, because the old rule was `word in seen or seen in word`, a bare substring test, and
+# "DRAW" is a substring of "DRAWERS". A whole OCR TOKEN must now equal the vocab word, or be
+# it with one letter dropped ('WINER' -> WINNER, OCR skipping a stroke) or one trailing
+# character that is a '!' misread as a letter ('DRAWI' -> DRAW). "DRAWERS", "WINNERS" and
+# "LOSERS" are each a real, different, LONGER word and must not match.
 VOCAB = {"WINNER": "win", "LOSER": "loss", "DRAW": "draw"}
+
+_TOKEN_RE = re.compile(r"[A-Za-z]+")
+_EXCLAIM_NOISE = "IL1"   # OCR sometimes renders a trailing '!' as one of these letters
 
 
 def _similar(seen: str, word: str) -> bool:
-    """True if `seen` is `word`, or `word` with letters dropped, in order."""
+    """True if the WHOLE token `seen` is `word` -- exactly, with one letter dropped in
+    order ('WINER' -> WINNER), or with one trailing '!'-as-a-letter noise char ('DRAWI' ->
+    DRAW). A `seen` that is LONGER than `word` for any other reason is a different word
+    ('DRAWERS', 'WINNERS', 'LOSERS') and must not match, however much of `word` it
+    contains -- containment used to count here and matched a card name (I-34)."""
     if len(seen) < 4:
         return False
-    if seen == word or seen in word or word in seen:
+    if seen == word:
         return True
+    if len(seen) == len(word) + 1 and seen[:-1] == word and seen[-1] in _EXCLAIM_NOISE:
+        return True
+    if len(seen) >= len(word):
+        return False
     i = 0                                   # subsequence: WINER -> WINNER
     for ch in word:
         if i < len(seen) and seen[i] == ch:
@@ -66,17 +83,60 @@ def _similar(seen: str, word: str) -> bool:
 
 
 def match_word(texts):
-    """(outcome, the text that matched) from OCR output, or (None, reason)."""
+    """(outcome, the text that matched) from OCR output, or (None, reason).
+
+    Tokenises each OCR text on non-letter boundaries BEFORE matching, so "JOHNNY DRAWERS"
+    is checked as the two whole tokens JOHNNY and DRAWERS -- never concatenated into one
+    string a substring test could hit, and never truncated to just DRAWERS's prefix.
+    """
     seen = []
     for t, conf in texts:
         if conf is None or conf < MIN_CONF:
             continue
-        clean = "".join(ch for ch in t.upper() if ch.isalpha())
-        seen.append(clean)
-        for word, outcome in VOCAB.items():
-            if _similar(clean, word):
-                return outcome, t
+        for tok in _TOKEN_RE.findall(t.upper()):
+            seen.append(tok)
+            for word, outcome in VOCAB.items():
+                if _similar(tok, word):
+                    return outcome, t
     return None, f"no result word in {seen!r}" if seen else "no text found"
+
+
+def _extraneous_alpha_tokens(texts):
+    """Every alphabetic OCR token longer than 2 letters that does NOT itself look like a
+    result word (`_similar` against any VOCAB entry). Used by `_match_word_strict` below."""
+    out = []
+    for t, conf in texts:
+        if conf is None or conf < MIN_CONF:
+            continue
+        for tok in _TOKEN_RE.findall(t.upper()):
+            if len(tok) > 2 and not any(_similar(tok, w) for w in VOCAB):
+                out.append(tok)
+    return out
+
+
+def _match_word_strict(texts):
+    """(outcome, detail) like `match_word`, plus a BELT-AND-BRACES rule (I-34): refuse a
+    match if the band's OCR texts contain any other alphabetic token longer than 2 letters
+    that doesn't itself look like a result word. A real result banner shows the word alone
+    in this band; a reveal or a live turn frame shows a player name or other prose beside
+    it -- exactly the "JOHNNY DRAWERS" shape that produced the phantom draw this fixes.
+
+    UNMEASURED against real result frames: this shipped with no `paddle_venv` in the
+    worktree and a live run in the main checkout (run_cycles, pid seen 2026-09-21), so
+    running PaddleOCR against test_fixtures/result_screens/ risked degrading that run's
+    timing (CLAUDE.md 10.13/13a) and was not done. It is safe to ship unmeasured only
+    because of its FAILURE DIRECTION: it can turn an accepted match into a refusal, never
+    a refusal into a match, so the worst case is an extra poll (`local_game_state` falls
+    through to "UNRECOGNISED SCREEN" and the caller retries), never a wrong score. Verify
+    it against real result frames before trusting it to silently absorb a genuine banner.
+    """
+    outcome, detail = match_word(texts)
+    if outcome is None:
+        return outcome, detail
+    extra = _extraneous_alpha_tokens(texts)
+    if extra:
+        return None, f"OCR read {detail!r} but the band also has {extra!r} -- not alone"
+    return outcome, detail
 
 
 # ---------------------------------------------------------------------------------------
@@ -165,7 +225,7 @@ def read_banner(full_frame, tmp_dir="/tmp"):
             texts = json.loads(line).get(path, [])
             if isinstance(texts, str):
                 return None, texts
-            return match_word(texts)
+            return _match_word_strict(texts)
         except Exception as e:
             _shutdown()
             return None, f"{type(e).__name__}: {e}"

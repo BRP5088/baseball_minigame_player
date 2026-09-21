@@ -814,6 +814,76 @@ are folded into `tests/minigame/test_walk_crosses_occluded_slot.py` as checks
 fail exactly its own check and no other, sha256-verified restored byte for byte
 between them.
 
+### I-34  A second substring matcher scored a phantom draw from a card name (JOHNNY DRAWERS)   P0  reader
+
+**Evidence.** overnight/run_live_20260921j.log ~262-268 (main checkout, read-only): a live
+turn frame's OCR-read card banner "JOHNNY DRAWERS" reached the LAST-RESORT OCR path
+(`orchestrator.local_game_state`, ~4325-4345 -> `result_ocr.read_banner`, wired in only
+after templates, ban counter, dealer prompt and hand reader all decline). `match_word`
+scored DRAW as a substring of DRAWERS, `run()` logged a draw for a match still in progress
+(6 total), and the real result screen that followed was discarded as "already scored" (log
+~line 374). Money unaffected; the record was wrong by one draw.
+
+**Root cause.** I-30 (2026-09-20) fixed the SAME bug shape in `local_state.read_result_card`
+(the TEMPLATE reader's own last-resort card path) with a whole-word regex. `result_ocr.py`'s
+`match_word`/`_similar` is a completely SEPARATE matcher -- the orchestrator's own OCR
+fallback -- and I-30 never touched it. Its rule was `seen == word or seen in word or word
+in seen`, a bare containment test, so `"DRAW" in "DRAWERS"` matched.
+
+**Fix.** `result_ocr._similar` now requires the WHOLE OCR token to equal the vocab word,
+with exactly two OCR-noise tolerances: one dropped letter (`WINER` -> WINNER, the
+tolerance the module already had and still needs) and one trailing letter standing in for
+a misread `!` (`DRAWI` -> DRAW, a form seen in this module's own docstring). A token
+LONGER than the word for any other reason -- `DRAWERS`, `WINNERS`, `LOSERS` -- no longer
+matches, however much of the word it contains. `match_word` now tokenises each OCR text on
+non-letter boundaries FIRST (`re.findall(r"[A-Za-z]+", ...)`), so "JOHNNY DRAWERS" is
+checked as the two whole tokens JOHNNY and DRAWERS, never concatenated into one string a
+containment test could hit.
+
+A second, independent layer (`result_ocr._match_word_strict`, wired into `read_banner` in
+place of the bare `match_word` call) refuses a match outright if the band's OCR texts carry
+any OTHER alphabetic token longer than 2 letters that doesn't itself look like a result
+word -- a real banner shows the word alone in the crop; a reveal or a turn frame shows a
+player name or other prose beside it. **UNMEASURED against real result frames**: this
+worktree has no `paddle_venv` (a live run, `run_cycles`, was confirmed running in the main
+checkout's process list while this was written -- `ps aux` showed pid 51234 -- and CLAUDE.md
+10.13/13a says CPU-bound work must not run alongside a live navigation), so
+`tools/read_banner_paddle.py` was not run against `test_fixtures/result_screens/` to check
+whether a real banner's OCR ever carries a stray long token that this rule would wrongly
+veto. It ships anyway because its failure direction is safe by construction: it can only
+turn an ACCEPTED match into a REFUSAL, never a refusal into a match, so the worst case is
+one extra poll (`local_game_state` falls through to "UNRECOGNISED SCREEN" and the caller
+retries), never a wrong score. Verify it against real result frames before trusting it to
+silently absorb a genuine banner that happens to carry extra OCR noise.
+
+grep for `DRAW` across `result_ocr.py`, `local_state.py`, `orchestrator.py` and
+`tools/read_banner_paddle.py` found exactly one other matcher: `local_state.
+read_result_card`'s I-30 fix (`\b{k}\b`), already whole-word and untouched here. The
+remaining hits in all four files are prose comments and docstrings, not matching code.
+
+**Verify.** `tests/minigame/test_result_ocr_whole_word.py`: (1) the exact bug --
+`match_word([("JOHNNY DRAWERS", 1.0)])` -> None; (2) `DRAWERS`/`WINNERS`/`LOSERS` each
+refused as real, longer, different words; (3) the existing vocabulary and both OCR-noise
+tolerances (`WINER`, `DRAWI`, a real `DRAW!`) still read exactly as before; (4) card
+banners (`PITCHER`, `BATTER`) and junk (`BANNEDCARDS`, `""`) still refused; (5) tokenised
+matching still finds a result word beside other text (`"THE WINNER"` -> win via
+`match_word`); (6) the strict call-site layer refuses that same `"THE WINNER"` text (its
+`THE` token is the giveaway), accepts the word alone, is not fooled by the real banner's
+own `!`, and is not vetoed by a short (<=2 letter) stray token. Two mutants, each caught by
+a disjoint set of checks and nothing else, restored byte-for-byte (sha256) between them,
+`__pycache__` not implicated (`-B` throughout, no `.pyc` ever written): (a) reverting
+`_similar` to the old substring test fails exactly the 4 substring-shape checks; (b)
+dropping the strict layer's extraneous-token veto (`_match_word_strict` falling through to
+plain `match_word`) fails exactly the one check that names it, nothing else. Siblings run
+clean: `tests/minigame/test_close_result_refuses_stale_read.py`,
+`tests/minigame/test_run_debit_and_scoring.py`, `tests/harness/test_no_shadowed_module_
+defs.py`, `tests/harness/test_no_undefined_names.py` all pass. `tests/minigame/
+test_result_reader.py` has one PRE-EXISTING, unrelated failure in this worktree --
+`diagnostics/20260910_103221_5018/screen_at_stall.png` does not exist here -- reproduced
+identically with this ticket's changes stashed out, so it is not this fix's doing.
+
+**Status.** Fixed on branch, awaiting skeptic.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
