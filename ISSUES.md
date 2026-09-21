@@ -622,6 +622,48 @@ unmodified against the fix.
 
 **Status.** Merged.
 
+### I-29  A redeal at a stalled slot that draws the same value inherited the old refusal count   P1  loop
+
+**Evidence.** QA round 4 (not seen live): `_discard_hand_identity` compares a VALUE tuple
+`(kind, power, secondary, type)` per `hand_index`, and the roster has only ~18-24 distinct
+(power, secondary) pairs. A REAL redeal at a stalled or excluded index that happens to draw a
+card sharing the value of the card it replaced reads as "no change" under
+`_hand_identity_changed` (I-27's own merge-only-adds fix), and the fresh card silently
+inherits the old card's refusal count or exclusion.
+
+**Root cause.** Both stall breakers (`discard_stalled`, `play_excluded_slots`) key entirely
+on VALUE identity with no notion of a confirmed deal EVENT at that index. Nothing in
+`play_one_turn` ever told the identity tracker "this index was just spent," so a coincidental
+value match after a real deal is indistinguishable from a truly unchanged card.
+
+**Fix.** MERGED 2026-09-20 (1abeb4e). Added `note_slot_dealt(hand_index, tactics_index=None)`
+(`orchestrator.py`) that pops the index (and, on a play, its tactics slot) out of both
+`_PLAY_STALL` and `_DISCARD_STALL`'s stored identity/exclusion/count, called at the two points
+in `play_one_turn` where a play or discard is CONFIRMED (not refused) — independent of what
+value the next read happens to show. `# ponytail:`-marked simplification: clearing BOTH
+trackers' counts unconditionally on every confirm, rather than only the tracker owning the
+confirmed action, on the reasoning that within one unchanged hand each breaker's target is a
+deterministic function of the pool, so a nonzero count can only belong to the slot actually
+being retried — except when a play-refusal streak on slot X is in progress and the hand later
+goes weak enough to fire the discard branch on a different slot Y, which forgives X's streak
+one cycle early. Judged safe-directioned (worst case one extra refusal cycle, never a wrong
+card played); not measured live.
+
+**Verify.** `tests/minigame/test_stall_state_forgets_dealt_slot.py`: (a) a confirmed discard
+clears that index's sig/exclusion from both trackers; (b) a confirmed play clears the played
+slot AND its tactics slot from both trackers; (c) an unrelated slot's stall state is left
+alone by either confirm; (d) 50 polls of the replacement index being merely ABSENT (never
+re-read) do not resurrect the forgotten identity, count, or exclusion, and the slot reads
+clean, unexcluded, uncounted when it finally reappears. Mutation-tested: dropping the
+play-site call fails (b) and (c)'s play-dependent check; dropping the discard-site call fails
+(a) and (d); both restored, `git diff orchestrator.py` shows only the three intended hunks.
+`test_stall_identity_survives_flicker.py`, `test_refused_play_falls_back.py`,
+`test_discard_stall_breaks.py`, `test_stall_counters_reset_with_hand_memory.py`,
+`test_should_redraw_incomplete.py`, `test_run_motion_gate.py`,
+`test_every_test_sets_the_flag.py` and `test_no_shadowed_module_defs.py` pass unmodified.
+
+**Status.** Merged; not seen live.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
