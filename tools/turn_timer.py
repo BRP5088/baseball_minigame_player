@@ -18,11 +18,27 @@ import os, sys, time
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
-os.environ.pop("BASEBALL_TEST_RUN", None)
 
 import orchestrator as o
 import local_hand as lh
 import input_controller as ic
+
+# THIS USED TO `os.environ.pop("BASEBALL_TEST_RUN", None)` AT IMPORT, unconditionally --
+# CLAUDE.md 10.1's guard-that-disables-itself, the same defect fixed in crawl_sheet.py.
+# It never touches the flag now; the refusal sits at main(), before the first live
+# capture, and importing this module changes nothing about the environment.
+TURN_TIMER_DRIVE_IN_TESTS = False
+
+
+def _refuse_if_test_run():
+    if os.environ.get("BASEBALL_TEST_RUN") and not TURN_TIMER_DRIVE_IN_TESTS:
+        raise RuntimeError(
+            "REFUSING: BASEBALL_TEST_RUN is set. This tool reads (and, with --play, "
+            "commits) a real hand at a real console and must never run under the "
+            "offline flag -- see CLAUDE.md §5. A test exercising this module's own "
+            "logic sets tools.turn_timer.TURN_TIMER_DRIVE_IN_TESTS = True and stubs "
+            "orchestrator._fast_grab / orchestrator.spend_and_play directly.")
+
 
 PLAY = "--play" in sys.argv
 marks = []
@@ -41,47 +57,54 @@ def hand_now():
     return h, rows, lh.selected_cards(rows, h.width / lh.ANCHOR_W) if len(rows) == 5 else None
 
 
-t0 = time.time()
-mark("start")
-h, rows, sel = hand_now()
-if h is None or len(rows) != 5:
-    print(f"no readable hand ({0 if rows is None else len(rows)} rows)"); sys.exit(1)
-cards, why = o.local_hand_cards(h)
-mark("read")
+def main():
+    _refuse_if_test_run()
+    t0 = time.time()
+    mark("start")
+    h, rows, sel = hand_now()
+    if h is None or len(rows) != 5:
+        print(f"no readable hand ({0 if rows is None else len(rows)} rows)"); return 1
+    cards, why = o.local_hand_cards(h)
+    mark("read")
 
-idx, glow, _ = lh.cursor_glow(h, rows)
-print(f"cursor {idx}   selected {sel}   glow {glow}")
-print(f"hand: {[(c.get('kind'), c.get('power')) for c in (cards or [])]}")
-if cards is None:
-    print(f"hand not usable: {why}"); sys.exit(1)
+    idx, glow, _ = lh.cursor_glow(h, rows)
+    print(f"cursor {idx}   selected {sel}   glow {glow}")
+    print(f"hand: {[(c.get('kind'), c.get('power')) for c in (cards or [])]}")
+    if cards is None:
+        print(f"hand not usable: {why}"); return 1
 
-# the strongest player card, which is the decision the engine makes when batting
-players = [(c["hand_index"], c.get("power") or 0) for c in cards if c.get("kind") != "tactics"]
-target = max(players, key=lambda p: p[1])[0]
-print(f"\nPROPOSED: play hand_index {target} (power {dict(players)[target]})")
-if not PLAY:
-    print("\n(dry run — pass --play to actually commit)")
-    sys.exit(0)
+    # the strongest player card, which is the decision the engine makes when batting
+    players = [(c["hand_index"], c.get("power") or 0) for c in cards if c.get("kind") != "tactics"]
+    target = max(players, key=lambda p: p[1])[0]
+    print(f"\nPROPOSED: play hand_index {target} (power {dict(players)[target]})")
+    if not PLAY:
+        print("\n(dry run — pass --play to actually commit)")
+        return 0
 
-# spend_and_play, so forget_hand_slot runs -- select_and_play leaves the spent
-# card in _hand_memory for the next unreadable read of that slot to serve.
-ok, _why = o.spend_and_play(target, None)   # (ok, why), not a bare bool
-mark("commit")
-print(f"  -> {'COMMITTED' if ok else 'REFUSED'}")
+    # spend_and_play, so forget_hand_slot runs -- select_and_play leaves the spent
+    # card in _hand_memory for the next unreadable read of that slot to serve.
+    ok, _why = o.spend_and_play(target, None)   # (ok, why), not a bare bool
+    mark("commit")
+    print(f"  -> {'COMMITTED' if ok else 'REFUSED'}")
 
-# wait for the hand to come back
-deadline = time.time() + 60
-rows_back = None
-while time.time() < deadline:
-    _h, rows_back, _s = hand_now()
-    if rows_back is not None and len(rows_back) == 5:
-        break
-    time.sleep(0.4)
-mark("deal")
+    # wait for the hand to come back
+    deadline = time.time() + 60
+    rows_back = None
+    while time.time() < deadline:
+        _h, rows_back, _s = hand_now()
+        if rows_back is not None and len(rows_back) == 5:
+            break
+        time.sleep(0.4)
+    mark("deal")
 
-print()
-prev = t0
-for tag, t in marks[1:]:
-    print(f"  {tag:8s} {t - prev:6.2f}s   (cumulative {t - t0:6.2f}s)")
-    prev = t
-print(f"  {'TOTAL':8s} {marks[-1][1] - t0:6.2f}s")
+    print()
+    prev = t0
+    for tag, t in marks[1:]:
+        print(f"  {tag:8s} {t - prev:6.2f}s   (cumulative {t - t0:6.2f}s)")
+        prev = t
+    print(f"  {'TOTAL':8s} {marks[-1][1] - t0:6.2f}s")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

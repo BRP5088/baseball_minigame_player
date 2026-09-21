@@ -13,7 +13,6 @@ import os, sys, time, json, datetime
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
-os.environ.pop("BASEBALL_TEST_RUN", None)
 
 import orchestrator as o
 import local_hand as lh
@@ -22,11 +21,24 @@ import input_controller as ic
 from decision_engine import (GameState, PlayerCard, TacticsCard, TacticsType,
                              best_batting_play, best_pitching_play)
 
+# THIS USED TO `os.environ.pop("BASEBALL_TEST_RUN", None)` AT IMPORT, unconditionally --
+# CLAUDE.md 10.1's guard-that-disables-itself, the same defect fixed in crawl_sheet.py.
+# It never touches the flag now; the refusal sits at main(), before the first live
+# capture or press (spend_and_play), and importing this module changes nothing.
+PLAY_MATCH_DRIVE_IN_TESTS = False
+
+
+def _refuse_if_test_run():
+    if os.environ.get("BASEBALL_TEST_RUN") and not PLAY_MATCH_DRIVE_IN_TESTS:
+        raise RuntimeError(
+            "REFUSING: BASEBALL_TEST_RUN is set. This tool plays real cards at a real "
+            "console (spend_and_play) and must never run under the offline flag -- see "
+            "CLAUDE.md §5. A test exercising this module's own logic sets "
+            "tools.play_match_verified.PLAY_MATCH_DRIVE_IN_TESTS = True and stubs "
+            "orchestrator._fast_grab / orchestrator.spend_and_play directly.")
+
+
 MAX_TURNS = 40
-OUT = os.path.join(_ROOT, "overnight", "crawl",
-                   "match_" + datetime.datetime.now().strftime("%H%M%S"))
-os.makedirs(OUT, exist_ok=True)
-log = []
 
 
 def look():
@@ -85,70 +97,81 @@ def decide(hand, cards, crops):
         f" + {d.tactics_card.kind.value}" if d.tactics_card else "")
 
 
-refusals = 0
-for turn in range(1, MAX_TURNS + 1):
-    t0 = time.time()
-    # ---- wait for a readable turn -------------------------------------------
-    hand = rows = cards = None
-    while time.time() - t0 < 90:
-        img, crops, hand = look()
-        res = ls.read_result(img)
-        if res["is_result"]:
-            print(f"\nRESULT SCREEN: {res['outcome']}  ({res['why']})")
-            json.dump(log, open(f"{OUT}/turns.json", "w"), indent=1)
-            sys.exit(0)
-        if hand is not None:
-            cards, why = o.local_hand_cards(hand)
-            if cards:
-                rows = lh.read_hand(hand)
-                break
-        time.sleep(0.4)
-    if not cards:
-        print(f"turn {turn}: no readable hand in 90s — stopping"); break
-    t_read = time.time()
+def main():
+    _refuse_if_test_run()
+    out = os.path.join(_ROOT, "overnight", "crawl",
+                       "match_" + datetime.datetime.now().strftime("%H%M%S"))
+    os.makedirs(out, exist_ok=True)
+    log = []
 
-    pi, ti, why = decide(hand, cards, crops)
-    if pi is None:
-        print(f"turn {turn}: {why} — stopping"); break
-    sel = lh.selected_cards(rows, hand.width / lh.ANCHOR_W)
-    print(f"turn {turn:2d}  {why:34s} -> play {pi}" + (f" + {ti}" if ti is not None else "")
-          + f"   (selected {sel})")
+    refusals = 0
+    for turn in range(1, MAX_TURNS + 1):
+        t0 = time.time()
+        # ---- wait for a readable turn -------------------------------------------
+        hand = rows = cards = None
+        while time.time() - t0 < 90:
+            img, crops, hand = look()
+            res = ls.read_result(img)
+            if res["is_result"]:
+                print(f"\nRESULT SCREEN: {res['outcome']}  ({res['why']})")
+                json.dump(log, open(f"{out}/turns.json", "w"), indent=1)
+                return
+            if hand is not None:
+                cards, why = o.local_hand_cards(hand)
+                if cards:
+                    rows = lh.read_hand(hand)
+                    break
+            time.sleep(0.4)
+        if not cards:
+            print(f"turn {turn}: no readable hand in 90s — stopping"); break
+        t_read = time.time()
 
-    # spend_and_play, NOT select_and_play: it forgets the spent slots AND takes the
-    # verified path. Calling the raw function leaves _hand_memory holding the card
-    # that was just played, and local_hand_cards then serves it for that slot on the
-    # next turn whenever the slot is unreadable -- which is exactly the slot the
-    # memory is consulted for.
-    # (ok, why), not a bare bool -- a non-empty tuple is always truthy, which
-    # would make every refusal read as a commit.
-    ok, _why = o.spend_and_play(pi, ti)
-    if not ok:
-        print(f"    REFUSED: {_why}")
-    t_commit = time.time()
+        pi, ti, why = decide(hand, cards, crops)
+        if pi is None:
+            print(f"turn {turn}: {why} — stopping"); break
+        sel = lh.selected_cards(rows, hand.width / lh.ANCHOR_W)
+        print(f"turn {turn:2d}  {why:34s} -> play {pi}" + (f" + {ti}" if ti is not None else "")
+              + f"   (selected {sel})")
 
-    # ---- wait for the hand to come back --------------------------------------
-    back = False
-    while time.time() - t_commit < 60:
-        _i, _c, h2 = look()
-        if h2 is not None:
-            c2, _w = o.local_hand_cards(h2)
-            if c2:
-                back = True
-                break
-        time.sleep(0.4)
-    t_deal = time.time()
+        # spend_and_play, NOT select_and_play: it forgets the spent slots AND takes the
+        # verified path. Calling the raw function leaves _hand_memory holding the card
+        # that was just played, and local_hand_cards then serves it for that slot on the
+        # next turn whenever the slot is unreadable -- which is exactly the slot the
+        # memory is consulted for.
+        # (ok, why), not a bare bool -- a non-empty tuple is always truthy, which
+        # would make every refusal read as a commit.
+        ok, _why = o.spend_and_play(pi, ti)
+        if not ok:
+            print(f"    REFUSED: {_why}")
+        t_commit = time.time()
 
-    row = {"turn": turn, "committed": bool(ok), "why": why,
-           "read_s": round(t_read - t0, 2), "commit_s": round(t_commit - t_read, 2),
-           "deal_s": round(t_deal - t_commit, 2), "total_s": round(t_deal - t0, 2),
-           "dealt": back}
-    log.append(row)
-    print(f"          {'COMMITTED' if ok else 'REFUSED  '}  "
-          f"read {row['read_s']:5.1f}s  commit {row['commit_s']:5.1f}s  "
-          f"deal {row['deal_s']:5.1f}s  total {row['total_s']:5.1f}s")
-    refusals = 0 if ok else refusals + 1
-    if refusals >= 2:
-        print("two refusals in a row — stopping rather than hammering"); break
+        # ---- wait for the hand to come back --------------------------------------
+        back = False
+        while time.time() - t_commit < 60:
+            _i, _c, h2 = look()
+            if h2 is not None:
+                c2, _w = o.local_hand_cards(h2)
+                if c2:
+                    back = True
+                    break
+            time.sleep(0.4)
+        t_deal = time.time()
 
-json.dump(log, open(f"{OUT}/turns.json", "w"), indent=1)
-print(f"\nturns -> {OUT}/turns.json")
+        row = {"turn": turn, "committed": bool(ok), "why": why,
+               "read_s": round(t_read - t0, 2), "commit_s": round(t_commit - t_read, 2),
+               "deal_s": round(t_deal - t_commit, 2), "total_s": round(t_deal - t0, 2),
+               "dealt": back}
+        log.append(row)
+        print(f"          {'COMMITTED' if ok else 'REFUSED  '}  "
+              f"read {row['read_s']:5.1f}s  commit {row['commit_s']:5.1f}s  "
+              f"deal {row['deal_s']:5.1f}s  total {row['total_s']:5.1f}s")
+        refusals = 0 if ok else refusals + 1
+        if refusals >= 2:
+            print("two refusals in a row — stopping rather than hammering"); break
+
+    json.dump(log, open(f"{out}/turns.json", "w"), indent=1)
+    print(f"\nturns -> {out}/turns.json")
+
+
+if __name__ == "__main__":
+    main()
