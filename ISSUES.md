@@ -2374,7 +2374,7 @@ restored and sha256-verified. `tests/minigame/test_verified_selection.py`,
 `tests/harness/test_no_undefined_names.py`, and `test_claude_md_constants.py` all pass
 unchanged.
 
-**Status.** merged (this commit), narrow window kept. Independent skeptic review
+**Status.** merged 15cfac4, narrow window kept. Independent skeptic review
 (`agent_progress/issues/I-46/skeptic.md`) reproduced the regression check and the
 17/23 census result exactly, confirmed scaling and the "cannot overwrite a read
 digit" invariant by tracing, and found two small defects: D1, the search wrote `y`
