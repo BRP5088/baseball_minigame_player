@@ -246,3 +246,156 @@ Python does not care about the endings, so the sweep's verdicts stand. The
 driver now reads and writes with `newline=""` so the bytes round-trip. To
 compare a Snoopy copy against Mac HEAD, hash with `\r\n` normalised to `\n`, or
 you will chase a difference that is not one.
+
+## Vision labelling with Qwen3-VL (2026-09-21)
+
+**CLAUDE.md §10.27 applies here without exception: this is a LABELLING AID,
+never part of the live ladder.** Snoopy is a second machine for offline work —
+labelling corpora, adjudicating frames, sweeps that would saturate the Mac
+(§10.13) — not a runtime dependency of the $50 loop. Nothing on the live path
+may come to depend on a model being up on another box, and a small clean
+sample disqualifies a reader on the money screen but never certifies one: the
+2026-09-09 qwen2.5vl sweep looked clean at 29 frames and would have shipped a
+false positive on `match_start_prompt` (a $50 screen) had it not been checked
+against the specific failure mode already on record. The same caution applies
+here — one frame below is not a certification of anything, least of all the
+"which card is raised" question, which it got wrong.
+
+**The 2026-09-09 Ollama models (`qwen2.5vl:7b`, `qwen3-vl:8b` at
+`http://snoopy:11434`) are GONE.** Ollama is not what is running on Snoopy any
+more; the vision server is now Unsloth Studio's own llama.cpp fork, launched
+from the desktop app, not a service you start over SSH. Do not `ssh` in and
+try to `ollama run` anything — check what is actually listening first (below).
+
+### What is running, and how to find it without touching it
+
+Unsloth Studio (the desktop app on Snoopy) spawns Unsloth's llama.cpp fork,
+`C:\Users\Brett\.unsloth\llama.cpp\build\bin\Release\llama-server.exe`, as a
+child process per loaded model, and exposes its own front door on
+`127.0.0.1:8888`. The loaded model as of this session is
+`unsloth/Qwen3-VL-8B-Instruct-GGUF` (Q4_K_M + mmproj).
+
+Port discovery, read-only, no process touched:
+
+    ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'powershell -Command "Get-Process llama-server | Select-Object Id,ProcessName,StartTime,Path"'
+    ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'powershell -Command "Get-NetTCPConnection -OwningProcess <pid> -State Listen | Select-Object LocalPort"'
+
+This session: PID 26956, started 2026-09-21 11:29:24, listening on **61758**.
+The port is NOT stable across a Studio restart or a model swap — always
+re-discover it this way rather than hardcoding it. Confirm the loaded model
+from the server's own `/props` (never assume from the desktop UI):
+
+    ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'powershell -Command "Invoke-RestMethod -Uri http://127.0.0.1:<port>/props | ConvertTo-Json -Depth 5"'
+
+`/props` reported `"model_alias": "unsloth/Qwen3-VL-8B-Instruct-GGUF"`,
+`"model_ftype": "Q4_K - Medium"`, `"modalities": {"vision": true, ...}`,
+`n_ctx` 9216, 4 slots. This is the OpenAI-compatible llama-server front door,
+not a custom API — `/v1/chat/completions` takes standard
+`image_url: {url: "data:image/...;base64,<...>"}` content blocks.
+
+**The Studio front on 8888 requires auth and was NOT used.** `GET
+127.0.0.1:8888/v1/models` from Snoopy itself returned
+`{"error":{"message":"Not authenticated", ...}}`. No credential was supplied
+or sought (that is out of scope for a read-and-call task), so **the working
+front door is the llama-server port directly (61758 this session), not
+8888**. If 8888 is ever preferred, it needs whatever API key Unsloth Studio
+issues, found in the desktop app, not over SSH.
+
+### PowerShell quoting: the STDIN rule extends past `python -c`
+
+`Snoopy_testing.md`'s existing STDIN rule was written for `python -c`;
+PowerShell eats double quotes there too when they carry a script rather than
+a one-liner (`Invoke-RestMethod ... | ConvertTo-Json` sent as an inline
+`-Command "..."` string failed with `TerminatorExpectedAtEndOfString`). Same
+fix, same shape: pipe the script to `powershell -Command -`, which reads it
+from STDIN and needs no quoting at all —
+
+    cat <<'PS1' | ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'powershell -Command -'
+    Invoke-RestMethod -Uri http://127.0.0.1:61758/props | ConvertTo-Json -Depth 5
+    PS1
+
+### The one call that worked
+
+Fixture `test_fixtures/hand_reads/i37_one_lifted_20260921.png` copied over
+scp (no directory needed, it lands directly under `C:\Users\Brett\`):
+
+    scp -i ~/.ssh/id_ed25519_snoopy test_fixtures/hand_reads/i37_one_lifted_20260921.png "Brett@snoopy:C:/Users/Brett/tmp_label.png"
+
+Then a base64-encoded `/v1/chat/completions` POST, run as a Python STDIN
+script on Snoopy's own venv interpreter (`urllib.request`, stdlib only — no
+new dependency for one HTTP call):
+
+    cat <<'PY' | ssh -i ~/.ssh/id_ed25519_snoopy Brett@snoopy 'C:\baseball\venv\Scripts\python.exe -'
+    import base64, json, time, urllib.request
+
+    with open(r"C:\Users\Brett\tmp_label.png", "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+
+    prompt = ("This is a card game screen. List the five cards in the hand fan at the "
+              "bottom, left to right, as either BATTER <power>/<speed>, PITCHER "
+              "<power>/<fielding>, or the tactics card's name, and say which card if "
+              "any is raised above the others.")
+
+    payload = {
+        "model": "unsloth/Qwen3-VL-8B-Instruct-GGUF",
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}},
+        ]}],
+        "temperature": 0.0,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "http://127.0.0.1:61758/v1/chat/completions", data=data,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    t0 = time.time()
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        body = resp.read().decode("utf-8")
+    print("WALL_TIME_SECONDS:", round(time.time() - t0, 2))
+    print(body)
+    PY
+
+**Measured: 3.02s wall time**, `prompt_n` 2110 tokens (the image dominates),
+`predicted_n` 75, 105.8 tok/s generation on the 3080. Raw response:
+
+    {"choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant",
+    "content":"From left to right, the five cards in the hand fan at the bottom
+    are:\n\n1. FIELDING PLAY\n2. PITCHER 9/2\n3. PITCHER 7/2\n4. PITCHER 9/2\n5.
+    PITCHER 6/2\n\nThe card raised above the others is: FIELDING PLAY"}}],
+    "usage":{"completion_tokens":75,"prompt_tokens":2110,"total_tokens":2185},
+    "timings":{"prompt_ms":2073.0,"predicted_ms":699.1,"predicted_per_second":105.8}}
+
+**Truth for that frame** (`i37_one_lifted_20260921.png`, as supplied, not
+this project's own reader): Fielding Play +1 | Pitcher 9/2 (raised) | Pitcher
+7 | Pitcher 9 | Pitcher 6.
+
+**Graded exactly, not generously:**
+
+    slot        model said        truth              verdict
+    1 (kind)    FIELDING PLAY     Fielding Play +1    kind right, bonus (+1) not stated
+    2 (power)   PITCHER 9/2       Pitcher 9/2          right
+    3 (power)   PITCHER 7/2       Pitcher 7            power right, /2 fielding UNCONFIRMED
+                                                       (truth gives no fielding for this slot)
+    4 (power)   PITCHER 9/2       Pitcher 9             power right, /2 UNCONFIRMED
+    5 (power)   PITCHER 6/2       Pitcher 6             power right, /2 UNCONFIRMED
+    raised      FIELDING PLAY     Pitcher 9/2 (slot 2)  WRONG
+
+So: the four player powers (9, 7, 9, 6) and the kind sequence
+(fielding/pitcher x4) are correct. **The "which card is raised" question — the
+one this exact prompt asked for, and the one CLAUDE.md's own cursor-reading
+history (§10.36's "hover does not lift a card" correction) makes hardest —
+was answered wrong**, naming the tactics card instead of the actual raised
+slot. The model also invented a uniform `/2` fielding figure for slots 3-5
+that the truth string never confirms one way or the other (it only confirms
+`/2` for slot 2); at best that is 1 correct and 3 unconfirmed, not 4 correct.
+This is n=1 and settles nothing about accuracy — it only proves the call
+path works end to end, which is what this section exists to document.
+
+### Cleanup
+
+`tmp_label.png` deleted from `C:\Users\Brett\` after the call
+(`Remove-Item ... -Force`, confirmed with `Test-Path` returning `False`). No
+process on Snoopy was stopped, restarted or reconfigured to do any of this —
+only `Get-Process`, `Get-NetTCPConnection`, `/props`, `scp`, and one POST to
+an already-running server.
