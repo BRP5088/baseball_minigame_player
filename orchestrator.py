@@ -7810,24 +7810,82 @@ def note_discard_refused():
 # budget. should_redraw and the discard branch still see the FULL hand: a card
 # nothing can confirm is not worth spending a discard over either.
 PLAY_STALL_MAX = 3
-_PLAY_STALL = {"sig": None, "n": 0, "excluded": frozenset()}
+_PLAY_STALL = {"sig": None, "n": 0, "excluded": frozenset(), "reasons": {}}
+
+# I-39: TWO REFUSAL REASONS, TWO LIFETIMES. Live 2026-09-21 (ISSUES.md I-39):
+# hand_index 3 (a 9) was excluded because its POSITION could not be read
+# (input_controller._select_verified's own "position is unreadable" refusal
+# -- see _slot_position_readable below), hand_index 1 was then PLAYED and a
+# new card dealt into it, and on the very next poll "hand_index [3] ... —
+# excluded" fired again -- and the WORSE card (a 6) was played over the 9.
+# Keying the exclusion on hand identity alone (as below, unchanged for every
+# OTHER refusal reason) reads that as "same hand" -- I-27's own merge rule
+# says a slot missing from both sides is not a change, and slot 1 dropped out
+# of the comparison the moment it went UNKNOWN mid-deal -- so slot 3's
+# exclusion outlived a reason that had nothing to do with slot 3 at all.
+#
+# The user's steer, 2026-09-21: key the exclusion GENERALLY on the slot and
+# WHY it was refused, not the exact hand. "unreadable" means this slot's own
+# POSITION could not be read the poll it was excluded -- that is a property of
+# the slot, not of the cards dealt around it, so it stays excluded for as long
+# as THIS SLOT reads unreadable and is re-offered the instant it reads,
+# whatever else changes. Every other refusal ("transient": a dropped press,
+# the wrong card raised, a garbled fan) keeps the ORIGINAL behaviour -- it is
+# a property of that attempt, not of the slot, so it clears on a genuine
+# redeal exactly as before.
+PLAY_REFUSAL_UNREADABLE = "unreadable"
+PLAY_REFUSAL_TRANSIENT = "transient"
+
+
+def _slot_position_readable(hand, idx) -> bool:
+    """True when hand_index `idx`'s POSITION was actually measured on the
+    read `hand` came from -- the same question
+    input_controller._select_verified asks (its own "position is unreadable"
+    refusal) before it will press a TOGGLE. A slot missing from `hand`
+    entirely (I-27: dropped for a flickered UNKNOWN read) counts as
+    unreadable too, the same safe direction I-27 already uses elsewhere --
+    "cannot tell" is not "readable"."""
+    for c in (hand or []):
+        if c.get("hand_index") == idx:
+            return c.get("y_measured") is True
+    return False
 
 
 def play_excluded_slots(hand) -> frozenset:
     """hand_index values ruled out for THIS hand by repeated play refusal.
 
-    Resets (both the count and the exclusion set) whenever the hand changes --
-    same identity discard_stalled uses, so a real redeal, including the one a
-    discard itself causes, clears both. A slot dropping out and coming back
-    (I-27) is not a redeal -- see _hand_identity_changed.
+    I-39: the two refusal reasons have different lifetimes -- see the
+    PLAY_REFUSAL_* comment above. On a genuine redeal (hand identity change)
+    a TRANSIENT exclusion clears, same as always; an UNREADABLE one survives
+    the redeal check here and is judged on its own terms below, against
+    THIS poll's own reading of that slot -- so it outlives a hand-identity
+    reset for as long as it needs to, and no longer.
     """
     sig = _discard_hand_identity(hand)
     if _hand_identity_changed(_PLAY_STALL["sig"], sig):
         _PLAY_STALL["sig"] = sig
         _PLAY_STALL["n"] = 0
-        _PLAY_STALL["excluded"] = frozenset()
+        _PLAY_STALL["excluded"] = frozenset(
+            i for i in _PLAY_STALL["excluded"]
+            if _PLAY_STALL["reasons"].get(i) == PLAY_REFUSAL_UNREADABLE)
+        for i in list(_PLAY_STALL["reasons"]):
+            if i not in _PLAY_STALL["excluded"]:
+                _PLAY_STALL["reasons"].pop(i, None)
     else:
         _PLAY_STALL["sig"] = {**_PLAY_STALL["sig"], **sig}
+    # RE-OFFER THE MOMENT IT READS. Checked on every call, hand-identity
+    # change or not -- an UNREADABLE exclusion's own slot can start reading
+    # again on the very next poll, well inside one hand's life, and nothing
+    # else is watching for that.
+    _still_excluded = frozenset(
+        i for i in _PLAY_STALL["excluded"]
+        if _PLAY_STALL["reasons"].get(i) != PLAY_REFUSAL_UNREADABLE
+        or not _slot_position_readable(hand, i))
+    for i in sorted(_PLAY_STALL["excluded"] - _still_excluded):
+        print(f"  [play] hand_index {i} reads again — un-excluding "
+              "(was unreadable)")
+        _PLAY_STALL["reasons"].pop(i, None)
+    _PLAY_STALL["excluded"] = _still_excluded
     return _PLAY_STALL["excluded"]
 
 
@@ -7843,10 +7901,12 @@ def note_play_refused():
     _PLAY_STALL["n"] += 1
 
 
-def exclude_play_slot(idx):
-    """Stop offering this hand_index for the rest of this hand's life, and
-    give whatever is played next its own fresh PLAY_STALL_MAX budget."""
+def exclude_play_slot(idx, reason=PLAY_REFUSAL_TRANSIENT):
+    """Stop offering this hand_index (for as long as `reason` says it should
+    stay excluded -- see play_excluded_slots), and give whatever is played
+    next its own fresh PLAY_STALL_MAX budget."""
     _PLAY_STALL["excluded"] = _PLAY_STALL["excluded"] | {idx}
+    _PLAY_STALL["reasons"][idx] = reason
     _PLAY_STALL["n"] = 0
 
 
@@ -7898,6 +7958,8 @@ def note_slot_dealt(*indices):
                 tracker["sig"].pop(i, None)
         tracker["n"] = 0
     _PLAY_STALL["excluded"] = _PLAY_STALL["excluded"] - idxs
+    for i in idxs:
+        _PLAY_STALL["reasons"].pop(i, None)
 
 
 def reset_stall_counters():
@@ -7911,6 +7973,7 @@ def reset_stall_counters():
     inherit a stale refusal count and an excluded slot from the PREVIOUS hand."""
     _DISCARD_STALL["sig"], _DISCARD_STALL["n"] = None, 0
     _PLAY_STALL["sig"], _PLAY_STALL["n"], _PLAY_STALL["excluded"] = None, 0, frozenset()
+    _PLAY_STALL["reasons"] = {}
 
 
 def play_one_turn(state_json: dict, batters_used: int):
@@ -8210,7 +8273,18 @@ def play_one_turn(state_json: dict, batters_used: int):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
                   "poll offers the next-best reachable card instead")
-            exclude_play_slot(player_idx)
+            # I-39: WHY decides how long the exclusion lasts -- see the
+            # PLAY_REFUSAL_* comment above play_excluded_slots. Judged on
+            # THIS poll's own hand read, the same one play_stalled just used.
+            _reason = (PLAY_REFUSAL_UNREADABLE
+                       if not _slot_position_readable(state_json.get("hand"), player_idx)
+                       else PLAY_REFUSAL_TRANSIENT)
+            print(f"  [play] hand_index {player_idx} excluded as {_reason} — "
+                  + ("stays excluded while its position cannot be read, "
+                     "whatever is dealt around it"
+                     if _reason == PLAY_REFUSAL_UNREADABLE else
+                     "stays excluded until this hand changes"))
+            exclude_play_slot(player_idx, _reason)
         else:
             print("  play REFUSED — the selection could not be verified; nothing committed")
         pop_hand_baseline()

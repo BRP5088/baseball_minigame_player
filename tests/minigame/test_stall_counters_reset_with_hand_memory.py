@@ -58,7 +58,7 @@ o.reset_hand_memory()
 check("reset_hand_memory() clears the discard stall counter entirely",
       o._DISCARD_STALL == {"sig": None, "n": 0}, f"{o._DISCARD_STALL!r}")
 check("reset_hand_memory() clears the play stall counter and its exclusions",
-      o._PLAY_STALL == {"sig": None, "n": 0, "excluded": frozenset()},
+      o._PLAY_STALL == {"sig": None, "n": 0, "excluded": frozenset(), "reasons": {}},
       f"{o._PLAY_STALL!r}")
 
 # ---- the SAME signature, replayed after the reset, starts fresh ---------------------
