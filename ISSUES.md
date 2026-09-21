@@ -723,7 +723,11 @@ stop `unreadable_screens`).
 **Status.** MERGED to main 2026-09-20 (f25f5f0): `tools/run_census.py`, pinned by
 `tests/harness/test_run_census.py` on the three 2026-09-20 logs. Unclassified lines it
 reports: `slot(s) [N] were ALREADY unreadable`, `Decision: Playing` with no reveal episode
-(3 in run a), `MEMORY WAS WRONG`.
+(3 in run a), `MEMORY WAS WRONG`. I-19b (200318a68bbf22b5b9723d1b40496390b27a0312): the
+deal-timeout column had gone dead when I-09 reworded the message (a 10.1 shape in the
+scorecard itself); it now counts both wordings, and six refusal shapes (false_cursor,
+stray_guard, pre_press_guard, inferred_select, excluded, confirm_verify_fail) have
+columns.
 
 ### I-20  Coverage gaps on the match loop                                          P1  evidence
 
