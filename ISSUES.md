@@ -814,6 +814,65 @@ are folded into `tests/minigame/test_walk_crosses_occluded_slot.py` as checks
 fail exactly its own check and no other, sha256-verified restored byte for byte
 between them.
 
+### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
+
+**Evidence.** overnight/run_live_20260921j.log:844-849 (07:50): hand `0: UNKNOWN
+1: swing_boost +1 2: 5/3 3: 5/2 4: 4/3`, the engine selected slot 2 then slot 1
+(attaching the boost), both verified, and the very next read stalled: "cannot read
+the fan after select_card (rows=0) -- refusing". A second live occurrence at 08:00,
+ONE card lifted (`0: Fielding Play +1 | 1: Pitcher 9/2 LIFTED | 2: Pitcher 7 |
+3: Pitcher 9 | 4: Pitcher 6`), same shape: `read_hand` returned 3 rows, none with a
+measured y. Frames: `test_fixtures/hand_reads/i37_two_lifted_20260921.png`,
+`i37_one_lifted_20260921.png`.
+
+**Root cause.** `read_hand`'s "is the fan there" gate (I-32's neighbour, the
+2026-09-20 COUNT fix in `local_hand.py`) counted only `_strong_discs(img)` --
+discs found as an isolated dark digit ringed by white, at `DARK_THRESHOLDS`
+(110/90/130). A SELECTED card's own disc often needs a threshold ABOVE that range
+to register at all (it brightens on lift; that is what `RAISED_DARK_MAX` exists
+for elsewhere in this file), so it can be entirely absent from `strong` while
+sitting, at the right position, in the WHITE-DISC or WREATH candidates
+`_read_fan` itself already pools from (`_white_discs`, `find_tactics`). On the
+two-lifted frame, `_strong_discs` found 4 candidates and only ONE cleared
+`FIT_MAX`; `_white_discs` finds the selected player card's own disc at cost 15.7
+(comfortably under `FIT_MAX` -- the cost formula `|dx| + |dy|/3` weighs a pure
+vertical lift lightly, and a white-disc blob's x is cleaner than a noisy partial
+digit-in-disc crop), invisible to the gate that decides whether to call
+`_read_fan` at all.
+
+**Fix.** `local_hand.py`: `read_hand`'s gate is now `_fan_looks_present(img,
+strong, s)`, which pools `strong` + `_white_discs` + `find_tactics` (the SAME
+candidates `_read_fan` itself reads from, deduped via the existing `_free`
+bookkeeping), takes the BEST cost PER SLOT (0..4), and requires `FIT_MIN_DISCS`
+slots at or under `FIT_MAX` -- same two constants, nothing invented.
+`_read_fan`/`_read_ungated` are untouched.
+
+**Verify.** `tests/minigame/test_hand_read_two_lifted.py`: both live fixtures read
+5 rows, every row `y_measured`, `selected_cards` names exactly the lifted slot(s)
+([1, 2] and [1]), the lifted cards' own kind/type/digit are correct, the untouched
+resting cards read unchanged; a CONTROL fixture with no selection (`hand_cursor/
+cursor_on_1.png`) reads byte-identical digits to before the fix; a negative-control
+fixture (`overnight/local_hand/hand_1788963163511615000.png`, the same one I-32's
+neighbour test uses) is still rejected as a non-fan. Two mutants, both caught
+end to end (row count collapses to 4/3 and the file raises an IndexError): (1)
+reverting to the old strong-only gate; (2) keeping the broadened candidate pool
+but taking the FIRST candidate per slot instead of the best (min-cost) one --
+`strong`'s own bad candidate for the lifted slot is seen before the good
+white-disc one, so "first wins" reproduces the same stall the fix exists for.
+sha256-verified restored byte for byte between mutants.
+
+**Regression check.** `agent_progress/issues/I-37/probe6_corpus_regression.py`
+(not part of the suite, too slow): over 2,396 archived hand crops
+(`overnight/local_hand/*.png`) plus the two fixtures above and the two
+`test_fixtures/selected_card/` fixtures I-32's neighbour test uses, the broadened
+gate agrees with the old (strong-only) gate on every frame except 4 -- ZERO
+frames flip from admitted to rejected, and the 4 newly-admitted are both I-37
+fixtures plus 2 archived corpus frames whose paid-model "vision" label in
+`agreement.jsonl` (never trusted for card VALUES, fine for card COUNT) confirms
+are genuine five-card fans the old gate was dropping for no reason.
+
+**Status.** Fixed in this worktree, not yet merged.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
