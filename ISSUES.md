@@ -537,6 +537,40 @@ a glow percentage -- do not conflate the two.)
 
 **Status.** Merged; live confirmation open: resume the parked match.
 
+### I-27  A slot flickering to UNKNOWN reset the stall counters and forgot an exclusion   P0  loop
+
+**Evidence.** `overnight/run_live_20260920h.log` lines ~136-150 (main checkout path): hand_index
+1 excluded at line 136 ("play REFUSED 3x running on hand_index 1 ... excluding it"), hand_index
+3 going UNKNOWN at line 148 while hand_index 1 is still listed as present (`1: 9/0`), and line
+150 offering "pitch focus 9" -- `agent_progress/census-20260920/progress.md` section 5 finding 1
+identifies that as hand_index 1 coming back on offer, confirmed by reading the log directly.
+
+**Root cause.** `_discard_hand_identity` (orchestrator.py:7358, pre-fix) returned
+`tuple(sorted(...))` over every card PRESENT in `hand`. `local_hand_cards` drops a slot it
+cannot read for one poll instead of emitting it with `power=None` (`dropped.append(i);
+continue`), so the identity tuple is genuinely shorter on a one-poll flicker, and comparing two
+such tuples with `!=` treats a missing element exactly like a changed one -- indistinguishable
+from a genuine redeal. `discard_stalled` and `play_excluded_slots` both keyed their breakers on
+it, so a flicker on any unrelated slot reset the count and forgot the exclusion.
+
+**Fix.** MERGED 2026-09-20 (bce1f4d). `_discard_hand_identity` now returns a `dict` keyed by
+`hand_index`, and `_hand_identity_changed(stored, current)` treats two identities as the same
+hand unless some `hand_index` readable in BOTH disagrees -- a slot missing from either side is
+not a disagreement. On a "same hand" verdict the current poll's readable cards are merged into
+the stored identity (`{**stored, **current}`) so a recovered slot compares against the fullest
+picture seen so far. Bounds (`DISCARD_STALL_MAX`, `PLAY_STALL_MAX` = 3) untouched.
+
+**Verify.** `tests/minigame/test_stall_identity_survives_flicker.py`: an excluded slot survives
+a same-hand flicker on an unrelated slot and the refusal count keeps accumulating across it;
+CONTROL, a hand where one readable slot holds a genuinely different card still resets the count
+and clears the exclusion, for both breakers. Mutation-tested: reverting `_hand_identity_changed`
+to exact dict equality (the pre-fix shape) fails 4 of the new test's checks; restored clean,
+`git diff orchestrator.py` shows only the intended change. `test_refused_play_falls_back.py`,
+`test_discard_stall_breaks.py` and `test_stall_counters_reset_with_hand_memory.py` pass
+unmodified against the fix.
+
+**Status.** Merged.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
@@ -711,7 +745,8 @@ no separate work.
 Merged: I-01, I-03, I-04 (win), I-06, I-07, I-08, I-09, I-10, I-11, I-12, I-18 (a, b, c),
 I-19, I-21, I-22, and I-02's offline half. Closed by measurement: I-13, I-14. QA round 1 on
 the merged diff: four confirmed findings, all fixed and skeptic-verified (7b5aba2); full
-suite 258 files green.
+suite 258 files green. A slot flickering to UNKNOWN resetting the stall counters, flagged by
+`agent_progress/census-20260920`, was reproduced against the live log and closed as I-27.
 
 Still open, in order:
 
