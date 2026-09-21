@@ -7340,6 +7340,48 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
 # turn a refusal into an answer, never a wrong answer into a confident one.
 MONEY_READ_TRIES = 5
 
+# I-40: a live run read $286 off a reload that CLAUDE.md section 4 says restores
+# $246 every time, and the frame that read came from was never kept -- so there was
+# nothing to look at afterwards, only the confident wrong number in the log. Copies
+# record_reveal_kind's pattern exactly (`test_fixtures/reveal_kind_truth/auto`'s
+# sibling for the money field): gitignored, so it is `diagnostics/` not
+# `test_fixtures/`, never raises into the money path, writes nothing under
+# BASEBALL_TEST_RUN unless a test hands it out_dir, and REFUSES past the cap
+# rather than pruning -- OPEN-24 is the record of a pruned corpus losing the
+# rows that needed it.
+MONEY_READ_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "diagnostics", "money_reads")
+MONEY_READ_DIR_ENV = "BASEBALL_MONEY_READ_DIR"
+MONEY_READ_MAX_FILES = 200
+
+
+def record_money_read_frame(frame, answer, out_dir=None):
+    """Keep the frame a money read was made on, named with the answer. Never raises.
+
+    `answer` is whatever the local reader decided -- an int, or None on a refusal --
+    so the filename alone says what this reader saw when it looked at this picture,
+    without opening it. Returns the filename written, or None.
+    """
+    try:
+        if frame is None:
+            return None
+        d = out_dir or os.environ.get(MONEY_READ_DIR_ENV)
+        if d is None and _running_under_test():
+            return None
+        d = d or MONEY_READ_DIR
+        os.makedirs(d, exist_ok=True)
+        if len([f for f in os.listdir(d) if f.endswith(".png")]) >= MONEY_READ_MAX_FILES:
+            print(f"  [balance] {d} already holds {MONEY_READ_MAX_FILES} frames -- "
+                  f"NOT keeping this one. Nothing is pruned here on purpose.")
+            return None
+        fname = f"{time.time_ns()}_{answer}.png"
+        frame.convert("RGB").save(os.path.join(d, fname))
+        return fname
+    except Exception:
+        # Never into the money path. A missing diagnostic frame costs a slower
+        # investigation later; an exception here costs a live money read.
+        return None
+
 
 def read_balance_from_pause_menu() -> int:
     """
@@ -7400,7 +7442,7 @@ def read_balance_from_pause_menu() -> int:
     # before answering -- and it had ZERO production callers. Both sites that wanted
     # a balance called THIS function, which is a paid call; with the paid model off it
     # raises, run_cycles swallows the exception and returns its hardcoded
-    # RESET_BALANCE_FALLBACK of 246 every cycle. So the only thing able to reconcile
+    # RELOAD_WALLET of 246 every cycle. So the only thing able to reconcile
     # the tracked balance against the game was a constant, while reloads keep putting
     # $246 back in the wallet and the tracked figure only ever marches down.
     # A measurement built, tested, and never wired (10.1).
@@ -7447,6 +7489,10 @@ def read_balance_from_pause_menu() -> int:
             if _try + 1 < MONEY_READ_TRIES:
                 time.sleep(0.6)
                 _frame = _fast_grab()
+        # I-40: keep the frame this answer -- or this refusal -- came from. A wrong
+        # local read (or a refusal on a legible screen) had nothing to look at
+        # afterwards until now; see record_money_read_frame.
+        record_money_read_frame(_frame, _local_money)
     except RuntimeError:
         raise
     except Exception as _e:

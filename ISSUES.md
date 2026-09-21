@@ -1385,26 +1385,74 @@ offered again the moment it reads.
 
 **Status.** Open.
 
-### I-40  pause_menu.read_money misreads the wallet and refuses a legible one   P1  money record
+### I-40  A reload's local money read disagreed with the known wallet and was trusted   P1  money
 
-**Evidence.** `overnight/run_live_20260921p.log:159` — "[balance] read LOCALLY from the pause
-menu: $286" right after a Load Last Save that always restores $246 (every earlier reset today
-read 246). `run_cycles` then set `max_spend=286`, played four matches, and attempted a fifth
-with the game's wallet at 46: "[verify] start_match: FAILED after 5 attempts, state never left
-'prompt'" / "Match never started — stopping". The record was left at balance 36 with
-`match_in_progress` true — a phantom $50 debit, repaired by the next reset. At 10:50 the pause
-book plainly showed 46 (fixture `test_fixtures/pause_money_20260921.png`) and `read_money`
-returned None on it.
+**Evidence.** `overnight/run_live_20260921p.log:158-161` (main checkout): right after a Load
+Last Save, which CLAUDE.md section 4 says restores the wallet to $246 every time (and cycles
+1-3 that same run read 246), `pause_menu.read_money` answered **$286** ("[balance] read
+LOCALLY from the pause menu: $286"). `run_cycles` trusted it as `max_spend`, played four
+matches, and attempted a fifth with the game's real wallet at $46: "[verify] start_match:
+FAILED after 5 attempts, state never left 'prompt'" / "Match never started — stopping". The
+record was left at balance 36 with `match_in_progress` true — a phantom $50 debit (no
+`save_progress` on that path), repaired by the next reset. Separately, at 10:50 the pause
+book plainly showed **46** (`test_fixtures/pause_money_20260921.png`, copied from the main
+checkout, never symlinked) and `read_money` returned **None** on it.
 
-**Root cause.** Not established — a 4->8 confusion at one OCR scale that passed the two-scale
-agreement, and a refusal on a two-digit value, are both candidates.
+**Root cause, ESTABLISHED (`agent_progress/issues/I-40/progress.md`, step 1).** The $46
+fixture is a DIFFERENT failure from the live $286 misread, not the same one reproduced:
+`read_money` REFUSES on it (both OCR scales return the empty string at every PSM, both
+the `tesserocr` and `pytesseract` backends agree — verified bypassing `ocr_glyphs`'s
+handle cache entirely) rather than answering wrong. Diagnosed (not fixed): narrowing the
+crop recovers "46", but a too-narrow crop starts reading the coin badge as a spurious
+extra digit ("466") — the fixed-width `MONEY_BOX_FRAC`, calibrated for 3-4 digit
+right-aligned numbers, leaves enough blank space beside a 2-digit value to defeat
+tesseract's segmentation outright. No frame from the actual $286 misread exists anywhere
+on disk, so that specific mechanism (a 246-to-286 read, not a refusal) could not be
+reproduced or explained here — nothing had ever saved the frame a money read was made on.
 
-**Proposed fix.** (a) Keep the pause-menu frame on every money read
-(`diagnostics/money_reads/<ts>.png`) so the next misread has evidence. (b) After a Load Last
-Save, `run_cycles` should refuse a read that is not the known reload wallet (246) instead of
-trusting it. (c) Measure `read_money` over every saved pause frame once there are some.
+**Fix, in two parts, NEITHER of which touches the reader:**
 
-**Status.** Open, agent dispatched for (a)+(b).
+  1. `orchestrator.record_money_read_frame()` keeps the frame every local money read
+     settles on (answer or refusal) at `diagnostics/money_reads/<epoch_ns>_<answer>.png`
+     — copies `record_reveal_kind`'s shape exactly (never raises, skipped under
+     `BASEBALL_TEST_RUN`, refuses past a 200-file cap rather than pruning). Called AFTER
+     `MONEY_READ_TRIES`'s retry loop, with the loop's final answer — pinned below — so a
+     retry that recovers a read does not file the frame under the earlier refusal.
+  2. `run_cycles.RELOAD_WALLET = 246` (renamed from `RESET_BALANCE_FALLBACK`, same
+     value): `_read_balance()` now treats a read that DISAGREES with the known reload
+     constant, or that raised, identically — logs the disagreement loudly (names both
+     numbers) and returns `RELOAD_WALLET`, never the raw reading. `_reset_progress()`'s
+     `balance` — which is exactly what becomes `max_spend` — inherits this for free.
+
+**Tests.** `tests/harness/test_reload_wallet_guard.py`, **21 checks** (re-counted from
+`grep -c "^PASS"` on a clean run — the branch's original writeup said 18), all green.
+Three mutants, all caught, files restored byte-for-byte (sha256-verified): the
+disagreement branch, the frame keeper's test-flag guard, and — added on skeptic review —
+moving the `record_money_read_frame` call to BEFORE the retry loop (case v: with the
+keeper stubbed and `read_money` returning None then 246, the un-mutated code calls the
+keeper once with 246; the mutant calls it once with None, and the check fails as
+required). Six sibling tests (`test_budget_reserve_fits`, `test_run_debit_and_scoring`,
+`test_stale_flag_never_presses_unpaid`, `test_no_shadowed_module_defs`,
+`test_no_undefined_names`, `test_no_real_input_under_test_run`) plus
+`test_pause_money_local`, `test_reveal_frame_kept` and `test_caches_not_written_in_tests`
+all still exit 0.
+
+**Residual, documented rather than fixed.** The guard closes the OVER-read cause only —
+a read ABOVE the true $246 inflating `max_spend`. `run()`'s `max_spend` is a session
+counter, set once at reset and never re-checked against a live wallet read again, and
+the $50 debit is recorded in the progress file before `start_match` is confirmed to have
+landed. So if the "$246 every reload" premise were ever violated in the LOW direction —
+a genuine reload that left the wallet under $246 — this guard would force `max_spend` UP
+to $246 and could reproduce a phantom debit of its own, the same shape as the bug it
+fixes, just the other sign. Judged acceptable rather than also guarded: `reset_environment`
+proves the reload happened (it reads the spawn bearing off the screen, CLAUDE.md section
+8(d)), and the reload wallet has read exactly $246 on every reset measured for weeks —
+so the LOW-direction premise violation this residual depends on has never once been
+observed. Revisit if a reload is ever seen landing under $246.
+
+**Status.** Merged `aedc9ba`; skeptic CONFIRMED WITH NOTES (keeper ordering now
+pinned by a mutation-tested check; residual documented above; check count corrected to
+21). The reader itself (`pause_menu.read_money`) is UNCHANGED.
 
 ### I-41  Four tools popped BASEBALL_TEST_RUN at import, silently disabling the offline input lockout   P1  rig
 

@@ -101,14 +101,21 @@ import _harness
 import chain_trials
 from chain_trials import walk_attempts
 
-# What "Load Last Save" restores the wallet to, per the user. Only a FALLBACK:
-# the real figure is READ, because a stale one silently mis-sizes the run.
+# What "Load Last Save" restores the wallet to -- CLAUDE.md section 4: "Load Last
+# Save restores the wallet to $246", the same figure every reload, not a guess.
+# _read_balance() still READS the pause menu rather than assuming this outright
+# -- a read is the only way to CATCH a reader gone wrong, and I-40 is a reader
+# gone wrong: a live reload read $286 off a screen CLAUDE.md's own record says
+# holds $246, and it was trusted, so run()'s max_spend was set from the bad
+# number. A reload's OWN wallet cannot itself be $286 -- only the reader can be
+# -- so the read is now used to DETECT a disagreement, never to override this
+# constant; see _read_balance's disagreement guard.
 #
 # DO NOT read money off the coin in the bottom-left corner. That is HEALTH.
 # Mistaking it for the balance on 2026-08-31 produced a confident, wrong
 # "the save only restores $100" and a progress file edited to match it.
 # Money is visible ONLY on the pause menu, which is what _read_balance() uses.
-RESET_BALANCE_FALLBACK = 246
+RELOAD_WALLET = 246
 PROGRESS_FILE = "progress_testing.json"
 MATCH_FEE = 50
 
@@ -186,25 +193,38 @@ def log(msg, **kw):
 
 
 def _read_balance():
-    """What the reloaded save ACTUALLY holds, not what it used to hold.
-
-    Reading beats assuming here regardless of what the number turns out to be:
-    run() trusts its persisted balance over anything on screen, so a stale
-    figure has it buying matches the wallet cannot cover, or stopping early on
-    money it actually has.
+    """What a reloaded save holds -- READ, but checked against the one thing that
+    is already known about it: CLAUDE.md section 4 says a reload restores the
+    SAME $246 every time, so this is not a stale figure that might drift like a
+    mid-match balance would; it is a constant.
 
     One vision call per cycle, and it must be the PAUSE MENU one — the coin in
     the bottom-left of the world HUD is health, not money, and reading it as
     money on 2026-08-31 produced a confident wrong answer twice over.
+
+    I-40: a live read answered $286 right after a reload — CLAUDE.md's own
+    record says that screen holds $246 — and it was trusted anyway: run()'s
+    max_spend was set to $286, four matches were played, and the fifth found
+    the game's actual wallet at $46. A reload's wallet cannot itself be $286;
+    only the READER can be. So a read that disagrees with RELOAD_WALLET, or
+    fails outright, is treated as the reader being wrong and RELOAD_WALLET is
+    used instead — never the raw reading, in either failure mode.
     """
     try:
         bal = orchestrator.read_balance_from_pause_menu()
-        log(f"read ${bal} off the pause menu")
-        return bal
     except Exception as e:
-        log(f"could not read the balance ({type(e).__name__}: {e}) — assuming "
-            f"${RESET_BALANCE_FALLBACK}, which may be wrong in either direction")
-        return RESET_BALANCE_FALLBACK
+        log(f"could not read the balance ({type(e).__name__}: {e}) — using the "
+            f"known reload constant ${RELOAD_WALLET} (CLAUDE.md section 4)")
+        return RELOAD_WALLET
+    if bal != RELOAD_WALLET:
+        log(f"[I-40] the local reader said ${bal}, which DISAGREES with the "
+            f"known reload constant ${RELOAD_WALLET} (CLAUDE.md section 4: "
+            f"'Load Last Save restores the wallet to $246') — a reload's own "
+            f"wallet does not move, so the READER is wrong here, not the "
+            f"wallet. Using ${RELOAD_WALLET} for max_spend, not ${bal}.")
+        return RELOAD_WALLET
+    log(f"read ${bal} off the pause menu")
+    return bal
 
 
 def _reset_progress():
