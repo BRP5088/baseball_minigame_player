@@ -101,6 +101,28 @@ check(_idx1_faked != 1,
       f"but a disc-read row whose digit reads None must not win the argmax even "
       f"though its glow clears the ceiling; got {_idx1_faked} (glow={_glow1_faked})")
 
+# THE RULE MUST NOT BE THE BLANKET "digit is None", OR A LEGITIMATE cursor on a
+# tactics slot goes blind too (skeptic review, 2026-09-20). Tactics cards never
+# carry a digit -- digit is None on EVERY tactics-slot-0 fixture on disk -- but
+# their y comes from y_from == "fallback", not "disc": no false circle was ever
+# found there, so the row must stay ELIGIBLE. sweep_f02_slot0.png is the user-
+# labelled ground truth for exactly this: the cursor is really on slot 0, a
+# tactics card, digit None throughout.
+_im_tac = Image.open(_os.path.join(_ROOT, "test_fixtures", "hand_cursor", "sweep_f02_slot0.png"))
+_rows_tac = lh.read_hand(_im_tac)
+check(_rows_tac[0].get("digit") is None and _rows_tac[0].get("kind") == "tactics"
+      and _rows_tac[0].get("y_from") == "fallback",
+      f"sweep_f02_slot0's row 0 is a legitimate digit-None, y_from='fallback' "
+      f"tactics row -- row 0 = {_rows_tac[0]!r}")
+_idx_tac, _glow_tac, _ = lh.cursor_glow(_im_tac, rows=_rows_tac)
+check(_idx_tac == 0,
+      f"and the cursor is STILL named there -- the row stays eligible because "
+      f"y_from is 'fallback', not 'disc'; got {_idx_tac} (glow={_glow_tac})")
+_sel_tac = lh.selected_cards(_rows_tac, _im_tac.width / lh.ANCHOR_W)
+check(lh.cursor_slot(_glow_tac, _sel_tac) == 0,
+      f"cursor_slot agrees from the raw glow list alone; got "
+      f"{lh.cursor_slot(_glow_tac, _sel_tac)} (glow={_glow_tac})")
+
 
 # =========================================================================
 print("(b) cursor_slot: the ceiling, on synthetic glow lists")
