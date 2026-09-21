@@ -149,6 +149,51 @@ check(f"real streaming frames are accepted ({len(rejected)}/{len(frames)} "
 for f in rejected[:5]:
     print(f"     rejected: {os.path.relpath(f, _ROOT)}")
 
+# --- 4b. I-24: a genuine STREAMING frame the guard currently REJECTS -------
+# test_fixtures/load_last_save_dialog_live_20260920.png is the game's OWN
+# "Load Last Save" dialog (a flat dark panel over the pause book), captured
+# live 2026-09-20 while `looks_like_ui` was returning True on it -- which
+# makes `streaming()` answer "not streaming" on a live game screen, sending
+# CLAUDE.md section 1's three tells the wrong way.
+#
+# THE CENSUS (agent_progress/issues/I-24/, i24_census.py/.json) FOUND THE
+# GATES CANNOT BE MOVED TO FIX THIS. widest_row_run does not separate the
+# two populations at ANY threshold: this frame scores 1.0000, and so do two
+# OTHER genuine in-game captures already on disk
+# (test_fixtures/pause_menu/load_last_save_selected.png at 1.0000 and
+# several test_fixtures/ban_counter/*.jpg frames at 0.9640) -- tied with the
+# host list's own 1.0000. Widening the streaming population past the 260
+# frames section 4 above globs (adding give_up/, pause_menu/, ban_counter/,
+# ban_digits/, result_screens/ -- 67 frames the shipped test never reached)
+# found 11/67 (16.4%) rejected the same way. Since `looks_like_ui` is an OR
+# of the two gates, raising UI_FLAT_FRAC cannot rescue this while
+# UI_ROW_RUN_FRAC sits at a value real streaming frames already saturate --
+# and it cannot be raised past 1.0 (a fraction of row width) while the
+# not_streaming population (still n=1, by the design note above) is also at
+# 1.0000. CLAUDE.md 10.4: a threshold must sit BETWEEN two measured
+# populations; here there is no gap to sit in. See the at_table 500-frame
+# lesson (CLAUDE.md section 8) -- a fix that "works" only because the
+# negative population is thin is worse than none.
+#
+# So this is recorded as a KNOWN FALSE NEGATIVE ON PURPOSE: the assertion
+# below pins the CURRENT WRONG ANSWER. A future fix replaces the flatness
+# heuristic with a game-content signal (find_bar/read_bearing, or the
+# pause_menu page_fraction/menu_text_fraction notebook-edge pair that
+# already separates the PAUSE book from the BAN book and a bright wall --
+# CLAUDE.md section 3) rather than moving these constants, and that fix
+# flips this specific assertion deliberately instead of leaving it stale.
+DIALOG = os.path.join(_ROOT, "test_fixtures",
+                       "load_last_save_dialog_live_20260920.png")
+check("the I-24 fixture (the game's own Load Last Save dialog) exists",
+      os.path.exists(DIALOG))
+if os.path.exists(DIALOG):
+    dialog_img = Image.open(DIALOG)
+    check("I-24 KNOWN FALSE NEGATIVE (tracked, not fixed): looks_like_ui "
+          "wrongly rejects the game's own Load Last Save dialog as chiaki "
+          "UI -- flip this assertion when the gate becomes a game-content "
+          "signal instead of a flatness one",
+          es.looks_like_ui(dialog_img) is True)
+
 # --- 5. the thresholds are pinned as LITERALS -------------------------------
 # CLAUDE.md 10.11: a test that asserts against the constant it is guarding
 # rises with it and passes forever.
@@ -156,6 +201,15 @@ check("UI_FLAT_FRAC is 0.25, between a streaming max of 0.2949 and the host "
       "list's 0.6678", es.UI_FLAT_FRAC == 0.25)
 check("UI_ROW_RUN_FRAC is 0.50, between a streaming max of 0.6208 and the "
       "host list's 1.0000", es.UI_ROW_RUN_FRAC == 0.50)
+# I-24 CORRECTION: those two numbers describe the ORIGINAL 848-frame OPEN-18
+# census (section 3 of CLAUDE.md), not the wider population above. Over the
+# 616-frame I-24 census (streaming_real + the run sample + give_up/pause_menu/
+# ban_counter/ban_digits/result_screens/etc.) the streaming max is 0.2853 for
+# flatness and 1.0000 -- not 0.6208 -- for widest_row_run, i.e. TIED with the
+# host list on that second quantity. The literals above are correct as pinned
+# constants; the docstring numbers they cite are stale for widest_row_run and
+# are not corrected here (CLAUDE.md 10b: fix the code/test first, prose after,
+# in one commit) -- left for whoever builds I-24's game-content-signal fix.
 
 # --- 6. it must never raise into a live run ---------------------------------
 class Exploding:
