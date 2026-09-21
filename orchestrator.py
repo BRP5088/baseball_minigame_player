@@ -7462,8 +7462,25 @@ def hand_cursor_look():
     # here let _select_verified believe a SELECTED card was not selected and press
     # select_card again -- a TOGGLE, which put the card back down. Live 2026-09-20,
     # five presses at an already-selected card. None makes it refuse instead.
+    #
+    # I-36: A TACTICS-TYPED FALLBACK ROW CAN ALSO BE A GARBLED PLAYER LIFT, and the
+    # `kind != "tactics"` guard above let it straight through with a real (wrong)
+    # y -- 167 of 378 frames in the failing window still misread this way even
+    # after I-37's fan-gate fix, because that fix widened the "is a fan here"
+    # PRESENCE gate, not this per-row TYPE/POSITION classification. A card raised
+    # mid-lift can overlap its neighbour and get typed 'tactics' with no banner
+    # actually read: `kind == "tactics"` and `type is None` at once. A GENUINE
+    # tactics card almost always clears this: `digit` is None for every tactics
+    # row by construction (no disc to read), but `type` is read from its own
+    # banner and populated whenever that banner is legible -- which is the normal
+    # case, not the exception. So `type is None` is the discriminator; `digit is
+    # None` is kept anyway per the corpus fixture the fix is targeted at, but
+    # contributes no extra selectivity of its own since it never varies for a
+    # tactics row.
     _ys = [None if (r.get("y_measured") is False
-                    or (r.get("kind") != "tactics" and r.get("y_from") == "fallback"))
+                    or (r.get("kind") != "tactics" and r.get("y_from") == "fallback")
+                    or (r.get("kind") == "tactics" and r.get("y_from") == "fallback"
+                        and r.get("digit") is None and r.get("type") is None))
            else r.get("y") for r in rows]
     return (glow, _ys, len(rows), selected)
 

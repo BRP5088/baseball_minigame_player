@@ -1059,12 +1059,83 @@ through a recognised transition.
 discards_left is still 1") and `run_live_20260921n.log` (the last "the discard was
 REFUSED 3x on this exact hand" block: "select_card did not land (attempt 1..4)", "never
 landed after 5 attempts", three polls). Both in the pitching half with 1 discard left; the
-first discard of the same half worked.
+first discard of the same half worked. Frames: `screenshot_log/run_20260921_080311/`
+(main checkout).
 
-**Root cause.** UNKNOWN, under offline investigation with the 21n screenshot log
-(`agent_progress/issues/I-36/`).
+**Root cause.** ESTABLISHED, read-only, from `agent_progress/issues/I-36/progress.md`
+(copied into this worktree's `agent_progress/issues/I-36/`). Target slot 3 (the 5/0
+pitcher, weakest by `(power, secondary)`) genuinely lifts on the first `select_card`
+press. For 2-5 seconds afterward, while it overlaps its neighbour in the fan, `read_hand`
+misreads its row as `kind='tactics', digit=None, type=None, y_from='fallback'` -- a REAL
+(wrong) y, not a None one. `orchestrator.hand_cursor_look`'s null rule (~line 7465, before
+this fix) only treated a row as position-unknown when `y_measured is False` OR the row
+was NOT typed 'tactics' and came from a fallback position -- `kind == 'tactics'` skipped
+the null, so `_ys[3]` read a real number, `_select_verified` concluded the press "did not
+land", and pressed `select_card` AGAIN: a TOGGLE, which put the just-lifted card back
+down. Repeats ~15 times (3 polls x up to 5 attempts) over ~40s without the discard ever
+committing. This is I-37's shape one layer over: I-37 fixed whether the FAN is admitted
+at all; this is about how one ROW inside an admitted fan gets typed. Measured directly:
+I-37 (already merged into this branch) does NOT fix it -- 167 of 378 frames in the
+failing window (`08:14:49-08:15:27`, `screenshot_log/run_20260921_080311/`) still misread
+slot 3 exactly this way with I-37's fix in place.
 
-**Status.** Investigating.
+**Fix.** `orchestrator.hand_cursor_look` only (nothing else touched, per the
+investigator's proposed narrow option): a row is now ALSO treated as position-unknown
+when `kind == 'tactics'` AND `digit is None` AND `type is None`. `digit` is None for
+every tactics row by construction (no disc to read) and adds no selectivity of its own;
+`type` is read from the card's own banner and is populated whenever that banner is
+legible, which is the normal case for a genuine tactics card -- so `type is None` is the
+real discriminator between a genuine tactics card and a garbled lifted row typed
+'tactics' with no banner actually read. This lets the EXISTING I-21 "selected by
+inference" rescue in `_select_verified` catch the case, with no new machinery.
+
+**The control, traced rather than assumed.** A genuine tactics card whose type
+genuinely fails to read (an ordinary `find_tactics`/banner miss, unrelated to any lift)
+would also get its y nulled by this rule -- `type is None` cannot distinguish "garbled by
+an overlapping lift" from "this card's own banner just didn't read this frame", and
+`hand_cursor_look` sees one fresh frame with no memory of a prior read, so a
+baseline-vs-current comparison (which WOULD disambiguate the two, and is what the
+investigator's alternative-but-tighter suggestion -- "only when readable-at-baseline as a
+PLAYER card in ys0" -- would use) is not available without passing `ys0` into
+`hand_cursor_look`, which means touching `_select_verified`/`_clear_strays`'s call sites
+and is out of this fix's scope. Traced downstream in `input_controller._clear_strays`:
+for a slot OUTSIDE `want`, a newly-None y takes the SAME one-look-then-refuse path
+(I-26) an unrelated flicker already goes through -- never a wrong commit, only an extra
+re-look and, in the worst case, one refuse-and-retry cycle a poll later. For a slot
+INSIDE `want` (I-28), a newly-None y is read as "expected, not a stray" and, if readable
+at baseline, rescued by the SAME I-21 inference this ticket needs -- the intended effect.
+So the residual risk is real, narrow, and UNMEASURED (not zero, and not claimed to be):
+a transient type-read miss on a NON-target tactics card could cost one extra re-look:
+never a wrong play, always the safe direction (refuse/retry).
+
+**Verify.** `tests/minigame/test_lifted_discard_row_rescued.py`, three copied real
+frames from the failing window (`test_fixtures/hand_reads/i36_lifted_discard_before.jpg`,
+`_garbled.jpg`, `_after.jpg`, real `cp`, never symlinked): (1) `_select_verified(3, ...)`
+driven with a stubbed `orchestrator._grab_settle_regions` returning the real
+before/garbled/garbled frame sequence is rescued by inference -- exactly ONE
+`select_card` press, `sel == [3]`; (2) CONTROL on the SAME garbled frame: slot 2
+(fielding_boost, a genuine tactics card whose banner DID read) keeps its measured y,
+while slot 3 is nulled; (3) a SYNTHETIC before/after row pair (stubbed
+`local_hand.cursor_glow`) reproduces the same tactics/None/None-after-press shape and is
+also rescued with one press. Two mutants, each caught by a different check,
+sha256-verified restored byte for byte between them: (a) revert the widened condition to
+the pre-fix rule -- caught by (1), which then exhausts its 3 scripted look() frames
+retrying select_card a second time and crashes with an unconsumed-queue IndexError (the
+same "runs out of scripted frames" shape I-33's own tests use); (b) drop the `digit is
+None and type is None` guard (null unconditionally on any tactics/fallback row) --
+caught exactly by check (2), the CONTROL: slot 2's genuine, correctly-read tactics row
+gets wrongly nulled (`ys=[203, 152, None, None, 208]`). Siblings run clean, unmodified:
+`tests/minigame/test_select_stops_when_lift_unreadable.py` (I-21),
+`tests/minigame/test_verified_presses_on_match_path.py`,
+`tests/minigame/test_stray_guard_exempts_target.py`,
+`tests/minigame/test_stray_guard_ignores_flicker.py`,
+`tests/minigame/test_false_cursor_on_occluded_slot.py`,
+`tests/minigame/test_hand_read_two_lifted.py` (I-37),
+`tests/harness/test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
+
+**Status.** Fixed on branch (this worktree, merged with I-37 as
+`worktree-agent-ae8e1e3cee1e04f4a`), awaiting an independent skeptic pass -- in
+particular on the unmeasured non-target-tactics-card residual risk named above.
 
 ### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
 
