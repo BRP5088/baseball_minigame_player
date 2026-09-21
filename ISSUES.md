@@ -470,7 +470,9 @@ delta from before it. Fix: `reset_env.load_save_dialog(img)` (phrase read in a b
 the first press so an open dialog is never pressed again, every press polled in the same
 iteration, delta kept as the fast signal; and `CONFIRM_HOLD_SEC = 0.6` on the confirm
 presses (n=1 accepted vs 4 taps ignored, thin and said so). Three mutants caught. Live
-confirmation: the next reset must reload in one held press.
+confirmation: the next reset must reload in one held press. QA round 3 (46a8210): the YES
+retry loop now re-reads the screen and re-presses only while the dialog is visibly up; a
+landed press followed by a slow world load sends one Cross, not three.
 
 ### I-24  `ensure_stream.looks_like_ui` fires on the game's own dark dialog panel          P1  reader
 
