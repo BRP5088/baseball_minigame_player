@@ -570,36 +570,80 @@ def read_hand(img):
     the slot, but their bonus is still not read.
     """
     strong = _strong_discs(img)
-    if len(strong) >= FIT_MIN_DISCS:
-        s = img.width / ANCHOR_W
-        fit = sorted(_slot(c[0], c[1], s)[0] / s for c in strong)
-        # COUNT THE DISCS THAT LAND ON A SLOT; DO NOT TAKE THE MEDIAN (2026-09-20).
-        #
-        # A SELECTED card is displaced ~22-26 px HORIZONTALLY as well as lifted, so
-        # its residual clears FIT_MAX on its own. The median then decides the whole
-        # frame: with ONE card selected it still lands on a resting disc and the fit
-        # passes, but with TWO selected -- which is what the engine chooses on every
-        # play that attaches a tactics card -- the median lands on a DISPLACED disc
-        # and the fan is rejected. Measured live, a real hand with slots 0 and 1 up:
-        #
-        #     residuals 26.3 (sel)  22.3 (sel)  12.7  0.0   median 22.3 > 20.0
-        #
-        # read_hand then falls to _read_ungated, whose rows carry NO slot identity
-        # and NO y -- so selected_cards and cursor_slot both go blind at exactly the
-        # moment the loop needs to verify a two-card play.
-        #
-        # The question the gate is for is "is the fan THERE", not "is every card at
-        # rest". FIT_MIN_DISCS discs landing on slots answers it, and reuses the two
-        # constants already fitted for this -- nothing new is invented.
-        #
-        # Measured over 540 archived hand crops: 459 accepted by both rules, 8
-        # rejected by both, ZERO that this rule rejects and the median accepts, and
-        # exactly ONE newly admitted -- hand_1788969878714664000.png, which is a
-        # fully visible five-card fan (POWER SWING +2, BATTER 7/1, SPEED BOOST +1,
-        # BATTER 5/2, BATTER 4/3) that the median rule was dropping.
-        if sum(1 for r in fit if r <= FIT_MAX) >= FIT_MIN_DISCS:
-            return _read_fan(img, strong)
+    s = img.width / ANCHOR_W
+    if _fan_looks_present(img, strong, s):
+        return _read_fan(img, strong)
     return _read_ungated(img, strong)
+
+
+def _fan_looks_present(img, strong, s):
+    """Is a five-card fan actually on screen -- from the SAME evidence `_read_fan`
+    itself will read, not a narrower subset of it (I-37, 2026-09-21).
+
+    COUNT THE DISCS THAT LAND ON A SLOT; DO NOT TAKE THE MEDIAN (2026-09-20) fixed
+    the gate collapsing on a MEDIAN residual, but its candidate pool was still only
+    `strong` -- discs found as an isolated dark digit ringed by white, at
+    DARK_THRESHOLDS. A SELECTED card's own disc often needs a threshold ABOVE that
+    range to register at all (it brightens on lift; that is what RAISED_DARK_MAX
+    exists for), so it can be entirely ABSENT from `strong` while still sitting,
+    at the right position, in the WHITE-DISC or WREATH candidates `_read_fan`
+    itself pools from (`_white_discs`, `find_tactics`). The gate asked "how many
+    discs land on a slot" using less evidence than the function it was deciding
+    whether to call.
+
+    Live 2026-09-21: a hand with slots 1 and 2 selected had 4 `strong` discs and
+    only ONE within FIT_MAX (13.0) -- `strong` alone never sees slot 2's own card
+    at all. Its white-disc pass finds it at (548, 102), cost 15.7 (the cost
+    formula weighs a pure vertical lift lightly: |dx| + |dy|/3, and a lifted
+    disc's x barely moves once its OWN blob is found rather than a noisier partial
+    digit crop) -- a real candidate `_read_fan` would go on to read, invisible to
+    the narrower gate that decides whether to call it. A second live case, one
+    card selected, had only 2 `strong` discs total, one of them the selected
+    card's own (far off); the other three cards -- including a tactics wreath --
+    were sitting in `_white_discs`/`find_tactics` at cost 5.0-15.0, plainly a fan.
+
+    Pooling the same candidates `_read_fan` uses, and taking the BEST cost PER
+    SLOT (so one card found twice by two passes counts once, and two passes both
+    missing the same card still counts zero), fixes both: measured over 2,396
+    archived hand crops (`overnight/local_hand/*.png`) plus the two live I-37
+    fixtures, the broadened gate admits every frame the strong-only one did --
+    ZERO frames flip from admitted to rejected -- and additionally admits exactly
+    four: both I-37 fixtures, and two archived frames whose paid-model "vision"
+    field (agreement.jsonl, never trusted for card VALUES but fine for "is this a
+    five-card hand") confirms are genuine five-card fans that the old gate was
+    dropping to the blind ungated path for no reason.
+
+    Reproduce: `agent_progress/issues/I-37/probe6_corpus_regression.py`, which
+    must crop the two I-37 fixtures through `orchestrator.crop_gameplay_regions`
+    before feeding them to either gate -- they are FULL 1920x1080 frames, not
+    hand crops. An earlier version of this script opened them directly with
+    `Image.open()` instead, at ~2x the calibration scale, where every raw-pixel
+    size gate in `_white_discs`/`find_tactics`/`circle_finder` silently rejects
+    real discs; both gates rejected both fixtures and the script never exercised
+    the fix at all (caught by an independent skeptic, 2026-09-21). Corrected and
+    re-run, it prints exactly:
+    `total files: 2400 both admit: 462 both reject: 1934
+    old-admits-new-rejects (BAD): 0 new-admits-old-rejects (newly fixed): 4`,
+    naming the four files above.
+    """
+    g = np.asarray(img.convert("L"), dtype=np.uint8)
+    taken = [(c[0], c[1]) for c in strong]
+    xy = list(taken)
+    for x, y, area, box in _white_discs(g):
+        if _free(x, y, taken):
+            taken.append((x, y))
+            xy.append((x, y))
+    for t in find_tactics(img):
+        if _free(t["x"], t["y"], taken):
+            taken.append((t["x"], t["y"]))
+            xy.append((t["x"], t["y"]))
+    best_per_slot = {}
+    for x, y in xy:
+        cost, i, _kind = _slot(x, y, s)
+        c = cost / s
+        if i not in best_per_slot or c < best_per_slot[i]:
+            best_per_slot[i] = c
+    return sum(1 for c in best_per_slot.values() if c <= FIT_MAX) >= FIT_MIN_DISCS
 
 
 

@@ -1066,6 +1066,91 @@ first discard of the same half worked.
 
 **Status.** Investigating.
 
+### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
+
+**Evidence.** overnight/run_live_20260921j.log:844-849 (07:50): hand `0: UNKNOWN
+1: swing_boost +1 2: 5/3 3: 5/2 4: 4/3`, the engine selected slot 2 then slot 1
+(attaching the boost), both verified, and the very next read stalled: "cannot read
+the fan after select_card (rows=0) -- refusing". A second live occurrence at 08:00,
+ONE card lifted (`0: Fielding Play +1 | 1: Pitcher 9/2 LIFTED | 2: Pitcher 7 |
+3: Pitcher 9 | 4: Pitcher 6`), same shape: `read_hand` returned 3 rows, none with a
+measured y. Frames: `test_fixtures/hand_reads/i37_two_lifted_20260921.png`,
+`i37_one_lifted_20260921.png`.
+
+**Root cause.** `read_hand`'s "is the fan there" gate (I-32's neighbour, the
+2026-09-20 COUNT fix in `local_hand.py`) counted only `_strong_discs(img)` --
+discs found as an isolated dark digit ringed by white, at `DARK_THRESHOLDS`
+(110/90/130). A SELECTED card's own disc often needs a threshold ABOVE that range
+to register at all (it brightens on lift; that is what `RAISED_DARK_MAX` exists
+for elsewhere in this file), so it can be entirely absent from `strong` while
+sitting, at the right position, in the WHITE-DISC or WREATH candidates
+`_read_fan` itself already pools from (`_white_discs`, `find_tactics`). On the
+two-lifted frame, `_strong_discs` found 4 candidates and only ONE cleared
+`FIT_MAX`; `_white_discs` finds the selected player card's own disc at cost 15.7
+(comfortably under `FIT_MAX` -- the cost formula `|dx| + |dy|/3` weighs a pure
+vertical lift lightly, and a white-disc blob's x is cleaner than a noisy partial
+digit-in-disc crop), invisible to the gate that decides whether to call
+`_read_fan` at all.
+
+**Fix.** `local_hand.py`: `read_hand`'s gate is now `_fan_looks_present(img,
+strong, s)`, which pools `strong` + `_white_discs` + `find_tactics` (the SAME
+candidates `_read_fan` itself reads from, deduped via the existing `_free`
+bookkeeping), takes the BEST cost PER SLOT (0..4), and requires `FIT_MIN_DISCS`
+slots at or under `FIT_MAX` -- same two constants, nothing invented.
+`_read_fan`/`_read_ungated` are untouched.
+
+**Verify.** `tests/minigame/test_hand_read_two_lifted.py`: both live fixtures read
+5 rows, every row `y_measured`, `selected_cards` names exactly the lifted slot(s)
+([1, 2] and [1]), the lifted cards' own kind/type/digit are correct, the untouched
+resting cards read unchanged; a CONTROL fixture with no selection (`hand_cursor/
+cursor_on_1.png`) reads byte-identical digits to before the fix; a negative-control
+fixture (`overnight/local_hand/hand_1788963163511615000.png`, the same one I-32's
+neighbour test uses) is still rejected as a non-fan. Three mutants, all caught:
+(1) reverting to the old strong-only gate and (2) keeping the broadened
+candidate pool but taking the FIRST candidate per slot instead of the best
+(min-cost) one -- both caught end to end, row count collapses to 4/3 and the
+file raises an IndexError (`strong`'s own bad candidate for the lifted slot is
+seen before the good white-disc one, so "first wins" reproduces the same stall
+the fix exists for); (3) replacing the per-slot dedup with a raw count over the
+pooled candidates (an independent skeptic's finding, 2026-09-21: this survived
+every local_hand test in the repo including this file's first version) --
+caught by check (e), two synthetic same-slot candidates >25px apart (so
+`_free`'s own dedup does not collapse them first) that a raw count wrongly
+admits and the deduped gate correctly refuses. sha256-verified restored byte
+for byte between all three mutants.
+
+**Regression check.** `agent_progress/issues/I-37/probe6_corpus_regression.py`
+(not part of the suite, too slow): over 2,396 archived hand crops
+(`overnight/local_hand/*.png`) plus the two fixtures above and the two
+`test_fixtures/selected_card/` fixtures I-32's neighbour test uses, the broadened
+gate agrees with the old (strong-only) gate on every frame except 4 -- ZERO
+frames flip from admitted to rejected, and the 4 newly-admitted are both I-37
+fixtures plus 2 archived corpus frames whose paid-model "vision" label in
+`agreement.jsonl` (never trusted for card VALUES, fine for card COUNT) confirms
+are genuine five-card fans the old gate was dropping for no reason.
+
+**CORRECTED 2026-09-21, caught by an independent skeptic.** The probe's first
+version opened the two I-37 fixtures with `Image.open()` directly -- they are
+FULL 1920x1080 frames, not hand crops -- so at ~2x calibration scale every
+raw-pixel size gate rejected every disc on them and BOTH gates rejected BOTH
+fixtures; the script's own tally then said "2 newly-admitted", not 4, and never
+exercised the fixtures the fix targets at all (the fix itself, verified through
+`orchestrator.crop_gameplay_regions` the way `test_hand_read_two_lifted.py`
+and production both do, was never in question). Fixed by cropping the two
+fixtures through `orchestrator.crop_gameplay_regions(img)["hand"]` before
+either gate sees them, matching the test. Re-run, it prints exactly:
+
+    total files: 2400   both admit: 462   both reject: 1934
+    old-admits-new-rejects (BAD): 0   new-admits-old-rejects (newly fixed): 4
+
+naming the four files above (`agent_progress/issues/I-37/probe6_corrected_output.txt`).
+
+**Status.** Fixed in this worktree, not yet merged. Independent skeptic round
+2026-09-21 (`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH
+NOTES -- the fix itself was never in question; two write-up/coverage gaps were
+found and both fixed on this branch (the corpus-regression probe's fixture
+scale bug, and the missing per-slot-dedup mutant), see above.
+
 ### I-38  An occluded target card cannot be selected, so the engine plays second-best   P1  input
 
 **Evidence.** `run_live_20260921l.log`: hand "fielding_boost +1 | 8/0 | 6/0 | 9/0 | 6/0",
