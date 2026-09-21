@@ -3750,6 +3750,14 @@ tried, on the live console, one press at a time:
 
     move the cursor RIGHT one slot      disc still hidden
     move the cursor ONTO the card       the card RISES above its neighbours -- still hidden
+
+    **CORRECTION 2026-09-20: HOVER DOES NOT LIFT A CARD.** Measured over 277 five-row
+    fans (`agent_progress/cursor-lift-refutation/measure_lift_vs_glow.py`): rise vs the
+    slot anchor is p50 7.0 hovered and 7.0 not at slot 3, -10.0 either way at slot 4.
+    The "rises" above was a live eyeball reading. SELECTION lifts a card (~44 px,
+    `SELECTED_MIN_RISE` 25); hovering does not, so a cursor reader built on hover
+    lift is dead and the probe-select in `_walk_cursor_to` (ISSUES.md I-02) uses the
+    selection lift instead.
     SELECT the card (cross)             "kind unknown" -> "player, power unread"; still no digit
     four local re-grabs, 0.25 s apart   0 of 15 recovered
 
@@ -4481,6 +4489,13 @@ pattern -- and it touches the turn loop, which is the money path, so it is not
 made unilaterally. Until then the gate stands on two matches, and the two RARE
 classes are the ones the existing sets happen to cover best (fielding 25 frames,
 speed 23) while the log's rarest are fielding 8 and speed 6.
+
+**SHIPPED 2026-09-20 with the user's yes (ISSUES.md I-18(b), commit 6808a39):**
+`orchestrator.record_reveal_kind` keeps one full reveal frame per tactics play under
+`test_fixtures/reveal_kind_truth/auto/<kind>_<ns>.jpg`, stamps the row with
+`reveal_frame`, never raises into the turn loop, writes nothing under
+`BASEBALL_TEST_RUN`, and refuses past 200 files rather than pruning. Pinned by
+`tests/minigame/test_reveal_frame_kept.py`. The census can now grow one frame per play.
 
 **OPEN-25 — A STALE `match_in_progress` STILL REACHES `start_match` WITH NO
 DEBIT, AND IT IS REPRODUCED. PREFLIGHT IS THE ONLY THING STOPPING IT (2026-09-17).**

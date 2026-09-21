@@ -28,8 +28,9 @@ Line numbers rot; the function name beside each one is the durable anchor.
 6. A threshold sits between two measured populations or it is not a threshold (§10.4).
    A change to card choice ships only on an interleaved A/B with a control arm that
    reproduces the shipped number (the `tie_w` pattern, CLAUDE.md §4).
-7. Model: Haiku for census and log parsing; Sonnet for code; Opus only for the money
-   path (`start_match`, `close_result`, debit, reset) and for strategy A/B design.
+7. Model: Sonnet for code and census (Haiku cannot load this repo's CLAUDE.md; it
+   died at launch on I-19); Opus only for the money path (`start_match`,
+   `close_result`, debit, reset) and for strategy A/B design.
 8. Before touching the cursor, deal gate or result reader, `git diff` — the other agent
    is in those files now.
 
@@ -561,7 +562,10 @@ on the way. (c): live fixtures read 2/5 -> 4/5 after two native-size templates c
 the pitch and speed fixtures; the held-out 48-frame corpus's wrong-kind max is 0.741,
 still under the 0.75 gate. NOT fixed: the fielding_boost fixture renders in ZONE_HOME and
 its banner sits above the padded band the reader searches, a zone/pad geometry gap in
-`reveal_cards.py`, open. (b) still waits for the user's yes.
+`reveal_cards.py`, open. (b) MERGED 2026-09-20 (f459378) with the user's yes:
+`record_reveal_kind` keeps one frame per tactics play under
+`test_fixtures/reveal_kind_truth/auto/`, links it from the row as `reveal_frame`, and
+refuses past 200 files; `tests/minigame/test_reveal_frame_kept.py`, three mutants caught.
 
 ### I-19  There is no run census tool                                              P1  evidence
 
@@ -597,11 +601,20 @@ no separate work.
 
 ---
 
-## Suggested order
+## Status at the end of 2026-09-20
 
-1. I-19 (scorecard), I-01 (relay), I-03, I-09, I-10 — offline, Sonnet, an afternoon.
-2. I-02, I-11, I-12 — input path, need one supervised live session.
-3. I-04 fixtures on the first live win and draw; I-06, I-07.
-4. I-05 — the unattended run, only after 1-3.
-5. I-13 to I-17 — simulator A/Bs, can run on Snoopy in parallel with 1-4; I-18 first
-   so the opponent model has rows.
+Merged: I-01, I-03, I-04 (win), I-06, I-07, I-08, I-09, I-10, I-11, I-12, I-18 (a, b, c),
+I-19, I-21, I-22, and I-02's offline half. Closed by measurement: I-13, I-14. QA round 1 on
+the merged diff: four confirmed findings, all fixed and skeptic-verified (7b5aba2); full
+suite 258 files green.
+
+Still open, in order:
+
+1. I-02 live check (a slot-4 discard through the probe-select) and I-21 live confirmation
+   (a 9 selected in one press). Both cheap with crawl mode's `d4` override.
+2. I-04 DRAW fixture on the first live draw.
+3. I-05 the unattended cycle: `run_cycles` must call `ensure_live` and a screen reader
+   before its first press, and `reset_environment` must reconcile the balance from the
+   pause menu (QA round 2 traced the stale-$46 refusal).
+4. I-15, I-16, I-17 simulator A/Bs (I-17 after the log has modern rows).
+5. I-18's fielding-boost zone gap in `reveal_cards.py`.
