@@ -222,6 +222,43 @@ class BlindRetryGrid(FakeGrid):
         return super().look()
 
 
+class TransientFlickerGrid:
+    """Single target (0, 0). Its first select_card press is genuinely dropped (no
+    state change at all). The pre-press retry re-check's OWN banned_set() read (the
+    3rd call: initial _before, _after of the dropped press, then this one) reports a
+    TRANSIENT flicker at an UNRELATED cell (1, 1) -- gone again on every other read --
+    rather than the target. The re-check must ask specifically whether `want` carries
+    the X, not merely whether the set grew: a merged-agent mutant that accepts ANY new
+    X (`_recheck - _before` non-empty) reads that flicker as "the target landed late",
+    never presses select_card again, and reports (0, 0) placed while it is still
+    unbanned on screen. Correct code presses again, which really bans it.
+    """
+
+    def __init__(self):
+        self.r, self.c = 0, 0
+        self.select_presses = 0
+        self.banned = set()
+        self.banned_set_calls = 0
+
+    def press(self, action, **kw):
+        if action == "select_card":
+            self.select_presses += 1
+            if self.select_presses == 1:
+                return  # genuinely dropped: no state change at all
+            self.banned.add((0, 0))  # the real retry press lands
+
+    def look(self):
+        return (self.r, self.c)
+
+    def banned_set(self):
+        self.banned_set_calls += 1
+        if self.banned_set_calls == 3:
+            # the pre-press retry re-check's own read: a flicker at an UNRELATED
+            # cell, gone again on every other read
+            return {(1, 1)}
+        return set(self.banned)
+
+
 def run(grid, want):
     real_press, real_sleep = ic.press, ic.time.sleep
     ic.press = grid.press
@@ -351,6 +388,18 @@ check("the chain was never abandoned as a cursor drift",
       not any("cursor left" in m for m in _logged))
 check("the blind frame was named truthfully",
       any("could not be read" in m for m in _logged))
+
+print("\nH. THE PRE-PRESS RETRY RE-CHECK MUST NAME THE TARGET, NOT JUST 'A NEW X "
+     "APPEARED': a transient flicker on an UNRELATED cell must not be read as the "
+     "target landing")
+g = TransientFlickerGrid()
+placed = run(g, {(0, 0)})
+check(f"placed only if actually banned on screen ({placed} vs banned={sorted(g.banned)})",
+      ((0, 0) in placed) == ((0, 0) in g.banned))
+check(f"the target really is banned ({sorted(g.banned)})", g.banned == {(0, 0)})
+check(f"TWO select_card presses (dropped, then a real retry press once the flicker "
+      f"at (1, 1) was correctly NOT read as the target landing) ({g.select_presses})",
+      g.select_presses == 2)
 
 print()
 if _fails:

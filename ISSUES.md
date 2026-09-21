@@ -2959,4 +2959,7 @@ nothing).
 
 **Status.** merged 59bb0b7; Opus skeptic CONFIRMED WITH NOTES, round 2 d92e81d
 added the settle before the re-check, cases B2/F/G, 7/7 mutants; expected
-shortfall ~0.07 matches per 37 vs 15 observed.
+shortfall ~0.07 matches per 37 vs 15 observed. Merge agent found a surviving
+mutant (the pre-press re-check accepting ANY new X instead of `want in
+_recheck`, so an unrelated flicker reads as the target landing); case H pins
+it, 8/8 mutants.
