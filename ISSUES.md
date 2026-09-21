@@ -1670,10 +1670,13 @@ All four fail as required; the two that escaped before are now caught cleanly
 skeptic used (a crash) and a hypothetical better-guarded form (a clean FAIL),
 so the guard isn't accidentally load-bearing for the catch.
 
-**Status.** Fixed on this branch (`tools/cursor_labels_from_lifts.py`,
-`tests/harness/test_cursor_labels_capture_gap.py`), skeptic round 1 CONFIRMED WITH
-NOTES and both named coverage gaps closed in round 2, awaiting re-review. Both real
-runs re-scanned end to end offline, no console, no live change.
+**Status.** merged cf127a477a05c00ebbfc450207c360061e2a016c, skeptic CONFIRMED WITH
+NOTES (two escaped mutants closed by 4 boundary cases). Re-verified post-merge on
+main: `tests/harness/test_cursor_labels_capture_gap.py` prints 16/16 checks, and
+`tools/cursor_labels_from_lifts.py screenshot_log/run_20260921_080311` reproduces
+173 raw candidates -> 41 kept, `cursor_slot` scoring 41/41 correct (0 blind, 0
+wrong) against the survivors. Both real runs re-scanned end to end offline, no
+console, no live change.
 
 ## C. Costs wins
 
