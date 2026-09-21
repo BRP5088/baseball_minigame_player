@@ -773,6 +773,12 @@ def select_and_play(card_index: int, tactics_index: int = None,
 # anything past this is presses not landing at all, not a longer journey.
 CURSOR_MAX_STEPS = 8
 
+# How many slots _walk_cursor_to may write off as FALSE cursors in one walk (I-25).
+# At most MAX_HAND_SIZE - 1 can be wrong while a real one still exists; past that,
+# excluding a slot cannot invent a cursor that is not there and the walk refuses
+# through the ordinary "nothing lit" path in cursor_slot.
+FALSE_CURSOR_EXCLUDE_MAX = 4
+
 # LOOK AFTER THE ANIMATION, NOT DURING IT. The user, watching the stream
 # (2026-09-10): "it quickly selected slot 1, mid animation of moving up deselected
 # it." A card takes a moment to slide, and a frame grabbed mid-slide puts the disc
@@ -1004,8 +1010,40 @@ def _walk_cursor_to(target, look):
         print(f"  [cursor] cannot see the cursor (rows={n}, glow={glow}) — refusing")
         return False, sel
     steps = 0
+    excluded = set()
+    first_cur = cur
     while cur != target:
         if steps >= CURSOR_MAX_STEPS:
+            # EIGHT LANDED PRESSES CANNOT LEAVE THE CURSOR IN PLACE (I-25). Section 5
+            # measures the console dropping at most 15.20% of presses, clustered but
+            # never eight in a row on this path -- CURSOR_MAX_STEPS crosses the whole
+            # 5-slot fan twice over. A reading that read the SAME slot before the
+            # first press and after every single one of the eight is not a stuck
+            # cursor, it is a FALSE one: CLAUDE.md 10.35 measured a glow window that
+            # lands ON a card's white art reads 60-88% regardless of the cursor, and
+            # test_fixtures/hand_reads/i25_false_cursor_slot0_live_20260920.png is
+            # exactly that -- slot 0 read 68.6 while presses toward slot 4 (22.8)
+            # never once moved the argmax winner. Exclude the false slot and see
+            # whether the real cursor is hiding under the gate elsewhere; bounded so
+            # this cannot loop forever writing off slots that were never the problem.
+            if cur == first_cur and cur not in excluded and len(excluded) < FALSE_CURSOR_EXCLUDE_MAX:
+                excluded.add(cur)
+                print(f"  [cursor] still at {cur} after {steps} presses with no change "
+                      f"— treating slot {cur} as a false cursor and excluding it")
+                glow, ys, n, sel = _look_settled(look)
+                if n != MAX_HAND_SIZE:
+                    print(f"  [cursor] cannot confirm the exclusion (rows={n}) — refusing")
+                    return False, sel
+                retried = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                if retried is None:
+                    print(f"  [cursor] excluding slot {cur} finds nothing else lit "
+                          f"(glow={glow}) — refusing")
+                    return False, sel
+                print(f"  [cursor] excluding slot {cur} finds the real cursor on "
+                      f"{retried} — continuing the walk from there")
+                cur = first_cur = retried
+                steps = 0
+                continue
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
         prev = cur
@@ -1016,7 +1054,7 @@ def _walk_cursor_to(target, look):
         if n != MAX_HAND_SIZE:
             print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) — refusing")
             return False, sel
-        cur = local_hand.cursor_slot(glow, sel)
+        cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
         if cur is None:
             # THE PRESS JUST MOVED TOWARD `target` AND `prev` WAS ONE STEP AWAY, SO
             # THE CURSOR IS MOST LIKELY ON `target` NOW (I-02): the glow window is
@@ -1029,6 +1067,7 @@ def _walk_cursor_to(target, look):
                 if not ok:
                     return False, sel
                 cur = new_cur
+                first_cur, steps = cur, 0
                 continue
             print(f"  [cursor] lost the cursor after {steps} press(es) "
                   f"(glow={glow}) — refusing")
