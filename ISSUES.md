@@ -2040,6 +2040,12 @@ three weakest cards of this 33-card collection are all pitchers, so the shipped 
 pitching-only rule by accident (bit-identical to "weakest-3 pitchers"). Banning batters
 instead buys offence (1.79 -> 2.07 runs/match) at the same win rate. **Status.** Closed.
 
+**2026-09-21 update.** The roster's last two untyped cards, Brian Coker (8/1) and Zachary
+Lee (6/2), are now typed BATTER (user-confirmed from ban-grid frames, Snoopy job 2;
+`simulate.UNTYPED` is empty). Both were already excluded from "the three weakest cards
+are all pitchers" above, so this result is unaffected; recorded here because it is the
+nearest roster-composition entry.
+
 ### I-14  Tactics timing is "always attach", measured only against "never attach"    P2  engine
 
 **Evidence.** `decision_engine.py:120-201, 230-318`: the boost attaches to whichever card

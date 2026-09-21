@@ -72,7 +72,7 @@ CARD_POOL = [
     PlayerCard("Brandon \"Binger\" Ortiz", 5, 2, "batter"),
     PlayerCard("Joshua Diaz", 4, 0, "pitcher"),
     PlayerCard("Justin Young", 6, 0, "pitcher"),
-    PlayerCard("Zachary Lee", 6, 2, ""),
+    PlayerCard("Zachary Lee", 6, 2, "batter"),
     PlayerCard("Johnny \"Blaze\" Sweets", 4, 3, "batter"),
     PlayerCard("Johnny C-Train Goudenberg", 7, 0, "pitcher"),
     PlayerCard("Charlie Pepper", 8, 0, "pitcher"),
@@ -84,7 +84,7 @@ CARD_POOL = [
     PlayerCard("Jeremiah Curd", 7, 0, "pitcher"),
     PlayerCard("Marian Bunz-Twarog", 4, 1, "pitcher"),
     PlayerCard("Jedediah Wetters", 4, 2, "batter"),
-    PlayerCard("Brian Coker", 8, 1, ""),
+    PlayerCard("Brian Coker", 8, 1, "batter"),
     PlayerCard("Timmeh Rattycum", 4, 3, "batter"),
     PlayerCard("Joe Jody Gain", 6, 0, "pitcher"),
     PlayerCard("Papa Jody Gain", 5, 2, "pitcher"),
@@ -174,11 +174,11 @@ def for_phase(player_pool, phase):
     of 3, which no real pitcher has. Every speed and fielding number this model produced
     before that was computed on a scrambled pool.
 
-    UNTYPED CARDS STAY IN BOTH POOLS rather than being dropped. Two of 33 are untyped
-    (they have never appeared on a ban grid we hold), and dropping them would bias the
-    draw as surely as mistyping them. Both have secondary 1 or 2, which is legal for
-    either role, so their worst case is the old behaviour on 2 cards instead of 33 --
-    and UNTYPED names them so the residual is countable rather than invisible.
+    UNTYPED CARDS STAY IN BOTH POOLS rather than being dropped, for whenever a future
+    card turns up unread -- dropping one would bias the draw as surely as mistyping it.
+    UNTYPED names any such residual so it is countable rather than invisible. As of
+    2026-09-21 all 33 cards are typed (Brian Coker and Zachary Lee, both batters,
+    confirmed by eye from ban-grid frames), so UNTYPED is empty.
     """
     want = "batter" if phase == "batting" else "pitcher"
     out = [c for c in player_pool if getattr(c, "role", "") in (want, "")]
