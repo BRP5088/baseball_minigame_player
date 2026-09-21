@@ -2957,4 +2957,6 @@ the splash re-check removed (cursor check kept) caught by case B (press count 5 
 case E (3 presses not 1, and a wrong cell -- `(0, 1)` -- ends up banned instead of
 nothing).
 
-**Status.** fixed on branch, awaiting skeptic (money path).
+**Status.** merged 59bb0b7; Opus skeptic CONFIRMED WITH NOTES, round 2 d92e81d
+added the settle before the re-check, cases B2/F/G, 7/7 mutants; expected
+shortfall ~0.07 matches per 37 vs 15 observed.
