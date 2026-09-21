@@ -146,6 +146,7 @@ class Game:
         self.load_secs = 6.0
         self.bearing = 97.4
         self.events = []               # ordered ('press', a) / ('sel', v)
+        self.cross_holds = []          # I-23: hold_seconds for every cross
         self.captures = 0
         self.focus_checks = 0
         self.pause_checks = 0
@@ -192,6 +193,13 @@ class Game:
 
     def press(self, action, hold_seconds=0.05, post_delay=None):
         self.events.append(("press", action))
+        if action == "cross":
+            # I-23, live 2026-09-20: a TAPPED Cross (hold_seconds=0.05) on the
+            # "Load Last Save" dialog was transmitted and ignored four times
+            # running; a 0.6s HOLD was accepted immediately. Recorded
+            # separately from `events` so existing 2-tuple unpacking
+            # elsewhere in this file is untouched.
+            self.cross_holds.append(hold_seconds)
         if action == "toggle_pause":
             if self.pause_opens and self.state == "gameplay":
                 if self.menu_delay:
@@ -591,6 +599,18 @@ check(len(g.presses("dpad_down")) == 1,
 check(len(g.presses("cross")) == 2,
       f"happy path sent {len(g.presses('cross'))} crosses, expected exactly 2 "
       f"(commit, then YES)")
+# I-23, live 2026-09-20: a TAPPED Cross (hold_seconds=0.05, pyautogui's own
+# default) on the "Load Last Save" dialog was transmitted and ignored four
+# times running; a 0.6s HOLD was accepted immediately. The literal below is
+# pinned rather than compared against reset_env.CONFIRM_HOLD_SEC on purpose
+# (CLAUDE.md 10.11: a check must not assert against the constant it is
+# guarding — mutating CONFIRM_HOLD_SEC down to the tap default would move
+# this bar right along with it and the check would still pass).
+_MIN_CONFIRM_HOLD_SEC = 0.5
+check(g.cross_holds and all(h >= _MIN_CONFIRM_HOLD_SEC for h in g.cross_holds),
+      f"happy path's cross presses used hold_seconds {g.cross_holds!r}, none "
+      f"of which clears {_MIN_CONFIRM_HOLD_SEC}s — a tapped Cross on this "
+      f"dialog is known to be ignored")
 
 # --- the invariant, over every scenario run above -------------------------
 # Re-run the whole set and assert the one property that matters across all of
