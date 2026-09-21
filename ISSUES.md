@@ -2675,6 +2675,10 @@ deferred.
 NOTES round 1, S-2/S-3/S-4 fixed 2c6cca5, 7/7 mutants; LATER: tactics slot not
 excluded after the fallback (~11 s per later turn).
 
+test_refusal_unwinds.py reconciled 307408c: scenarios 3 re-pinned to the
+batter-alone contract, 1 kept (plus 1 new scenario added so the
+general-refusal unwind's own mutant has something real to catch).
+
 ### I-49  A readable reveal's row is staged, then dropped by a later poll's failure (21 of 36 orphans)  P1  evidence
 
 **Evidence.** `agent_progress/census/reveal_orphans_trace/` traced 42 fully-readable
