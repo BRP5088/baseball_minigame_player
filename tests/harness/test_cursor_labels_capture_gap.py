@@ -53,6 +53,25 @@ between and after each:
 (a fifth, `hist[-2]==hist[-1]` -> `hist[-2]==sel` (compares against the RISE
 frame's own sel, not the labelled frame) and a sixth, discarding every reason
 to `None`, were already caught by cases 1-4 in the skeptic's own run.)
+
+**Cases 9-10, added for QA7/I-47.** `gap_ok = len(hist) < 2 or hist[-2] == hist[-1]`
+and the flicker window's own `if len(hist) > 1 else []` guard both defaulted to
+PASSING a candidate labelled frame that has fewer than 2 prior frames of history
+since the last capture-gap reset -- exactly the moment right after a reset, which
+is the shape both filters exist to catch. Fixed to REJECT with reason
+"insufficient_history" instead:
+
+    9.  a candidate whose labelled frame is the very first frame after a reset
+        (only 1 prior frame of history) -- REJECTED, insufficient_history
+    10. CONTROL: the same shape but with one more frame of quiet history before
+        the labelled frame (2 prior frames, both quiet) -- KEPT, not rejected
+        for insufficient_history (proves the reject in case 9 is about the
+        history depth, not about rejecting every post-reset rise)
+
+Mutant to run by hand alongside the four above:
+
+    `len(hist) < 2` -> `len(hist) < 1` (restore the permissive default for the
+    single-prior-frame case)                                    -> case 9 fails
 """
 import glob as glob_module
 import os
@@ -219,6 +238,32 @@ check("case 8 (flicker boundary, K=FLICKER_WINDOW+1 back): %s is KEPT"
       % labelled8, labelled8 in kept8)
 check("case 8: not rejected for capture_gap or flicker",
       labelled8 not in rej8)
+
+
+# --- case 9: insufficient history right after a reset (I-47) -----------------
+# f00 is the very first frame processed -- when slot 5 rises at f01, hist holds
+# only f00's own selected-set (1 prior frame), too little to evaluate either
+# capture_gap or flicker. Must REJECT rather than default-pass.
+seq9 = [E, frozenset({5}), frozenset({5}), frozenset({5}), frozenset({5})]
+kept9, rej9 = run_case(seq9)
+check("case 9 (insufficient history): f00 is REJECTED, not kept",
+      "f00.jpg" not in kept9)
+check("case 9: rejected specifically for insufficient_history",
+      rej9.get("f00.jpg") == "insufficient_history")
+
+
+# --- case 10: CONTROL -- one more frame of quiet history is enough -----------
+# Same shape as case 9, but one extra quiet frame (f00, f01 both E) precedes
+# the rise at f02, so hist has 2 elements when the rise is evaluated: both
+# capture_gap and flicker CAN be evaluated (and both pass), so the labelled
+# frame f01 is KEPT. Proves case 9's rejection is about history depth, not
+# about rejecting every post-reset rise.
+seq10 = [E, E, frozenset({5}), frozenset({5}), frozenset({5}), frozenset({5})]
+kept10, rej10 = run_case(seq10)
+check("case 10 (control, 2 prior frames): f01 is KEPT",
+      "f01.jpg" in kept10)
+check("case 10: not rejected for insufficient_history",
+      rej10.get("f01.jpg") != "insufficient_history")
 
 
 print("\nall green" if ok else "\nFAILURES above")

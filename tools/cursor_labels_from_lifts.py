@@ -97,10 +97,17 @@ def labels_for(run_dir, hold=HOLD, flicker_window=FLICKER_WINDOW, log=_say):
     a candidate lift transition was rejected for, so the rejections are reported
     rather than silently dropped (I-42; see the module docstring for why).
 
-    Three independent filters, none of which asks `cursor_slot` or `cursor_glow`
+    Four independent filters, none of which asks `cursor_slot` or `cursor_glow`
     anything (CLAUDE.md 10.22 -- an independent label cannot mark its own
     homework):
 
+        insufficient_history   fewer than 2 prior frames exist since the last
+                      capture-gap reset (a `sel is None` frame) -- neither
+                      capture_gap nor flicker below can be evaluated, so the
+                      candidate is REJECTED rather than passed by default
+                      (QA7/I-42's own second trap: a rise right after a reset
+                      is exactly the shape the other two filters exist to
+                      catch, and it must not fall through their absent history)
         capture_gap   the frame before the labelled one must show the SAME
                       selected-set as the labelled frame -- i.e. the fan was
                       already quiet for >=2 frames before the rise, not mid a
@@ -129,14 +136,19 @@ def labels_for(run_dir, hold=HOLD, flicker_window=FLICKER_WINDOW, log=_say):
             new = sel - prev_sel
             if len(new) == 1:          # exactly one card newly rose
                 slot = int(next(iter(new)))
-                gap_ok = len(hist) < 2 or hist[-2] == hist[-1]
-                window = hist[-(flicker_window + 1):-1] if len(hist) > 1 else []
-                flickered = any(slot in s for s in window)
-                reasons = []
-                if not gap_ok:
-                    reasons.append("capture_gap")
-                if flickered:
-                    reasons.append("flicker")
+                if len(hist) < 2:
+                    # Not enough prior frames to evaluate capture_gap or flicker --
+                    # reject with a reason rather than pass by default (I-47).
+                    reasons = ["insufficient_history"]
+                else:
+                    gap_ok = hist[-2] == hist[-1]
+                    window = hist[-(flicker_window + 1):-1]
+                    flickered = any(slot in s for s in window)
+                    reasons = []
+                    if not gap_ok:
+                        reasons.append("capture_gap")
+                    if flickered:
+                        reasons.append("flicker")
                 candidates.append((prev, slot, n, "+".join(reasons) or None))
         hist.append(sel)
         if len(hist) > flicker_window + 2:
