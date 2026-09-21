@@ -2728,8 +2728,12 @@ def screen_is_moving(regions: str = "default", settle_pause: float = 0.12) -> bo
 # I-07: was 15.0, set before the game's own animation ceiling was measured.
 # RULES.md §4 clocks a bases-loaded home run's runners clearing at 16.65s (60fps
 # sampling, two plays) -- ABOVE the old 15s bound, so the gate could force a read
-# mid-animation on the longest plays. Raised to 18.0: the measured ceiling plus
-# one poll of headroom, same margin the old value kept over its own p90/max.
+# mid-animation on the longest plays. Raised to 18.0 = 16.65 + 1.35: the measured
+# ceiling plus 1.35s of headroom. THAT MARGIN IS NOT DERIVED FROM A POPULATION
+# (CLAUDE.md 10.4) -- an earlier version of this comment claimed it was "the same
+# margin the old value kept over its own p90/max", which is false: the old value's
+# margin over its own max was 5.0s (15.0 - 10.0), not 1.35s. 1.35 is one poll of
+# headroom, chosen by hand, nothing more.
 # Tune from settle_stats_summary() after a real session.
 MAX_CONTINUOUS_MOTION_WAIT = 18.0
 
@@ -4653,6 +4657,11 @@ def _retry_local_hand(state):
             continue
         if cards is not None:
             state["hand"] = cards
+            # F2 (QA round 1, ISSUES.md): same flag, same reason as apply_local_readers --
+            # `why` is non-None when a slot was dropped on the way to this hand, and the
+            # regrab must not silently hand should_redraw a hand it believes is
+            # complete when it is not.
+            state["hand_incomplete"] = bool(why)
             state.pop("_hand_unread", None)
             print(f"  [local] hand read on local re-grab {i + 1} "
                   f"-- no paid retry needed")
@@ -4864,6 +4873,11 @@ def reset_hand_memory():
     # DELETE THE FILE, not just the dict: a new match in the same phase would
     # otherwise be handed the previous match's hand.
     _save_hand_memory()
+    # F1 (QA round 1, ISSUES.md): the discard/play stall breakers key on the CARDS, not on
+    # _hand_memory, so clearing the dict above never touched them. Without this a
+    # later hand reproducing the same signature (plausible -- fixed roster, CLAUDE.md
+    # section 4) would inherit a stale refusal count and an excluded slot.
+    reset_stall_counters()
 
 
 MIN_LOCAL_HAND_CARDS = 3
@@ -5362,6 +5376,13 @@ def apply_local_readers(state: dict, crops: dict = None) -> None:
         cards, why = local_hand_cards(crops["hand"])
         if cards is not None:
             state["hand"] = cards
+            # F2 (QA round 1, ISSUES.md): `why` is non-None here whenever local_hand_cards
+            # dropped a slot on its way to a returned hand -- the same I-10 shape
+            # local_game_state already flags at its own "st = {...}" site. Left unset,
+            # should_redraw sees a SHORT hand and reads max() over the survivors as the
+            # hand's true maximum, on every turn that reaches state through THIS site
+            # (the paid-orientation path) rather than local_game_state.
+            state["hand_incomplete"] = bool(why)
         else:
             # NOT READ is a real answer and it must look different from an empty hand.
             state["hand"] = []
@@ -7585,6 +7606,19 @@ def exclude_play_slot(idx):
     give whatever is played next its own fresh PLAY_STALL_MAX budget."""
     _PLAY_STALL["excluded"] = _PLAY_STALL["excluded"] | {idx}
     _PLAY_STALL["n"] = 0
+
+
+def reset_stall_counters():
+    """Clear both stall breakers. Call this everywhere reset_hand_memory() is
+    called -- both mark the same boundary (a new match, a new half's fresh
+    five), but _DISCARD_STALL/_PLAY_STALL key on the CARDS (_discard_hand_identity),
+    not on _hand_memory, so reset_hand_memory() clearing its own dict never
+    touched them. A later hand that happens to reproduce the same
+    (hand_index, kind, power, secondary, type) signature -- plausible, since
+    the roster is a small fixed set (CLAUDE.md section 4) -- would otherwise
+    inherit a stale refusal count and an excluded slot from the PREVIOUS hand."""
+    _DISCARD_STALL["sig"], _DISCARD_STALL["n"] = None, 0
+    _PLAY_STALL["sig"], _PLAY_STALL["n"], _PLAY_STALL["excluded"] = None, 0, frozenset()
 
 
 def play_one_turn(state_json: dict, batters_used: int):

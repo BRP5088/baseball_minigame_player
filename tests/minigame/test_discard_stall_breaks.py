@@ -112,26 +112,103 @@ check(o.discard_stalled(_same) is True,
       "is not, the counter resets every poll and the bound can never be reached, "
       "which is the original deadlock with extra steps")
 
-# --- 5. THE WIRING. The helper existing is not the helper being USED. ---------
-# CLAUDE.md records a wiring assertion that passed because it matched the function's
-# own `def` line, so this asserts on the CONDITION, and requires the guard to sit in
-# play_one_turn rather than merely somewhere in the file.
-import inspect                                                      # noqa: E402
-_src = inspect.getsource(o.play_one_turn)
-check("discard_stalled(" in _src,
-      "play_one_turn does not call discard_stalled — the bound exists but nothing "
-      "consults it, so the loop still spins (10.1: a guard that cannot fire)")
-check("and not _stalled" in _src,
-      "the should_redraw branch is not gated on the stall flag; without that the "
-      "engine re-enters the discard path forever")
-check("note_discard_refused()" in _src,
-      "nothing increments the counter in play_one_turn, so discard_stalled can "
-      "never become True however many discards are refused")
+# --- 5. THE WIRING, BEHAVIOURALLY. --------------------------------------------
+# QA round 1, F3. Sections 5-6 used to be `"and not _stalled" in inspect.getsource(...)`
+# — a source-text substring check that a cosmetic rename of `_stalled` fails while an
+# inverted guard (`and _stalled`) that keeps the same words passes. CLAUDE.md's
+# "check() SIGNATURES" entry is this exact shape one level up: a check that cannot
+# fail on the real regression it is named for. Replaced with the same shape
+# test_refused_play_falls_back.py section 7 uses for the sibling PLAY breaker: drive
+# the real play_one_turn, with select_and_discard stubbed to refuse FOREVER on a WEAK
+# hand (should_redraw fires), and assert on what actually happened.
+import contextlib                                                    # noqa: E402
+import io                                                             # noqa: E402
 
-# --- 6. the else branch must SAY it is playing because of the stall -----------
-check("REFUSED" in _src and "looping" in _src,
-      "the fall-through prints no reason naming the stall — a run that silently "
-      "stops discarding is indistinguishable from one that never wanted to")
+STATE_JSON = {"phase": "batting", "your_score": 0, "opp_score": 0,
+              "runners": [], "discards_left": 2, "hand": HAND}
+
+_discard_calls = []
+_play_calls = []
+
+
+def _fake_select_and_discard(player_idx, look=None, discards_look=None):
+    _discard_calls.append(player_idx)
+    return False                       # every discard REFUSED, forever
+
+
+def _fake_select_and_play(player_idx, tactics_idx, look=None):
+    _play_calls.append(player_idx)
+    return True
+
+
+def _fake_grab_settle_regions(names):
+    from PIL import Image
+    return {n: Image.new("RGB", (4, 4), (0, 0, 0)) for n in names}
+
+
+def _patch(saved):
+    for _name, _fn in {
+        "select_and_discard": _fake_select_and_discard,
+        "select_and_play": _fake_select_and_play,
+        "_grab_settle_regions": _fake_grab_settle_regions,
+    }.items():
+        saved[_name] = getattr(o, _name)
+        setattr(o, _name, _fn)
+
+
+def _unpatch(saved):
+    for _name, _fn in saved.items():
+        setattr(o, _name, _fn)
+
+
+o._DISCARD_STALL["sig"], o._DISCARD_STALL["n"] = None, 0
+_saved = {}
+_patch(_saved)
+_results = []
+_buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(_buf):
+        for _ in range(o.DISCARD_STALL_MAX + 1):
+            _results.append(o.play_one_turn(dict(STATE_JSON), 0))
+finally:
+    _unpatch(_saved)
+_log = _buf.getvalue()
+
+check(len(_discard_calls) == o.DISCARD_STALL_MAX,
+      f"expected exactly {o.DISCARD_STALL_MAX} discard attempts before the guard "
+      f"trips, got {len(_discard_calls)}: {_discard_calls!r} (10.1: a guard one "
+      "layer up from where the loop actually spins)")
+check(len(_play_calls) == 1,
+      f"select_and_play must be called exactly ONCE, on the poll right after the "
+      f"{o.DISCARD_STALL_MAX}th refused discard — the deadlock this file guards "
+      f"against: {_play_calls!r}")
+check(all(r == (False, None) for r in _results[:-1]),
+      f"every poll before the stall trips must be a refused discard "
+      f"(played=False, matchup_info=None): {_results[:-1]!r}")
+check(_results[-1][0] is True,
+      f"the poll after the stall trips must PLAY instead of discarding again: "
+      f"{_results!r}")
+check("REFUSED" in _log and "looping" in _log,
+      "the fall-through must name the stall as its reason in the log — a run "
+      "that silently stops discarding is indistinguishable from one that never "
+      f"needed to:\n{_log}")
+
+# --- 6. CONTROL: a genuinely NEW hand gets its own fresh discard budget -------
+NEW_HAND = [dict(c) for c in HAND]
+NEW_HAND[4] = dict(NEW_HAND[4], power=4)      # still weak (max <= 6), different sig
+o._DISCARD_STALL["sig"], o._DISCARD_STALL["n"] = None, 0
+_discard_calls.clear()
+_play_calls.clear()
+_saved = {}
+_patch(_saved)
+try:
+    _r = o.play_one_turn(dict(STATE_JSON, hand=NEW_HAND), 0)
+finally:
+    _unpatch(_saved)
+check(_r == (False, None) and len(_discard_calls) == 1 and not _play_calls,
+      f"a DIFFERENT hand must attempt a discard again rather than inherit the "
+      f"previous hand's stalled count: result={_r!r} discard_calls="
+      f"{_discard_calls!r} play_calls={_play_calls!r}")
 
 if fails:
     for f in fails:

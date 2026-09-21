@@ -189,6 +189,70 @@ finally:
     orchestrator.select_and_play = _real_select_play
     orchestrator.press = _real_press
 
+# ---- 8. QA1-F2: apply_local_readers threads `why` into state["hand_incomplete"] -----
+# The finder's own reproduction: a stubbed local_hand_cards reporting a dropped slot,
+# driven through apply_local_readers directly (the PAID-orientation path's own hand
+# site, separate from local_game_state's -- section 6 above already covers that one).
+# Before the fix, state["hand"] was set here and "hand_incomplete" never was, so
+# should_redraw on this path saw a SHORT hand and read its survivors' max as the truth.
+saved8 = orchestrator.local_hand_cards
+try:
+    three_cards = [{"kind": "player", "name": None, "power": 5, "secondary": 0,
+                    "hand_index": i} for i in (0, 2, 4)]
+    orchestrator.local_hand_cards = (
+        lambda *a, **k: (three_cards, "played without slots [1, 3] (unreadable)"))
+    state = {"screen": "turn"}
+    orchestrator.apply_local_readers(state, crops={"hand": object()})
+    check("apply_local_readers sets hand_incomplete when `why` is non-None",
+          state.get("hand_incomplete") is True, f"state={state!r}")
+
+    # control: nothing dropped -> hand_incomplete is False, not merely absent
+    orchestrator.local_hand_cards = lambda *a, **k: (three_cards, None)
+    state2 = {"screen": "turn"}
+    orchestrator.apply_local_readers(state2, crops={"hand": object()})
+    check("CONTROL: apply_local_readers sets hand_incomplete False when nothing dropped",
+          state2.get("hand_incomplete") is False, f"state={state2!r}")
+finally:
+    orchestrator.local_hand_cards = saved8
+
+# ---- 9. QA1-F2: _retry_local_hand threads `why` into state["hand_incomplete"] -------
+# The other site the finder named: the local re-grab that runs after the paid
+# orientation read fails to build a hand. Same defect, same fix.
+saved9 = (orchestrator._fast_grab, orchestrator.crop_gameplay_regions,
+          orchestrator.local_hand_cards, orchestrator.homeplate_runner_present,
+          orchestrator.time)
+
+
+class _InstantSleep:
+    def sleep(self, *a, **k):
+        pass
+
+
+try:
+    dummy = object()
+    orchestrator._fast_grab = lambda: dummy
+    orchestrator.crop_gameplay_regions = lambda full: [("hand", dummy)]
+    orchestrator.homeplate_runner_present = lambda crops: False
+    orchestrator.time = _InstantSleep()
+    three_cards = [{"kind": "player", "name": None, "power": 5, "secondary": 0,
+                    "hand_index": i} for i in (0, 2, 4)]
+    orchestrator.local_hand_cards = (
+        lambda *a, **k: (three_cards, "played without slots [1, 3] (unreadable)"))
+    state = {"_hand_unread": "some earlier reason"}
+    orchestrator._retry_local_hand(state)
+    check("_retry_local_hand sets hand_incomplete when the regrab's `why` is non-None",
+          state.get("hand_incomplete") is True, f"state={state!r}")
+
+    orchestrator.local_hand_cards = lambda *a, **k: (three_cards, None)
+    state2 = {"_hand_unread": "some earlier reason"}
+    orchestrator._retry_local_hand(state2)
+    check("CONTROL: _retry_local_hand sets hand_incomplete False when nothing dropped",
+          state2.get("hand_incomplete") is False, f"state={state2!r}")
+finally:
+    (orchestrator._fast_grab, orchestrator.crop_gameplay_regions,
+     orchestrator.local_hand_cards, orchestrator.homeplate_runner_present,
+     orchestrator.time) = saved9
+
 print()
 if fails:
     print(f"{len(fails)} FAILED")
