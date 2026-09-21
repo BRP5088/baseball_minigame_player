@@ -1546,6 +1546,135 @@ press/grab behind `<NAME>_DRIVE_IN_TESTS`, scanner widened to `.pop`.
 
 **Status.** Merged.
 
+### I-43  A stray left lifted by a refused attempt survives into the NEXT operation's baseline-blind exemption   P0  guard
+
+**Evidence.** QA6 finder, read-only, main checkout HEAD a277f46
+(`agent_progress/qa6/interactions/progress.md`, Q4), reproduced against the real
+`input_controller._clear_strays` (the finder's own repro script did not survive
+on disk; reconstructed from its precise write-up in
+`tests/minigame/test_commit_refuses_unseen_strays.py` case (A)).
+
+**Root cause.** `_verified_select_and_play_inner`/`select_and_discard` capture
+`blind_before` from ONE `_look_settled` at the very top of the call, before any
+press. When an EARLIER, unrelated attempt's `_unwind_selection` could not even
+read the fan ("cannot read the fan to unwind — leaving the board as is") its
+target may still be genuinely lifted. That slot then reads unreadable at the
+NEXT operation's own baseline too — indistinguishable, from `blind_before`
+alone, from a card that has been chronically occluded the whole hand and was
+never touched by anyone. I-26/I-28's own accepted exemption ("slot(s) [..] were
+ALREADY unreadable before this operation began — proceeding") then waves it
+through: `selected_cards()` also skips a None-y row, so the stray is invisible
+to `lifted = set(sel) | _want_inferred` too, and `_clear_strays` returns `True`
+believing the board is clean when a card the engine never chose is still up.
+
+**Fix.** A process-local `_MAYBE_LIFTED` set in `input_controller.py`, reset by
+`orchestrator.reset_hand_memory()` (every match/half boundary — a stray cannot
+survive a hand that no longer exists on screen). Every return-False site across
+`_unwind_selection` and `_clear_strays` that leaves the board's clean state
+UNPROVEN now records the implicated slot(s) via `_mark_maybe_lifted`, listed
+here (the trace the fix is built from):
+
+    _unwind_selection   fan unreadable at all            marks `ours`
+                        a slot in `extra` could not be
+                          walked-to/deselected            marks that slot and
+                                                          every slot after it
+                                                          in that loop (unproven)
+                        any exception mid-unwind          marks `ours`
+    _clear_strays       top: fan unreadable before
+                          committing                      marks `want`
+                        re-look: fan unreadable            marks `_new_blind`
+                        still blind after the one
+                          allowed re-look                  marks `_new_blind`
+                        a stray in `extra` could not be
+                          cleared                          marks that slot and
+                                                          every slot after it
+                                                          in the clearing loop
+                        still bad after clearing           marks the implicated
+                                                          blind/lifted slots
+    select_and_discard   the pre-select walk/select fail
+                          (no _unwind_selection safety
+                          net on this path)                marks `card_index`
+                        the post-clear walk-back fails     marks `card_index`
+                        confirm_discard pressed but its
+                          result is unverified (four
+                          distinct branches)                marks `card_index`
+
+`_clear_strays`'s baseline-blind exemption (`_untouched_blind`) now refuses,
+naming the slot(s), whenever it intersects `_MAYBE_LIFTED` — a tracked slot
+must be SEEN DOWN (a real y, not risen) before it can be waved through as a
+chronic occlusion. `_reconcile_maybe_lifted(ys, sel)` clears a tracked slot the
+moment a fresh read proves exactly that, at every `_look_settled` inside
+`_clear_strays`. A genuinely chronic occlusion nobody ever failed to clear is
+never in `_MAYBE_LIFTED` and is unaffected (control-a).
+
+**Verify.** `tests/minigame/test_commit_refuses_unseen_strays.py`: case (A) is
+the reconstructed QA6 Q4 repro (refuses, was `True` pre-fix); control (a) shows
+a genuine chronic occlusion (I-28's own live case) is still exempted, never
+walked to or deselected, never marked; control (d) is the full lifecycle —
+attempt 1 refuses while the stray is still up, attempt 2 commits once a later
+read proves it down, and `_MAYBE_LIFTED` is cleared for it. Mutant (i), drop the
+`_MAYBE_LIFTED` intersection check, caught by case (A) and control-d's attempt
+1. sha256-verified restored byte for byte.
+
+**Status.** Fixed on this branch, awaiting skeptic.
+
+### I-44  `_clear_strays`'s commit-time inference asks for no real corroboration   P0  guard
+
+**Evidence.** QA6 finder (`agent_progress/qa6/interactions/progress.md`, Q2),
+reproduced against the real `_clear_strays` (script not on disk; reconstructed
+in `tests/minigame/test_commit_refuses_unseen_strays.py` case (B)): `want={3}`,
+baseline readable, a look() where the card never lifts, ever (`sel` permanently
+empty, the slot's own y permanently `None`) — `_clear_strays` still returned
+`True` and `confirm_play` would fire.
+
+**Root cause.** `_want_inferred`'s commit-time re-application of I-21's
+inference asks only three facts, all derivable from the CALLER's own
+`ys0`/`kinds0`/`blind_before` book-keeping with no reference to a real,
+geometric read: readable at baseline, blind now, not tactics-typed. Nothing
+requires that `sel` (the fresh look `_clear_strays` itself just took) or
+`_select_verified`'s own retry loop EVER actually saw the target selected. A
+dropped press plus a transient disc misread produce the identical three facts
+a genuine lift does, and I-36's own write-up already named this as an accepted,
+unmeasured gap for a player-baseline target.
+
+**Fix.** `_select_verified`'s existing inference branch (I-21) now reports
+WHICH slot it inferred, via a new `_InferredSel(list)` subclass carrying
+`.inferred` (behaves as a plain list to every existing consumer — `in`,
+`sorted()`, `set()`, `==` all defer to `list`, the same trick `orchestrator.
+_CursorSel.kinds` already uses for `kinds0`, chosen specifically so the
+existing 2-tuple `ok, sel = _select_verified(...)` unpacking at both call
+sites, and in every sibling test, needs no changes). Both callers
+(`_verified_select_and_play_inner`, `select_and_discard`) accumulate
+`getattr(sel, "inferred", frozenset())` across their select step(s) into an
+`inferred_targets` set and thread it into `_clear_strays` the same way
+`ys0`/`kinds0` already are. `_want_inferred`'s gate gains a fourth condition:
+`inferred_targets is None or k in inferred_targets` — `None` (no caller
+support) is PERMISSIVE, the unchanged pre-I-44 behaviour, matching the exact
+convention `kinds0` already established for the identical reason (every test
+and caller written before this needs no changes); a caller that supplies a
+real set (even empty, meaning "the select step ran and reported nothing")
+requires the SAME slot to have been actually inferred by `_select_verified` on
+THIS operation. A target that ends up neither in `sel` nor in `inferred_targets`
+is refused with a line naming it ("target not seen selected — refusing to
+commit"), falling through to the existing "not all lifted" refusal. I-36's own
+baseline-kind gate (`kinds0`) is untouched and still applies independently.
+
+**Verify.** `tests/minigame/test_commit_refuses_unseen_strays.py`: case (B)
+shows `inferred_targets=None` still commits (unchanged) while
+`inferred_targets=set()` (empty, real) now refuses the identical never-lifts
+scenario; control (b) a genuine geometric selection commits regardless;
+control (c) drives `_select_verified` for real against a `LiftScreen` harness,
+takes its actual `.inferred` report, threads it into `_clear_strays`, and
+confirms the commit — proving the plumbing end to end, not just the gate in
+isolation. Mutant (ii), `_corroborated` always returns `True`, caught by case
+(B)'s fix check. sha256-verified restored byte for byte. Sibling
+`test_lifted_discard_row_rescued.py` case (5) (I-36's own kinds0-threading
+test, a tactics-baseline target whose commit-time look glitches) passes
+unmodified and is now ALSO caught by this gate independently of I-36's own —
+both must agree the target was never seen selected.
+
+**Status.** Fixed on this branch, awaiting skeptic.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,

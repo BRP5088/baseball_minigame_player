@@ -5005,6 +5005,10 @@ def reset_hand_memory():
     # later hand reproducing the same signature (plausible -- fixed roster, CLAUDE.md
     # section 4) would inherit a stale refusal count and an excluded slot.
     reset_stall_counters()
+    # I-43: a slot _input_controller._MAYBE_LIFTED still names belongs to the
+    # HAND that is going away -- a fresh five (or a new match) cannot inherit a
+    # stray from a hand that no longer exists on screen.
+    input_controller.clear_maybe_lifted()
 
 
 MIN_LOCAL_HAND_CARDS = 3
