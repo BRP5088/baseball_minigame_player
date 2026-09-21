@@ -52,21 +52,46 @@ MIN_CONF = 0.55
 # as "JOHNNY DRAWERS" on a live TURN frame -- not a result screen -- used to score a phantom
 # draw, because the old rule was `word in seen or seen in word`, a bare substring test, and
 # "DRAW" is a substring of "DRAWERS". A whole OCR TOKEN must now equal the vocab word, or be
-# it with one letter dropped ('WINER' -> WINNER, OCR skipping a stroke) or one trailing
-# character that is a '!' misread as a letter ('DRAWI' -> DRAW). "DRAWERS", "WINNERS" and
-# "LOSERS" are each a real, different, LONGER word and must not match.
+# it with UP TO TWO letters dropped ('WINE' -> WINNER, OCR skipping two strokes -- see
+# `_similar`'s docstring for why the tolerance is 2 and not the 1 an earlier comment here
+# claimed) or one trailing character that is a '!' misread as a letter ('DRAWI' -> DRAW).
+# "DRAWERS", "WINNERS" and "LOSERS" are each a real, different, LONGER word and must not
+# match.
+#
+# A BELT-AND-BRACES CALL-SITE VETO ("refuse a match if the band has any other long alpha
+# token") SHIPPED AND WAS REVERTED THE SAME DAY (I-34 skeptic, 2026-09-21). Viewing the
+# actual `BAND` crop on every fixture in test_fixtures/result_screens/ shows the matchbox
+# ring lettering (CAMEL BURN, SPARK-D, SAFETY MATCHES, SPIKE-D...) is ALWAYS present
+# alongside the real word, on every class including the phantom-draw frame itself -- so
+# the veto refused every genuine WINNER/LOSER/DRAW read, and a None here (not "unavailable",
+# not "missing") reaches orchestrator.py:4256-4259's "the template answer is not trusted
+# alone" branch, which repeats until MAX_STUCK_ATTEMPTS and ends the run UNSCORED on a real
+# result screen -- the exact 35s-stall failure this whole module exists to prevent. Do not
+# re-add a "no other token" rule without measuring the real BAND crop first.
 VOCAB = {"WINNER": "win", "LOSER": "loss", "DRAW": "draw"}
 
 _TOKEN_RE = re.compile(r"[A-Za-z]+")
-_EXCLAIM_NOISE = "IL1"   # OCR sometimes renders a trailing '!' as one of these letters
+_EXCLAIM_NOISE = "IL"    # OCR sometimes renders a trailing '!' as one of these letters
 
 
 def _similar(seen: str, word: str) -> bool:
-    """True if the WHOLE token `seen` is `word` -- exactly, with one letter dropped in
-    order ('WINER' -> WINNER), or with one trailing '!'-as-a-letter noise char ('DRAWI' ->
-    DRAW). A `seen` that is LONGER than `word` for any other reason is a different word
-    ('DRAWERS', 'WINNERS', 'LOSERS') and must not match, however much of `word` it
-    contains -- containment used to count here and matched a card name (I-34)."""
+    """True if the WHOLE token `seen` is `word` -- exactly, with UP TO TWO letters
+    dropped in order ('WINE' -> WINNER, two strokes skipped), or with one trailing
+    '!'-as-a-letter noise char ('DRAWI' -> DRAW). A `seen` that is LONGER than `word`
+    for any other reason is a different word ('DRAWERS', 'WINNERS', 'LOSERS') and must
+    not match, however much of `word` it contains -- containment used to count here and
+    matched a card name (I-34).
+
+    THE TWO-DROP TOLERANCE IS REAL AND WAS UNDER-STATED HERE UNTIL THE I-34 SKEPTIC READ
+    THE CODE (2026-09-21): `len(seen) >= len(word) - 2` allows seen to be TWO shorter than
+    word, not one -- WINNER accepts WINE, INNER, WIER and 13 more 4-letter subsequences.
+    The floor `len(seen) < 4` caps how much of that tolerance any given word can actually
+    use: DRAW (4 letters) gets ZERO drops (a 3-letter seen never clears the floor), LOSER
+    (5) gets ONE (a 3-letter seen still can't clear it), and only WINNER (6) reaches the
+    full two. Pre-existing behaviour, not a regression; documented rather than tightened,
+    because tightening a reader on the money path is itself an unmeasured change (CLAUDE.md
+    10.32) and this tolerance has been live and correct since result_ocr.py's first commit.
+    """
     if len(seen) < 4:
         return False
     if seen == word:
@@ -75,7 +100,7 @@ def _similar(seen: str, word: str) -> bool:
         return True
     if len(seen) >= len(word):
         return False
-    i = 0                                   # subsequence: WINER -> WINNER
+    i = 0                                   # subsequence: WINE -> WINNER (up to 2 drops)
     for ch in word:
         if i < len(seen) and seen[i] == ch:
             i += 1
@@ -85,58 +110,31 @@ def _similar(seen: str, word: str) -> bool:
 def match_word(texts):
     """(outcome, the text that matched) from OCR output, or (None, reason).
 
-    Tokenises each OCR text on non-letter boundaries BEFORE matching, so "JOHNNY DRAWERS"
-    is checked as the two whole tokens JOHNNY and DRAWERS -- never concatenated into one
-    string a substring test could hit, and never truncated to just DRAWERS's prefix.
+    Two kinds of candidate token are tried per OCR text, both checked WHOLE, never as a
+    containment: the individual runs split on non-letter boundaries ("JOHNNY DRAWERS" ->
+    JOHNNY, DRAWERS -- never concatenated into one string a substring test could hit), and
+    the text's letters joined into ONE string with every non-letter (space, digit,
+    punctuation) dropped ("W I N N E R" -> WINNER, "L0SER" -> LSER, "DRA W" -> DRAW) -- the
+    OLD reader's only candidate, kept because OCR sometimes splits or digit-corrupts a
+    single word (I-34 skeptic finding 4). Neither can reopen I-34: a joined card name like
+    "JOHNNYDRAWERS" or a lone "DRAWERS" is LONGER than every vocab word, so `_similar`
+    refuses it exactly as it refuses the split tokens -- verified below in
+    `tests/minigame/test_result_ocr_whole_word.py`.
     """
     seen = []
     for t, conf in texts:
         if conf is None or conf < MIN_CONF:
             continue
-        for tok in _TOKEN_RE.findall(t.upper()):
+        candidates = _TOKEN_RE.findall(t.upper())
+        joined = "".join(candidates)
+        if joined and joined not in candidates:
+            candidates = candidates + [joined]
+        for tok in candidates:
             seen.append(tok)
             for word, outcome in VOCAB.items():
                 if _similar(tok, word):
                     return outcome, t
     return None, f"no result word in {seen!r}" if seen else "no text found"
-
-
-def _extraneous_alpha_tokens(texts):
-    """Every alphabetic OCR token longer than 2 letters that does NOT itself look like a
-    result word (`_similar` against any VOCAB entry). Used by `_match_word_strict` below."""
-    out = []
-    for t, conf in texts:
-        if conf is None or conf < MIN_CONF:
-            continue
-        for tok in _TOKEN_RE.findall(t.upper()):
-            if len(tok) > 2 and not any(_similar(tok, w) for w in VOCAB):
-                out.append(tok)
-    return out
-
-
-def _match_word_strict(texts):
-    """(outcome, detail) like `match_word`, plus a BELT-AND-BRACES rule (I-34): refuse a
-    match if the band's OCR texts contain any other alphabetic token longer than 2 letters
-    that doesn't itself look like a result word. A real result banner shows the word alone
-    in this band; a reveal or a live turn frame shows a player name or other prose beside
-    it -- exactly the "JOHNNY DRAWERS" shape that produced the phantom draw this fixes.
-
-    UNMEASURED against real result frames: this shipped with no `paddle_venv` in the
-    worktree and a live run in the main checkout (run_cycles, pid seen 2026-09-21), so
-    running PaddleOCR against test_fixtures/result_screens/ risked degrading that run's
-    timing (CLAUDE.md 10.13/13a) and was not done. It is safe to ship unmeasured only
-    because of its FAILURE DIRECTION: it can turn an accepted match into a refusal, never
-    a refusal into a match, so the worst case is an extra poll (`local_game_state` falls
-    through to "UNRECOGNISED SCREEN" and the caller retries), never a wrong score. Verify
-    it against real result frames before trusting it to silently absorb a genuine banner.
-    """
-    outcome, detail = match_word(texts)
-    if outcome is None:
-        return outcome, detail
-    extra = _extraneous_alpha_tokens(texts)
-    if extra:
-        return None, f"OCR read {detail!r} but the band also has {extra!r} -- not alone"
-    return outcome, detail
 
 
 # ---------------------------------------------------------------------------------------
@@ -225,7 +223,7 @@ def read_banner(full_frame, tmp_dir="/tmp"):
             texts = json.loads(line).get(path, [])
             if isinstance(texts, str):
                 return None, texts
-            return _match_word_strict(texts)
+            return match_word(texts)
         except Exception as e:
             _shutdown()
             return None, f"{type(e).__name__}: {e}"

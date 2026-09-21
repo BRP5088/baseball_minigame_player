@@ -830,59 +830,97 @@ scored DRAW as a substring of DRAWERS, `run()` logged a draw for a match still i
 fallback -- and I-30 never touched it. Its rule was `seen == word or seen in word or word
 in seen`, a bare containment test, so `"DRAW" in "DRAWERS"` matched.
 
-**Fix.** `result_ocr._similar` now requires the WHOLE OCR token to equal the vocab word,
-with exactly two OCR-noise tolerances: one dropped letter (`WINER` -> WINNER, the
-tolerance the module already had and still needs) and one trailing letter standing in for
-a misread `!` (`DRAWI` -> DRAW, a form seen in this module's own docstring). A token
+**Fix.** `result_ocr._similar` requires the WHOLE OCR token to equal the vocab word, with
+two OCR-noise tolerances: UP TO TWO dropped letters (`WINE` -> WINNER -- pre-existing
+behaviour; see below, this was mis-stated as "one dropped letter" in the first version of
+this fix) and one trailing letter standing in for a misread `!` (`DRAWI` -> DRAW). A token
 LONGER than the word for any other reason -- `DRAWERS`, `WINNERS`, `LOSERS` -- no longer
-matches, however much of the word it contains. `match_word` now tokenises each OCR text on
-non-letter boundaries FIRST (`re.findall(r"[A-Za-z]+", ...)`), so "JOHNNY DRAWERS" is
-checked as the two whole tokens JOHNNY and DRAWERS, never concatenated into one string a
-containment test could hit.
-
-A second, independent layer (`result_ocr._match_word_strict`, wired into `read_banner` in
-place of the bare `match_word` call) refuses a match outright if the band's OCR texts carry
-any OTHER alphabetic token longer than 2 letters that doesn't itself look like a result
-word -- a real banner shows the word alone in the crop; a reveal or a turn frame shows a
-player name or other prose beside it. **UNMEASURED against real result frames**: this
-worktree has no `paddle_venv` (a live run, `run_cycles`, was confirmed running in the main
-checkout's process list while this was written -- `ps aux` showed pid 51234 -- and CLAUDE.md
-10.13/13a says CPU-bound work must not run alongside a live navigation), so
-`tools/read_banner_paddle.py` was not run against `test_fixtures/result_screens/` to check
-whether a real banner's OCR ever carries a stray long token that this rule would wrongly
-veto. It ships anyway because its failure direction is safe by construction: it can only
-turn an ACCEPTED match into a REFUSAL, never a refusal into a match, so the worst case is
-one extra poll (`local_game_state` falls through to "UNRECOGNISED SCREEN" and the caller
-retries), never a wrong score. Verify it against real result frames before trusting it to
-silently absorb a genuine banner that happens to carry extra OCR noise.
+matches, however much of the word it contains. `match_word` tries two kinds of candidate
+per OCR text: the individual runs split on non-letter boundaries (`re.findall(r"[A-Za-z]+",
+...)`, so "JOHNNY DRAWERS" is checked as JOHNNY and DRAWERS, never concatenated into one
+string a containment test could hit) and the text's letters joined into ONE string with
+every space/digit/punctuation dropped (see the recall-regression paragraph below). Neither
+candidate can reopen the bug: a joined card name like `JOHNNYDRAWERS` is still LONGER than
+every vocab word, so `_similar` refuses it exactly as it refuses the split tokens.
 
 grep for `DRAW` across `result_ocr.py`, `local_state.py`, `orchestrator.py` and
 `tools/read_banner_paddle.py` found exactly one other matcher: `local_state.
 read_result_card`'s I-30 fix (`\b{k}\b`), already whole-word and untouched here. The
 remaining hits in all four files are prose comments and docstrings, not matching code.
 
-**Verify.** `tests/minigame/test_result_ocr_whole_word.py`: (1) the exact bug --
-`match_word([("JOHNNY DRAWERS", 1.0)])` -> None; (2) `DRAWERS`/`WINNERS`/`LOSERS` each
-refused as real, longer, different words; (3) the existing vocabulary and both OCR-noise
-tolerances (`WINER`, `DRAWI`, a real `DRAW!`) still read exactly as before; (4) card
-banners (`PITCHER`, `BATTER`) and junk (`BANNEDCARDS`, `""`) still refused; (5) tokenised
-matching still finds a result word beside other text (`"THE WINNER"` -> win via
-`match_word`); (6) the strict call-site layer refuses that same `"THE WINNER"` text (its
-`THE` token is the giveaway), accepts the word alone, is not fooled by the real banner's
-own `!`, and is not vetoed by a short (<=2 letter) stray token. Two mutants, each caught by
-a disjoint set of checks and nothing else, restored byte-for-byte (sha256) between them,
-`__pycache__` not implicated (`-B` throughout, no `.pyc` ever written): (a) reverting
-`_similar` to the old substring test fails exactly the 4 substring-shape checks; (b)
-dropping the strict layer's extraneous-token veto (`_match_word_strict` falling through to
-plain `match_word`) fails exactly the one check that names it, nothing else. Siblings run
-clean: `tests/minigame/test_close_result_refuses_stale_read.py`,
+**REFUTED AS FIRST SHIPPED (6686603), FIXED ON THE SAME BRANCH.** The first version added a
+second, independent call-site layer (`result_ocr._match_word_strict`, wired into
+`read_banner`) that refused a match outright if the OCR band carried any other alphabetic
+token longer than 2 letters, on the theory that a real banner shows the word alone. An Opus
+skeptic (`agent_progress/issues/I-34-skeptic/progress.md`) cropped `result_ocr.BAND` from
+every fixture in `test_fixtures/result_screens/` and VIEWED it: the crop always contains the
+matchbox-ring lettering around the medallion (CAMEL BURN, SPARK-D, SAFETY MATCHES, SPIKE-D),
+on every class including the phantom-draw frame itself -- so the veto refused every genuine
+WINNER/LOSER/DRAW read. It also refuted the claimed failure direction: a None from OCR here
+(not "unavailable", not "missing") reaches orchestrator.py:4241-4259's "the template answer
+is not trusted alone" branch, which is static on an unchanging real result screen and so
+repeats every poll until MAX_STUCK_ATTEMPTS (15) -- the run ends UNSCORED, the exact 35s-
+stall failure this module exists to prevent, not the "one extra poll" the first write-up
+claimed. **The veto is REMOVED**: `read_banner` calls `match_word` directly again;
+`_match_word_strict`/`_extraneous_alpha_tokens` are deleted, along with the four test checks
+that pinned them. Do not re-add a "no other token" rule without measuring the real `BAND`
+crop first (CLAUDE.md 10.32 -- an unmeasured claim about the failure direction is exactly
+what got this wrong).
+
+The same skeptic found two more real findings, both fixed on this branch:
+
+- **A recall regression from dropping the old joined-alpha candidate.** The pre-I-34 reader
+  joined every alpha character of an OCR text into ONE string before matching (digits and
+  spaces silently dropped), so it caught a word OCR splits across spaces (`"W I N N E R"`)
+  or digit-corrupts (`"L0SER"`). Tokenising on word boundaries lost this. Restored as an
+  ADDITIONAL candidate alongside the split tokens (`match_word` now tries both per text),
+  verified NOT to reopen the bug: the joined form of a card name (`JOHNNYDRAWERS`) is still
+  longer than every vocab word.
+- **The docstring understated the dropped-letter tolerance.** `len(seen) >= len(word) - 2`
+  allows TWO drops, not the one the first write-up claimed (`WINE`, `INNER`, `WIER` and 13
+  more all match WINNER). Pre-existing behaviour, not introduced by this ticket; documented
+  accurately rather than tightened, because tightening a reader on the money path is itself
+  an unmeasured change and this tolerance has been live and correct since the module's first
+  commit. The floor `len(seen) < 4` caps how much of it any given word can use: DRAW gets
+  zero drops, LOSER one, only WINNER the full two -- now stated in `_similar`'s docstring
+  with the reasoning. `_EXCLAIM_NOISE`'s dead `"1"` (tokens come from `[A-Za-z]+`, so a token
+  can never end in a digit) is removed rather than made reachable; no design needed a digit
+  tolerance.
+
+**Verify.** `tests/minigame/test_result_ocr_whole_word.py`, rewritten: (1) the exact bug --
+`match_word([("JOHNNY DRAWERS", 1.0)])` -> None, and the joined form `"JOHNNYDRAWERS"` ->
+None too; (2) `DRAWERS`/`WINNERS`/`LOSERS`/`PITCHERBATTER` each refused as real, longer,
+different (or non-vocabulary) words; (3) the vocabulary and both OCR-noise tolerances
+(`WINER`, `WINE` for the 2-drop case, `DRAWI`, a real `DRAW!`) read correctly, and a THIRD
+dropped letter (`WIE`) is refused; (4) card banners (`PITCHER`, `BATTER`) and junk
+(`BANNEDCARDS`, `""`) still refused; (5) tokenised matching still finds a result word beside
+other text (`"THE WINNER"` -> win); (6) the recall-regression cases -- `"W I N N E R"` ->
+win, `"D R A W"` -> draw, `"DRA W"` -> draw, `"L0SER"` -> loss; (7) THE WIRING -- a new test
+drives the real `read_banner` end to end through a stubbed `_worker`/`_readline` (no
+`paddle_venv` needed) with `texts=["JOHNNY DRAWERS"]` -> None and `texts=["DRAW!"]` -> draw,
+so a future edit that disconnects `read_banner` from `match_word` fails a test rather than
+reaching the live rig unnoticed.
+
+Five mutants, each caught by a disjoint set of checks and nothing else, restored byte-for-
+byte (sha256) between them, `__pycache__` not implicated (`-B` throughout, no `.pyc` ever
+written): (i) tokenise on whitespace only (`r"[A-Za-z]+"` -> `r"\S+"`) fails the `DRAW!`,
+`L0SER` and wiring-`DRAW!` checks (3); (ii) the call-site veto no longer exists to mutate
+(removed as refuted) -- N/A, superseded by the wiring mutant below; (iii) restore
+containment in `_similar` fails the exact-bug, joined-form, `DRAWERS`/`WINNERS`/`LOSERS` and
+wiring-`JOHNNY DRAWERS` checks (6); (iv) drop the `!`-as-letter tolerance fails exactly the
+`DRAWI` check (1); (v) `read_banner` bypasses `match_word` (returns a hardcoded string
+instead) fails exactly the wiring-`DRAW!` check (1) -- confirming the wiring test earns its
+keep. Siblings run clean: `tests/minigame/test_close_result_refuses_stale_read.py`,
 `tests/minigame/test_run_debit_and_scoring.py`, `tests/harness/test_no_shadowed_module_
 defs.py`, `tests/harness/test_no_undefined_names.py` all pass. `tests/minigame/
 test_result_reader.py` has one PRE-EXISTING, unrelated failure in this worktree --
 `diagnostics/20260910_103221_5018/screen_at_stall.png` does not exist here -- reproduced
-identically with this ticket's changes stashed out, so it is not this fix's doing.
+identically both before this ticket's changes and after the redo, so it is not this fix's
+doing.
 
-**Status.** Fixed on branch, awaiting skeptic.
+**Status.** Fixed on branch (whole-word matcher CONFIRMED by the skeptic; call-site veto
+REMOVED per the same skeptic's refutation), redo complete, awaiting a second skeptic pass on
+the redo.
 
 ## C. Costs wins
 
