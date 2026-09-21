@@ -31,6 +31,7 @@ wired, and it replaces a 35 s stall.
 import atexit
 import json
 import os
+import re
 import select
 import subprocess
 import threading
@@ -47,18 +48,59 @@ MIN_CONF = 0.55
 
 # A CLOSED VOCABULARY OF THREE. Fuzzy, because OCR drops letters ('WINER' was observed at
 # 0.87) -- but never so loose that a card banner counts: "PITCHER" appears on a turn screen
-# and must NOT match. The rule is a prefix/containment test on words of length >= 4, which
-# 'WINER' passes against WINNER and 'PITCHER' fails against all three.
+# and must NOT match. Matching is WHOLE-WORD ONLY (I-34, 2026-09-21): a player card OCR'd
+# as "JOHNNY DRAWERS" on a live TURN frame -- not a result screen -- used to score a phantom
+# draw, because the old rule was `word in seen or seen in word`, a bare substring test, and
+# "DRAW" is a substring of "DRAWERS". A whole OCR TOKEN must now equal the vocab word, or be
+# it with UP TO TWO letters dropped ('WINE' -> WINNER, OCR skipping two strokes -- see
+# `_similar`'s docstring for why the tolerance is 2 and not the 1 an earlier comment here
+# claimed) or one trailing character that is a '!' misread as a letter ('DRAWI' -> DRAW).
+# "DRAWERS", "WINNERS" and "LOSERS" are each a real, different, LONGER word and must not
+# match.
+#
+# A BELT-AND-BRACES CALL-SITE VETO ("refuse a match if the band has any other long alpha
+# token") SHIPPED AND WAS REVERTED THE SAME DAY (I-34 skeptic, 2026-09-21). Viewing the
+# actual `BAND` crop on every fixture in test_fixtures/result_screens/ shows the matchbox
+# ring lettering (CAMEL BURN, SPARK-D, SAFETY MATCHES, SPIKE-D...) is ALWAYS present
+# alongside the real word, on every class including the phantom-draw frame itself -- so
+# the veto refused every genuine WINNER/LOSER/DRAW read, and a None here (not "unavailable",
+# not "missing") reaches orchestrator.py:4256-4259's "the template answer is not trusted
+# alone" branch, which repeats until MAX_STUCK_ATTEMPTS and ends the run UNSCORED on a real
+# result screen -- the exact 35s-stall failure this whole module exists to prevent. Do not
+# re-add a "no other token" rule without measuring the real BAND crop first.
 VOCAB = {"WINNER": "win", "LOSER": "loss", "DRAW": "draw"}
+
+_TOKEN_RE = re.compile(r"[A-Za-z]+")
+_EXCLAIM_NOISE = "IL"    # OCR sometimes renders a trailing '!' as one of these letters
 
 
 def _similar(seen: str, word: str) -> bool:
-    """True if `seen` is `word`, or `word` with letters dropped, in order."""
+    """True if the WHOLE token `seen` is `word` -- exactly, with UP TO TWO letters
+    dropped in order ('WINE' -> WINNER, two strokes skipped), or with one trailing
+    '!'-as-a-letter noise char ('DRAWI' -> DRAW). A `seen` that is LONGER than `word`
+    for any other reason is a different word ('DRAWERS', 'WINNERS', 'LOSERS') and must
+    not match, however much of `word` it contains -- containment used to count here and
+    matched a card name (I-34).
+
+    THE TWO-DROP TOLERANCE IS REAL AND WAS UNDER-STATED HERE UNTIL THE I-34 SKEPTIC READ
+    THE CODE (2026-09-21): `len(seen) >= len(word) - 2` allows seen to be TWO shorter than
+    word, not one -- WINNER accepts WINE, INNER, WIER and 13 more 4-letter subsequences.
+    The floor `len(seen) < 4` caps how much of that tolerance any given word can actually
+    use: DRAW (4 letters) gets ZERO drops (a 3-letter seen never clears the floor), LOSER
+    (5) gets ONE (a 3-letter seen still can't clear it), and only WINNER (6) reaches the
+    full two. Pre-existing behaviour, not a regression; documented rather than tightened,
+    because tightening a reader on the money path is itself an unmeasured change (CLAUDE.md
+    10.32) and this tolerance has been live and correct since result_ocr.py's first commit.
+    """
     if len(seen) < 4:
         return False
-    if seen == word or seen in word or word in seen:
+    if seen == word:
         return True
-    i = 0                                   # subsequence: WINER -> WINNER
+    if len(seen) == len(word) + 1 and seen[:-1] == word and seen[-1] in _EXCLAIM_NOISE:
+        return True
+    if len(seen) >= len(word):
+        return False
+    i = 0                                   # subsequence: WINE -> WINNER (up to 2 drops)
     for ch in word:
         if i < len(seen) and seen[i] == ch:
             i += 1
@@ -66,16 +108,32 @@ def _similar(seen: str, word: str) -> bool:
 
 
 def match_word(texts):
-    """(outcome, the text that matched) from OCR output, or (None, reason)."""
+    """(outcome, the text that matched) from OCR output, or (None, reason).
+
+    Two kinds of candidate token are tried per OCR text, both checked WHOLE, never as a
+    containment: the individual runs split on non-letter boundaries ("JOHNNY DRAWERS" ->
+    JOHNNY, DRAWERS -- never concatenated into one string a substring test could hit), and
+    the text's letters joined into ONE string with every non-letter (space, digit,
+    punctuation) dropped ("W I N N E R" -> WINNER, "L0SER" -> LSER, "DRA W" -> DRAW) -- the
+    OLD reader's only candidate, kept because OCR sometimes splits or digit-corrupts a
+    single word (I-34 skeptic finding 4). Neither can reopen I-34: a joined card name like
+    "JOHNNYDRAWERS" or a lone "DRAWERS" is LONGER than every vocab word, so `_similar`
+    refuses it exactly as it refuses the split tokens -- verified below in
+    `tests/minigame/test_result_ocr_whole_word.py`.
+    """
     seen = []
     for t, conf in texts:
         if conf is None or conf < MIN_CONF:
             continue
-        clean = "".join(ch for ch in t.upper() if ch.isalpha())
-        seen.append(clean)
-        for word, outcome in VOCAB.items():
-            if _similar(clean, word):
-                return outcome, t
+        candidates = _TOKEN_RE.findall(t.upper())
+        joined = "".join(candidates)
+        if joined and joined not in candidates:
+            candidates = candidates + [joined]
+        for tok in candidates:
+            seen.append(tok)
+            for word, outcome in VOCAB.items():
+                if _similar(tok, word):
+                    return outcome, t
     return None, f"no result word in {seen!r}" if seen else "no text found"
 
 
