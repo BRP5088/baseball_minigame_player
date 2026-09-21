@@ -462,7 +462,15 @@ after. Keep the delta as a secondary signal only.
 world frame, the give-up dialog and a ban screen must not. Mutation: drop the content
 check, the fixture reads absent.
 
-**Status.** Open, blocks unattended resets.
+**Status.** MERGED 2026-09-20 (4ce2d5e). The traced cause was NEITHER hypothesis: the
+retry loop polled the PREVIOUS press's result at the top of each iteration and pressed
+at the bottom, so the LAST press's result was never polled and the raise quoted the
+delta from before it. Fix: `reset_env.load_save_dialog(img)` (phrase read in a band,
+1 true positive and 0 false positives over 656 other 1920x1080 fixtures), checked before
+the first press so an open dialog is never pressed again, every press polled in the same
+iteration, delta kept as the fast signal; and `CONFIRM_HOLD_SEC = 0.6` on the confirm
+presses (n=1 accepted vs 4 taps ignored, thin and said so). Three mutants caught. Live
+confirmation: the next reset must reload in one held press.
 
 ### I-24  `ensure_stream.looks_like_ui` fires on the game's own dark dialog panel          P1  reader
 
