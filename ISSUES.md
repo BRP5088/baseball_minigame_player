@@ -2903,6 +2903,217 @@ now asserted to produce.
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
 
+### I-48b/I-48c  A target verified earlier in an operation can be silently toggled down by a LATER blind press, and nothing re-checked before commit    P1  play
+
+**Evidence.** `overnight/run_live_20260921s.log` ~369-400 (main checkout), the first
+live firing of I-48's batter-alone fallback. Hand `[swing_boost +2, UNKNOWN
+(occluded slot 1), 5/3 (card_index=2), speed_boost +1, 5/2]`, decision batter=2 +
+tactics=0:
+
+    [cursor] slot 1 is occluded (y unmeasured) — its glow cannot read; dead-reckoning one step across it
+    [cursor] probe-select raised nothing (attempt 1/2) — retrying once; ...
+    [cursor] probe-select raised nothing after 2 attempts — refusing
+    [cursor] tactics slot 0 could not be verified — dropping the boost and playing the batter alone (I-48)
+    [cursor] slot(s) [1] were ALREADY unreadable before this operation began — proceeding. ...
+    [cursor] the engine's cards [2] are not all lifted ([]) — refusing to commit a partial selection
+
+The whole play refused, having never re-attempted the batter. The refusal frame is
+`diagnostics/deal_frames/refused_select_1790025302210541000/` (main checkout). On
+the VERY NEXT poll the identical decision succeeded, via a different recovery path
+("fan reads but the cursor is nowhere above the gate ... nudging off the blind
+slot", "recovered on slot 0 after 1 nudge(s)").
+
+**Root cause, traced in `input_controller._verified_select_and_play_inner`
+(pre-fix ~:2027-2066).** The per-target loop is `for target in (card_index,
+tactics_index):` -- card_index is listed first, so by the time the
+`target == tactics_index` I-48 branch's own guard condition can even be reached,
+card_index's iteration MUST already have returned `ok=True` (if it had failed,
+`target == tactics_index` is false for `target == card_index`, and the loop falls
+straight to the generic `_unwind_selection(...); return False` without ever
+attempting the tactics target). That is airtight from control flow alone. So in
+this play: card_index=2 was walked to and selected (silently -- no log line, the
+"already selected" and "steps==0" success paths in `_walk_cursor_to`/
+`_select_verified` print nothing), THEN the walk to tactics_index=0 dead-reckoned
+across occluded slot 1 (which sits geometrically between 0 and 2, so a walk in
+EITHER direction between them crosses it), and the subsequent I-02 probe
+(`_probe_select_blind_target`, 2 attempts) failed twice.
+
+The probe presses `select_card` BLIND, hoping the cursor physically reached the
+tactics target. Its own success check, `new = [i for i in sel if i not in
+before]`, only asks "did anything NEW appear selected" -- it has no way to notice
+a slot that DISAPPEARED. If the navigation presses toward the tactics target were
+silently dropped (section 5's measured 15.20% ignore rate, clustered), the true
+cursor can still be sitting on card_index's own slot when the probe presses
+`select_card` -- toggling the BATTER's own, already-verified selection, with the
+probe reporting "raised nothing" either way.
+
+**The independent skeptic review (`agent_progress/issues/I-48b/skeptic.md`) PROVED
+this by elimination, and reproduced it from press mechanics alone.** Section 1
+walks the log: the four presses between "batter verified" and "not all lifted"
+are two `move_left` (which cannot toggle anything) and the probe's two
+`select_card` presses, so a probe press putting the batter down is a DEDUCTION
+from the log, not a hypothesis — and `probe2.py` R1 reproduces the exact log
+sequence, wording included, from a physically-honest fake screen with no sabotage
+hook at all. The one thing genuinely NOT recoverable from the log alone is the
+precise press-by-press parity (whether it was one toggle or an even number that
+happened to net to one) — the fix does not depend on that parity either way.
+
+**The skeptic's N1 found the fix was NARROWER than the root cause.** The real
+invariant that broke is stated in this ticket's title: *a target verified earlier
+in this operation can be silently toggled down by a later blind press, and
+nothing re-checked before commit.* The first cut of this fix put the re-check
+only inside the I-48 branch (reachable only when the TACTICS target fails), so it
+repaired exactly the shape above and missed the SIBLING shape, present twice in
+the archive, where the TACTICS target's own walk and select both SUCCEED and the
+BATTER is what gets silently lost instead — the I-48 branch never fires, so a
+branch-local re-check never runs:
+
+    run_live_20260921j.log:620-624
+      verified on 0 after 2 press(es)   <- batter
+      verified on 1 after 1 press(es)   <- tactics
+      select_card did not land (attempt 1) — retrying
+      select_card landed on attempt 2
+      the engine's cards [0, 1] are not all lifted ([1]) — refusing
+
+    run_live_20260921o.log:1040-1050
+      verified on 3 after 2 press(es) ... verified on 4 after 3 press(es)
+      the engine's cards [3, 4] are not all lifted ([4]) — refusing
+
+Driven through the real code (skeptic's `probe3.py` R7): the play refuses with
+exactly that message and nothing recovers the batter. So the first cut of this
+fix repaired 1 of the 3 archived instances of the underlying defect.
+
+**Fix**, in `input_controller._verified_select_and_play_inner`. The re-verify
+moved from inside the I-48 branch to ONE shared place, right before the commit
+gate (`_clear_strays`) that every path converges on:
+
+1. **The batter is still processed first as a REAL invariant, not an assumed
+   position.** `_batter_verified` is set True only when `target == card_index`
+   succeeds; the I-48 fallback's own guard still requires it. `card_index`
+   happening to be listed first in the loop's source tuple was never a proof by
+   itself -- a reordering mutant (5) still needs this gate to refuse rather than
+   silently proceed on an unattempted batter.
+2. **Before the commit gate, re-read the fan once.** Every target still in
+   `want` succeeded its OWN walk+select earlier in the loop (the loop's only
+   other exit is a full refusal that already returned False), so `want` IS the
+   set of targets this operation has already verified. For every one of them NOT
+   seen lifted in this fresh read, retry `_walk_cursor_to`+`_select_verified`
+   once -- the SAME calls the loop already uses, so no new constant and no new
+   press budget. This covers BOTH shapes: the I-48 branch's own case (batter lost
+   while tactics was failing) and the sibling case (batter lost while tactics
+   succeeded), because it no longer cares which target failed, only which one
+   is missing now.
+3. If a retry also fails, refuse the whole play exactly as the pre-I-48 code did:
+   unwind the full original target set, invalidate the cursor, return False.
+   Never commits an unproven selection.
+
+This is a SHORTER diff than the first cut (one copy of the re-check instead of
+one embedded in a branch), and it is not a new mechanism -- the skeptic's own
+recommendation (N1) names the same move. I-43's `_MAYBE_LIFTED` contract is
+unchanged -- the retry-failure path reuses the same `_unwind_selection(...)` call
+(existing marking logic intact) that the generic refusal branch already used;
+the argument passing is keyword-explicit (`ours=targets`) on BOTH occurrences now,
+to keep them textually distinct from each other and from
+`test_refusal_unwinds.py`'s own pre-existing mutation anchor on the loop's
+generic-refusal unwind.
+
+**Not fixed here, and named as a follow-up rather than guessed at:** whether the
+walk should prefer a NUDGE (moving off the current slot without assuming a
+direction) over dead-reckoning when the CURRENT slot is itself the occluded one,
+rather than only using the nudge as a last resort at the top of a fresh
+`_walk_cursor_to` call. The live log's own successful retry the next poll used
+exactly that nudge path ("nudging off the blind slot ... recovered on slot 0
+after 1 nudge(s)"), which is markedly cheaper and safer than dead-reckoning
+across the same slot and falling into a 2-attempt blind probe. Changing WHEN the
+nudge is preferred touches `_walk_cursor_to`'s core decision tree (interacts with
+I-32's dead-reckon bound and I-33's blind-confirmation retry, both of which are
+mutation-tested against specific press counts) -- a bigger change than one branch,
+and it changes the $50 play path, so it is not made unilaterally here.
+
+**Verify.** `tests/minigame/test_tactics_select_fallback.py`: `OccludedPlayScreen`
+(models an occluded slot between two targets, a one-shot dropped navigation press,
+and a count-based "sabotage" hook -- the Nth `select_card` press system-wide costs
+an earlier target's lift instead of doing its normal thing -- deliberately
+mechanism-agnostic, matching the skeptic's own finding that the exact press parity
+is not recoverable, and general enough to model BOTH shapes by choosing which
+press it lands on). Cases I/J: the original I-48 shape (recovered / double
+failure). K: control, both land, nothing fires. L/M (new, the sibling shape): the
+tactics target's own walk and select both succeed with no occlusion and no I-48
+branch at all, its own `_select_verified` retry costs the batter, and the SHARED
+re-check recovers it (L) or, with the retry also blocked, refuses cleanly (M).
+
+Nine mutants total in the file now (4 pre-existing + 5 for this ticket),
+`__pycache__` cleared and sha256-verified restored around each:
+
+    mutant 5: reorder the loop to (tactics_index, card_index)
+        -> case I no longer succeeds (the _batter_verified gate still refuses
+           the fallback outright rather than silently proceeding)
+    mutant 6 (skeptic M1b): the shared re-check reuses a stale, fabricated
+        "everything is still lifted" belief instead of a fresh look
+        -> case I no longer honestly recovers the batter
+    mutant 7 (skeptic M2): a missing target's retry is unbounded instead of
+        running once -> case J (a genuine double failure) sends far more
+        select_card presses than the shipped single retry
+    mutant 8 (skeptic M3): the double-failure unwind passes ours=set() instead
+        of the real target set -> the unwind spy no longer sees {0, 2}
+    mutant 9 (skeptic M4): the retry drops _walk_cursor_to and presses
+        select_card wherever the cursor already is -> case I refuses instead
+        of recovering (the skeptic's own M4 survived their narrower scenario --
+        cursor already on the target -- and is caught here by the occluded one)
+
+All nine caught; both `input_controller.py` and `orchestrator.py` restored
+byte-for-byte (sha256-verified) after every mutant. Also green:
+`test_refusal_unwinds.py`, `test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_inference_needs_baseline_read.py`,
+`test_i22_pitch_boost_slot3.py`, `test_walk_crosses_occluded_slot.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`.
+
+**Status.** fixed on branch (shared re-check, covers I-48b + the sibling shape),
+skeptic round 1 CONFIRMED WITH NOTES (N1 implemented here; N2 filed separately
+below as I-48d, OPEN, not fixed; N3, N4 cosmetic/process, not this ticket's
+business).
+
+### I-48d  An invisible (chronically occluded) stray can still be committed through the I-26/I-28 exemption    P2  play
+
+**Evidence.** Skeptic review of I-48b (`agent_progress/issues/I-48b/skeptic.md`
+section 2, `probe2.py` R4), pre-existing and NOT introduced by I-48b/I-48c. The
+I-02 probe (`_probe_select_blind_target`, unchanged by this ticket) presses
+`select_card` blind while hunting for a target it lost the cursor near. If that
+press lands on a THIRD slot that is chronically occluded (its `ys` was never
+readable, so `selected_cards` abstains on it regardless of whether it is really
+lifted), the probe's own toggle is invisible to every reader downstream:
+`_clear_strays`'s I-26/I-28 exemption waves an already-blind, non-`want` slot
+through with "were ALREADY unreadable before this operation began — proceeding"
+(`input_controller.py` ~:1803), because that exemption exists precisely for the
+common, harmless case of a chronic occlusion nobody ever touched, and it has no
+way to tell that apart from one the probe just silently raised.
+`probe2.py` R4 drives this through the real code and confirm_play commits
+`[1, 2]` -- a card the engine never chose, alongside the one it did.
+
+**Root cause.** `_clear_strays`'s exemption for a slot blind at baseline answers
+"was this slot readable before we touched anything", not "is this slot's
+SELECTION STATE unchanged" -- and a chronically occluded slot can never answer
+the second question either way, by construction (its `y` is never readable, so
+`selected_cards` can never confirm it either lifted or not). The I-48b/I-48c fix
+in this file does not worsen this (the skeptic's R6: the shared re-check's own
+retry can fire a second probe, marginally raising exposure, but the exemption is
+what admits the stray either way, with or without the re-check) and does not
+close it either -- it is a pre-existing hole in a DIFFERENT function
+(`_clear_strays`), not the target-verification logic I-48b/I-48c touches.
+
+**Not fixed here.** It changes ban/select verification on the $50 play path and
+the skeptic's own review explicitly declines to hold the I-48b/I-48c merge on it
+("filing it is the right answer; blocking this merge on it is not"). A real fix
+needs a way to distinguish "chronically occluded, never touched" from
+"chronically occluded, and the probe just raised it" -- for example, tracking
+which chronically-occluded slots a probe pressed `select_card` on during THIS
+operation (the same shape `_MAYBE_LIFTED` already uses for a different case) and
+excluding those from the I-26/I-28 exemption specifically. That is new state on
+the money path and wants a live screen to check before it ships, not a
+same-day follow-on to this ticket.
+
+**Status.** OPEN, no fix here.
 ### I-50  A dropped select_card press on the ban grid is never retried; 15 of 37 matches start a ban short  P1  money
 
 **Evidence.** Census (`agent_progress/census/ban_shortfall/progress.md`, main
