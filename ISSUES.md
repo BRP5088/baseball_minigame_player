@@ -1598,17 +1598,67 @@ threshold here was chosen to hit a number (CLAUDE.md 10.4) — `FLICKER_WINDOW=1
 the 2-frame capture-gap requirement are the literal reading of the two checks' own
 definitions, not a fit to this data.
 
-**Tests.** `tests/harness/test_cursor_labels_capture_gap.py`, 8 checks (`check(name,
-cond)`, no bare `PASS True`), 4 synthetic frame-sequence cases: a clean selection
-(kept), a rise one frame after a move (rejected, capture_gap), a flicker re-rise
-(rejected, flicker), and the original HOLD filter still firing on its own
-(rejected, transient). Two mutants, both by hand (forcing `gap_ok = True` and
-`flickered = False` in turn): each breaks exactly the case it corresponds to and no
-other, files restored byte-for-byte (sha256-verified) between and after.
+**Tests.** `tests/harness/test_cursor_labels_capture_gap.py`, originally 4 synthetic
+frame-sequence cases (8 checks): a clean selection (kept), a rise one frame after a
+move (rejected, capture_gap), a flicker re-rise (rejected, flicker), and the original
+HOLD filter still firing on its own (rejected, transient).
+
+**Skeptic round 1: CONFIRMED WITH NOTES.** Independently re-derived the diff, the
+verification table (exact match: 28/28 known-bad rejected, 44/53 known-good kept) and
+the caller census (`labels_for` has exactly two callers, both already unpack the new
+`(kept, rejected)` return). Ran its OWN four mutants against the original 4-case
+suite and found two coverage gaps the fixer's two mutants (`gap_ok = True`,
+`flickered = False`) never probed: a wrong-pair swap (`hist[-3] == hist[-2]` in place
+of `hist[-2] == hist[-1]`) escaped by fixture coincidence (this test's case 2 happens
+to have `hist[-3] != hist[-2]` exactly where `hist[-2] != hist[-1]`, so the mutant's
+wrong condition gives the same answer as the right one on that one fixture), and a
+flicker-window off-by-one (`hist[-(fw+1):-1]` shrunk to `hist[-fw:-1]`) escaped
+structurally (case 3's flicker gap sits 4 frames inside a 10-frame window, far from
+the boundary a one-frame shrink would clip). Both are coverage gaps in the TEST, not
+correctness defects in the shipped code — confirmed by tracing the correct logic by
+hand, independent of any test.
+
+**Four cases added to close both gaps, none touching the shipped mechanism:**
+case 5 (`hist[-3]==hist[-2]` while `hist[-2]!=hist[-1]`, so the correct pair
+disagrees but the adjacent wrong pair agrees), case 6 (the analogous
+`hist[-3]==hist[-1]` swap), case 7 (the rising slot last risen EXACTLY
+`FLICKER_WINDOW` frames before the labelled frame — inside the window, REJECTED)
+and case 8 (EXACTLY `FLICKER_WINDOW + 1` frames before — one frame outside, KEPT).
+8 cases, 16 checks total, all green on unmodified code.
+
+**All four of the skeptic's named mutants re-run, this time against the full
+16-case suite, `__pycache__` deleted and sha256 verified identical
+(`b727bb7ed7760555ec0204df2d9f821430ed19daa26d4ecf7e11a9c1f1fd7481`) before, between
+and after every one:**
+
+    force gap_ok = True                                  case 2, 5, 6 FAIL
+    force flickered = False                              case 3, 7 FAIL
+    hist[-2]==hist[-1] -> hist[-3]==hist[-2] (literal)    CRASHES (IndexError) at
+                                                          case 2's own n=2 candidate,
+                                                          before case 5 is even
+                                                          reached -- the SAME literal
+                                                          substitution the skeptic
+                                                          used, unearthing that its
+                                                          own len(hist)<2 guard is
+                                                          now one index too short.
+                                                          A crash is a harder failure
+                                                          than a printed FAIL: no
+                                                          "all green", nonzero exit.
+    hist[-2]==hist[-1] -> hist[-3]==hist[-2] (guarded,
+      len(hist)<3, so it cannot crash)                    case 5 FAILS, nothing else
+    hist[-(fw+1):-1] -> hist[-fw:-1] (flicker off-by-one) case 7 FAILS, nothing else
+    reasons discarded to None (unconditionally)           already caught by cases
+                                                          2 and 3 (unchanged)
+
+All four fail as required; the two that escaped before are now caught cleanly
+(cases 5 and 7), and the wrong-pair mutant is caught in BOTH the literal form the
+skeptic used (a crash) and a hypothetical better-guarded form (a clean FAIL),
+so the guard isn't accidentally load-bearing for the catch.
 
 **Status.** Fixed on this branch (`tools/cursor_labels_from_lifts.py`,
-`tests/harness/test_cursor_labels_capture_gap.py`), awaiting skeptic. Both real runs
-re-scanned end to end offline, no console, no live change.
+`tests/harness/test_cursor_labels_capture_gap.py`), skeptic round 1 CONFIRMED WITH
+NOTES and both named coverage gaps closed in round 2, awaiting re-review. Both real
+runs re-scanned end to end offline, no console, no live change.
 
 ## C. Costs wins
 
