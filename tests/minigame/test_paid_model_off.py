@@ -144,7 +144,8 @@ _saved_rgs = o.read_game_state
 try:
     o.read_game_state = lambda *a, **k: (_paid_calls.append(1),
                                          {"screen": "turn", "phase": "paid"})[1]
-    o.local_game_state = lambda: ({"screen": "turn", "phase": "batting"}, None)
+    o.local_game_state = (
+        lambda turns_this_half=None: ({"screen": "turn", "phase": "batting"}, None))
     o._paid_state_done = False
     _st = o.read_state_for_turn()
     check(_st == {"screen": "turn", "phase": "batting"},
@@ -154,7 +155,7 @@ try:
 
     # ...and a NAMED GAP must still raise, or a missing local reader would be
     # papered over as "no state" and the run would buy past it.
-    o.local_game_state = lambda: (None, "the hand reader found 0 rows")
+    o.local_game_state = lambda turns_this_half=None: (None, "the hand reader found 0 rows")
     o._paid_state_done = False
     try:
         o.read_state_for_turn()
@@ -168,7 +169,7 @@ try:
     # CONTROL: when the paid model IS allowed, the orientation read still happens --
     # otherwise this check would pass just as well on a function that never reads.
     _paid_calls.clear()
-    o.local_game_state = lambda: ({"screen": "turn"}, None)
+    o.local_game_state = lambda turns_this_half=None: ({"screen": "turn"}, None)
     o._paid_state_done = False
     os.environ["BASEBALL_ALLOW_PAID"] = "1"
     try:

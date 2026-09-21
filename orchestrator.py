@@ -4236,12 +4236,25 @@ def begin_cycle_state():
         pass
 
 
-def local_game_state():
+# I-31: "5 ROUNDS PER HALF" (CLAUDE.md section 4, "THE SHAPE OF A MATCH") -- five at-bats
+# batting, then five pitching. Used only by local_game_state's match-state phase fallback.
+ROUNDS_PER_HALF = 5
+
+
+def local_game_state(turns_this_half=None):
     """The state, read entirely locally. (state, None) or (None, what is missing).
 
     `screen` is "result" or "turn". The RESULT screen is read first, because a match that
     has ended has no hand to read and the hand reader would report the missing hand as the
     gap -- naming the wrong reader. Anything else comes back as a NAMED GAP.
+
+    `turns_this_half`, when given, is run()'s own half-tracking count (I-31): the first
+    turn of a match is the FIRST batting turn play_one_turn will ever see, and a match is
+    ROUNDS_PER_HALF rounds per half (CLAUDE.md section 4), so it is enough to say which
+    half a readable-but-unphased hand is in WITHOUT reading the phase at all. It is the
+    fallback of last resort, used only when read_phase itself abstains on a genuinely
+    readable hand -- never a substitute for reading it. Callers with no notion of the
+    match's progress (the frozen-stream probe) omit it and keep the old refusal.
     """
     try:
         import local_state
@@ -4443,9 +4456,16 @@ def local_game_state():
 
     # THE FIELDS THAT DECIDE A PLAY. Without a phase the engine silently runs the pitching
     # strategy on a batting turn (see validate_game_state), so an unread phase is a GAP,
-    # not a default.
+    # not a default -- EXCEPT for the match-state fallback below, which is not a guess:
+    # it is the game's own fixed shape (I-31).
     if st.get("phase") is None:
-        return None, "phase not read locally"
+        if turns_this_half is not None:
+            fallback = "pitching" if turns_this_half >= ROUNDS_PER_HALF else "batting"
+            print(f"  [state] phase from match state (reader abstained): "
+                  f"turns_this_half={turns_this_half} -> {fallback}")
+            st["phase"] = fallback
+        else:
+            return None, "phase not read locally"
     if st.get("runners") is None:
         return None, "runners not read locally"
     return st, None
@@ -5351,11 +5371,14 @@ def on_turn_screen(hand_img):
         return False
 
 
-def read_state_for_turn():
+def read_state_for_turn(turns_this_half=None):
     """The state the turn loop reads. PAID once per cycle, LOCAL every turn after.
 
     A local failure RAISES with the gap named. The caller already retries and counts
     stuck attempts, so the run surfaces the missing reader instead of buying past it.
+
+    `turns_this_half` is passed straight through to local_game_state's match-state
+    phase fallback (I-31) -- see its docstring.
     """
     global _paid_state_done
     # ...AND `paid_model_allowed()`, or the turn loop cannot run at all.
@@ -5377,7 +5400,7 @@ def read_state_for_turn():
         print(f"  [state] orientation read (PAID): screen={st.get('screen')!r} "
               f"-- every turn after this one is local")
         return st
-    st, gap = local_game_state()
+    st, gap = local_game_state(turns_this_half=turns_this_half)
     if st is not None:
         return st
     raise ValueError(f"LOCAL STATE GAP: {gap} -- this is the next reader to build; "
@@ -8017,6 +8040,11 @@ def play_one_turn(state_json: dict, batters_used: int):
         elif _stalled:
             _why = (f"the discard was REFUSED {DISCARD_STALL_MAX}x on this "
                     "exact hand — PLAYING rather than looping forever")
+        elif getattr(state, "hand_incomplete", False):
+            # I-10's guard fired: a dropped player slot means max() is over the
+            # SURVIVORS, so "strong enough" is unknowable. Seen live 2026-09-21:
+            # best 5 < threshold 6 printed as "strong enough" (run_live_20260921d).
+            _why = "the hand is INCOMPLETE (an unreadable player slot) — its true max is unknown, not strong"
         else:
             _why = "hand is strong enough"
         print(f"  [redraw] keeping the hand: best power {_best} vs threshold "
@@ -8417,7 +8445,7 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 motion_wait_started = None
 
             try:
-                state_json = read_state_for_turn()
+                state_json = read_state_for_turn(turns_this_half=turns_this_half)
             except Exception as e:
                 # I-30: the "Give up?" dialog is a RECOGNISED screen, not one more
                 # unreadable poll. Live 2026-09-20: a phantom "JOHNNY DRAWERS" ->
@@ -9416,6 +9444,8 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                 # MAX_STUCK_ATTEMPTS, so letting the counter climb across them
                 # is safe and still catches a genuinely stuck screen.
                 if state_json["phase"] != last_phase:
+                    _new_phase = state_json["phase"]   # captured before the re-read below
+                                                        # overwrites state_json (I-31)
                     turns_this_half = 0
                     # A NEW HALF DEALS A FRESH HAND OF FIVE, so the memory of the old
                     # one is not memory, it is five wrong cards. reset_hand_memory had
@@ -9456,7 +9486,14 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         # unpack first and caught by reading the function instead of
                         # assuming its shape.
                         try:
-                            state_json = read_state_for_turn()
+                            # I-31: this is the freshly-dealt hand of a new half, exactly
+                            # where a card is most likely to sit occluded under its
+                            # neighbour (CLAUDE.md 10.28/10.34) -- so pass the half we
+                            # JUST detected (_new_phase), not the reset turns_this_half=0,
+                            # or an abstention here would wrongly fall back to "batting"
+                            # on the first turn of a PITCHING half.
+                            _hint = 0 if _new_phase == "batting" else ROUNDS_PER_HALF
+                            state_json = read_state_for_turn(turns_this_half=_hint)
                             print("  [hand] re-read the hand after the reset")
                         except Exception as _e:
                             # Refusing is safe: this poll is abandoned and the loop comes

@@ -1,131 +1,170 @@
-# HANDOFF — 2026-09-17, overnight
+# HANDOFF — 2026-09-21, 02:00 EDT stop
 
-## READ THIS FIRST: A PAID MATCH IS SUSPENDED, NOT FINISHED
+## 1. READ THIS FIRST: console / money state
 
-**$50 is spent on a match parked mid-turn, and the PS5 is in REST MODE.** Rest
-mode SUSPENDS the game, so the match survives. `match_in_progress` is `true` and
-**that is CORRECT — do not clear it.** Check the screen before touching it (§2).
+**NO MATCH IN PROGRESS.** `progress_testing.json`: 46W 12L 5D, balance 146,
+`match_in_progress: false`, `bans_done_this_match: true` (verified: `cat
+progress_testing.json`, this session).
 
-State when it was put to sleep, read off the frame:
+**Nothing has reached the console since WIN #46 logged at 01:37** (last line of
+`overnight/run_live_20260921f.log` before the spend-cap stop). Expect it
+**ASLEEP**. Confirm with the three tells in CLAUDE.md §1 before any press —
+`game_capture.grab()` size, `ensure_stream.looks_like_ui()`,
+`ensure_stream.streaming()` — and if it reads asleep, **do nothing**.
 
-    JACK PEPPER  2 0 2      OPPONENT  0 0 0
-    a runner on HOME PLATE (Donny Mekesz, stranded) and Rube Sharp on a base
-    hand of five, one turn of the BATTING half still unplayed
+**NEVER save the game.** Resets and `Load Last Save` only (memory:
+never-save-the-game.md).
 
-**The console was slept deliberately, at the user's instruction, and the walked
-procedure is `console_rest_mode_procedure.md`.** Confirm the state before any
-press with the three tells in §1 — capture size, `looks_like_ui()`, `streaming()`.
+This is an OFFLINE stop-procedure write-up: no presses were sent, no screen
+was captured, no run was started while producing this file.
 
-## NOTHING WAS CHANGED ON THE $50 PATH
+## 2. What was merged tonight, and what the two live matches showed
 
-No reader, no input path, no engine code was modified tonight. `local_hand.py`,
-`input_controller.py`, `orchestrator.py` and `decision_engine.py` are untouched
-(`git diff 2e54dcd..HEAD --stat` names only docs, fixtures and one new tool).
+Merges/fixes on `main` since `a3419d0` (this session, filtered from `git log`):
 
-The user's standing rules were in force all night and still are:
+- `3b7c77f`/`3ef4447` — I-30 test follow-up (`_clear_strays` accepts I-28's `ys0`)
+- `e6fbcce` — **Merge I-30**: whole-word result reads; `close_result` only after
+  a fresh result read; two-frame confirm at the play floor; give-up dialog
+  answered NO, never Cross
+- `f8dfa34`/`49af1ca` — I-30 follow-ups (pin the fresh-check gate; phantom-draw
+  fixture)
+- `13a4f6a`/`dc47548` — QA round 4 (census wording, false-cursor exclusion bound)
+- `1abeb4e` — ISSUES.md: I-29 added/merged
+- `3149e8e`/`db96589` — **Merge I-28**: stray guard exempts the engine's own
+  target when it was readable at baseline and went blind after the press
+- `aed2468` — I-28 follow-up: narrow want-blind inference to I-21's own shape
+- `ed7e4ab`/`1babf0c` — **Merge I-29**: forget a spent hand slot's stall
+  identity on confirm, not on value change
+- `7b27ca6`/`41dd459` — **QA round 5**: give-up test reads the frame, not its
+  own press flag
+- `39d0eb8`/`e23e0f6` — **Merge I-31**: tactics kinds (swing/speed=batting,
+  pitch/fielding=pitching) vote on the phase; the match's own half is the
+  fallback when `read_phase` abstains on a readable hand
+- `4f5da6f` — redraw log names the incomplete-hand guard (was "strong enough"
+  at best 5 < 6)
+- `61b5d2a`/`a5e212a` — **Merge I-32**: `_walk_cursor_to` dead-reckons ONE step
+  across a known-occluded slot (`ys[expected] is None`) instead of refusing
+  the whole hand; bounded to one consecutive dead-reckoned step; never
+  dead-reckons onto the target itself
+- `ccdd46b` — I-32: fold skeptic's two coverage-gap tests (leftward walk, two
+  occlusions in a row) into the shipped test file
 
-    do not make plays without my approval
-    the paid vision model stays OFF
-    play the engine's pick; if it is wrong, fix the ENGINE
+**WIN #45 — the parked I-32 match, resumed on main.** `overnight/run_live_20260921e.log`
+(verified by grep): the walk hit the same occluded slot 1 that had caused the
+00:52-00:56 stall (`run_live_20260921d.log`, three "every reachable card on
+this hand has been refused" stops) — this time logging `slot 1 is occluded (y
+unmeasured) — its glow cannot read; dead-reckoning one step across it`, then
+`verified on 4 after 4 press(es)`. Zero refusals. `WIN #45 logged. 954 to go.`
+Run then hit `Spend cap reached ($0/$0 spent this session)` (a resume, no new
+match bought) and stopped clean. This is I-32's first live exercise and it
+worked as designed.
 
-## WHAT WAS DONE, AND THE HEADLINE IS A NEGATIVE
+**WIN #46 — a fresh match, `run_live_20260921f.log` (max_spend=50).** Walk +
+bans + full match on `main`. Two things worth carrying forward:
 
-The task: *"figure out exactly where the cards are so you more accurately read
-the cursor no matter the drift or weird scenarios."*
+- I-02's probe-select answered YES live for the first time:
+  `[cursor] probe-select: 4 lifted — the cursor was there`, and the play
+  committed (`verified on 4 after 6 press(es)`). Slot 4 is confirmed reachable
+  as a target through the probe path.
+- One refusal, recovered on the next attempt. Pitching half: a card was played
+  and verified (`ours 8, theirs 4` in the reveal), then one press toward slot
+  0 for the pitch boost read `lost the cursor (glow=[0.0, 0.4, 0.0, 0.0, 0.4])`
+  and the walker unwound and refused (`run_live_20260921f.log:112`). Slot 4 is
+  structurally blind by glow (10.35 in CLAUDE.md), so a dropped press leaving
+  it reads exactly like a lost cursor — this is NOT an I-32 defect, it's a
+  gap I-32 doesn't cover (the blind slot here is the walk's *start*, not a
+  slot it's crossing). Candidate rule for next session, not built: when a
+  press leaves a structurally-blind slot (4) and the next look reads None,
+  press once more before refusing, since a dropped press there is
+  indistinguishable from a landed one.
 
-**The cards ARE locatable exactly, and the reader already has the locator.**
-Tophat (k=9, >30) strips the card art; the disc-to-corner offset is constant to
-±2-5 px on clean slots. The power disc IS an exact locator; nothing to build.
+Run stopped clean at `Spend cap reached ($50/$50 spent this session)` after
+`WIN #46 logged. 953 to go.` Suite after both matches: **all green, 271 files,
+314s** (`overnight/suite_20260921_0140.log`, verified: `tail -3`). `main` HEAD
+is `ccdd46b`.
 
-**Four ways to exploit that were measured and ALL FAILED — and three would have
-shipped on their TRUE numbers alone.** Full table and the mechanism are in
-CLAUDE.md §10.35. One line: the window works BECAUSE it is pinned to the narrow
-dark strip outside the card, the cards are white art, and every degree of freedom
-added moves the box onto the card and destroys the discrimination.
+**NOT independently verified this session:** the outgoing notes state the
+auto-mode classifier declined a third paid-match start at ~01:38 as a
+real-money-transaction guard, after two starts had been allowed. I could not
+find any trace of this in `run_live_20260921f.log` or any other file on disk
+— that log's only stop is the ordinary `$50/$50` spend-cap message, which is
+consistent with exactly one match being bought in that run. If this refers to
+a decision made in the tool-permission layer above the game loop rather than
+anything the game loop itself logs, there's nothing in this repo that would
+show it either way. Treat it as reported by the outgoing session, not
+confirmed here.
 
-**The binding constraint is the corpus, not the reader.** 4,183 five-row turn
-frames exist and **4,142 are one run**, at 10 Hz. A "finding" — slot 4 blind 71%
-of the time — dissolved into ONE fade burst sampled ten times (§10.8).
+## 3. In flight / NOT merged: I-05a
 
-## THE UNLOCK, AND IT IS THE THING TO USE NEXT
+Second attempt, worktree `.claude/worktrees/agent-a7613eff370917779`, branch
+`worktree-agent-a7613eff370917779`, commits `2b426fa` ("verify the PS5 overlay
+dismiss, and gate run() on liveness") + `3731b5e` ("widen the liveness reader
+set, debounce ambiguous misses"). Both commits confirmed to exist and to sit
+on that worktree's HEAD.
 
-`tools/cursor_labels_from_lifts.py <run_dir>` produces the first labels for
-`cursor_slot` that the reader cannot influence: a card that RISES above its fan
-anchor was selected, and selecting requires the cursor to be on it, so the frame
-before it rises has a known cursor slot. Geometry, not brightness (§10.22).
+The first I-05a attempt was refuted (reader set omitted `read_result`/
+`read_ban_counter`/`read_hand` — would have toggled the overlay mid-match).
+This redo uses the full reader set plus a 3-consecutive-miss debounce before
+`ensure_live()` fires.
 
-    raw lift transitions 29 -> persisted 4   (86% dropped as deal-frame artefacts)
-    shipped reader on the 4:  4 correct, 0 blind, 0 wrong
+**Skeptic verdict: CONFIRMED WITH NOTES, NOT MERGED.** Full notes at
+`.claude/worktrees/agent-a7613eff370917779/agent_progress/issues/I-05a-skeptic/progress.md`
+(read in full this session). The closed half: the first attempt's hazard
+(false "not the game" on genuine frames) does not reproduce — a 659-fixture
+sweep at 1920x1080 found 0 false negatives, `_game_visible` alone (with
+`looks_like_ui` contributing nothing) answers on 96.5% of fixtures, and the
+one real PS5 game-card overlay on disk (`agent_progress/still_overlay.png`) is
+correctly rejected. The dismiss press itself (`ensure_stream.py:492` ->
+`_dismiss_overlay_if_blocking`, at most two `ps_button` presses, a fresh
+capture + `_game_visible` check after each) is verified.
 
-**~4 labels per recorded run. Point it at every future run** and the corpus
-accumulates with no console time and no live change. That is what a threshold on
-this path needs and does not have.
+**Three holes, from the skeptic's notes, verbatim in substance:**
 
-## WHAT IS WRITTEN AND DELIBERATELY NOT APPLIED
+1. `LIVENESS_MISS_STREAK = 3` is invented and its own comment's arithmetic is
+   wrong: `orchestrator.py` ~8404, a moving screen `continue`s with **no
+   sleep** (`settle_pause` 0.12s), so three consecutive misses can span under
+   a second *during an animation* — exactly when misses are expected. Fix:
+   measure the streak in TIME (misses on polls ≥N s apart), or measure the
+   real population of consecutive-miss lengths on archived deal/reveal frames
+   first (CLAUDE.md §10.4).
+2. Two mutants survived out of five: **M2** — the streak never resets on a
+   hit (turns a 3-consecutive-miss debounce into a 3-lifetime-miss trigger,
+   unpinned). **M5** — `ensure_live()`'s False return is ignored (the
+   existing test only asserts the call count, not that a failed recovery is
+   noticed). Both need tests before merge.
+3. `_game_visible` cannot tell "no reader answered" from "every reader
+   crashed" — all nine readers sit in bare `try/except: pass`. If a broken
+   numpy/cv2/tesseract makes every one raise, `_game_visible` returns False on
+   every frame, indistinguishable from a real overlay: two blind `ps_button`
+   presses at a live match, run stopped. Fix: count readers that actually
+   executed; return True (don't fire) when that count is zero.
 
-A **vertical bound** for the glow box — it is bounded horizontally by neighbour
-midpoints and not bounded above, so on an unsettled hand it samples the card
-ABOVE and returns a confident wrong answer. The patch is written, vectorised
-(0.11 ms a slot, verified 300/300 against the loop it replaces) and **NOT
-applied**, because its instrument fails its own control: on the one unambiguous
-cursor in the archive, disc-to-backdrop reads 37-38 while NOT the cursor and
-49-50 while it IS. **It rises with the halo it would police.** A gate would also
-zero a plausibly-genuine reading of 142 mid-play, on the $50 path.
+## 4. Open items for next session, in order
 
-Evidence kept: `test_fixtures/card_above_box/` (3 frames + a README that states
-what is and is not established). Scratchpad scripts are session-local and gone
-on reboot; the tool and the fixtures are committed.
+1. **I-05a**: fix the three holes above (time-based or measured streak;
+   pin M2 and M5; zero-readers-executed fallback), get a fresh skeptic pass,
+   merge.
+2. **Candidate rule from WIN #46's one refusal**: at a structurally-blind slot
+   (4), a press-then-None reads the same whether the press landed or was
+   dropped — retry once before refusing. Not built; needs its own harness
+   test (bounded, cheap per the notes above).
+3. **I-04**: DRAW fixture still needs a live draw to capture.
+4. **P2 simulator A/Bs**: I-15, I-16, I-17 — none started.
 
-## THREE CORRECTIONS TO MY OWN WORK TONIGHT
+Also note: the auto-mode classifier apparently declined a third paid-match
+start tonight (see §2's caveat) — worth asking the user about directly rather
+than assuming a mechanism, since it isn't visible in any log here.
 
-Recorded because each read as a finding before it was checked:
+## 5. How to resume
 
-    the phantom-card explanation for slot 2    killed by its own failed prediction:
-                                               blanking the home-plate strip made the
-                                               reading MORE extreme (-67 -> -77)
-    "slot 4 is structurally weak"              an archived frame reads 28.2 at slot 4;
-                                               the claim holds for THAT HAND only
-    the vertical-bound guard                   its instrument is not independent of
-                                               what it polices (above)
-
-## SUITE — one of the five was a REAL defect and is fixed
-
-233 files, 5 failures, none caused by tonight's work. **One turned out to be
-worth the detour and is now fixed; four are left alone.**
-
-**`test_paid_reads_no_cards` had three checks silently disabled, and the suite's
-answer depended on whether anyone had played recently.** Same commit, same code:
-
-    in a git worktree (no hand_memory.json)   30 PASS   0 FAIL
-    in the checkout after a live match        26 PASS   3 FAIL
-
-`reset_hand_memory()` clears the dict and calls `_save_hand_memory()` to DELETE
-the file — and that write is deliberately suppressed off the rig, so
-`hand_memory.json` survives and the carry-forward reloads the LAST LIVE MATCH's
-cards. The file held exactly tonight's hand (`{"0": 5, "1": 4, "4": 4}`), so the
-three "a powerless card is dropped" checks were reading memory, not the drop
-rule. 10.1's family: the reset did nothing, and doing nothing looked like working.
-
-Fixed on the TEST side (`MEMORY_IN_PROCESS_ONLY`); production untouched, and the
-file was NOT deleted — it is the suspended match's live state. Mutation-tested:
-with the drop turned into a no-op the file FAILS, restored, sha verified.
-
-**FIXED 2026-09-20 — all four now pass, and the suite is green at 235 files.**
-This line read "still failing, pre-existing, NOT investigated". Three were stale
-TESTS rather than broken code and were repinned to properties instead of source
-text (`test_local_retry_not_paid` took a signature change, `test_reveal_kind_capture`
-pinned a literal line of source, `test_post_play_timing` pinned two exact lines of
-text); `test_run_resume_and_persist` was the real one -- the match log's
-`pending_matchup` was unreachable. See commits fc41a8e and 639ce3a.
-
-## SUGGESTED NEXT STEP, THE USER'S CALL
-
-1. Finish the batting half's last turn when the user is present (the engine's
-   pick was slot 0 + a speed boost; a home run is arithmetically impossible).
-2. Run `tools/cursor_labels_from_lifts.py` against every run the rig records
-   from now on, and revisit the cursor gate once the label count is in the
-   dozens rather than 4. **The whole archive yields 4** — the other two runs
-   (`run_20260828_135528`, `run_20260828_150622`) contain no selections at all,
-   and the tool says "NOTHING TO SCORE" rather than reporting a vacuous 0%.
-3. Leave the glow window alone until then — §10.35 is four nights' worth of
-   reasons not to touch it without a FALSE column.
+1. The three tells (CLAUDE.md §1) — confirm the console's actual state before
+   any press. If asleep, that's fine; leave it.
+2. To play: `.venv/bin/python` (or an interactive session) calling
+   `orchestrator.run(target_wins=999, progress_file='progress_testing.json',
+   max_spend=50, compare_local_reads=True, log_screenshots=True)`, logging to
+   a NEW `overnight/run_live_<date><letter>.log` (do not reuse `f`).
+3. Suite: `PATH="$PWD/.venv/bin:$PATH" ./run_tests.sh` (or `.venv/bin/python -B
+   tools/doctor.py` first if it's been more than a few hours since the last
+   console check).
+4. Read-only look without moving anything:
+   `.venv/bin/python -B tools/match_crawl.py --session new --action look`.

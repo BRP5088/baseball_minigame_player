@@ -253,6 +253,11 @@ PS5 overlay up and confirm the cycle refuses rather than presses.
 
 **Status.** Open. Blocked on I-01 to I-04 landing first.
 
+**I-05a:** second attempt on branch worktree-agent-a7613eff370917779 (3731b5e);
+skeptic CONFIRMED WITH NOTES, NOT merged: three holes (streak counted in polls
+not time; two surviving mutants M2/M5; all-readers-crashed reads as an
+overlay) — see HANDOFF_NOW.md.
+
 ### I-06  A stalled match is abandoned by the next cycle with no record             P1  money
 
 **Evidence.** `reset_env.py:183 reset_environment`: `:270-276` answer the "Give up?" dialog
@@ -726,7 +731,88 @@ boundary block, `test_give_up_dialog_recognized.py`, `test_close_result_refuses_
 four mutants caught, including the skeptic's fresh-read one; 1,340 fixtures swept with zero
 give-up false positives.
 
-**Status.** Merged; live confirmation open.
+**Status.** Merged; live confirmation open. QA round 5 (41dd459cad89a71bff9af2bb63881dd78be8bf5e): the give-up test's stub answered from its own press flag rather than the frame, so a stale post-press read went uncaught; it now keys on the frame's capture sequence and that mutant fails.
+
+### I-31  A fresh match's first turn stalled forever on an unreadable phase banner   P0  reader/loop
+
+**Evidence.** overnight/run_live_20260921c.log: a fresh match's first hand held three
+tactics cards and two batters, one batter's disc hidden under the lifted neighbour, the
+SPEED BOOST's type unread; read_phase had one banner vote and abstained, 15 polls of
+"phase not read locally", and the run stopped with unreadable_screens. Frame:
+test_fixtures/phase/i31_fresh_match_tactics_batting.png.
+
+**Root cause.** read_phase voted only on BATTER/PITCHER banners, and local_game_state
+raised on abstention even on a fresh match whose half is known.
+
+**Fix.** MERGED 2026-09-21 (e23e0f6602267664261b71386d65d60bfba983ca): tactics kinds
+vote (swing/speed = batting, pitch/fielding = pitching), and when the reader still
+abstains on a readable hand the match's own half decides, logged.
+
+**Verify.** 12 checks, 3 mutants.
+
+**Status.** Merged; live confirmation: resume the parked match.
+
+### I-32  A cursor crossing an occluded slot was refused as "lost", excluding the play   P0  input
+
+**Evidence.** overnight/run_live_20260921d.log (00:52-00:56): a hand read
+`0: swing_boost +2, 1: UNKNOWN, 2: swing_boost +1, 3: speed_boost +1, 4: 5/3`. Slot 1's
+power disc sat under slot 2's card (CLAUDE.md 10.28's fan occlusion), so `read_hand` gave
+that row `y_measured: False` for the rest of the hand. `input_controller._walk_cursor_to`
+walked from slot 0 toward slot 4, crossing slot 1, and refused after exactly ONE press:
+`lost the cursor after 1 press(es) (glow=[0.0, 0.0, 0.0, 0.0, 0.7]) — refusing`, three
+times running on the same hand. The play was excluded and the run stopped with "every
+reachable card on this hand has been refused". Frame:
+`overnight/crawl/20260921_005556/001_before.png`.
+
+**Root cause.** `local_hand.cursor_glow` returns 0.0 BY CONSTRUCTION for any row whose y
+was never measured, so `cursor_slot` reads None whenever the cursor sits on an occluded
+slot -- indistinguishable from a dropped press by glow alone. `_walk_cursor_to` only had
+I-02's remedy for a blind slot ONE STEP FROM THE TARGET (probe by selection); a blind slot
+the walk merely CROSSES had no remedy at all and refused immediately.
+
+**Fix.** `input_controller._walk_cursor_to`, ~1015-1113: when a press reads no cursor,
+compute `expected` (the slot one step toward `target` from where the cursor was). If
+`expected` is not the target and the walk's own `ys` column -- the same fallback-y gate
+I-02's probe already checks -- shows `ys[expected] is None`, "nothing lit" is the expected
+reading of an occluded row, not a lost cursor: dead-reckon onto it and let the next press
+prove the walk is still live. Bounded to ONE consecutive dead-reckoned step
+(`dead_reckoned_last`); a second dark slot right after one still refuses, occluded or not
+-- two occluded slots in a row is the mirror case and stays a refusal, no code chains
+guesses to cover it. The occlusion check runs BEFORE I-02's probe-select branch (not
+after) so "never dead-reckon onto the target" is a real, mutation-catchable guard rather
+than an unreachable one: `expected == target` is exactly I-02's own `abs(prev - target)
+== 1` condition, so checking I-02 first would make the guard dead code. An occluded
+target still falls through to `_probe_select_blind_target`, which already refuses without
+a press when `ys[target] is None`.
+
+**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`: (1) a single occluded
+slot mid-walk costs nothing extra and the log names it; (2) a genuinely dropped press
+right after the dead-reckoned step still refuses; (2b) the mirror case -- two occluded
+slots in a row still refuse, only the first is dead-reckoned; (3) an occluded TARGET is
+never dead-reckoned onto, only I-02's probe (or its own refusal); CONTROL (4) a hand with
+no occlusion anywhere still hits the old, byte-identical refusal. Three mutants, each
+caught by a different check: dropping the `ys[expected] is None` test is caught by
+CONTROL; dropping the one-consecutive-step bound is caught by (2b) (not by (2), whose
+second slot is readable and would refuse regardless of the bound); dropping the
+`expected != target` guard is caught by (3), which dead-reckons straight onto the
+occluded target and returns success instead of refusing. Siblings all still pass:
+`tests/rig/test_blind_slot_probe_select.py` (I-02), `test_select_stops_when_lift_
+unreadable.py`, `test_verified_presses_on_match_path.py`, `tests/rig/test_no_real_input_
+under_test_run.py`, `tests/harness/test_no_shadowed_module_defs.py`.
+
+**Status.** MERGED to main 2026-09-21 (a5e212a), skeptic CONFIRMED WITH NOTES
+(coverage gaps folded into the test): an independent review confirmed the diff
+matches this ticket, found no overstated claims, and reproduced the fixer's own
+three mutants by hand, but found two of its OWN gaps -- the shipped test only
+ever walks rightward, so a mutant hardcoding `expected = prev + 1` (dropping the
+`prev - 1` branch) survived, and it never separates two occlusions by a clean
+read, so a mutant dropping the `dead_reckoned_last` reset also survived. Both
+are folded into `tests/minigame/test_walk_crosses_occluded_slot.py` as checks
+(5) (a leftward walk, occluded slot 3, must arrive in 4 presses naming it) and
+(6) (occluded {1, 3} with readable slot 2 in between, walk 0->4, must arrive in
+4 presses naming BOTH). Each mutant reproduced on this checkout and shown to
+fail exactly its own check and no other, sha256-verified restored byte for byte
+between them.
 
 ## C. Costs wins
 
