@@ -114,6 +114,17 @@ for seen, want in (("W I N N E R", "win"),      # split across single-letter spa
     check(got == want, f"recall regression: {seen!r} -> {got!r} (wanted {want!r}, "
           f"detail {detail!r})")
 
+# I-54 SKEPTIC (N1): a banner split by OCR into two SEPARATE detected text entries ("WIN"
+# and "NER" as two lines, not one text split by a space) is DIFFERENT from the within-entry
+# splits above -- the joined-candidate mechanism only joins letters within one entry `t`, so
+# it cannot bridge across two. This reads None, and that is INTENDED, not a gap: "WIN" alone
+# is three letters, under `_similar`'s 4-letter floor, and "NER" matches no vocab word
+# either. Pinned so a future change cannot silently start (or silently stop) matching it
+# without the change being deliberate.
+got, detail = result_ocr.match_word([("WIN", 1.0), ("NER", 1.0)])
+check(got is None, f"a banner split across two OCR entries ('WIN' + 'NER') reads None by "
+      f"design, not 'win' (got {got!r}, detail {detail!r})")
+
 # --- 5. THE WIRING: read_banner must actually CALL match_word, not just have it nearby --
 # match_word alone proves nothing about read_banner if the two are ever disconnected (the
 # I-34 skeptic's mutant v: read_banner bypasses match_word). Drive read_banner end to end
@@ -258,6 +269,35 @@ check(got is None,
 got, detail = _read_banner_via_stub(NEG_TEXTS)
 check(got is None,
       f"wiring: read_banner on the negative fixture must not score a result "
+      f"(got {got!r}, detail {detail!r})")
+
+# --- 7b. I-54 SKEPTIC: A SECOND, STRONGER NEGATIVE -- the fixture above never actually
+# exercises the OCR reader against production noise, because none of its tokens ("PITCH",
+# "FOCUS", "PITCHER") are anywhere near a vocab word; it reads None whether or not any guard
+# in this file exists at all. This one is a real WIN-match frame,
+# `screenshot_log/run_20260921_080311/20260921_081145_187.jpg` (main checkout), copied to
+# test_fixtures/result_screens/negative_win_screen_no_banner_20260921.jpg. Its BAND crop has
+# NO result banner in it -- real PaddleOCR reads the OPPONENT's card, "JOHNNY DRAWERS" /
+# "BATTER" / "8" / "BATTER" / "CUR" (agent_progress/issues/I-54/progress.md). "DRAWERS" is
+# refused by I-34's own length rule (`_similar`), same as the module docstring's example --
+# this fixture's value is that the refusal is demonstrated on genuinely captured pixels
+# from a live WIN screen, not a hand-typed string, which is a stronger real-world control
+# than the fixture above. Only the OCR FALLBACK is asserted here: the template reader
+# (local_state.read_result_card) is a different code path this ticket does not touch and
+# may or may not read this frame as a result -- not this file's question.
+NEG_FIX2 = os.path.join(_ROOT, "test_fixtures", "result_screens",
+                        "negative_win_screen_no_banner_20260921.jpg")
+check(os.path.exists(NEG_FIX2), f"fixture missing: {NEG_FIX2}")
+NEG_TEXTS2 = [("JOHNNY DRAWERS", 1.0), ("BATTER", 1.0), ("8", 0.997),
+              ("BATTER", 1.0), ("CUR", 0.944)]
+got, detail = result_ocr.match_word(NEG_TEXTS2)
+check(got is None,
+      f"the stronger negative fixture's real OCR text must not score a result "
+      f"(got {got!r}, detail {detail!r})")
+
+got, detail = _read_banner_via_stub(NEG_TEXTS2)
+check(got is None,
+      f"wiring: read_banner on the stronger negative fixture must not score a result "
       f"(got {got!r}, detail {detail!r})")
 
 # --- 8. I-54: THE THREE LIVE RESULT FIXTURES STILL READ ----------------------------------

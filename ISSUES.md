@@ -3611,4 +3611,7 @@ before and after this ticket's changes), `test_result_card_is_read.py`,
 `test_run_debit_and_scoring.py`, `test_transition_screens_recognised.py`,
 `tests/harness/test_no_undefined_names.py`, `test_claude_md_constants.py`.
 
-**Status.** fixed on branch, awaiting skeptic (result path).
+**Status.** merged ca202d1; Opus skeptic CONFIRMED WITH NOTES (627 frames, 0
+disagreements on true results, 0 FP on 285 non-result frames); N1 pinned, N3 fixture
+added; LATER: VOCAB lacks DEFEAT (a live run retried 15/15 and ended unscored) and
+PaddleOCR fails on the mid-animation flat banner 10/231.

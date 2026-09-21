@@ -147,6 +147,10 @@ def match_word(texts):
     No confidence floor from the template reader is added here -- CLAUDE.md 10.32: no such
     floor has been measured, and inventing one on the money path is exactly the mistake this
     file's own history warns against.
+
+    A banner split by OCR into two separate entries ("WIN" + "NER") is intended to read
+    None, not "win": "WIN" alone is under `_similar`'s 4-letter floor and "NER" matches
+    nothing, so this is the existing per-entry tokeniser doing its job, not a new gap.
     """
     seen = []
     for t, conf in texts:
