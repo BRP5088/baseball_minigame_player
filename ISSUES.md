@@ -2606,5 +2606,6 @@ now asserted to produce.
     drop the `drop_reason` field from the streak append
         -> test_unscored_reveal_rows_kept.py: scenario A FAILS (drop_reason check)
 
-**Status.** Fixed on this branch (`agent_progress/issues/I-49/progress.md` carries
-the trace). Suite green as listed above; not yet merged to main.
+**Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
+NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
+still discards, 0/42 traced).
