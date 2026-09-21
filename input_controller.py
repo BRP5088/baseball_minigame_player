@@ -2243,8 +2243,56 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # the loop above already uses, so no new constant and no new press budget.
     # A second failure refuses and unwinds everything, exactly as a first-pass
     # failure already does above.
-    _g1, _ys1, n1, sel1 = _look_settled(look)
-    _missing = (want - set(sel1)) if n1 == MAX_HAND_SIZE else set()
+    # I-48e: A TACTICS TARGET'S "MISSING" READ HERE CAN BE A FLICKER, NOT A
+    # TOGGLE. Tactics rows carry no disc; their lifted state is read off the
+    # wreath, which the I-36 investigation (`ISSUES.md`) already documents as
+    # misreading for a look or two on an otherwise-untouched card. Retrying
+    # costs real `_walk_cursor_to` presses (up to `CURSOR_BLIND_NUDGES` if the
+    # cursor is believed lost), so trusting a SINGLE unlifted read here on a
+    # tactics row is the same mistake `_clear_strays`'s own `_baseline_not_
+    # tactics` gate (this file ~:1893-1894) already refuses to make for ITS
+    # inference. Mirrored here as the same two gates, on the same `_kinds0`
+    # snapshot `_clear_strays` is handed below:
+    #   (a) the target's BASELINE row was a PLAYER card (disc-anchored, does
+    #       not flicker this way) -- trust the first look, exactly as
+    #       I-48b/I-48c shipped, no change;
+    #   (b) the target's BASELINE row was 'tactics' -- only trust a MISSING
+    #       read once a SECOND settled look, taken after the same confirm
+    #       sleep the I-26 flicker re-look already uses in `_clear_strays`
+    #       (~:1813-1822), also shows it missing.
+    #
+    # WHEN NOTHING IN `want` IS PLAYER-KIND AT BASELINE, this block takes NO
+    # look at all. `_clear_strays`, called unconditionally below, takes its
+    # OWN fresh look next, and its `_baseline_not_tactics`/`_want_inferred`
+    # gate already refuses to trust anything short of a genuine risen read for
+    # a tactics-baseline target -- so a look here first would only be a
+    # wasted, redundant read of the exact same question, not a safer one.
+    # This is what overran `test_lifted_discard_row_rescued.py`'s case (5)
+    # (ISSUES.md I-48b regression triage): a tactics-only `want` took an extra
+    # look here, read a single commit-time glitch as missing, and sent 8 real
+    # move_left presses hunting a cursor that was never lost, for a target
+    # that had been correctly selected the whole time.
+    def _baseline_is_tactics(k):
+        return _kinds0 is not None and k < len(_kinds0) and _kinds0[k] == "tactics"
+
+    _missing = set()
+    if any(not _baseline_is_tactics(t) for t in want):
+        _g1, _ys1, n1, sel1 = _look_settled(look)
+        _missing = (want - set(sel1)) if n1 == MAX_HAND_SIZE else set()
+        _tactics_missing = {t for t in _missing if _baseline_is_tactics(t)}
+        if _tactics_missing:
+            print(f"  [cursor] slot(s) {sorted(_tactics_missing)} read unlifted "
+                  "on a tactics-baseline row — re-looking once before treating "
+                  "this as a real drop rather than a flicker (I-48e)")
+            time.sleep(SELECT_RETRY_CONFIRM_SEC)
+            _g1b, _ys1b, n1b, sel1b = _look_settled(look)
+            _still_missing = (_tactics_missing - set(sel1b)
+                               if n1b == MAX_HAND_SIZE else _tactics_missing)
+            for _t in sorted(_tactics_missing - _still_missing):
+                print(f"  [cursor] slot {_t} is lifted again on the re-look — a "
+                      "tactics-row flicker (I-26), not a real drop; skipping "
+                      "the re-select (I-48e)")
+            _missing = (_missing - _tactics_missing) | _still_missing
     for _t in sorted(_missing):
         print(f"  [cursor] slot {_t} was verified earlier this operation and "
               "is no longer lifted — re-selecting before committing (I-48b)")

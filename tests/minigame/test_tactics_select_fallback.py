@@ -224,6 +224,53 @@ class OccludedPlayScreen(PlayScreen):
         return glow, ys, N, sel
 
 
+class TacticsKindPlayScreen(PlayScreen):
+    """I-48e: carries a per-slot BASELINE `kind` on `.kinds`, the same
+    `orchestrator._CursorSel` shape `hand_cursor_look` returns (see its own
+    docstring) -- this is what `_kinds0 = getattr(before_all, "kinds", None)`
+    reads, and every OTHER screen in this file returns a plain list, so
+    `_kinds0` is `None` for cases A-M and the new gate is permissive there
+    (unchanged). Two independent fault-injection knobs, each keyed by the
+    1-indexed number of the `look()` call across the WHOLE operation (found by
+    tracing a real run once, same method as `test_lifted_discard_row_rescued.
+    py` case (5)'s own queue):
+
+      `hide_on_call={call_n: {slots}}`  a pure READ glitch -- these slots are
+                                         omitted from `sel` on call `call_n`
+                                         ONLY; `self.lifted` (the real state)
+                                         is untouched, so the NEXT look reads
+                                         correctly again. Models the I-26
+                                         tactics-row flicker case (N).
+      `drop_on_call={call_n: {slots}}`  a REAL drop -- these slots are removed
+                                         from `self.lifted` itself, right
+                                         before call `call_n` builds its
+                                         answer, so every look from then on
+                                         reads them missing until a genuine
+                                         select_card re-lifts them. Models a
+                                         real silent toggle-off, case (O).
+    """
+
+    def __init__(self, cur=0, kinds=None, hide_on_call=None, drop_on_call=None,
+                 **kw):
+        super().__init__(cur=cur, **kw)
+        self.kinds = list(kinds) if kinds is not None else ["player"] * N
+        self.hide_on_call = {k: set(v) for k, v in (hide_on_call or {}).items()}
+        self.drop_on_call = {k: set(v) for k, v in (drop_on_call or {}).items()}
+        self._look_n = 0
+
+    def look(self):
+        self._look_n += 1
+        for slot in self.drop_on_call.get(self._look_n, ()):
+            self.lifted.discard(slot)
+        if self.fan_gone:
+            return [0.0] * N, [None] * N, 0, orch._CursorSel([], list(self.kinds))
+        glow = [0.0] * N
+        glow[self.cur] = 27.0
+        hide = self.hide_on_call.get(self._look_n, set())
+        sel = sorted(s for s in self.lifted if s not in hide)
+        return glow, list(REST), N, orch._CursorSel(sel, list(self.kinds))
+
+
 def _play(card_index, tactics_index):
     """Run one play through the REAL function, capturing stdout and every
     `_unwind_selection` call (target set only) without altering its behaviour."""
@@ -598,6 +645,67 @@ try:
     check("(M) the batter re-select was attempted and failed",
           "was verified earlier this operation and is no longer lifted" in out
           and "could not be re-verified" in out)
+
+    # =====================================================================
+    print("(N) I-48e: a TACTICS-baseline target reads unlifted ONCE at the "
+          "shared re-check, then lifted again on the re-look -- a flicker, "
+          "not a toggle -- so no navigation presses are sent and both commit")
+    # =====================================================================
+    # card_index=0 (kind 'player'), tactics_index=1 (kind 'tactics'). Both
+    # land cleanly through the per-target loop with no occlusion and no
+    # sabotage. The shared re-check's OWN preliminary look is call 9 (traced
+    # once against the real code, same method as case (5)'s own queue) --
+    # `hide_on_call` omits slot 1 from `sel` on THAT call only, so `self.
+    # lifted` never actually changes and the very next look (the I-48e
+    # confirmatory re-look) reads it correctly again.
+    s = TacticsKindPlayScreen(cur=0, kinds=["player", "tactics", "player",
+                                             "player", "player"],
+                               hide_on_call={9: {1}})
+    ok, out, unwind_calls = _play(0, 1)
+    check("(N) play succeeds, both committed", ok is True)
+    check("(N) both slots committed", s.confirmed_sel == [0, 1])
+    check("(N) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(N) no navigation press was sent for the flicker -- the real fix "
+          "is not entered at all",
+          s.sent == ["select_card", "move_right", "select_card", "confirm_play"])
+    check("(N) the re-look fired and named the flicker, not a real drop",
+          "read unlifted on a tactics-baseline row" in out
+          and "is lifted again on the re-look" in out
+          and "tactics-row flicker (I-26), not a real drop" in out)
+    check("(N) the I-48b re-select line never fired -- nothing was ever "
+          "treated as genuinely missing", "re-selecting before committing "
+          "(I-48b)" not in out)
+    check("(N) no unwind was needed at all", unwind_calls == [])
+
+    # =====================================================================
+    print("(O) I-48e: a TACTICS-baseline target reads unlifted on BOTH the "
+          "shared re-check's own look and the confirmatory re-look -- a real "
+          "drop, not a flicker -- so the existing retry (one walk+select) "
+          "runs and recovers it, exactly as I-48b already does for a player "
+          "target")
+    # =====================================================================
+    # Same setup as (N), but `drop_on_call` removes slot 1 from `self.lifted`
+    # for real at call 9 (the preliminary look), so it is genuinely gone by
+    # the confirmatory look (call 10) too -- the I-48e gate then adds it to
+    # `_missing` for the existing retry loop, which walks to it and presses
+    # select_card once more, landing for real.
+    s = TacticsKindPlayScreen(cur=0, kinds=["player", "tactics", "player",
+                                             "player", "player"],
+                               drop_on_call={9: {1}})
+    ok, out, unwind_calls = _play(0, 1)
+    check("(O) play succeeds by recovering the tactics target", ok is True)
+    check("(O) both slots committed", s.confirmed_sel == [0, 1])
+    check("(O) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(O) the retry sent exactly one extra select_card press",
+          s.sent == ["select_card", "move_right", "select_card", "select_card",
+                     "confirm_play"])
+    check("(O) the re-look fired and confirmed a real drop, not a flicker",
+          "read unlifted on a tactics-baseline row" in out
+          and "is lifted again on the re-look" not in out)
+    check("(O) the existing I-48b re-select ran and recovered it",
+          "was verified earlier this operation and is no longer lifted" in out
+          and "re-selecting before committing (I-48b)" in out)
+    check("(O) no unwind was needed -- the retry succeeded", unwind_calls == [])
 
     # =====================================================================
     print()
