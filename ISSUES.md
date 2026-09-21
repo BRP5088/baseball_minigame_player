@@ -747,6 +747,56 @@ abstains on a readable hand the match's own half decides, logged.
 
 **Status.** Merged; live confirmation: resume the parked match.
 
+### I-32  A cursor crossing an occluded slot was refused as "lost", excluding the play   P0  input
+
+**Evidence.** overnight/run_live_20260921d.log (00:52-00:56): a hand read
+`0: swing_boost +2, 1: UNKNOWN, 2: swing_boost +1, 3: speed_boost +1, 4: 5/3`. Slot 1's
+power disc sat under slot 2's card (CLAUDE.md 10.28's fan occlusion), so `read_hand` gave
+that row `y_measured: False` for the rest of the hand. `input_controller._walk_cursor_to`
+walked from slot 0 toward slot 4, crossing slot 1, and refused after exactly ONE press:
+`lost the cursor after 1 press(es) (glow=[0.0, 0.0, 0.0, 0.0, 0.7]) — refusing`, three
+times running on the same hand. The play was excluded and the run stopped with "every
+reachable card on this hand has been refused". Frame:
+`overnight/crawl/20260921_005556/001_before.png`.
+
+**Root cause.** `local_hand.cursor_glow` returns 0.0 BY CONSTRUCTION for any row whose y
+was never measured, so `cursor_slot` reads None whenever the cursor sits on an occluded
+slot -- indistinguishable from a dropped press by glow alone. `_walk_cursor_to` only had
+I-02's remedy for a blind slot ONE STEP FROM THE TARGET (probe by selection); a blind slot
+the walk merely CROSSES had no remedy at all and refused immediately.
+
+**Fix.** `input_controller._walk_cursor_to`, ~1015-1113: when a press reads no cursor,
+compute `expected` (the slot one step toward `target` from where the cursor was). If
+`expected` is not the target and the walk's own `ys` column -- the same fallback-y gate
+I-02's probe already checks -- shows `ys[expected] is None`, "nothing lit" is the expected
+reading of an occluded row, not a lost cursor: dead-reckon onto it and let the next press
+prove the walk is still live. Bounded to ONE consecutive dead-reckoned step
+(`dead_reckoned_last`); a second dark slot right after one still refuses, occluded or not
+-- two occluded slots in a row is the mirror case and stays a refusal, no code chains
+guesses to cover it. The occlusion check runs BEFORE I-02's probe-select branch (not
+after) so "never dead-reckon onto the target" is a real, mutation-catchable guard rather
+than an unreachable one: `expected == target` is exactly I-02's own `abs(prev - target)
+== 1` condition, so checking I-02 first would make the guard dead code. An occluded
+target still falls through to `_probe_select_blind_target`, which already refuses without
+a press when `ys[target] is None`.
+
+**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`: (1) a single occluded
+slot mid-walk costs nothing extra and the log names it; (2) a genuinely dropped press
+right after the dead-reckoned step still refuses; (2b) the mirror case -- two occluded
+slots in a row still refuse, only the first is dead-reckoned; (3) an occluded TARGET is
+never dead-reckoned onto, only I-02's probe (or its own refusal); CONTROL (4) a hand with
+no occlusion anywhere still hits the old, byte-identical refusal. Three mutants, each
+caught by a different check: dropping the `ys[expected] is None` test is caught by
+CONTROL; dropping the one-consecutive-step bound is caught by (2b) (not by (2), whose
+second slot is readable and would refuse regardless of the bound); dropping the
+`expected != target` guard is caught by (3), which dead-reckons straight onto the
+occluded target and returns success instead of refusing. Siblings all still pass:
+`tests/rig/test_blind_slot_probe_select.py` (I-02), `test_select_stops_when_lift_
+unreadable.py`, `test_verified_presses_on_match_path.py`, `tests/rig/test_no_real_input_
+under_test_run.py`, `tests/harness/test_no_shadowed_module_defs.py`.
+
+**Status.** Fixed on branch, awaiting skeptic.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
