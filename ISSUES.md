@@ -1812,3 +1812,41 @@ Still open, in order:
    pause menu (QA round 2 traced the stale-$46 refusal).
 4. I-15, I-16, I-17 simulator A/Bs (I-17 after the log has modern rows).
 5. I-18's fielding-boost zone gap in `reveal_cards.py`.
+
+### I-45  QA6 test hygiene                                                          P2  test
+
+**Evidence.** Four fixes from the QA6 finder, merged 738a2e7: `load_log_distribution()`
+no longer `open()`s a gitignored one-off artefact (crashed with `FileNotFoundError` on a
+fresh clone) — it now derives the opponent-pitcher power distribution live from
+`match_log.jsonl` (tracked) by ISSUES.md I-17's method, falling back to a pinned snapshot
+(`tools/ab_data/opp_pitcher_dist_20260921.json`) when the tracked log has zero qualifying
+rows; `test_hand_memory_persists.py` no longer globs the gitignored 1.4G
+`agent_progress/deal-frames/` tree, using two named fixtures under
+`test_fixtures/deal_frames/` instead; `test_hand_read_two_lifted.py`'s negative-control
+fixture moved from the live-written `overnight/local_hand/` to `test_fixtures/hand_reads/`;
+and `LIVENESS_MISS_SEC` (6.0) / `MONEY_READ_MAX_FILES` (200) are now pinned as literals in
+their tests.
+
+**Status.** Merged fd2c6ccb5db1f3d24529d6fe22234997e66b4fe7. All seven required tests pass
+against a clean checkout of that sha (verified in an isolated `git worktree add --detach`
+at HEAD, so the check runs on tracked content only); `test_no_shadowed_module_defs.py` and
+`test_no_undefined_names.py` are also green. Both fails-loudly claims proved: renaming
+`tools/ab_data/opp_pitcher_dist_20260921.json` makes `test_ab_controls_reproduce_baseline.py`
+die with `FileNotFoundError` naming that exact path (exit 1); renaming
+`test_fixtures/deal_frames/hand_memory_drive_01.png` makes `test_hand_memory_persists.py`
+die with `FileNotFoundError` naming that exact path (exit 1). Both files restored, `git
+status --porcelain` clean of any `T` (rename) entries afterward.
+`test_run_gates_on_liveness.py`'s full census ran in 126s (under the 3-minute budget) and
+passed. `tests/harness/test_claude_md_constants.py` and `test_reload_wallet_guard.py` pass.
+
+**Open finding.** Run against THIS checkout's actual on-disk `match_log.jsonl` (520 rows,
+151 uncommitted since the tracked 369) rather than a clean checkout,
+`test_ab_controls_reproduce_baseline.py` FAILS: the extra rows on disk are enough (82
+qualifying) that `load_log_distribution()` no longer takes the zero-qualifying-rows
+fallback branch and instead derives a live distribution, which does not bit-for-bit match
+the pinned 20260921 snapshot (built from that same 520-row state on the day it was
+pinned, but never committed). This is the test doing exactly what CLAUDE.md §10.16c/2 asks
+— failing loudly on a data change rather than silently drifting — not a defect in the
+merge. It resolves itself the moment `match_log.jsonl` is committed with matching content,
+or is expected to keep firing (correctly) until then. Not fixed here; flagged for whoever
+commits the live match log next.
