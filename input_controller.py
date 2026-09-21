@@ -1240,6 +1240,26 @@ def _unwind_selection(before, look, ours):
         return False
 
 
+def _untrustworthy_slots(glow, ys):
+    """Slots with no trustworthy start-of-operation position (I-26).
+
+    An unmeasured y is the obvious case. The other is I-25's own shape one layer
+    up: a disc that was found but never matched a digit only clears
+    `local_hand.CURSOR_GLOW_MAX` by landing its glow window on a card's own white
+    art (CLAUDE.md 10.35), which is exactly the reading `local_hand.cursor_glow`
+    already refuses to let win its argmax. This layer never sees `rows`, only the
+    raw glow numbers `look()` returns, so the ceiling is the only way to ask the
+    same question here -- there is no `y_from`/`digit` to check directly.
+
+    A slot this untrustworthy from the start cannot be proven "lifted by us"
+    later just because its y went from a bogus number to None.
+    """
+    import local_hand
+    blind = {i for i, y in enumerate(ys) if y is None}
+    blind |= {i for i, g in enumerate(glow) if i < len(ys) and g > local_hand.CURSOR_GLOW_MAX}
+    return blind
+
+
 def _clear_strays(want, look, blind_before=frozenset()):
     """Put down every lifted card the engine did not choose. True if safe to commit.
 
@@ -1292,12 +1312,40 @@ def _clear_strays(want, look, blind_before=frozenset()):
     _blind_now = {i for i, y in enumerate(_ys) if y is None}
     _new_blind = _blind_now - set(blind_before)
     if _new_blind:
-        print(f"  [cursor] slot(s) {sorted(_new_blind)} went unreadable DURING this "
-              f"operation ({_ys}) — refusing. They were measurable when it started, so "
-              "something we pressed lifted them, and a raised card would go in with "
-              "the commit.")
-        invalidate_cursor()
-        return False
+        # A SINGLE LOOK CAN CATCH A FLICKER, NOT A LIFT (I-26). The occluded-disc
+        # reader can drop a slot from a real (if untrustworthy) position to
+        # unreadable and back within a few frames of an UNCHANGED card
+        # (CLAUDE.md 10.26: "a reader that looks stable on a still may not be").
+        # Give it one more look, after the same settle this file already waits
+        # out a swallowed press with, before treating that as something WE
+        # raised.
+        print(f"  [cursor] slot(s) {sorted(_new_blind)} read unreadable ({_ys}) — "
+              "re-looking once before refusing")
+        time.sleep(SELECT_RETRY_CONFIRM_SEC)
+        _g, _ys, n, sel = _look_settled(look)
+        if n != MAX_HAND_SIZE:
+            print("  [cursor] cannot read the fan on the re-look — refusing. A "
+                  "commit whose lifted set was never seen is a blind commit.")
+            invalidate_cursor()
+            return False
+        _blind_now = {i for i, y in enumerate(_ys) if y is None}
+        _new_blind = _blind_now - set(blind_before)
+        # AT REST: nothing was committed (still a full fan) and nothing outside
+        # what the engine chose is sitting lifted -- the only two things this
+        # layer can check without a measured position for the flickering slot
+        # itself, and both are already in hand from the re-look.
+        _at_rest = n == MAX_HAND_SIZE and not (set(sel) - want)
+        if _new_blind and not _at_rest:
+            print(f"  [cursor] slot(s) {sorted(_new_blind)} still unreadable after "
+                  f"the re-look ({_ys}) — refusing. They were measurable when this "
+                  "operation started, so something we pressed lifted them, and a "
+                  "raised card would go in with the commit.")
+            invalidate_cursor()
+            return False
+        if _new_blind:
+            print(f"  [cursor] slot(s) {sorted(_new_blind)} are still unreadable "
+                  "but the rest of the fan is unchanged and nothing unexpected is "
+                  "lifted — treating as already blind rather than refusing forever")
     if _blind_now:
         print(f"  [cursor] slot(s) {sorted(_blind_now)} were ALREADY unreadable before "
               "this operation began — proceeding. We cannot have raised them, and "
@@ -1432,8 +1480,9 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # experiment, and the result still looks like a finding".
     want = {t for t in (card_index, tactics_index) if t is not None}
     # THE BASELINE IS THE PRE-PRESS READ AT THE TOP OF THIS FUNCTION, so a slot that
-    # was never readable is told apart from one this call lifted.
-    _blind0 = {i for i, y in enumerate(_ys0) if y is None}
+    # was never readable (or never trustworthy -- I-26) is told apart from one this
+    # call lifted.
+    _blind0 = _untrustworthy_slots(_g0, _ys0)
     if not _clear_strays(want, look, blind_before=_blind0):
         return False
 
@@ -1556,7 +1605,7 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # discard path did not, so it had no way to tell a slot it had just lifted from one
     # that was unreadable all along -- see _clear_strays. One look, ~40 ms.
     _g0, _ys0, _n0, _before0 = _look_settled(look)
-    _blind0 = {i for i, y in enumerate(_ys0) if y is None} if _n0 == MAX_HAND_SIZE else frozenset()
+    _blind0 = _untrustworthy_slots(_g0, _ys0) if _n0 == MAX_HAND_SIZE else frozenset()
     ok, _sel = _walk_cursor_to(card_index, look)
     if not ok:
         invalidate_cursor()
