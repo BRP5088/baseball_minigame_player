@@ -494,9 +494,14 @@ try:
     # (occluded slot 1), 5/3 (card_index=2), speed_boost +1, 5/2], decision
     # batter=2 + tactics=0. The walk from 2 to 0 dead-reckons across occluded
     # slot 1, one navigation press toward the target is dropped so the cursor
-    # never physically arrives, the probe fires and fails twice ("probe-select
-    # raised nothing after 2 attempts"), and (per the live log) card_index ends
-    # up unselected by the time the old code checked. The exact press-by-press
+    # never physically arrives, and the probe fires. Post-I-51 (B1) this is
+    # caught EARLY as a disappearance ("probe-select made 2 disappear ...
+    # re-selecting it") rather than looping to "raised nothing after N
+    # attempts" -- but the corrective re-select itself cannot land either
+    # (the fake's cursor never physically reaches slot 2), so the probe still
+    # genuinely fails ("could not re-select probe slot 2 -- refusing rather
+    # than leaving it lost"), and (per the live log) card_index ends up
+    # unselected by the time the old code checked. The exact press-by-press
     # parity that cost it is not recoverable from the log text alone -- see
     # agent_progress/issues/I-48b/skeptic.md section 1, which PROVED it by
     # elimination and reproduced it from press mechanics alone (probe2.py R1,
@@ -512,7 +517,7 @@ try:
     check("(I) the occluded slot was dead-reckoned first",
           "slot 1 is occluded" in out)
     check("(I) the tactics probe genuinely failed",
-          "probe-select raised nothing after 2 attempts" in out)
+          "could not re-select probe slot 2" in out)
     check("(I) the fallback fired",
           "dropping the boost and playing the batter alone" in out)
     check("(I) the batter was found NOT lifted and re-selected, never assumed",

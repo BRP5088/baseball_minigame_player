@@ -234,11 +234,16 @@ try:
           f"CONTROL: and must NOT probe -- the mechanism is scoped to 'one step "
           f"from the target', not every lost cursor; pressed {s.sent!r}")
 
-    # --- the constant is a literal, not a re-derivation of itself (CLAUDE.md 10.11) --
-    check(ic.PROBE_SELECT_MAX == 2,
-          f"PROBE_SELECT_MAX is {ic.PROBE_SELECT_MAX}, not 2. It is derived from "
-          "the 15.20% clustered press-drop rate (one retry absorbs a lone drop); "
-          "moving it needs that derivation redone.")
+    # --- I-51: the constant now REUSES PRESS_VERIFY_TRIES, not a re-derivation of
+    #     its own (CLAUDE.md 10.11) -- was a literal 2 (one retry, ~3.8% chance of
+    #     two clustered drops), which fired on a cursor sitting correctly on the
+    #     target (agent_progress/census/blind_cursor_m4/progress.md). See
+    #     tests/minigame/test_probe_select_budget.py for the budget-change coverage.
+    check(ic.PROBE_SELECT_MAX == ic.PRESS_VERIFY_TRIES,
+          f"PROBE_SELECT_MAX is {ic.PROBE_SELECT_MAX}, not PRESS_VERIFY_TRIES "
+          f"({ic.PRESS_VERIFY_TRIES}). It must stay an ALIAS of that constant, not "
+          "a separately-derived number -- both bound retrying select_card against "
+          "the same measured press-drop rate.")
 finally:
     ic.press = _real_press
     ic._deselect_verified = _real_deselect

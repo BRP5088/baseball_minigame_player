@@ -295,10 +295,10 @@ try:
           "lost the cursor after 2 press(es)" in out)
 
     # --- no bare-bool checks slipped in (CLAUDE.md 5's nine check() signatures) --
+    # I-51 made PROBE_SELECT_MAX an alias of PRESS_VERIFY_TRIES (was a literal 2);
+    # this file's own fix never touches either, so the two must still agree.
     check("PROBE_SELECT_MAX untouched by this file's fix",
-          ic.PROBE_SELECT_MAX == 2)
-    check("PRESS_VERIFY_TRIES is the constant reused, not a new one",
-          ic.PRESS_VERIFY_TRIES == 5)
+          ic.PROBE_SELECT_MAX == ic.PRESS_VERIFY_TRIES)
 finally:
     ic.press = _real_press
 

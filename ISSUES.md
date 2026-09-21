@@ -3200,6 +3200,174 @@ mutant (the pre-press re-check accepting ANY new X instead of `want in
 _recheck`, so an unrelated flicker reads as the target landing); case H pins
 it, 8/8 mutants.
 
+### I-51  The blind-target probe gives up after 2 presses; two clustered drops refuse a play on a healthy cursor   P1  play
+
+**Evidence.** `agent_progress/census/blind_cursor_m4/progress.md` (cycle7 match4,
+`refused_select_1790026023456048000`). `_walk_cursor_to` presses toward a target one
+step away, reads back a blind cursor, and hands off to `_probe_select_blind_target`
+(input_controller.py, ~:910) when the target's row IS readable to the lift reader --
+that probe presses `select_card` up to `PROBE_SELECT_MAX` (2) times, looking for the
+target to rise. Here it pressed twice, nothing lifted, and the play was REFUSED. The
+kept post-refusal frame shows the cursor sitting correctly on the target the whole
+time: slot 3, glow 26.9 (comfortably inside `cursor_slot`'s own measured true band
+20.7 .. 36.1, well clear of `CUR_TRUSTED_GLOW_MIN`), digit 9 legible off a
+disc-anchored y, nothing selected. Not CLAUDE.md 10.28-style occlusion (the disc is
+fully legible) and not slot-4's structural glow ceiling (slot 3 reads fine). The
+simplest account consistent with the evidence: two GENUINELY DROPPED `select_card`
+presses on a cursor that was exactly where the walk expected it. The very next poll
+re-decided the same play and committed it after one dropped `confirm_play` retry --
+an ordinary press-drop, not a stuck slot.
+
+**Root cause.** CLAUDE.md section 5 measured the console ignoring 15.20% of presses,
+CLUSTERED (P(ignore | previous ignored) = 0.250, longest observed run 4) -- the exact
+reasoning that already raised `PRESS_VERIFY_TRIES` from 3 to 5 (independent-assumption
+tail 0.95% -> clustered-tail 0.059%) after it fired on a live $50 match at 2. The
+probe's own budget was never re-derived alongside it: `PROBE_SELECT_MAX = 2` (one
+retry) leaves a ~3.8% chance of two clustered drops in a row, which is exactly what
+this event looks like. The user's bar is zero stalls, and a second constant on the
+same money path, bounding retries against the same measured drop rate, drifted from
+the first one that was already fixed for this reason.
+
+**Fix.** `PROBE_SELECT_MAX` now ALIASES `PRESS_VERIFY_TRIES` (defined right after it,
+since Python needs that name to exist first) instead of a separately-derived 2 -- both
+bound retrying `select_card` against the same measured, clustered press-drop rate, so
+they cannot drift apart again. The probe's existing safety is untouched and now stated
+as an explicit invariant in its docstring: every iteration LOOKS before it decides
+whether to press again, so a press whose lift only becomes visible on the very next
+look is caught there -- an extra press after a landed one is impossible by
+construction, not merely unlikely. `input_controller._LAST_PROBE_ATTEMPTS` now records
+one entry (glow, ys, selected) per attempt, reset at the top of every probe call, so a
+refusal's own evidence shows which attempts saw nothing instead of only the frame
+grabbed after the fact. `orchestrator.record_refused_select` grew an optional `extra`
+dict argument (default `None`, so every existing caller -- including
+`tests/minigame/test_tactics_select_fallback.py`'s own mutation anchor on that
+function's `json.dump` call -- is byte-for-byte unchanged) that merges into why.json
+AFTER the base write, never inside it, specifically so it does not disturb that
+anchor.
+
+**Verify.** `tests/minigame/test_probe_select_budget.py` (new): (A) four clustered
+drops then a landed 5th press -> success, exactly `PRESS_VERIFY_TRIES` (5) presses;
+(B) the first press lands -> success, exactly 1 press, no double-toggle; (C) all 5
+dropped -> refusal, `_LAST_PROBE_ATTEMPTS` carries 5 records in order, and
+`record_refused_select(..., extra={"probe_attempts": ...})` persists them into
+why.json while `extra=None` (every existing call site) writes no such key at all; (D)
+a rise at the wrong slot after two drops is untouched -- explicit untoggle, walk
+continues. Three mutants, `__pycache__` cleared and sha256-verified restore around
+each:
+
+    PROBE_SELECT_MAX reverted to a literal 2
+        -> case A: refuses at 2 presses, never reaches the 5th
+    an unconditional press before the loop's own first look
+        -> case B: 2 presses sent instead of 1
+    _LAST_PROBE_ATTEMPTS.append(...) dropped
+        -> case C: 0 records instead of 5
+
+All three caught. Also re-ran unaffected: `tests/rig/test_blind_slot_probe_select.py`
+(updated to assert `PROBE_SELECT_MAX == PRESS_VERIFY_TRIES` rather than the literal
+2), `tests/minigame/test_walk_crosses_occluded_slot.py` (same literal updated),
+`tests/minigame/test_verified_selection.py`, `tests/minigame/
+test_tactics_select_fallback.py` (its own mutant 3 on `record_refused_select` still
+finds its anchor and still passes -- confirms the `extra` merge does not disturb it),
+`tests/minigame/test_commit_refuses_unseen_strays.py`,
+`tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py` -- all green.
+
+**INDEPENDENT SKEPTIC ROUND 1: REFUTED, two blockers, both fixed
+(`agent_progress/issues/I-51/skeptic.md`, `probe_toggle_parity.py`,
+`probe_end_to_end.py`).**
+
+**B1 (the real bug).** `select_card` is a TOGGLE and does NOT move the cursor, so
+when the TRUE cursor sits on an ALREADY-SELECTED slot (I-48b: the batter selected
+first, then dropped navigation presses toward the tactics target left the true
+cursor sitting on the batter still), the probe's `select_queue=[None|slot]`
+fixer's-own fake could not represent it, and every probe press TOGGLES the
+already-selected batter -- the original code only ever checked `sel - before`
+(a rise), never `before - sel` (a disappearance). Raising the budget 2 -> 5
+changed the TOGGLE PARITY of an unrelated press storm without the probe ever
+noticing: P(the already-selected batter left DOWN), CLAUDE.md sec5's clustered
+chain -- **0.229 at budget 2, 0.707 at budget 3, 0.621 at budget 5** --
+non-monotonic in the budget, so it was never a knob to nudge. End to end through
+the real `_verified_select_and_play_inner` (I-48b's own shape), budget 2
+COMMITTED the batter alone (I-48's fallback) and budget 5 was a FULL STALL --
+I-51 was built to remove stalls and, unfixed, it added one. Safety was intact
+throughout (`_clear_strays`' `want <= lifted` gate caught it every time -- cost
+was a stall, never a wrong commit).
+
+Fix: mirror the rise branch with a disappearance branch, inserted before the
+rise check. `gone = [i for i in before if i not in sel]`; if `gone`, the true
+cursor is (or was) on `gone[0]`, put back UP via `_select_verified` (not
+`_deselect_verified` -- restoring a selection the probe's own press just
+knocked down, not removing a stray one) and return, with NO further
+select_card press. Re-run against the skeptic's own two scripts: `probe_end_to_end.py`
+now returns True with confirm_play sent exactly once at BOTH budget 2 and 5 (was a
+stall at 5); `probe_toggle_parity.py`'s exhaustive sweep (every drop pattern,
+budgets 2 and 5) reads "restored" on every row, P(left DOWN) = 0.0000 at both
+budgets, and the wrong-slot CONTROL is unharmed. New test cases (E) all-land,
+(F) an odd landed-press count (1, 3 dropped), (G) end to end through
+`_verified_select_and_play_inner` at both budgets.
+
+**B2 (half the ticket was dead).** The sole production call site
+(`orchestrator.py` ~:8472, inside `play_one_turn`) passed no `extra`, so
+`input_controller._LAST_PROBE_ATTEMPTS` never reached a live why.json --
+CLAUDE.md 10.1, a fix that produces output that looks like evidence and does
+not. Fixed: `extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS}`,
+module-qualified (not `from ... import`) because the probe REBINDS that name
+every call. New test case (H) drives the REAL `play_one_turn` with
+`select_and_play` stubbed to refuse and confirms the real call site's why.json
+carries the seeded sentinel.
+
+**Non-blocking, fixed while here (Q3):** the `extra` merge used to
+`open(path, "w")` (truncating) and then `json.dump` straight into it -- an
+unserialisable `extra` would destroy the good base record the merge was
+supposed to enrich. Now serialises to a string first (`json.dumps(..., default=str)`)
+and only writes the file once that succeeds; `default=str` also means most
+unserialisable values degrade to a string instead of raising at all.
+
+**Mutants, round 2 (4 new, 7 total in `test_probe_select_budget.py`):**
+
+    (M1, the skeptic's own, re-run) `if target in new:` -> `if new:`
+        -> case D: a wrong-slot rise is misattributed to the target
+    the whole B1 disappearance branch deleted
+        -> case E: the already-selected batter ends up lost, not re-lifted
+    press-and-return WITHOUT verifying, after detecting a disappearance
+        -> case F: a corrective press that itself gets dropped is reported
+           as success with the batter still down (an earlier attempt --
+           an extra press placed just BEFORE the existing, still-verifying
+           `_select_verified` call -- was an EQUIVALENT mutant: that helper
+           already checks state before pressing, so a redundant press one
+           line earlier does exactly what its own first internal attempt
+           would have done; not counted)
+    orchestrator.py's call site drops extra=
+        -> case H: probe_attempts never reaches why.json
+
+All four caught; the original three (budget reverted, press-before-look,
+attempt-log dropped) still caught after the B1/B2 edits; both files restored
+byte-for-byte (sha256-verified). Full regression re-run, all green:
+`test_probe_select_budget.py`, `test_blind_slot_probe_select.py`,
+`test_verified_selection.py`, `test_tactics_select_fallback.py`,
+`test_commit_refuses_unseen_strays.py`, `test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `test_no_real_input_under_test_run.py`,
+`test_walk_crosses_occluded_slot.py`.
+
+**INDEPENDENT SKEPTIC ROUND 2: CONFIRMED WITH NOTES.** One ordering risk
+flagged, N-2: the row-count guard (`if n != MAX_HAND_SIZE`) and the B1 `gone`
+computation are two separate statements, and nothing pinned which one has to
+run first. If `gone = [i for i in before if i not in sel]` ran BEFORE the
+row-count guard, a GARBLED post-press frame -- `_look_settled`'s own bad-read
+sentinel, n=0 and `sel` EMPTIED -- would be read as a disappearance: with an
+already-selected slot in `before` (I-48b's own batter), `gone` would equal
+that slot and `_select_verified` would fire on a frame nobody could read, not
+a real toggle-down. Pinned as case I in `test_probe_select_budget.py`
+(`GarbledScreen`, every look() unreadable, `before=[2]`): refuses,
+`_select_verified` is never called. Mutant 8 swaps the two statements'
+order and case I catches it (`_select_verified` fires on the unreadable
+frame); both files restored byte-for-byte (sha256-verified) after. The
+shipped order already had the guard first -- N-2 pins that it stays first,
+it does not change production code.
+
+**Status.** fixed on branch (round 2), awaiting skeptic.
+
 ### I-53  A cursor lost right after dead-reckoning across an occluded slot is refused instead of nudged    P1  input
 
 **Evidence.** Census over every `overnight/run_live_2026092*.log` in the main checkout

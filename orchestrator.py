@@ -7436,7 +7436,7 @@ REFUSED_SELECT_DIR_ENV = "BASEBALL_REFUSED_SELECT_DIR"
 REFUSED_SELECT_MAX_DIRS = 200
 
 
-def record_refused_select(target, kind, attempt, out_dir=None):
+def record_refused_select(target, kind, attempt, out_dir=None, extra=None):
     """Keep the frame + why.json a refused select_and_play() call left behind.
 
     Grabs its own frame rather than reusing a decision-time one, because the
@@ -7450,6 +7450,12 @@ def record_refused_select(target, kind, attempt, out_dir=None):
     orchestrator cannot see which of the two targets inside it actually failed
     to verify; see ISSUES.md I-48), and `attempt` is play_stalled's own running
     count of refusals on this exact hand.
+
+    `extra` (I-51) is an OPTIONAL dict merged into why.json on top of the four
+    fields above -- e.g. input_controller._LAST_PROBE_ATTEMPTS, the blind-target
+    probe's own per-attempt glow/ys/selected reads, so a refusal's why.json can
+    show WHICH attempts saw nothing rather than only the frame taken after the
+    fact. Defaults to None so every existing caller is unchanged.
 
     Never raises into the turn loop. Returns the directory written, or None.
     """
@@ -7475,6 +7481,25 @@ def record_refused_select(target, kind, attempt, out_dir=None):
             json.dump({"target": target, "kind": kind,
                        "already_selected": list(sel), "attempt": attempt},
                       fh, indent=1)
+        # I-51: merged in AFTER the write above, never inside it -- that json.dump
+        # call is a mutation ANCHOR for tests/minigame/test_tactics_select_fallback.py
+        # (I-48's own mutant 3), and rewriting it inline here would silently break
+        # that file's exact-string match (CLAUDE.md 10.19) without either file
+        # saying so.
+        if extra:
+            why_path = os.path.join(out, "why.json")
+            with open(why_path) as fh:
+                why = json.load(fh)
+            why.update(extra)
+            # I-51 skeptic Q3 (non-blocking, fixed while here): serialise to a
+            # STRING before opening the file for write. `open(..., "w")` truncates
+            # immediately, so a dump that raised partway through an unserialisable
+            # `extra` used to destroy the good base record it was meant to enrich.
+            # `default=str` also means most unserialisable values degrade to a
+            # string instead of raising at all.
+            payload = json.dumps(why, indent=1, default=str)
+            with open(why_path, "w") as fh:
+                fh.write(payload)
         print(f"  [play] kept the frame this refusal happened on -> {out}")
         return out
     except Exception:
@@ -8451,9 +8476,16 @@ def play_one_turn(state_json: dict, batters_used: int):
     forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
+        # I-51 SKEPTIC B2: without `extra`, input_controller._LAST_PROBE_ATTEMPTS
+        # never reached why.json on the live path at all -- module-qualified
+        # (not `from ... import`) because the probe REBINDS that name on every
+        # call, so a bound-at-import copy would go stale the first time it ran.
+        # select_and_play can probe TWICE in one call (once per target when a
+        # tactics card is also attached), so this records the LAST probe only.
         record_refused_select(
             player_idx, "player+tactics" if tactics_idx is not None else "player",
-            _PLAY_STALL["n"])
+            _PLAY_STALL["n"],
+            extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS})
         if play_stalled(state_json.get("hand")):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
