@@ -2508,12 +2508,51 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                     # somewhere else reads as a missing ban and the counter still
                     # says 3/3. The difference of the full set names the actual card.
                     _before = banned_set() if banned_set is not None else None
-                    press("select_card")
-                    toggled += 1
                     reached = True
-                    time.sleep(BAN_NAV_SETTLE)
-                    _after = banned_set() if banned_set is not None else None
-                    if _before is not None and _after is not None:
+                    # A DROPPED select_card LOOKS IDENTICAL TO A DECLINED ONE (CLAUDE.md
+                    # §5: 15.2% of presses are silently ignored, clustered) and this was
+                    # the one press on the whole ban path with no retry at all. Retry up
+                    # to PRESS_VERIFY_TRIES -- but never blind: select_card is a TOGGLE,
+                    # so a retry that fires after a press that DID land, just late (the
+                    # selection splash), would un-ban the very cell it meant to confirm.
+                    # Before each retry: re-look to confirm the cursor is still on
+                    # `want`, and re-check the full set for a splash that caught up.
+                    _settled = False
+                    for _attempt in range(1, PRESS_VERIFY_TRIES + 1):
+                        if _attempt > 1:
+                            _here_retry = look()
+                            if _here_retry != want:
+                                log(f"  [ban] cursor left {want} before retry "
+                                    f"{_attempt}/{PRESS_VERIFY_TRIES} — not pressing "
+                                    "again")
+                                break
+                            _recheck = banned_set() if banned_set is not None else None
+                            if _recheck is not None and want in _recheck:
+                                log(f"  [ban] {want} now carries an X on re-look — the "
+                                    "earlier press landed late (selection splash); not "
+                                    "pressing again")
+                                _after = _recheck
+                                placed.append(want)
+                                _settled = True
+                                break
+                        press("select_card")
+                        toggled += 1
+                        time.sleep(BAN_NAV_SETTLE)
+                        _after = banned_set() if banned_set is not None else None
+                        if _before is None or _after is None:
+                            if confirm_ban is None or confirm_ban(want):
+                                placed.append(want)
+                            else:
+                                # THE TOGGLE DID NOT TAKE. Pressing again is not safe --
+                                # select_card is a TOGGLE, so a second press on a card
+                                # that DID ban un-bans it. Report. (No banned_set() here
+                                # to distinguish a splash from a genuine drop, so this
+                                # path does not retry -- census: zero misses came from
+                                # it.)
+                                log(f"  [ban] select_card at {want} did not place an X "
+                                    "— leaving it")
+                            _settled = True
+                            break
                         _new = _after - _before
                         # AND THE OTHER DIRECTION. select_card is a TOGGLE, so a press
                         # that lands on a cell ALREADY banned by an earlier target
@@ -2538,6 +2577,8 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                                     placed.remove(_p)
                         if _new == {want}:
                             placed.append(want)
+                            _settled = True
+                            break
                         elif _new:
                             # A CARD THE ENGINE DID NOT CHOOSE IS NOW BANNED. Not
                             # re-pressed: select_card is a TOGGLE and the cursor is
@@ -2550,17 +2591,15 @@ def select_bans_verified(grid, banned_positions, look, confirm_ban=None,
                                 f"cell bans another one.")
                             if on_wrong_ban is not None:
                                 on_wrong_ban(want, _new)
-                        else:
-                            log(f"  [ban] select_card at {want} placed no X anywhere "
-                                "— leaving it")
-                        break
-                    if confirm_ban is None or confirm_ban(want):
-                        placed.append(want)
-                    else:
-                        # THE TOGGLE DID NOT TAKE. Pressing again is not safe --
-                        # select_card is a TOGGLE, so a second press on a card that DID
-                        # ban un-bans it. Report.
-                        log(f"  [ban] select_card at {want} did not place an X — leaving it")
+                            _settled = True
+                            break
+                        # NOTHING CHANGED. Advance the baseline to THIS look before the
+                        # next retry, so its own diff is scored against here, not
+                        # against the frame before the very first press.
+                        _before = _after
+                    if not _settled:
+                        log(f"  [ban] select_card at {want} placed no X anywhere after "
+                            f"{PRESS_VERIFY_TRIES} tries — leaving it")
                     break
                 # one step toward the target, then look again
                 if here[0] < want[0]:
