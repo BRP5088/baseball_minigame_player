@@ -1260,7 +1260,7 @@ def _untrustworthy_slots(glow, ys):
     return blind
 
 
-def _clear_strays(want, look, blind_before=frozenset()):
+def _clear_strays(want, look, blind_before=frozenset(), ys0=None):
     """Put down every lifted card the engine did not choose. True if safe to commit.
 
     Factored out of _verified_select_and_play so the DISCARD path can run it too.
@@ -1290,6 +1290,18 @@ def _clear_strays(want, look, blind_before=frozenset()):
     slot 1 blind). The exemption is narrow -- only slots the engine itself chose are
     exempt; any OTHER slot that goes blind mid-operation still gets the I-26 re-look
     and, failing that, the refusal.
+
+    A SKEPTIC CAUGHT THE FIRST VERSION TRUSTING `want` UNCONDITIONALLY. `lifted`
+    below used to OR in every blind `want` slot with no further question, which
+    means a target that was ALREADY occluded at baseline -- never actually
+    selected, just permanently unreadable (CLAUDE.md 10.28) -- would be counted
+    as lifted on the strength of being blind and being `want`, with nothing ever
+    having proven it was toggled on. `ys0`, the baseline `_ys` the callers already
+    capture before pressing anything, narrows the inference to I-21's own shape:
+    a `want` slot counts as lifted by INFERENCE only when it was READABLE at
+    baseline (`ys0[k] is not None`) and is blind NOW -- that is a proven lift, not
+    a chronic occlusion. A `want` slot blind at baseline AND blind now must still
+    show up in `sel` on its own merits, or the commit refuses.
     """
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE:
@@ -1376,13 +1388,19 @@ def _clear_strays(want, look, blind_before=frozenset()):
         print(f"  [cursor] slot(s) {sorted(_want_blind)} are the engine's own "
               "target(s) and are unreadable — I-21's inference: selecting a card is "
               "what makes its own disc unreadable, so this is expected, not a stray.")
-    # I-28: A BLIND `want` SLOT COUNTS AS LIFTED. `sel` comes from selected_cards(),
-    # which abstains on exactly the row this guard just exempted (its own y is
-    # None), so `sel` alone cannot see an inferred-selected target -- the final
-    # commit gate below would refuse it right after this guard just proved it safe.
-    # OR it in here, once, so the stray computation and the commit gate both agree
-    # with the exemption above.
-    lifted = set(sel) | (set(want) & _blind_now)
+    # I-28: A `want` SLOT BLIND NOW *AND* READABLE AT BASELINE COUNTS AS LIFTED.
+    # `sel` comes from selected_cards(), which abstains on exactly the row this
+    # guard just exempted (its own y is None), so `sel` alone cannot see an
+    # inferred-selected target -- the final commit gate below would refuse it
+    # right after this guard just proved it safe. But the inference is only
+    # earned by I-21's own signature -- READABLE then BLIND -- never by a slot
+    # that was already unreadable before this operation touched anything (a
+    # skeptic caught the first version trusting `want` unconditionally, which
+    # would have let a chronically-occluded, never-selected target through).
+    _want_inferred = {k for k in want
+                       if k in _blind_now
+                       and ys0 is not None and k < len(ys0) and ys0[k] is not None}
+    lifted = set(sel) | _want_inferred
     extra = lifted - want
     if extra:
         # TRY TO PUT THEM DOWN, with the same walk-and-verify used to raise them.
@@ -1402,7 +1420,10 @@ def _clear_strays(want, look, blind_before=frozenset()):
                 return False
         _g, _ys, n, sel = _look_settled(look)
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
-        lifted = set(sel) | (set(want) & _blind_now)
+        _want_inferred = {k for k in want
+                           if k in _blind_now
+                           and ys0 is not None and k < len(ys0) and ys0[k] is not None}
+        lifted = set(sel) | _want_inferred
         if n != MAX_HAND_SIZE or (_blind_now - set(want)) or lifted - want:
             print(f"  [cursor] after clearing, the lifted set is still {sel} against "
                   f"{sorted(want)} — refusing to commit")
@@ -1517,7 +1538,7 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # was never readable (or never trustworthy -- I-26) is told apart from one this
     # call lifted.
     _blind0 = _untrustworthy_slots(_g0, _ys0)
-    if not _clear_strays(want, look, blind_before=_blind0):
+    if not _clear_strays(want, look, blind_before=_blind0, ys0=_ys0):
         return False
 
     # LOOK AFTER THE COMMIT TOO (I-11). Every other press in this function is
@@ -1640,6 +1661,7 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # that was unreadable all along -- see _clear_strays. One look, ~40 ms.
     _g0, _ys0, _n0, _before0 = _look_settled(look)
     _blind0 = _untrustworthy_slots(_g0, _ys0) if _n0 == MAX_HAND_SIZE else frozenset()
+    _ys0_for_strays = _ys0 if _n0 == MAX_HAND_SIZE else None
     ok, _sel = _walk_cursor_to(card_index, look)
     if not ok:
         invalidate_cursor()
@@ -1658,7 +1680,7 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
     # deliberately leaves a wrongly-raised card up ("pressing again compounds it"),
     # and the clear-at-commit is the play path's answer to that. The discard path
     # simply did not have one.
-    if not _clear_strays({card_index}, look, blind_before=_blind0):
+    if not _clear_strays({card_index}, look, blind_before=_blind0, ys0=_ys0_for_strays):
         return False
     # AND PUT THE CURSOR BACK ON THE CARD. _clear_strays walks to each stray to
     # deselect it and does not walk back, so adding it here parked the cursor on the
