@@ -577,7 +577,26 @@ def reset_environment(log=print, progress_file=None, reason=None):
         # was transmitted and ignored four times running.
         ic.press("cross", hold_seconds=CONFIRM_HOLD_SEC)
         time.sleep(1.5)
-        if float(np.abs(_grey(cap()) - pre).mean()) >= CONFIRM_DELTA_MIN:
+        post_img = cap()
+        if float(np.abs(_grey(post_img) - pre).mean()) >= CONFIRM_DELTA_MIN:
+            break
+        # QA round 3: this used to retry on the raw pixel delta ALONE, with
+        # nothing read between presses — unlike the commit loop just above,
+        # which re-verifies the screen before every retry. If the first held
+        # press landed and the world then loads SLOWLY, a low delta looks
+        # identical to a dropped press, and the old loop would send up to two
+        # more blind Crosses into whatever comes next. Cross is also YES on
+        # "Give up?" and the select in a match (CLAUDE.md section 4/8), so a
+        # blind retry here is not harmless. Re-read before retrying: only
+        # press again while the dialog is still visibly up; once it and the
+        # pause book have both left the screen — world coming back, or
+        # anything else — wait out the load instead (step 4 below already
+        # does this) rather than pressing into the unknown.
+        if not load_save_dialog(post_img) and not pm.is_pause_screen(post_img):
+            log(f"  YES press {attempt + 1}: delta too small (delta "
+                f"{float(np.abs(_grey(post_img) - pre).mean()):.1f}) but the "
+                f"dialog is no longer visibly up — treating as landed rather "
+                f"than pressing again")
             break
         log(f"  YES press {attempt + 1} did not register, retrying")
     else:
