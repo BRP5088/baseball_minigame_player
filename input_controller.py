@@ -2070,54 +2070,6 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
                   "— dropping the boost and playing the batter alone (I-48)")
             _unwind_selection(before_all, look, {tactics_index}, ys0=_ys0)
             invalidate_cursor()
-            # I-48b: THE TACTICS WALK ABOVE CAN COST THE BATTER'S OWN SELECTION,
-            # NOT JUST THE TACTIC'S. Dead-reckoning across an occluded slot (I-32)
-            # and the I-02 probe it can fall into both press BLIND, and the
-            # probe's own `new = [i for i in sel if i not in before]` check only
-            # notices a NEWLY raised slot, never one that DISAPPEARED -- so a
-            # select_card sent while the true cursor never reached the tactics
-            # target (its own navigation presses dropped, section 5's 15.20%
-            # ignore rate) can toggle whatever slot the cursor is REALLY on,
-            # including card_index's own, already-verified one, and the probe
-            # reports "raised nothing" without ever seeing the loss.
-            #
-            # Reproduced live 2026-09-21 (overnight/run_live_20260921s.log ~379):
-            # card_index=2 (power 5/3) was selected cleanly, the walk to
-            # tactics_index=0 (swing_boost) dead-reckoned across occluded slot 1
-            # between them, the probe then failed twice ("probe-select raised
-            # nothing after 2 attempts"), THIS branch fired on the belief that
-            # card_index was still lifted, and the commit-time `_clear_strays`
-            # found sel=[] -- card 2 was gone, and the whole play refused having
-            # never re-attempted the batter. The comment above this branch
-            # already states the premise ("card_index's own walk+select already
-            # succeeded above") -- true when this branch is ENTERED, not
-            # necessarily still true by the time it COMMITS, after more presses.
-            #
-            # Re-prove it rather than trust a stale verification: a plain re-read
-            # covers the common case for free, and only a genuine loss pays for a
-            # walk+select retry -- the SAME calls the main loop above already
-            # uses, so no new constant and no new press budget.
-            _g1, _ys1, n1, sel1 = _look_settled(look)
-            if n1 == MAX_HAND_SIZE and card_index in sel1:
-                print(f"  [cursor] batter slot {card_index} is still lifted "
-                      "— committing alone (I-48b)")
-            else:
-                print(f"  [cursor] batter slot {card_index} is no longer lifted "
-                      "after the tactics attempt — re-selecting before playing "
-                      "alone (I-48b)")
-                _rok, _rsel = _walk_cursor_to(card_index, look)
-                if _rok:
-                    _rok, _rsel = _select_verified(card_index, look)
-                if _rok:
-                    _inferred_targets |= getattr(_rsel, "inferred", frozenset())
-                else:
-                    print(f"  [cursor] batter slot {card_index} could not be "
-                          "re-verified after dropping the tactics attempt — "
-                          "refusing rather than committing an unproven "
-                          "selection (I-48b)")
-                    _unwind_selection(before_all, look, ours=targets, ys0=_ys0)
-                    invalidate_cursor()
-                    return False
             tactics_index = None
             _LAST_PLAY_DROPPED_TACTICS = True
             continue
@@ -2144,6 +2096,51 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
     # a human probe: "an investigation that leaves state behind poisons the next
     # experiment, and the result still looks like a finding".
     want = {t for t in (card_index, tactics_index) if t is not None}
+    # I-48b/I-48c: EVERY target still in `want` succeeded its own walk+select in
+    # the loop above -- that loop's only other exit is a full refusal, which
+    # already returned False -- but a LATER press this operation sent can still
+    # toggle it back down invisibly. The I-02 probe's own `new = [i for i in sel
+    # if i not in before]` check only notices a NEWLY raised slot, never one
+    # that DISAPPEARED, so a blind select_card sent while the true cursor never
+    # reached its intended target (a dropped navigation press, section 5's
+    # 15.20% ignore rate; or the ordinary select retry above, which presses
+    # blind at whatever the cursor is really on) can cost an EARLIER target's
+    # already-verified selection.
+    #
+    # THIS IS NOT ONLY THE I-48 FALLBACK'S OWN SHAPE. Reproduced live
+    # 2026-09-21 (overnight/run_live_20260921s.log ~379): card_index=2 was
+    # selected cleanly, the walk to tactics_index=0 dead-reckoned across an
+    # occluded slot between them, the probe failed twice, and card_index was
+    # gone by commit time. But the SIBLING shape needs no I-48 branch at all --
+    # the TACTICS target's own walk and select can both succeed while the
+    # BATTER is what gets silently lost (run_live_20260921j.log:620-624,
+    # 20260921o.log:1040-1050: "the engine's cards [0, 1] are not all lifted
+    # ([1])" / "[3, 4] are not all lifted ([4])"), and a re-check that only ran
+    # inside the I-48 branch never sees it, because the tactics target never
+    # failed.
+    #
+    # So this is ONE shared re-read, at the one place both shapes converge
+    # (right before the commit gate): for every target already verified above
+    # and not seen lifted NOW, retry its walk+select once -- the SAME calls
+    # the loop above already uses, so no new constant and no new press budget.
+    # A second failure refuses and unwinds everything, exactly as a first-pass
+    # failure already does above.
+    _g1, _ys1, n1, sel1 = _look_settled(look)
+    _missing = (want - set(sel1)) if n1 == MAX_HAND_SIZE else set()
+    for _t in sorted(_missing):
+        print(f"  [cursor] slot {_t} was verified earlier this operation and "
+              "is no longer lifted — re-selecting before committing (I-48b)")
+        _rok, _rsel = _walk_cursor_to(_t, look)
+        if _rok:
+            _rok, _rsel = _select_verified(_t, look)
+        if _rok:
+            _inferred_targets |= getattr(_rsel, "inferred", frozenset())
+        else:
+            print(f"  [cursor] slot {_t} could not be re-verified — refusing "
+                  "rather than committing an unproven selection (I-48b)")
+            _unwind_selection(before_all, look, ours=targets, ys0=_ys0)
+            invalidate_cursor()
+            return False
     # THE BASELINE IS THE PRE-PRESS READ AT THE TOP OF THIS FUNCTION, so a slot that
     # was never readable (or never trustworthy -- I-26) is told apart from one this
     # call lifted.

@@ -23,15 +23,23 @@ keeps one frame + why.json per refused select_and_play() call
 RUN-gated/REFUSES-past-the-cap shape as record_local_hand and record_money_read_frame,
 so a human does not have to re-derive what failed from the log alone next time.
 
-I-48b (added 2026-09-21, `overnight/run_live_20260921s.log` ~369-400): the fallback
-above committed to "batter alone" on the STALE belief that card_index was still
-lifted. When the tactics walk dead-reckons across an OCCLUDED slot (I-32) and falls
-into the I-02 probe one step short of the target, the probe's own blind `select_
-card` press can cost the BATTER's own selection too -- its "did anything NEW appear"
-check cannot see a slot that DISAPPEARED. The fallback now re-reads the fan before
-committing and, if the batter is gone, retries its walk+select once before deciding;
-only a genuine double failure refuses. Cases I-K (`OccludedPlayScreen`, below) drive
-this directly.
+I-48b/I-48c (I-48b added 2026-09-21 `overnight/run_live_20260921s.log` ~369-400,
+moved to its shared form the same day on the skeptic's N1): the I-48 fallback above
+used to commit to "batter alone" on the STALE belief that card_index was still
+lifted, re-checked ONLY inside its own branch. The skeptic's review
+(agent_progress/issues/I-48b/skeptic.md) PROVED the mechanism (a later blind press
+this operation sends -- most often the I-02 probe crossing an occluded slot, section
+5's 15.20% ignore rate -- can toggle an EARLIER, already-verified target back down,
+because the probe's own "did anything NEW appear" check cannot see one disappear)
+and found a SIBLING instance the branch-local re-check could never reach: the
+TACTICS target's own walk and select can both succeed while the BATTER is what gets
+silently lost (`run_live_20260921j.log:620-624`, `20260921o.log:1040-1050`), which
+never enters the I-48 branch at all. The re-check now lives in ONE shared place,
+right before the commit both shapes converge on: for every target this operation
+already verified and is not seen lifted now, retry its walk+select once; a second
+failure refuses and unwinds everything. Cases I-M (`OccludedPlayScreen`, below)
+drive this directly -- I/J the original I-48 shape (recovered / double failure), K
+the control, L/M the sibling shape (recovered / double failure).
 
 Cases A-C drive `input_controller._verified_select_and_play_inner` directly against a
 FakeScreen (the `PlayScreen` class below, in the same style as
@@ -128,25 +136,33 @@ class PlayScreen:
 
 
 class OccludedPlayScreen(PlayScreen):
-    """I-48b: the live shape -- an OCCLUDED slot sits between card_index and
-    tactics_index (CLAUDE.md 10.28's fan occlusion, `ys[slot]` unmeasured), so the
-    walk between them dead-reckons across it (I-32) and can fall into the I-02
-    probe one step short of the tactics target.
+    """I-48b/I-48c: the live shape -- an OCCLUDED slot can sit between
+    card_index and tactics_index (CLAUDE.md 10.28's fan occlusion, `ys[slot]`
+    unmeasured), so the walk between them dead-reckons across it (I-32) and can
+    fall into the I-02 probe one step short of the target.
 
     `drop_moves_from={slot: n}` silently drops the next `n` `move_left`/
     `move_right` presses whose cursor is AT `slot` when pressed -- the console's
     own measured press-drop rate (CLAUDE.md section 5), applied at the one place
     that reproduces the live log's exact message sequence: the cursor never
-    physically reaches the tactics target, so the walk falls into
+    physically reaches the target, so the walk falls into
     `_probe_select_blind_target` one step short.
 
-    `sabotage_on_probe`, when set, is the slot a blind `select_card` press costs
-    THE FIRST TIME it lands while the true cursor sits in `occluded` -- modelling
-    the live bug (overnight/run_live_20260921s.log ~379): a probe press sent
-    while the true cursor never left the batter's own slot toggles the BATTER's
-    OWN selection off, invisibly to the probe's "did anything NEW appear" check.
-    `sabotage_permanent`, when True, also blocks the sabotaged slot from ever
-    being re-selected again (`never_lands`) -- models a retry that ALSO fails.
+    `sabotage_on_probe` (a slot) + `sabotage_on_nth_select` (a 1-indexed count):
+    the Nth `select_card` press SYSTEM-WIDE, whatever it was meant to do, costs
+    `sabotage_on_probe`'s lift instead, once -- modelling "a blind press this
+    operation sent toggled an EARLIER, already-verified target back down",
+    which is the mechanism `input_controller._verified_select_and_play_inner`'s
+    I-48b re-check exists to repair. It is deliberately mechanism-agnostic:
+    the skeptic review (agent_progress/issues/I-48b/skeptic.md, probe2.py R1)
+    reproduced the I-48 shape from press mechanics alone (no hook needed) and
+    also found the SIBLING shape -- the tactics target's own `_select_verified`
+    retry costing the BATTER, with no occlusion and no probe at all
+    (run_live_20260921j.log:620-624) -- so this hook is written to model
+    EITHER shape by picking which press it lands on, rather than re-deriving
+    one specific untraceable press sequence. `sabotage_permanent`, when True,
+    also blocks the sabotaged slot from ever landing again (`never_lands`) --
+    models a re-check retry that ALSO fails.
 
     Occluded slots are never themselves toggleable (matching `selected_cards`
     abstaining on any row whose y is unmeasured, CLAUDE.md 10.28), so
@@ -155,12 +171,14 @@ class OccludedPlayScreen(PlayScreen):
 
     def __init__(self, cur=0, occluded=frozenset(), never_lands=frozenset(),
                  drop_moves_from=None, sabotage_on_probe=None,
-                 sabotage_permanent=False):
+                 sabotage_on_nth_select=None, sabotage_permanent=False):
         super().__init__(cur=cur, never_lands=never_lands)
         self.occluded = set(occluded)
         self.drop_budget = dict(drop_moves_from or {})
         self.sabotage_on_probe = sabotage_on_probe
+        self.sabotage_on_nth_select = sabotage_on_nth_select
         self.sabotage_permanent = sabotage_permanent
+        self._select_count = 0
 
     def press(self, key):
         self.sent.append(key)
@@ -175,12 +193,15 @@ class OccludedPlayScreen(PlayScreen):
             else:
                 self.cur = min(N - 1, self.cur + 1)
         elif key == "select_card":
+            self._select_count += 1
+            if (self.sabotage_on_probe is not None
+                    and self._select_count == self.sabotage_on_nth_select):
+                self.lifted.discard(self.sabotage_on_probe)
+                if self.sabotage_permanent:
+                    self.never_lands.add(self.sabotage_on_probe)
+                self.sabotage_on_probe = None
+                return  # this press cost an earlier target instead
             if self.cur in self.occluded:
-                if self.sabotage_on_probe is not None:
-                    self.lifted.discard(self.sabotage_on_probe)
-                    if self.sabotage_permanent:
-                        self.never_lands.add(self.sabotage_on_probe)
-                    self.sabotage_on_probe = None
                 return  # occluded slots are never toggleable themselves
             if self.cur in self.never_lands:
                 return
@@ -466,8 +487,8 @@ try:
     # =====================================================================
     print("(I) THE LIVE SHAPE (I-48b): batter verified, tactics walk crosses an "
           "occluded slot and the probe fails, silently costing the batter's own "
-          "selection -> the fallback re-verifies and RETRIES the batter rather "
-          "than trusting the stale belief, and commits the batter alone")
+          "selection -> the SHARED re-check before commit retries the batter "
+          "rather than trusting the stale belief, and commits the batter alone")
     # =====================================================================
     # overnight/run_live_20260921s.log ~369-400: hand [swing_boost +2, UNKNOWN
     # (occluded slot 1), 5/3 (card_index=2), speed_boost +1, 5/2], decision
@@ -476,11 +497,13 @@ try:
     # never physically arrives, the probe fires and fails twice ("probe-select
     # raised nothing after 2 attempts"), and (per the live log) card_index ends
     # up unselected by the time the old code checked. The exact press-by-press
-    # parity that cost it is not recoverable from the log text alone (see
-    # agent_progress/issues/I-48b/progress.md); `sabotage_on_probe` models the
-    # NET effect the log proves happened, not a specific press count.
+    # parity that cost it is not recoverable from the log text alone -- see
+    # agent_progress/issues/I-48b/skeptic.md section 1, which PROVED it by
+    # elimination and reproduced it from press mechanics alone (probe2.py R1,
+    # no sabotage hook needed) -- `sabotage_on_nth_select` here models the NET
+    # effect the log and the skeptic's own reproduction both establish.
     s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                            sabotage_on_probe=2)
+                            sabotage_on_probe=2, sabotage_on_nth_select=2)
     ok, out, unwind_calls = _play(2, 0)
     check("(I) play succeeds by recovering the batter, not refusing", ok is True)
     check("(I) the batter alone was committed (tactics dropped)",
@@ -492,29 +515,30 @@ try:
           "probe-select raised nothing after 2 attempts" in out)
     check("(I) the fallback fired",
           "dropping the boost and playing the batter alone" in out)
-    check("(I) the batter was found NOT lifted and re-selected (I-48b), never "
-          "assumed", "is no longer lifted" in out and "re-selecting" in out)
-    check("(I) it never claims the batter was still lifted",
-          "is still lifted" not in out)
+    check("(I) the batter was found NOT lifted and re-selected, never assumed",
+          "was verified earlier this operation and is no longer lifted" in out
+          and "re-selecting before committing (I-48b)" in out)
 
     # =====================================================================
     print("(J) tactics fails AND the batter's retry ALSO fails -> refused, "
           "nothing committed, no confirm_play (I-48b)")
     # =====================================================================
     s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                            sabotage_on_probe=2, sabotage_permanent=True)
+                            sabotage_on_probe=2, sabotage_on_nth_select=2,
+                            sabotage_permanent=True)
     ok, out, unwind_calls = _play(2, 0)
     check("(J) play refuses", ok is False)
     check("(J) nothing was ever committed", s.confirmed_sel is None)
     check("(J) confirm_play was never sent", "confirm_play" not in s.sent)
     check("(J) the batter re-select was attempted and failed",
-          "is no longer lifted" in out and "could not be re-verified" in out)
+          "was verified earlier this operation and is no longer lifted" in out
+          and "could not be re-verified" in out)
     check("(J) the refusal names I-48b, not a silent drop",
           "refusing rather than committing an unproven selection (I-48b)" in out)
 
     # =====================================================================
     print("(K) CONTROL: both land despite crossing the same occluded slot -> "
-          "both committed, the I-48/I-48b fallback never fires at all")
+          "both committed, no fallback and no re-check fires at all")
     # =====================================================================
     s = OccludedPlayScreen(cur=2, occluded={1})   # no drops, no sabotage
     ok, out, unwind_calls = _play(2, 0)
@@ -523,9 +547,52 @@ try:
     check("(K) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
     check("(K) the occluded slot was still dead-reckoned",
           "slot 1 is occluded" in out)
-    check("(K) neither fallback fired",
+    check("(K) neither fallback nor the re-check fired",
           "dropping the boost" not in out and "I-48b" not in out)
     check("(K) no unwind was needed at all", unwind_calls == [])
+
+    # =====================================================================
+    print("(L) THE SIBLING SHAPE (I-48c, skeptic N1): the TACTICS target's "
+          "OWN walk and select both succeed -- no occlusion, no I-48 branch, "
+          "no I-02 probe -- but its own select_verified retry silently costs "
+          "the BATTER. The I-48-branch-local re-check could never see this; "
+          "the SHARED re-check before commit does, and both are committed.")
+    # =====================================================================
+    # overnight/run_live_20260921j.log:620-624 (also 20260921o.log:1040-1050):
+    #     verified on 0 after 2 press(es)   <- batter
+    #     verified on 1 after 1 press(es)   <- tactics
+    #     select_card did not land (attempt 1) — retrying
+    #     select_card landed on attempt 2
+    #     the engine's cards [0, 1] are not all lifted ([1]) — refusing
+    # Both walks land cleanly; the tactics target's OWN select_card needs two
+    # attempts, and somewhere in there the batter's own selection is gone.
+    # card_index=0, tactics_index=1, no occlusion needed at all -- the second
+    # select_card press system-wide is what tactics's own retry sends.
+    s = OccludedPlayScreen(cur=0, sabotage_on_probe=0, sabotage_on_nth_select=2)
+    ok, out, unwind_calls = _play(0, 1)
+    check("(L) play succeeds, both committed", ok is True)
+    check("(L) both slots committed", s.confirmed_sel == [0, 1])
+    check("(L) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(L) the tactics target needed no I-48 fallback at all",
+          "dropping the boost" not in out)
+    check("(L) the batter was found missing and re-selected by the SHARED "
+          "re-check", "was verified earlier this operation and is no longer "
+          "lifted" in out and "re-selecting before committing (I-48b)" in out)
+
+    # =====================================================================
+    print("(M) THE SIBLING SHAPE, DOUBLE FAILURE: tactics lands, the batter is "
+          "lost, and the re-check's own retry ALSO fails -> refused, nothing "
+          "committed")
+    # =====================================================================
+    s = OccludedPlayScreen(cur=0, sabotage_on_probe=0, sabotage_on_nth_select=2,
+                            sabotage_permanent=True)
+    ok, out, unwind_calls = _play(0, 1)
+    check("(M) play refuses", ok is False)
+    check("(M) nothing was ever committed", s.confirmed_sel is None)
+    check("(M) confirm_play was never sent", "confirm_play" not in s.sent)
+    check("(M) the batter re-select was attempted and failed",
+          "was verified earlier this operation and is no longer lifted" in out
+          and "could not be re-verified" in out)
 
     # =====================================================================
     print()
@@ -714,73 +781,152 @@ try:
         ic.tactics_dropped_last_play = _real_tdl_m4
         orch._hand_memory.clear()
 
+    def _case_i_screen():
+        return OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
+                                   sabotage_on_probe=2, sabotage_on_nth_select=2)
+
+    def _case_j_screen():
+        return OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
+                                   sabotage_on_probe=2, sabotage_on_nth_select=2,
+                                   sabotage_permanent=True)
+
     # --- mutant 5 (I-48b): revert the ordering -------------------------------
     print("mutant 5: the per-target loop processes tactics BEFORE the batter "
-          "-- case I must fail (the whole shape depends on the batter's own "
-          "walk+select landing first)")
+          "-- case I must fail (the batter is never even attempted before the "
+          "fallback's own guard, which still requires _batter_verified, "
+          "refuses outright)")
     try:
         _mutate(IC_PATH,
                 "    for target in (card_index, tactics_index):\n",
                 "    for target in (tactics_index, card_index):\n")
         _reload_ic()
-        s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                                sabotage_on_probe=2)
+        s = _case_i_screen()
         ok, out, unwind_calls = _play(2, 0)
         check("mutant 5 caught: case I no longer succeeds as designed",
               not (ok is True and s.confirmed_sel == [2]))
     finally:
         _restore_ic()
 
-    # --- mutant 6 (I-48b): fire the fallback with the batter unverified -----
-    print("mutant 6: the re-check always believes the batter is still lifted "
-          "(never actually looks) -- case I must commit an UNPROVEN selection "
-          "instead of recovering it, and case J must silently over-report success")
+    # --- mutant 6 (I-48c, skeptic M1b): the shared re-check reuses a STALE ---
+    # belief instead of a fresh read
+    print("mutant 6: the shared re-check before commit reuses a stale, "
+          "fabricated 'everything is still lifted' belief instead of taking a "
+          "fresh look -- case I must commit an unproven selection or refuse "
+          "outright, never honestly recover the batter")
     try:
         _mutate(
             IC_PATH,
-            "            if n1 == MAX_HAND_SIZE and card_index in sel1:\n",
-            "            if True:  # I-48b mutant: never actually checks\n")
+            "    _g1, _ys1, n1, sel1 = _look_settled(look)\n",
+            "    _g1, _ys1, n1, sel1 = _g0, _ys0, MAX_HAND_SIZE, list(want)"
+            "  # I-48c mutant: stale belief, no fresh read\n")
         _reload_ic()
-        s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                                sabotage_on_probe=2)
+        s = _case_i_screen()
         ok, out, unwind_calls = _play(2, 0)
-        # The mutant skips the retry entirely and commits straight through;
+        # The mutant believes `want` (={2}) is already lifted without looking,
+        # so `_missing` is always empty and the retry never runs at all --
         # _clear_strays is the only thing left standing between it and a
-        # confirm_play on an EMPTY fan, and it refuses -- so the mutant is
-        # caught by case I's own success assertion failing (this no longer
-        # recovers the batter, so it does not equal the fixed code's [2]).
-        check("mutant 6 caught: case I no longer names the re-check honestly",
-              "is no longer lifted" not in out or not (ok is True
-                                                        and s.confirmed_sel == [2]))
+        # confirm_play with nothing actually lifted, and it refuses. Either
+        # way this is NOT the fixed code's honest recovery.
+        check("mutant 6 caught: case I no longer honestly recovers the batter",
+              "was verified earlier this operation and is no longer lifted"
+              not in out or not (ok is True and s.confirmed_sel == [2]))
     finally:
         _restore_ic()
 
-    # --- mutant 7 (I-48b): drop the batter retry -----------------------------
-    print("mutant 7: the recovery branch never actually re-walks/re-selects "
-          "the batter (forces the retry to fail outright) -- case I must fail")
+    # --- mutant 7 (I-48c, skeptic M2): the retry is UNBOUNDED, not "once" ---
+    print("mutant 7: a missing target's retry loops instead of running once "
+          "-- case J (a genuine double failure) must send far more presses "
+          "than the shipped single retry, instead of refusing promptly")
     try:
         _mutate(
             IC_PATH,
-            "                _rok, _rsel = _walk_cursor_to(card_index, look)\n"
-            "                if _rok:\n"
-            "                    _rok, _rsel = _select_verified(card_index, look)\n",
-            "                _rok, _rsel = False, None  # I-48b mutant: no retry sent\n")
+            "        _rok, _rsel = _walk_cursor_to(_t, look)\n"
+            "        if _rok:\n"
+            "            _rok, _rsel = _select_verified(_t, look)\n"
+            "        if _rok:\n"
+            "            _inferred_targets |= getattr(_rsel, \"inferred\", frozenset())\n"
+            "        else:\n",
+            "        _rok, _rsel = _walk_cursor_to(_t, look)\n"
+            "        if _rok:\n"
+            "            _rok, _rsel = _select_verified(_t, look)\n"
+            "        _i48c_mutant_tries = 0\n"
+            "        while not _rok and _i48c_mutant_tries < 50:  # I-48c mutant: unbounded\n"
+            "            _i48c_mutant_tries += 1\n"
+            "            _rok, _rsel = _walk_cursor_to(_t, look)\n"
+            "            if _rok:\n"
+            "                _rok, _rsel = _select_verified(_t, look)\n"
+            "        if _rok:\n"
+            "            _inferred_targets |= getattr(_rsel, \"inferred\", frozenset())\n"
+            "        else:\n")
         _reload_ic()
-        s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                                sabotage_on_probe=2)
+        s = _case_j_screen()
         ok, out, unwind_calls = _play(2, 0)
-        check("mutant 7 caught: case I refuses instead of recovering",
+        check("mutant 7 caught: far more select_card presses than a single "
+              "bounded retry sends",
+              s.sent.count("select_card") > 20)
+    finally:
+        _restore_ic()
+
+    # --- mutant 8 (I-48c, skeptic M3): the double-failure unwind passes -----
+    # ours=set() instead of the full original target set
+    print("mutant 8: the shared re-check's own double-failure unwind passes "
+          "ours=set() -- the spy must see it, not the real {0, 2}")
+    try:
+        _mutate(
+            IC_PATH,
+            "            print(f\"  [cursor] slot {_t} could not be re-verified "
+            "— refusing \"\n"
+            "                  \"rather than committing an unproven selection "
+            "(I-48b)\")\n"
+            "            _unwind_selection(before_all, look, ours=targets, ys0=_ys0)\n",
+            "            print(f\"  [cursor] slot {_t} could not be re-verified "
+            "— refusing \"\n"
+            "                  \"rather than committing an unproven selection "
+            "(I-48b)\")\n"
+            "            _unwind_selection(before_all, look, ours=set(), ys0=_ys0)"
+            "  # I-48c mutant\n")
+        _reload_ic()
+        s = _case_j_screen()
+        ok, out, unwind_calls = _play(2, 0)
+        check("mutant 8 caught: the double-failure unwind no longer names the "
+              "real target set",
+              not any(c == {0, 2} for c in unwind_calls))
+    finally:
+        _restore_ic()
+
+    # --- mutant 9 (I-48c, skeptic M4): the retry never walks, presses where -
+    # the cursor already happens to be
+    print("mutant 9: the retry drops _walk_cursor_to and presses select_card "
+          "blind wherever the cursor already is -- case I must fail (the "
+          "cursor is sitting on the occluded slot, not the batter's)")
+    try:
+        _mutate(
+            IC_PATH,
+            "        _rok, _rsel = _walk_cursor_to(_t, look)\n"
+            "        if _rok:\n"
+            "            _rok, _rsel = _select_verified(_t, look)\n",
+            "        _rok, _rsel = _select_verified(_t, look)"
+            "  # I-48c mutant: no walk first\n")
+        _reload_ic()
+        s = _case_i_screen()
+        ok, out, unwind_calls = _play(2, 0)
+        check("mutant 9 caught: case I refuses instead of recovering",
               not (ok is True and s.confirmed_sel == [2]))
     finally:
         _restore_ic()
 
-    # --- sanity: the I-48b fix is still intact after all three new mutants --
-    s = OccludedPlayScreen(cur=2, occluded={1}, drop_moves_from={1: 1},
-                            sabotage_on_probe=2)
+    # --- sanity: the I-48b/I-48c fix is still intact after all five new mutants
+    s = _case_i_screen()
     ok, out, unwind_calls = _play(2, 0)
     check("post-restore sanity: case I passes again",
           ok is True and s.confirmed_sel == [2]
-          and "is no longer lifted" in out)
+          and "was verified earlier this operation and is no longer lifted"
+          in out)
+    s = _case_j_screen()
+    ok, out, unwind_calls = _play(2, 0)
+    check("post-restore sanity: case J passes again",
+          ok is False and s.confirmed_sel is None
+          and s.sent.count("select_card") < 20)
 
 finally:
     pass
