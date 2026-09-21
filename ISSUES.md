@@ -814,70 +814,119 @@ are folded into `tests/minigame/test_walk_crosses_occluded_slot.py` as checks
 fail exactly its own check and no other, sha256-verified restored byte for byte
 between them.
 
-### I-33  A press off an I-02-probed slot that reads nothing is refused, not retried   P1  input
+### I-33  A press off a slot named without a genuine glow read is refused, not retried   P1  input
 
 **Evidence.** `overnight/run_live_20260921f.log` (~01:40): hand
 `0: pitch_boost +1  1: 5/1  2: fielding_boost +1  3: 5/0  4: 8/0`, no occlusion, every
-slot's y readable. The walker verified the cursor on slot 4 via the I-02 probe (a lift --
-slot 4's glow can never itself clear `CURSOR_GLOW_MIN`, CLAUDE.md 10.35: "slot 4 never
-exceeds 11.0 at ANY offset, while slots 0-3 read 26-28"), pressed toward slot 0 for the
-tactics card, and the very next look read no cursor anywhere at all
-(`glow=[0.0, 0.4, 0.0, 0.0, 0.4]` -- slot 4 still sitting exactly on its blind ceiling,
-slot 3 at 0.0). `_walk_cursor_to` refused, `_unwind_selection` walked back to slot 4 and
-deselected it, and the retry a full poll cycle later played the identical card correctly.
+slot's y readable. `_verified_select_and_play_inner` walks to `card_index=4`, prints
+"verified on 4 after 6 press(es)" (a NORMAL glow-confirmed arrival -- `steps` is nonzero,
+which only happens off a direct read; the I-02 probe resets `steps` to 0 on success), then
+`_select_verified(4, ...)` selects it, leaving card 4 lifted. A FRESH
+`_walk_cursor_to(0, look)` call then begins for the tactics slot: its own TOP-OF-FUNCTION
+read sees `glow=[0.0, 0.4, 0.0, 0.0, 0.4]` -- slot 4 still on its structural ceiling
+(CLAUDE.md 10.35: "slot 4 never exceeds 11.0 at ANY offset") -- presses once toward 0, and
+"lost the cursor after 1 press(es)" refuses. `_unwind_selection` walks back to slot 4 and
+deselects it, and the retry a full poll cycle later played the identical card correctly.
 Cost: ~15-20s (an unwind-and-retry cycle) on a paid match, for a press section 5 already
 measures the console dropping 15.20% of the time, clustered (`P(ignore | previous
 ignored) = 0.250`).
 
-**Root cause.** A slot confirmed only by the I-02 probe's selection lift -- never by a
-direct glow read -- has a glow that can never confirm "still here" either. So when the
-walk steps off it and the very next look reads nothing, that is EXACTLY what a dropped
-press looks like: the cursor may never have left the probed slot at all, and there is no
-way to tell "the press was ignored" from "the press landed but the new slot is also
-unreadable" by glow alone. `_walk_cursor_to` treated both as "lost the cursor" and refused
-outright, at the one place a free remedy (retrying the same direction once, since nothing
-irreversible has been pressed) was available.
+**Root cause.** A slot named without a genuine, confidently-clear glow read -- either
+because the read barely crossed `CURSOR_GLOW_MIN` (a slot-4-shaped marginal crossing) or
+because it was inferred (a lift, or the I-02 probe) -- has a glow that cannot reliably
+confirm "still here" either. So when the walk steps off it and the very next look reads
+nothing, that is EXACTLY what a dropped press looks like: the cursor may never have left
+that slot at all. `_walk_cursor_to` treated every such loss as "lost the cursor" and
+refused outright, at the one place a free remedy (retrying the same direction once, since
+nothing irreversible has been pressed) was available.
 
-**Fix.** `input_controller._walk_cursor_to`, ~1012-1160: a new local, `cur_confirmed_
-blind`, tracks whether the CURRENT `cur` was confirmed by a direct glow read (False) or
-only by the I-02 probe landing on a slot other than the call's own target (True) --
-`cursor_slot()` resets it False the moment it succeeds. When a press off a slot whose
-prior state (`prev_blind`) was True reads nothing, and the walk is not one step from
-target (that case is already claimed, unmodified, by the existing I-02 probe branch,
-which runs first and would otherwise risk overshooting `target` on a second press),
-press the SAME direction once more and look again before refusing. Bounded to exactly one
-extra press per lost-cursor event (it counts toward `steps`/`CURSOR_MAX_STEPS`); if the
-retry also reads nothing, fall through to the original, unmodified refusal.
+**FIRST FIX WAS REFUTED (2026-09-21) BY AN INDEPENDENT SKEPTIC**
+(`agent_progress/issues/I-33-skeptic/progress.md`, `repro_cross_call.py`). It scoped the
+new local, `cur_confirmed_blind`, to "True only when set by the I-02 probe within THIS
+call" -- and that local resets to False at the top of EVERY `_walk_cursor_to` invocation.
+The live event is a call boundary: `_walk_cursor_to(4, ...)` confirms slot 4 by a NORMAL
+read (not the probe, per the "verified on 4 after 6 press(es)" evidence above), returns,
+`_select_verified` leaves it lifted, and the SEPARATE `_walk_cursor_to(0, ...)` call that
+follows has no memory of any of it -- its own top-of-function read is what names `cur=4`,
+and nothing in the shipped v1 code marked that as unreliable. The skeptic's repro
+(top-of-function read at glow 10.5, sel empty) reproduces the refusal on v1 byte for byte.
+
+**FIX (v2).** `input_controller._walk_cursor_to`: `cur_confirmed_blind` is now
+RE-EVALUATED wherever `cur` is set, from TWO independent sources of unreliability, not
+just the I-02 probe:
+
+  1. `CUR_TRUSTED_GLOW_MIN = 20.7` (local_hand.cursor_slot's own measured floor for a
+     genuine cursor, "20.7 .. 36.1"). A `cursor_slot()` read that clears `CURSOR_GLOW_MIN`
+     (10.0) but stays under this floor sits inside CLAUDE.md 10.35's own measured ceiling
+     for slot 4 ("never exceeds 11.0") -- a marginal, unreliable crossing rather than a
+     confident one. Applied at every normal read, TOP OF FUNCTION included (the nudge
+     loop's own read and the initial read both feed the same check), not only inside the
+     walk loop.
+  2. A NEW top-of-function fallback: if the fan's own glow cannot name ANY cursor
+     (`cursor_slot()` returns None) but exactly one card is already SELECTED, that card
+     names the cursor -- selection only happens under the cursor, and nothing else can
+     move it without a press this call has not yet sent. This is the literal live-log
+     mechanism: `sel == [4]` with `glow[4] == 0.4` at the top of the second call.
+
+Both sources set `cur_confirmed_blind = True`; a genuine read (clears
+`CUR_TRUSTED_GLOW_MIN`) always RECOMPUTES it (not just resets to False), so an earlier
+blind flag cannot leak into a later, unrelated lost cursor -- see the mutant-B fix below.
+When a press off a blind `prev` reads nothing, and the walk is not one step from target
+(claimed, unmodified, by the existing I-02 probe branch, which runs first and would
+otherwise risk overshooting `target` on a second press), press the SAME direction once
+more and look again before refusing. Bounded to exactly one extra press per lost-cursor
+event (counts toward `steps`/`CURSOR_MAX_STEPS`); if the retry also reads nothing, fall
+through to the original, unmodified refusal.
 
 **Deliberately NOT set after an I-32 dead-reckon.** I-32's own bound is stricter than this
 fix: "no code chains guesses to cover it" means not even a retry PRESS after a
 dead-reckoned step, which `test_walk_crosses_occluded_slot.py` cases (2) and (2b) pin
-exactly (2 presses, refuse, nothing further). The first version of this fix flagged a
+exactly (2 presses, refuse, nothing further). An early draft of v1 flagged a
 dead-reckoned `cur` as blind too, and that broke those two cases (a third press appeared
 where they require none) -- caught by running the sibling suite, not by this ticket's own
-tests. `cur_confirmed_blind` is therefore scoped to the I-02 probe outcome only.
+tests. The dead-reckon branch leaves `cur_confirmed_blind` untouched by that step alone.
 
-**Verify.** `tests/minigame/test_walk_retries_off_blind_slot.py`: (1) prev confirmed via
-the I-02 probe (landing on slot 4, a DIFFERENT slot than the call's own target), one
-dropped press, one retry that lands on slot 3 -- the walk continues and arrives, exactly
-one extra press taken, log names slot 4; (2) the retry ALSO reads nothing -- refuses
-exactly as before, 2 presses for that event, nothing further sent; (3) the target is only
-one step from the probed slot -- no extra press; the existing I-02 probe branch fires a
-second time instead, untouched; CONTROL (4) prev confirmed by a READABLE glow (not
-inference) -- a lost cursor still hits the old refusal, with no extra press. Three
-mutants, each caught by a different check, sha256-verified restored byte for byte between
-them: (a) dropping the `prev_blind` gate (retry unconditionally) is caught by CONTROL,
-which then runs out of scripted frames retrying when it should have refused; (b) allowing
-two extra presses instead of one is caught by (2), which runs out of frames on the
-now-unexpected third attempt; (c) reordering the retry to run BEFORE the I-02 one-step
-check is caught by (3), which then hits the retry's own press instead of the second
-I-02 probe and runs out of frames. Siblings all still pass, unmodified:
-`tests/rig/test_blind_slot_probe_select.py` (I-02), `tests/minigame/
-test_walk_crosses_occluded_slot.py` (I-32), `test_select_stops_when_lift_unreadable.py`,
-`test_verified_presses_on_match_path.py`, `tests/rig/test_no_real_input_under_test_run.py`,
-`tests/harness/test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
+**Verify.** `tests/minigame/test_walk_retries_off_blind_slot.py`, 7 cases: (1) prev
+confirmed via the I-02 probe (landing on slot 4, a DIFFERENT slot than the call's own
+target), one dropped press, one retry that lands on slot 3 -- arrives, exactly one extra
+press, log names slot 4; (2) the retry ALSO reads nothing -- refuses exactly as before, 2
+presses for that event, nothing further sent; (3) the target is only one step from the
+probed slot -- no extra press; the existing I-02 probe branch fires a second time instead,
+untouched; CONTROL (4) prev confirmed by a READABLE glow (not inference) -- a lost cursor
+still hits the old refusal, with no extra press; (5) THE REFUTED SHAPE, mechanism 1: a
+FRESH call's own top-of-function read names cur=4 from a marginal glow crossing (10.5), no
+I-02 probe anywhere in this call -- retries and arrives; (6) THE REFUTED SHAPE, mechanism
+2, the literal live-log frame: slot 4 already selected (`sel == [4]`) with
+`glow=[0.0, 0.0, 0.0, 0.0, 0.4]` at the top of a fresh call -- named from the lift, no
+probe, no nudge -- retries and arrives; (7) MUTANT-B GUARD: the probe confirms slot 4
+(blind), then TWO genuine strong reads intervene, then a LATER unrelated drop -- must
+refuse immediately, proving the blind flag was actually cleared and not just left set.
 
-**Status.** Fixed on branch `i33-blind-slot-retry`, awaiting skeptic.
+Four mutants, each caught by a different check, sha256-verified restored byte for byte
+between them: (a) dropping the `prev_blind` gate (retry unconditionally) is caught by
+CONTROL, which then runs out of scripted frames retrying when it should have refused; (b)
+allowing two extra presses instead of one is caught by (2), which runs out of frames on
+the now-unexpected third attempt; (c) reordering the retry to run BEFORE the I-02
+one-step check is caught by (3), which then hits the retry's own press instead of the
+second I-02 probe and runs out of frames; (B, the skeptic's own finding) deleting the
+recompute of `cur_confirmed_blind` on a genuine mid-walk read is caught by (7), which then
+wrongly retries a later, unrelated drop and runs out of frames.
+
+Reproduced on the ORIGINAL skeptic repro (`agent_progress/issues/I-33-skeptic/
+repro_cross_call.py`, unmodified): on v2 it no longer reproduces the refusal -- the retry
+fires and consumes the script's third (previously "left unconsumed") frame, then runs out
+of frames because the walk now proceeds past where the 3-frame script stops (confirmed
+separately with a fully-populated frame set: the walk arrives, `ok is True`, exactly one
+retry press). Siblings all still pass, unmodified: `tests/rig/test_blind_slot_probe_
+select.py` (I-02), `tests/minigame/test_walk_crosses_occluded_slot.py` (I-32),
+`test_select_stops_when_lift_unreadable.py`, `test_verified_presses_on_match_path.py`,
+`tests/rig/test_no_real_input_under_test_run.py`, `tests/harness/
+test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
+
+**Status.** v1 REFUTED 2026-09-21 (scoped to the I-02 probe only, missed the cross-call
+case that motivated the ticket). v2 fixed on branch `i33-blind-slot-retry`, addresses
+both mechanisms the skeptic named plus a mutant-B hole in the same round; awaiting
+re-review.
 
 ## C. Costs wins
 

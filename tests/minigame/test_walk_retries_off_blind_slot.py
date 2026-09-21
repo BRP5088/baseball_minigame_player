@@ -1,22 +1,45 @@
 """I-33: a press off a BLIND-CONFIRMED slot must be retried once, not refused outright.
 
-Live 2026-09-21 (`overnight/run_live_20260921f.log`): the walker verified the cursor on
-slot 4 via the I-02 probe (a lift, since slot 4's glow can never itself clear
-CURSOR_GLOW_MIN -- CLAUDE.md 10.35: "slot 4 never exceeds 11.0 at ANY offset, while
-slots 0-3 read 26-28"), pressed ONCE toward slot 0 for the tactics card, and the next
-look read no cursor anywhere at all (glow=[0.0, 0.4, 0.0, 0.0, 0.4] -- slot 4 still at
-its blind ceiling, slot 3 at 0.0, no occlusion, every slot's y was readable). The play
-was refused, unwound, and retried a full cycle later -- 15-20s on a paid match for a
-press section 5 already measures the console dropping 15.20% of the time, clustered.
+Live 2026-09-21 (`overnight/run_live_20260921f.log`): `_verified_select_and_play_inner`
+walks to card_index=4, `_select_verified(4, ...)` selects it (leaving it lifted), then
+walks a FRESH `_walk_cursor_to(0, ...)` toward tactics_index=0. That second call's own
+TOP-OF-FUNCTION read sees glow=[0.0, 0.4, 0.0, 0.0, 0.4] -- slot 4 still at its
+structural ceiling (CLAUDE.md 10.35: "slot 4 never exceeds 11.0 at ANY offset, while
+slots 0-3 read 26-28"), no occlusion, every slot's y readable -- presses once toward 0,
+and "lost the cursor after 1 press(es)" refuses. The play was refused, unwound, and
+retried a full cycle later -- 15-20s on a paid match for a press section 5 already
+measures the console dropping 15.20% of the time, clustered.
 
-THE MECHANISM: a slot whose presence was proven only by INFERENCE -- the I-02 probe's
-selection lift, or an I-32 dead-reckon across an occluded slot -- reads EXACTLY like a
-dropped press when the walk steps off it and nothing lights up: its own glow could
-never confirm "still here" either. `_walk_cursor_to` now tracks whether the CURRENT
-`cur` was confirmed by a direct glow read or only inferred (`cur_confirmed_blind`), and
-when a press off an INFERRED `prev` reads nothing, it presses the SAME direction once
-more before refusing -- bounded to one extra press per lost-cursor event, and counted
-toward `steps`/CURSOR_MAX_STEPS like any other press.
+V1 OF THIS FIX WAS REFUTED (agent_progress/issues/I-33-skeptic/progress.md,
+repro_cross_call.py). It scoped `cur_confirmed_blind` to "set only by the I-02 probe
+within THIS call", a local that resets to False at the top of every `_walk_cursor_to`
+invocation -- so it could not survive the walk-to-4-call -> select -> walk-to-0-call
+sequence the live log actually shows, which is a BRAND NEW call whose own
+top-of-function read is what names cur=4, never a probe inside it. Two things
+independently name `cur` there without a genuine strong glow read, and V2 covers both:
+
+  (a) A MARGINAL glow crossing. Section 3.35's own numbers give slot 4 a ceiling of
+      11.0 -- ABOVE CURSOR_GLOW_MIN (10.0) -- so cursor_slot() can occasionally name it
+      directly, just unreliably. `CUR_TRUSTED_GLOW_MIN` (20.7, local_hand.cursor_slot's
+      OWN measured floor for a genuine cursor) is the line: below it, a cleared gate is
+      not yet trusted.
+  (b) A card already SELECTED when the fan's own glow cannot name ANY cursor. Selection
+      only happens under the cursor, and nothing else can move it without a press this
+      call has not sent -- so if exactly one slot is lifted, it names the cursor even
+      through a gate the glow itself never clears (`0.4 < CURSOR_GLOW_MIN`). This is the
+      literal live-log mechanism: card 4 was already selected by the FIRST call's
+      `_select_verified`, so the second call's own top-of-function read finds `sel = [4]`
+      with nothing lit.
+
+THE MECHANISM, UNCHANGED FROM V1: a slot whose presence was proven only by an
+UNRELIABLE confirmation -- (a) or (b) above, or the I-02 probe's selection lift landing
+on a slot other than the call's target -- reads EXACTLY like a dropped press when the
+walk steps off it and nothing lights up. `_walk_cursor_to` tracks this per-`cur`
+(`cur_confirmed_blind`), RE-EVALUATED on every genuine read so an earlier blind flag
+cannot leak into a later, unrelated lost cursor (the mutant-B hole below), and when a
+press off a blind `prev` reads nothing, it presses the SAME direction once more before
+refusing -- bounded to one extra press per lost-cursor event, counted toward
+`steps`/CURSOR_MAX_STEPS like any other press.
 
 WHY abs(prev - target) == 1 IS EXCLUDED. That is precisely the case the EXISTING I-02
 probe branch already claims (checked just above this fix in the code, and it always
@@ -37,7 +60,18 @@ WHAT THIS FILE PINS:
       no extra press is taken; the (existing, unmodified) I-02 probe branch is what
       runs a second time, not the new retry;
   CONTROL (4): prev confirmed by a READABLE glow (not inference) -- a press that
-      reads nothing still hits the OLD, unmodified refusal, with NO extra press.
+      reads nothing still hits the OLD, unmodified refusal, with NO extra press;
+  (5) THE REFUTED CROSS-CALL SHAPE, mechanism (a): a FRESH call's own TOP-OF-FUNCTION
+      read names cur=4 from a marginal glow crossing (10.5), no I-02 probe involved
+      anywhere in this call -- the retry still fires and the walk arrives;
+  (6) THE REFUTED CROSS-CALL SHAPE, mechanism (b), and the literal live-log frame:
+      slot 4 already SELECTED (`sel == [4]`) with glow=[0.0, 0.0, 0.0, 0.0, 0.4] at the
+      top of a fresh call -- named from the lift, no probe, no nudge -- and the retry
+      still fires and the walk arrives;
+  (7) MUTANT-B GUARD: the probe confirms slot 4 (blind), then TWO genuine strong reads
+      (slots 3, 2) intervene, then a LATER unrelated drop -- must refuse immediately,
+      proving the blind flag was actually CLEARED by the intervening reads and not
+      just left set from four steps back.
 
 Uses a ScriptedLook stub rather than the position-tracking fakes in the sibling I-02/
 I-32 files, because this fix keys on WHICH look() answers "nothing reads" and which
@@ -227,8 +261,110 @@ try:
           s.sent == ["move_left"])
     check("CONTROL: no frames left unconsumed", s.frames == [])
 
+    # --- (5) THE CROSS-CALL HOLE A SKEPTIC FOUND (agent_progress/issues/
+    #         I-33-skeptic/progress.md, repro_cross_call.py): a FRESH call's own
+    #         TOP-OF-FUNCTION read names `cur` from a MARGINAL glow crossing --
+    #         above CURSOR_GLOW_MIN (10.0) but below CUR_TRUSTED_GLOW_MIN (20.7),
+    #         exactly the live log's own shape (glow 10.5 at slot 4, no I-02 probe
+    #         involved in THIS call at all) -- and the shipped v1 fix, scoped to
+    #         "confirmed via the I-02 probe", could not see it. No `sel` entry
+    #         here on purpose, to isolate this from case (6)'s lift path. -------
+    frames = [
+        (lit(4, 10.5), []),   # top-of-function: a marginal glow crossing names 4
+        (LOW, []),             # press toward 0 from cur=4: dropped, nothing reads
+        (lit(3), []),          # THE RETRY: slot 3 reads
+        (lit(2), []),
+        (lit(1), []),
+        (lit(0), []),
+    ]
+    s = ScriptedLook(frames)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(0, s.look)
+    out = buf.getvalue()
+    check("(5) the walk arrives", ok is True)
+    check("(5) no I-02 probe was needed -- this is a top-of-function glow read, "
+          "never select_card", "select_card" not in s.sent)
+    check("(5) the retry fired exactly once", out.count("pressing once more") == 1)
+    check("(5) the log names the blind slot (4)",
+          "the press left blind slot 4" in out)
+    check("(5) exactly 5 move_left presses (4 to cross the fan + 1 retry)",
+          s.sent == ["move_left"] * 5)
+    check("(5) no frames left unconsumed", s.frames == [])
+
+    # --- (6) THE EXACT SHAPE THE COORDINATOR ASKED FOR: slot 4 already SELECTED
+    #         (`sel == [4]`) at the top of a fresh call, glow[4] == 0.4 -- byte
+    #         for byte the live log's own failing frame, glow=[0.0, 0.4, 0.0, 0.0,
+    #         0.4] -- reached by NO glow crossing at all (0.4 never clears
+    #         CURSOR_GLOW_MIN). `_verified_select_and_play_inner` leaves card 4
+    #         selected via `_select_verified(4, ...)` before ever calling
+    #         `_walk_cursor_to(0, ...)`, so this is the literal cross-call state,
+    #         not a stand-in for it. -----------------------------------------
+    frames = [
+        ([0.0, 0.0, 0.0, 0.0, 0.4], [4]),  # top-of-function: cursor_slot() reads
+                                           # None (0.4 < CURSOR_GLOW_MIN); the
+                                           # lift fallback names cur=4 from `sel`
+        (LOW, [4]),                        # first press toward 0: dropped
+        (lit(3, val=27.0), [4]),           # THE RETRY: slot 3 reads
+        (lit(2), [4]),
+        (lit(1), [4]),
+        (lit(0), [4]),
+    ]
+    s = ScriptedLook(frames)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(0, s.look)
+    out = buf.getvalue()
+    check("(6) the walk arrives", ok is True)
+    check("(6) no I-02 probe or nudge was needed -- named from the lift alone",
+          "select_card" not in s.sent and "nudging" not in out)
+    check("(6) the lift-naming line fires, naming slot 4",
+          "the fan is blind but slot 4 is already selected" in out)
+    check("(6) the retry fired exactly once", out.count("pressing once more") == 1)
+    check("(6) the log names the blind slot (4) in the retry line too",
+          "the press left blind slot 4" in out)
+    check("(6) exactly 5 move_left presses (4 to cross the fan + 1 retry)",
+          s.sent == ["move_left"] * 5)
+    check("(6) no frames left unconsumed", s.frames == [])
+
+    # --- (7) MUTANT-B GUARD: the probe confirms slot 4 (blind), the walk then
+    #         makes TWO genuine, strongly-confirmed reads (slots 3 and 2), and
+    #         ONLY THEN does a press read nothing. That later loss must NOT get
+    #         the retry -- the blind flag from the probe, four steps back, must
+    #         have been CLEARED by the intervening genuine reads. A flag that
+    #         only ever gets set and never re-evaluated would wrongly retry
+    #         here, exactly the hole a skeptic found unguarded in the first
+    #         version of this fix. --------------------------------------------
+    frames = [
+        ([0.0, 0.0, 0.0, 0.0, 0.4], [4]),  # top-of-function: lift-named, blind=True
+        (lit(3), []),                       # genuine strong read -- clears blind
+        (lit(2), []),                       # another genuine strong read
+        (LOW, []),                          # a LATER, unrelated drop -- must
+                                             # refuse immediately, no retry
+    ]
+    s = ScriptedLook(frames)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(0, s.look)
+    out = buf.getvalue()
+    check("(7) refuses -- the later drop is NOT covered by the stale blind flag",
+          ok is False)
+    check("(7) the I-33 retry never fired for this later drop",
+          "pressing once more" not in out)
+    check("(7) the OLD unmodified refusal line fires, after 3 presses",
+          "lost the cursor after 3 press(es)" in out)
+    check("(7) exactly 3 presses sent, nothing more",
+          s.sent == ["move_left"] * 3)
+    check("(7) no frames left unconsumed", s.frames == [])
+
     # --- no bare-bool checks slipped in (CLAUDE.md 5's nine check() signatures) --
     check("CURSOR_MAX_STEPS untouched by this file's fix", ic.CURSOR_MAX_STEPS == 8)
+    check("CUR_TRUSTED_GLOW_MIN sits between the measured populations "
+          "(11.0 slot-4 ceiling, 20.7 cursor_slot's own genuine floor)",
+          ic.CUR_TRUSTED_GLOW_MIN == 20.7)
 finally:
     ic.press = _real_press
     ic._deselect_verified = _real_deselect
@@ -239,5 +375,7 @@ if fails:
     _sys.exit(1)
 print("  a press off a blind-confirmed slot is retried once before refusing, a "
       "second drop still refuses cleanly, a target one step away is left to the "
-      "I-02 probe untouched, and a press off a glow-confirmed slot still hits the "
-      "old refusal with no extra press")
+      "I-02 probe untouched, a press off a glow-confirmed slot still hits the old "
+      "refusal with no extra press, both cross-call mechanisms (a marginal top-of-"
+      "call glow crossing and a card already selected) retry and arrive, and an "
+      "intervening genuine read clears a stale blind flag before a later drop")
