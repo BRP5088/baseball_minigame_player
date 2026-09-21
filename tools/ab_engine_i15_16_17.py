@@ -255,11 +255,17 @@ def load_log_distribution():
     opp_power.
 
     Falls back to the PINNED snapshot (ab_data/opp_pitcher_dist_20260921.json) when this
-    checkout's match_log.jsonl has zero qualifying rows -- a fresh clone's tracked
-    match_log.jsonl is the 369 legacy rows only, none of which carry outcome_basis or
-    margin. Once live play accumulates qualifying rows, this reproduces the pin only if
-    nothing changed since; a genuine divergence is the POINT (a change in match_log then
-    fails loudly instead of silently shifting the baseline), not a bug to suppress.
+    checkout's match_log.jsonl has zero rows that are phase=="batting" WITH a non-null
+    opp_power (not merely zero "qualifying" rows -- QA7/I-47 found the two conditions
+    differ: a log that is all-pitching, or all-null-opp_power, also falls back silently).
+    The fallback prints one line to stderr naming why, and the returned meta dict carries
+    a dedicated `fallback` bool plus the LIVE log's own n_used_for_distribution (honest,
+    can be 0) separately from the pinned snapshot's own n under
+    `n_used_for_distribution_pinned` -- the two must never be conflated (I-47).
+
+    Once live play accumulates qualifying rows, this reproduces the pin only if nothing
+    changed since; a genuine divergence is the POINT (a change in match_log then fails
+    loudly instead of silently shifting the baseline), not a bug to suppress.
     """
     total = 0
     qualifying = 0
@@ -286,14 +292,27 @@ def load_log_distribution():
 
     n_used = sum(counts.values())
     if n_used == 0:
+        print(
+            "load_log_distribution(): FALLBACK to pinned snapshot %s -- this checkout's "
+            "match_log.jsonl has 0 rows with phase==batting and a non-null opp_power "
+            "(%d rows had a local reveal read at all)" % (_PINNED_LOG_DIST_PATH, qualifying),
+            file=sys.stderr,
+        )
         with open(_PINNED_LOG_DIST_PATH) as f:
-            d = json.load(f)
-        probs = d["effective_power_probs"]
+            pinned = json.load(f)
+        probs = pinned["effective_power_probs"]
+        d = dict(pinned)
+        d["fallback"] = True
+        d["n_used_for_distribution"] = n_used   # THIS checkout's log: honestly 0 here
+        d["n_used_for_distribution_pinned"] = pinned["n_used_for_distribution"]
+        d["rows_with_outcome_basis_or_margin"] = qualifying
+        d["rows_excluded_no_local_reveal_read"] = total - qualifying
         return [(int(k), v) for k, v in sorted(probs.items(), key=lambda kv: int(kv[0]))], d
 
     dist = sorted((p, c / n_used) for p, c in counts.items())
     d = {
         "effective_power_probs": {str(p): prob for p, prob in dist},
+        "fallback": False,
         "n_used_for_distribution": n_used,
         "rows_with_outcome_basis_or_margin": qualifying,
         "rows_excluded_no_local_reveal_read": total - qualifying,

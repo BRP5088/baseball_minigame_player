@@ -2081,3 +2081,82 @@ restored and sha256-verified back to `d09cbcb...` (unchanged from HEAD, confirme
 `git status --porcelain`). The i15/i16/i17 exact-equality control checks were never
 affected by this — they compare simulate.py's own deterministic scorers against each
 other and never touch `match_log.jsonl`.
+
+### I-47  Two silent permissive defaults in offline tools (QA7)                     P2  evidence
+
+**F1. `load_log_distribution()` in `tools/ab_engine_i15_16_17.py` fell back to the
+pinned snapshot silently, and its own docstring described a narrower trigger than the
+code.** The branch is `n_used == 0` (rows must be `phase=="batting"` AND carry a
+non-null `opp_power`), not "zero qualifying rows" as the docstring and ISSUES.md I-45
+both said — a log whose qualifying rows are all pitching, or all `opp_power: null`,
+also falls back with zero output and a `meta` dict shaped identically to a
+live-derived one. Reproduced with a synthetic 3-line `match_log.jsonl` (2 pitching
+rows + 1 batting row with `opp_power: null` — 3 "qualifying" rows, 0 usable):
+`n_used=0` triggers the pinned fallback even though `qualifying=2`, silently.
+`test_ab_controls_reproduce_baseline.py`'s own check (`meta["n_used_for_distribution"]
+> 0`) did not catch this, because the fallback also satisfied it (it returned the
+pin's own `n_used_for_distribution: 82` verbatim, reporting the SNAPSHOT's n as if it
+were live).
+
+**Fix.** The fallback branch now prints one line to stderr naming the reason (rows
+with a local reveal read but none phase==batting with a non-null opp_power) and the
+pinned path; the returned `meta` carries a dedicated `meta["fallback"]` bool (`True`
+on fallback, `False` when live-derived) and separates the two `n` quantities that were
+being conflated — `meta["n_used_for_distribution"]` is now always THIS checkout's own
+live count (honestly 0 on fallback), and `meta["n_used_for_distribution_pinned"]`
+carries the pinned snapshot's own n under its own key.
+
+**F2. `labels_for()` in `tools/cursor_labels_from_lifts.py`: the capture-gap and
+flicker filters both passed silently with under 2 frames of history.** `gap_ok =
+len(hist) < 2 or hist[-2] == hist[-1]` and `window = hist[-(flicker_window+1):-1] if
+len(hist) > 1 else []` both defaulted to permissive (gap_ok=True, no flicker window to
+check) whenever fewer than 2 valid frames had been seen since the last capture-gap
+reset — i.e. the first candidate right after a `sel is None` reset kept its label with
+reason `None`, indistinguishable from a genuinely 2-frame-verified one. That is
+exactly the shape both filters exist to catch (I-42): a rise right after instability,
+just with the instability being "too little history" rather than "a recent jump".
+
+**Fix.** With fewer than 2 prior frames, the candidate is now REJECTED with reason
+`"insufficient_history"` instead of passed. `capture_gap` and `flicker` are unchanged
+for candidates with >=2 frames of history.
+
+**F3 (found reviewing F1's own test coverage).** The pre-fix test file never actually
+executed `load_log_distribution()`'s fallback branch's own code — its "pinned
+probabilities sum to 1" check re-opened the JSON with a bare `json.load` and never
+called `load_log_distribution()` at all, so a mutant corrupting the fallback branch
+itself (e.g. leaving its returned keys as strings instead of `int`) would have
+survived the whole file. Fixed by adding a case that monkeypatches
+`ab_engine._MATCH_LOG_PATH` to the same synthetic all-pitching/null-power log used for
+F1 and calls `load_log_distribution()` for real, asserting on the RETURNED
+distribution: `meta["fallback"] is True`, `meta["n_used_for_distribution"] == 0`,
+integer keys 4-11, probabilities summing to 1 within 1e-9.
+
+**Verify.** `tests/minigame/test_ab_controls_reproduce_baseline.py` (F1, F3) and
+`tests/harness/test_cursor_labels_capture_gap.py` (F2, cases 9-10) both green.
+`tests/harness/test_no_undefined_names.py` and `tests/harness/test_claude_md_constants.py`
+also green. Three mutants applied by hand, `__pycache__` deleted before and after each
+(CLAUDE.md 10.10), each confirmed to fail the relevant test, then reverted and
+`git status --porcelain`/`diff` confirmed byte-identical to HEAD before commit:
+
+    `d["fallback"] = True` -> `d["fallback"] = False` in the fallback branch
+        -> test_ab_controls_reproduce_baseline.py: 2 checks FAIL (the fallback-or-
+           positive check, and F3's `meta["fallback"] is True` check)
+    `[(int(k), v) for k, v in ...]` -> `[(k, v) for k, v in ...]` (string keys)
+        in the fallback branch's return
+        -> test_ab_controls_reproduce_baseline.py: TypeError on the existing
+           "keys are plausible effective powers 4-11" check (4 <= p <= 11 on a str)
+    restore the permissive default (`gap_ok = len(hist) < 2 or hist[-2] == hist[-1]`,
+        `window = ... if len(hist) > 1 else []`) in `labels_for()`
+        -> test_cursor_labels_capture_gap.py: case 9 FAILS (f00.jpg wrongly kept
+           with reason None instead of rejected as insufficient_history); case 10
+           still passes (a discriminating mutant, not a vacuous one)
+
+Also re-ran `tools/cursor_labels_from_lifts.py` on `screenshot_log/run_20260921_080311`
+(8036 frames, main checkout) end to end with the fix: `raw candidates 173 -> kept 41,
+rejected 132 {'capture_gap+flicker': 38, 'flicker': 62, 'transient': 29, 'capture_gap':
+3}` — identical to the pre-fix 173/41 split, with zero `insufficient_history`
+rejections in this particular run (no candidate in it happened to sit inside 2 frames
+of a reset), so the fix changes no label on this corpus while closing the gap the QA7
+finder demonstrated synthetically.
+
+**Status.** Fixed on branch, awaiting merge.

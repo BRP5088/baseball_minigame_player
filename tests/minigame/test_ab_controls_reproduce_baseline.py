@@ -11,12 +11,14 @@ test_tie_risk_is_closed.py's own docstring for the same rule).
 import json
 import os
 import sys
+import tempfile
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 os.environ["BASEBALL_TEST_RUN"] = "1"
 
 import simulate as sim
+import tools.ab_engine_i15_16_17 as ab_engine
 from tools.ab_engine_i15_16_17 import (
     run_arm, sequenced_batting_play, deck_aware_redraw, make_expected_runs_play,
     load_log_distribution,
@@ -90,10 +92,19 @@ log_dist, meta = load_log_distribution()
 check(abs(sum(p for _, p in log_dist) - 1.0) < 1e-9,
       f"log-derived opponent-pitcher distribution sums to 1.0 (got "
       f"{sum(p for _, p in log_dist):.6f})")
-check(meta["n_used_for_distribution"] > 0,
-      f"log-derived distribution was built from a nonzero number of qualifying rows "
-      f"({meta['n_used_for_distribution']} of {meta['rows_with_outcome_basis_or_margin']} "
-      f"with a local reveal read, {meta['rows_excluded_no_local_reveal_read']} excluded)")
+# I-47: a fallback honestly reports the LIVE log's own n_used_for_distribution, which
+# can legitimately be 0 (this checkout's own match_log.jsonl has 0 qualifying rows as of
+# this writing) -- so "nonzero" is only required when NOT falling back. On fallback, the
+# pinned snapshot's own n must still be nonzero, under its own separate key.
+check(meta["fallback"] or meta["n_used_for_distribution"] > 0,
+      f"log-derived distribution was built from a nonzero number of qualifying rows, or "
+      f"is honestly reporting a fallback with a live n_used_for_distribution of 0 "
+      f"(fallback={meta['fallback']}, n_used_for_distribution={meta['n_used_for_distribution']}, "
+      f"of {meta['rows_with_outcome_basis_or_margin']} with a local reveal read, "
+      f"{meta['rows_excluded_no_local_reveal_read']} excluded)")
+check(not meta["fallback"] or meta["n_used_for_distribution_pinned"] > 0,
+      f"fallback meta carries the pinned snapshot's own nonzero n under a separate key "
+      f"(got n_used_for_distribution_pinned={meta.get('n_used_for_distribution_pinned')!r})")
 # Base player power runs 4-9 (CLAUDE.md sec 4); a swing/pitch tactics bonus adds at most
 # +2, so effective power can reach 11. Whichever branch load_log_distribution() took
 # (computed from this checkout's own qualifying rows, or the pinned fallback), its keys
@@ -101,6 +112,47 @@ check(meta["n_used_for_distribution"] > 0,
 check(all(4 <= p <= 11 for p, _ in log_dist),
       f"log-derived distribution keys are plausible effective powers 4-11 "
       f"(got {[p for p, _ in log_dist]})")
+
+# F3 (QA7): the checks above call load_log_distribution() with whatever this checkout's
+# OWN match_log.jsonl happens to contain, which -- as of this writing -- already takes
+# the fallback branch (0 batting rows with opp_power). But nothing FORCES that branch to
+# run, so a checkout with qualifying live rows would silently skip covering it. Drive it
+# on purpose with a synthetic log (2 pitching rows, 1 batting row with opp_power null --
+# 3 "qualifying" rows, 0 usable), through load_log_distribution() ITSELF rather than
+# re-reading the pinned JSON directly (that only checks the pin's own bytes, not the
+# fallback branch's own code -- a mutant that returns the pinned probs with STRING keys
+# instead of int would pass every check above and still corrupt every (power, prob) pair
+# a caller relies on being int-keyed).
+_synthetic_log = (
+    '{"phase": "pitching", "outcome_basis": "x", "opp_power": 5}\n'
+    '{"phase": "pitching", "margin": 2, "opp_power": 6}\n'
+    '{"phase": "batting", "outcome_basis": "y", "opp_power": null}\n'
+)
+with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as _tf:
+    _tf.write(_synthetic_log)
+    _synthetic_path = _tf.name
+_real_log_path = ab_engine._MATCH_LOG_PATH
+try:
+    ab_engine._MATCH_LOG_PATH = _synthetic_path
+    fb_dist, fb_meta = ab_engine.load_log_distribution()
+finally:
+    ab_engine._MATCH_LOG_PATH = _real_log_path
+    os.remove(_synthetic_path)
+
+check(fb_meta["fallback"] is True,
+      f"synthetic all-pitching/null-opp_power log (3 qualifying rows, 0 usable) drives "
+      f"the REAL fallback branch: meta['fallback'] is True (got {fb_meta['fallback']!r})")
+check(fb_meta["n_used_for_distribution"] == 0,
+      f"fallback honestly reports THIS (synthetic) log's own n_used_for_distribution as "
+      f"0, not the pinned snapshot's (got {fb_meta['n_used_for_distribution']})")
+check(all(isinstance(p, int) for p, _ in fb_dist),
+      f"fallback distribution keys are ints, not strings "
+      f"(got {[type(p).__name__ for p, _ in fb_dist]})")
+check(all(4 <= p <= 11 for p, _ in fb_dist),
+      f"fallback distribution keys are plausible effective powers 4-11 "
+      f"(got {[p for p, _ in fb_dist]})")
+check(abs(sum(p for _, p in fb_dist) - 1.0) < 1e-9,
+      f"fallback distribution sums to 1.0 (got {sum(p for _, p in fb_dist):.6f})")
 
 # match_log.jsonl GROWS as matches are played (CLAUDE.md sec 2/10.16c's lesson applied to
 # a data file), so asserting the live derivation bit-matches a dated snapshot is false by
