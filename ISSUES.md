@@ -196,7 +196,8 @@ is a veto, as for `at_table`).
 answered by the template bank at 0.91-0.93; called directly the card reader also reads
 'WINNER'. 42 of 42 result frames read win, 0 wrong; 300 non-result frames from the same
 match read nothing. DEFEAT pinned by the other session. **DRAW still unconfirmed by a frame**
-for the card reader; the first live draw closes it.
+for the card reader; the first live draw closes it. DRAW still unconfirmed by a frame; the
+one "draw" scored on 2026-09-20 was I-30's phantom.
 
 ### I-21  `_select_verified` re-toggled a landed selection once its own disc went blind   P0  input
 
@@ -656,7 +657,9 @@ no proof it was ever selected — refused. Two mutants, "count all blind slots a
 lifted" and "want blind at baseline counts", each killed by a different case ((e) and
 (f) respectively). All 11 regression files pass unmodified.
 
-**Status.** Merged; live confirmation open.
+**Status.** Merged; live confirmation open. Its regression list missed
+test_verified_presses_on_match_path.py, whose _clear_strays stub lacked the new keyword;
+fixed in 3ef4447.
 
 ### I-29  A redeal at a stalled slot that draws the same value inherited the old refusal count   P1  loop
 
@@ -699,6 +702,31 @@ play-site call fails (b) and (c)'s play-dependent check; dropping the discard-si
 `test_every_test_sets_the_flag.py` and `test_no_shadowed_module_defs.py` pass unmodified.
 
 **Status.** Merged; not seen live.
+
+### I-30  Phantom draw (substring OCR) scored, then close_result mashed a Give-up dialog open   P0  reader/loop/input
+
+**Evidence.** Match 5 on 2026-09-20: a live turn frame's mound card "JOHNNY DRAWERS" read
+as DRAW by the card reader's substring match, at exactly `MIN_PLAYS_FOR_RESULT` plays so no
+confirmation ran; a phantom draw was scored, `match_in_progress` cleared, `close_result`
+pressed on a live turn which opened "Give up?", 15 unreadable polls, stop; the manager
+answered NO and corrected the record.
+
+**Root cause.** Four: the OCR fallback's bare substring match; the `<` boundary at exactly
+`plays_this_match == MIN_PLAYS_FOR_RESULT`, a known, deliberately-pinned residual;
+`press_verified` accepting a stale False baseline as proof nothing needed pressing; and the
+give-up dialog unknown to `run()`.
+
+**Fix.** MERGED 2026-09-20 (e6fbcce): whole-word regex + negative fixture
+`phantom_draw_20260920.png`; `_close_result_safely` presses only after a fresh result read;
+two consecutive result frames required at the play floor; the give-up dialog answered with
+one Circle and a look, never Cross.
+
+**Verify.** `test_result_card_is_read.py`, `test_early_result_double_debit.py`'s rewritten
+boundary block, `test_give_up_dialog_recognized.py`, `test_close_result_refuses_stale_read.py`;
+four mutants caught, including the skeptic's fresh-read one; 1,340 fixtures swept with zero
+give-up false positives.
+
+**Status.** Merged; live confirmation open.
 
 ## C. Costs wins
 
