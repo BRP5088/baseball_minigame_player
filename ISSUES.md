@@ -1375,15 +1375,96 @@ inverse of I-21's inference).
 "hand_index [3] refused 3x running on this hand — excluded" fired again and the 6 was
 played over the 9.
 
-**Root cause.** Not established beyond the Evidence above — the exclusion key is not
-traced here; the user's steer below names the fix without confirming the mechanism.
+**Root cause established.** `orchestrator.play_excluded_slots` keyed exclusion SOLELY on
+`_discard_hand_identity` (the hand's (kind, power, secondary, type) value tuple), with no
+notion of WHY a slot was refused. Slot 3's exclusion happened to survive the next poll
+not because anything about slot 3 was re-checked, but because I-27's own merge rule says
+a slot missing from both sides (slot 1, dropped to UNKNOWN mid-deal) is not a
+disagreement — so the hand identity never registered as "changed" at all, and slot 3
+stayed excluded by accident. Had a DIFFERENT, readable slot genuinely changed instead
+(a real redeal), the identity check would have cleared slot 3's exclusion too, even
+though slot 3's own position was still unreadable — the same bug in the other direction.
 
-**Proposed fix.** User's steer (2026-09-21 08:02): key the exclusion GENERALLY on the slot
-and its reason, not an exact hand identity — a slot excluded because its position/lift
-cannot be read stays excluded while it is unreadable, whatever is dealt around it, and is
-offered again the moment it reads.
+**Fix (orchestrator.py).** `_PLAY_STALL` gained a `"reasons"` dict, one of
+`PLAY_REFUSAL_UNREADABLE` / `PLAY_REFUSAL_TRANSIENT` per excluded hand_index, set at the
+one call site in `play_one_turn` via `_slot_position_readable(state_json.get("hand"),
+player_idx)` — the same "position is unreadable" question
+`input_controller._select_verified` already asks before pressing a TOGGLE blind (I-38).
+`play_excluded_slots` now: on a genuine hand-identity change, drops only the TRANSIENT
+exclusions (unchanged pre-I-39 behaviour) and keeps the UNREADABLE ones; and on EVERY
+call, independent of identity change, re-checks each UNREADABLE exclusion against
+`_slot_position_readable` on the CURRENT hand and un-excludes it the instant it reads.
+`exclude_play_slot(idx, reason=PLAY_REFUSAL_TRANSIENT)` defaults to the old behaviour so
+every pre-I-39 caller is unaffected. `note_slot_dealt` and `reset_stall_counters` also
+forget the reason when they forget everything else about a slot.
 
-**Status.** Open.
+**Verify.** `tests/minigame/test_refusal_exclusion_by_reason.py`: (a) an UNREADABLE
+exclusion survives a genuine redeal elsewhere in the hand while the slot itself stays
+unreadable; (b) it clears the instant that slot reads again, with NO identity change at
+all (the one thing the old, identity-only code could never do); (c) a TRANSIENT exclusion
+keeps the exact pre-I-39 behaviour (survives an unchanged hand, clears on a genuine
+redeal); (d) fewer than PLAY_STALL_MAX refusals never excludes; (e)
+`exclude_play_slot`'s default reason; (5) end to end through the real `play_one_turn`,
+reproducing the live shape at three turns (excluded, still-excluded-next-poll, then
+re-offered once readable); (6) the TRANSIENT mirror of (5), which exercises the real call
+site's OWN reason inference rather than a reason the test computed itself. Three mutants,
+each caught by a different assertion: reverting `play_excluded_slots` to the pre-I-39,
+identity-only body fails (a)/(b)/(5-turn-3); hard-coding every reason to TRANSIENT at the
+call site fails (5, the "excluded as unreadable" log line and turn 3); hard-coding every
+reason to UNREADABLE fails (6, which is the one test that would not otherwise catch it).
+Restored byte-for-byte (sha256) after each mutant. Siblings re-run green:
+`test_refused_play_falls_back.py`, `test_stall_identity_survives_flicker.py`,
+`test_stall_state_forgets_dealt_slot.py`, `test_lifted_discard_row_rescued.py`,
+`test_run_debit_and_scoring.py`, `test_no_shadowed_module_defs.py`,
+`test_no_undefined_names.py`. `test_stall_counters_reset_with_hand_memory.py` updated for
+the new `"reasons": {}` key in `_PLAY_STALL`'s exact-dict-equality check.
+
+**Skeptic review (CONFIRMED WITH NOTES, agent_progress/issues/I-39-skeptic/progress.md):
+one defect found and fixed before merge.** The readability un-exclude path
+(`play_excluded_slots`, the "reads again" loop) did NOT reset `_PLAY_STALL["n"]` --
+`n` is a SINGLE SHARED counter for whatever the decision currently offers, and
+`exclude_play_slot`'s own docstring promises "whatever is played next its own fresh
+PLAY_STALL_MAX budget", a promise the identity-change branch and `exclude_play_slot`
+itself both keep but this second way an exclusion clears did not. Reproduced: exclude
+slot A (unreadable); refuse slot B twice on the same hand (n=2, A still excluded); A
+becomes readable and is re-offered; ONE further refusal on A read n=3 and re-excluded
+it after a single fresh refusal, not PLAY_STALL_MAX (3).
+
+**Fix.** Reset the SHARED counter (`_PLAY_STALL["n"] = 0`) whenever the readability
+path un-excludes at least one slot — not a per-slot counter. Only one target is ever
+"current" (the decision recomputes its single best pick every poll), and every other
+reset in this module already treats `n` as belonging to that one pick, not to a
+specific hand_index; a per-slot counter would be more precise but is a second
+bookkeeping structure for a shape this file already declined to build once
+(`note_slot_dealt`'s own comment: clearing both breakers' counts on every spend "is
+the smaller diff... forgiving a count early is the safe direction this file already
+uses elsewhere"). Same tolerance applies here — if a different slot was mid-streak
+when the un-exclude fires, its count is forgiven one cycle early in the rare case the
+decision keeps offering it anyway; never the direction that excludes something short
+of its own fresh PLAY_STALL_MAX.
+
+**Verify (added).** `test_refusal_exclusion_by_reason.py` scenario (f) reproduces the
+skeptic's exact sequence (slot A excluded unreadable; two refusals on slot B; A reads
+again and is re-offered; one refusal on A must not re-exclude it; three must). Mutant:
+drop the `_PLAY_STALL["n"] = 0` reset — caught (n reads 2 instead of 0 immediately
+after un-exclusion, then 3 and 4 on what should be a fresh 1-refusal and 2-refusal
+count). Restored byte-for-byte (sha256:
+9f2d8d1c1b816608dd01ea5aba3e4eaf796d6cf0d0897627240777efccadc349) after the mutant.
+All 7 named sibling tests re-run green at that same sha.
+
+**Open note from the skeptic, not itself a defect.** The reason inference
+(`play_one_turn`, `_slot_position_readable(state_json.get("hand"), player_idx)`) is
+computed against the hand read taken at POLL START (`read_state_for_turn`), which is
+captured BEFORE `select_and_play`'s own internal press/verify loop runs its fresh
+`hand_cursor_look` reads (`input_controller.py` ~1244-1400). So the reason is an
+indirect proxy from a slightly earlier snapshot, not the walker's own per-attempt
+refusal cause. Directionally right — the two reads are seconds apart on an otherwise
+unchanged hand, and slot readability is unlikely to flip in that window — but this is
+a narrow gap the skeptic did not demonstrate misfiring live. Worth a live frame pair
+if a future exclusion is ever classified wrong.
+
+**Status.** Fixed on branch (both this ticket and the skeptic's counter-reset defect),
+confirmed by skeptic, ready to merge.
 
 ### I-40  A reload's local money read disagreed with the known wallet and was trusted   P1  money
 
