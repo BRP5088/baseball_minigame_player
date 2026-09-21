@@ -191,7 +191,36 @@ is a veto, as for `at_table`).
 
 **Agent brief.** Haiku, after the frames exist. Done when the three fixtures are pinned.
 
-**Status.** In flight (other agent shipped the reader); the fixtures are open.
+**Status.** WIN pinned 2026-09-20 (c994139): the live win screen is the ARCHED WINNER banner,
+answered by the template bank at 0.91-0.93; called directly the card reader also reads
+'WINNER'. 42 of 42 result frames read win, 0 wrong; 300 non-result frames from the same
+match read nothing. DEFEAT pinned by the other session. **DRAW still unconfirmed by a frame**
+for the card reader; the first live draw closes it.
+
+### I-21  `_select_verified` re-toggled a landed selection once its own disc went blind   P0  input
+
+**Evidence.** overnight/run_live_20260920d.log ~168-190 and screenshot_log/run_20260920_194419
+19:48:50-19:49:30: hand [fielding_boost, 9/0, 5/1, pitch_boost, 6/0], "Playing pitch focus 9"
+(slot 1); `_select_verified` pressed select_card FIVE times, the user watched the 9 select
+and deselect on the stream, then two polls refused on "position is unreadable", then I-03's
+fallback played the 6 at slot 4 (revealed 6 vs 6, a coin flip).
+
+**Root cause.** A lifted card's power disc loses its dark edge, so `selected_cards` abstains
+on that row and a LANDED select reads exactly like an unlanded one; the pre-press guard ran
+once, before the first press, and every retry toggled the card back down.
+
+**Fix.** MERGED 2026-09-20 (3450a03): after any press, a target that has become unreadable
+is re-looked once after `SELECT_RETRY_CONFIRM_SEC` and, if still unreadable, INFERRED
+selected (nothing but our press could have blinded a row proven readable a moment before);
+it is never pressed twice without a look showing it at rest and readable. A target
+unreadable from the start still refuses without pressing.
+
+**Verify.** `tests/minigame/test_select_stops_when_lift_unreadable.py`: landed-then-blind (1
+press, success), dropped press (still retries), pre-unreadable (refuses, 0 presses),
+genuinely dead (exhausts the budget). Two mutants reproduce the 5-press toggle. Live check:
+the next match with a 9 selected must log one press, no toggle.
+
+**Status.** Merged; live confirmation open.
 
 ### I-05  The unattended loop has never run end to end with the paid model off      P0  loop
 
