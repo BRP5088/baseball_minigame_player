@@ -1103,6 +1103,53 @@ entry that is an `Exception` now makes `read_state_for_turn` raise it, mirroring
 `play_results`' existing shape) -- no existing test passes an `Exception` there, so
 this is backward compatible.
 
+**Opus skeptic round, 2026-09-21 (`agent_progress/issues/I-35-skeptic/progress.md`,
+worktree head 63edc52): CONFIRMED WITH NOTES.** 9,966 archived frames scanned (both
+live logs in full, every fixture dir), 2,525 detector firings, **0 on a turn, result,
+ban or dealer-prompt screen** -- no refutation. Measured durations: new_inning
+1.4-1.7s (7 episodes), reveal_recap 3.7-12.6s (36 episodes), both well under the 30s
+bound. Money path (start_match, the debit, C1/C2/C3/C5, close_result) confirmed
+textually unchanged. Of 6 planted mutants, 3 survived and were fixed here, all
+re-verified CAUGHT after the fix (sha256 restored both times: `local_state.py
+cd042a6a...`, `orchestrator.py 8a78168a...`):
+
+- **A (`is_reveal_recap`'s no-hand-fan term rejected 0 of 9,966 frames -- inert).**
+  Kept rather than removed (the code's own contract: a fan present must mean "not a
+  recap" regardless of the diamond), now pinned by a MANUFACTURED fixture
+  (`test_fixtures/screens/reveal_recap_with_fan_synthetic.jpg`,
+  `agent_progress/issues/I-35/build_fan_composite.py`: a real fan crop pasted onto a
+  real recap frame's hand region, centre region untouched) that isolates the fan
+  check as the only thing rejecting it. Docstring corrected to say so plainly rather
+  than claim it as a fourth separating signal.
+- **B (the pending-row skip's NARROWNESS was unpinned -- the CONTROL used a raised
+  Exception, never a screen literally named "other" through the success path).**
+  Added a harness case: `["turn"] + ["other"] * N` with no trailing "turn" (a first
+  draft had one and it rescued the row under BOTH arms, proving nothing) --
+  baseline resolves (logs) the row on the first "other" poll (its default payload
+  carries real, not None, score fields); a mutant widening the skip to also exempt
+  "other" leaves it unresolved. logged==1 pins the narrow scope.
+- **E (whole-word vs substring in `is_new_inning` measure IDENTICAL on all 9,966
+  frames).** Not a measured separation; corrected the docstring to say it is
+  insurance against the I-30/I-34 substring-collision shape, kept for that reason
+  alone. Left unpinned by a mutant deliberately -- the skeptic's own instruction
+  scoped this one as a documentation fix, not a code-behind-a-test gap, and forcing
+  a synthetic fixture to fabricate a difference the measurement says does not exist
+  would misrepresent it as more than insurance.
+
+Also fixed: the orchestrator.py comment on `transition_screen_since` claimed an
+"uninterrupted" clock; an unreadable poll in between does NOT reset it (the raise
+path's `continue` sits before the reset line), so it spans the whole gap, not just
+recognised-screen runs -- corrected, kept (right direction: it still bounds the
+total wait). Added a harness case pinning the skeptic's noted (non-refuting)
+behavioural delta: "new_inning"/"reveal_recap" DO clear `acted_screen` (unlike
+"other"), so a `result -> reveal_recap -> result` sequence was checked directly
+rather than just argued -- scores exactly once, `match_in_progress` (QA1-F2)
+independently blocks the double-score N2's `acted_screen != "other"` clause cannot
+see here. (Measured while building it: the second result read still presses
+close_result to dismiss the overlay even though it does not re-score -- 2 presses
+across 2 sightings is correct, not a symptom; an earlier draft of this test wrongly
+asserted exactly 1 press.)
+
 **Status.** Fixed, awaiting live verification (this ticket is offline-only; a live
 run is what would confirm the measured 6.6-13.7s dwell and the 30s bound against a
 real match rather than a scripted one).

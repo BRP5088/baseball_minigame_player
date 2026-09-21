@@ -8361,9 +8361,17 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # express it; a process-local latch can, and it cannot loop because the
     # debit is what sets it.
     debited_this_process = False
-    # I-35: when the CURRENT uninterrupted run of "new_inning"/"reveal_recap" began
-    # (None between such runs) -- see TRANSITION_SCREEN_MAX_SEC and the dispatch
-    # branch for these two screens below.
+    # I-35: when the CURRENT run of "new_inning"/"reveal_recap" began (None between
+    # such runs) -- see TRANSITION_SCREEN_MAX_SEC and the dispatch branch for these
+    # two screens below.
+    #
+    # NOT reset by an unreadable poll in between (the Opus skeptic caught this,
+    # `agent_progress/issues/I-35-skeptic/progress.md`): the raise path this
+    # variable's reset line sits after is a `continue` ~200 lines above it, so a
+    # gap that alternates transition/unreadable keeps one uninterrupted clock
+    # across the WHOLE gap, not just the recognised part of it. That is the
+    # direction that matters (it still bounds the total wait), so it is kept as
+    # designed -- but "uninterrupted" describes runs of a RECOGNISED screen only.
     transition_screen_since = None
     # "No action needed" bookkeeping: when the current run of motion began (None
     # when the screen is still), and how many polls it has absorbed.

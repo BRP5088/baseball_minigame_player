@@ -58,7 +58,7 @@ from PIL import Image
 
 import local_state
 import table_prompt
-from _run_harness import Harness
+from _run_harness import Harness, RESULT_WIN, _PLAYED
 import orchestrator as o
 
 fails = []
@@ -146,6 +146,31 @@ for label, frames in REQUIRED_NEGATIVES.items():
 for i, im in enumerate(NEW_INNING_POS, 1):
     check(local_state.is_reveal_recap(im) is False,
           f"is_reveal_recap must not fire on new_inning positive #{i}")
+
+# --- THE NO-HAND-FAN TERM ACTUALLY REJECTS SOMETHING (Opus skeptic mutant A) ---
+# The skeptic's census over 9,966 archived frames found ZERO with edge>=0.065 AND a
+# hand fan present, so a mutant deleting `local_hand._fan_looks_present` from
+# is_reveal_recap survived the whole suite -- the term was inert on every frame that
+# exists. This fixture is MANUFACTURED (`agent_progress/issues/I-35/
+# build_fan_composite.py`) rather than sighted live: a real fan, pasted onto a real
+# recap frame's hand region, leaving the centre (what `edge` measures) untouched. It
+# proves the term does something rather than claiming it does on real traffic.
+FAN_COMPOSITE = img("reveal_recap_with_fan_synthetic.jpg")
+check(local_state._center_card_edge_fraction(FAN_COMPOSITE) >= local_state.REVEAL_RECAP_EDGE_MIN,
+      "sanity: the composite's edge score must still clear the gate (the paste must "
+      "not have touched the centre region) or this proves nothing")
+check(local_state.read_result(FAN_COMPOSITE).get("is_result") is False,
+      "sanity: the composite must not be caught by the result exclusion instead")
+try:
+    import table_prompt as _tp_sanity
+    check(_tp_sanity.at_table(FAN_COMPOSITE) is False,
+          "sanity: the composite must not be caught by the prompt exclusion instead")
+except Exception as exc:
+    check(False, f"sanity: table_prompt.at_table raised on the composite ({exc})")
+check(local_state.is_reveal_recap(FAN_COMPOSITE) is False,
+      "is_reveal_recap must reject a frame combining high centre edge with a real "
+      "hand fan -- if this fails with the sanity checks above passing, the "
+      "no-hand-fan term itself is not doing the rejecting")
 
 # =============================================================================
 # 2. WIRED INTO local_game_state() -- AFTER result/ban/prompt/turn, per the
@@ -283,6 +308,76 @@ check("outlasted" in out and "stuck on 'reveal_recap'" in out,
 check(len(logged) == 0,
       f"the 30s bound firing must drop the still-pending row (nothing to log "
       f"yet, the transition never advanced to a real turn), got {len(logged)}")
+
+# =============================================================================
+# 6. THE PENDING-ROW SKIP IS NARROW: it names exactly "new_inning"/"reveal_recap"
+#    and nothing else -- a screen genuinely named "other" (not a raised exception)
+#    is NOT exempted and is resolved the same way it always was. Opus skeptic
+#    mutant B: widening the skip tuple to also include "other" survived the whole
+#    suite because the CONTROL above uses a scripted Exception (the raise path),
+#    never a screen literally named "other" through the SUCCESS path.
+#
+# Measured directly before writing this: "other"'s default harness payload
+# carries your_score=0/opp_score=0 (not None, unlike new_inning/reveal_recap), so
+# baseline code resolves (logs) the pending row on the very FIRST "other" poll --
+# it is not "dropped" in the unscorable sense, it is scored immediately, same as
+# any other successful read. Under the widened-exclusion mutant "other" would
+# also be skipped, the row would never be resolved against it, and it would
+# still be unresolved when the scripted screens run out -- logged=0. That is the
+# behavioural difference this pins.
+#
+# NO TRAILING "turn" HERE, DELIBERATELY (a first draft of this test had one and
+# it did not distinguish baseline from the mutant): "turn" is never excluded
+# from the resolution block either way, so a later "turn" rescues the row under
+# BOTH the shipped code and the widened-exclusion mutant, making them read
+# identical. Only the run staying on "other" the whole time separates them.
+# =============================================================================
+logged = []
+real_log_matchup = o.log_matchup
+o.log_matchup = lambda record: logged.append(record)
+screens = ["turn"] + ["other"] * (o.MAX_UNRECOGNIZED_ATTEMPTS + 3)
+h = Harness(screens, play_results=[(True, dict(_INFO))], balance=500,
+            revealed=[_OURS_CARD, _THEIRS_CARD], opp_local=dict(_OPP_LOCAL))
+h.run(target_wins=99)
+check(len(logged) == 1,
+      f"a screen genuinely named 'other' must NOT be exempted by the transition-"
+      f"screen skip -- it should resolve the pending row on its own (score "
+      f"fields present, unlike new_inning/reveal_recap), got {len(logged)} logged")
+
+# =============================================================================
+# 7. NOTED BY THE OPUS SKEPTIC (not a refutation): "new_inning"/"reveal_recap" are
+#    RECOGNISED screen names, so unlike "other" they DO clear `acted_screen`
+#    (orchestrator.py: `if screen != acted_screen and screen != "other":
+#    acted_screen = None`). N2's own comment says "other" is excluded from that
+#    specifically to stop `result -> other -> result` double-scoring. A half-faded
+#    result screen that reads as "reveal_recap" between two result polls would
+#    clear acted_screen the way "other" cannot -- but C1's double-score guard is
+#    ALSO independently blocked by `match_in_progress` (QA1-F2, orchestrator.py
+#    ~8996: "if not match_in_progress:" -- set False the moment a result scores),
+#    so this is not reachable as a hole. Pinned here rather than just argued:
+#    reveal_recap in place of "other" in the SAME N2 sequence
+#    (test_run_debit_and_scoring.py's own precedent) must still score exactly once.
+#
+#    Measured while writing this: the SECOND result read still presses
+#    close_result (to dismiss the overlay -- QA1-F2's own branch does that on
+#    purpose, printing "Result screen with no paid match in progress -- already
+#    scored, not counting it again") even though it does not re-score. TWO
+#    close_result presses across two result sightings is therefore the CORRECT
+#    behaviour, not a symptom -- the invariant that matters is wins, not press
+#    count, and asserting exactly one press here would have been a wrong
+#    expectation pinned as if it were a requirement.
+# =============================================================================
+h2 = Harness(["match_start_prompt"] + _PLAYED
+             + [RESULT_WIN, "reveal_recap", RESULT_WIN])
+final2 = h2.run(target_wins=99)
+_close_result_presses = h2.presses.count("close_result")
+check(final2["wins"] == 1,
+      f"result / reveal_recap (clears acted_screen, unlike 'other') / result "
+      f"scored {final2['wins']} wins, expected 1 -- match_in_progress (QA1-F2) "
+      f"must still block the double-score C1/N2 exist to prevent")
+check(_close_result_presses >= 1,
+      f"result / reveal_recap / result never pressed close_result "
+      f"({_close_result_presses} times) -- the overlay would be left on screen")
 
 
 if fails:

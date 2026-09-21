@@ -951,13 +951,11 @@ def read_result(full_frame):
 def is_new_inning(full_frame):
     """Is the "NEW INNING" half-boundary banner on screen right now.
 
-    OCR on the fixed caption band, requiring "NEW" and "INNING" as WHOLE WORDS (I-30's
-    "JOHNNY DRAWERS" lesson: a substring match on "DRAW" fired on "DRAWERS"; the same
-    trap exists here against any card or scenery text that merely contains those
-    letters). Native template matching (CLAUDE.md 10.30) was tried first and dropped: the
-    caption band also carries "PLAY BALL!", "ROUND N" and "PLAY AS THE X", so a bank of
-    templates would need one entry per rendering of EVERY caption to avoid matching the
-    wrong one, while OCR only has to spell two words right.
+    OCR on the fixed caption band, requiring "NEW" and "INNING" as WHOLE WORDS. Native
+    template matching (CLAUDE.md 10.30) was tried first and dropped: the caption band
+    also carries "PLAY BALL!", "ROUND N" and "PLAY AS THE X", so a bank of templates
+    would need one entry per rendering of EVERY caption to avoid matching the wrong one,
+    while OCR only has to spell two words right.
 
     Measured, `agent_progress/issues/I-35/measure_screens.py`:
 
@@ -969,6 +967,20 @@ def is_new_inning(full_frame):
             PLAY AS THE PITCHER -- the reveal-recap tableau, the required turn/result/
             ban/prompt/pause fixtures, and every world/navigation frame sampled)
             0 of 51 read both words
+
+    WHOLE-WORD MATCHING IS INSURANCE, NOT A MEASURED SEPARATION -- corrected 2026-09-21
+    after the Opus skeptic checked it (`agent_progress/issues/I-35-skeptic/progress.md`,
+    mutant E). Over 9,966 archived frames (both live logs in full plus every fixture
+    directory), a whole-word rule and a bare substring rule (`"NEW" in txt and "INNING"
+    in txt`) answer IDENTICALLY on every one -- 117 positives either way, 0 substring-
+    only false positives. So on everything that exists today this guard has never once
+    mattered. It stays anyway: it is the same shape as I-30/I-34's "JOHNNY DRAWERS"
+    substring trap (a card or scenery text merely CONTAINING "NEW" or "INNING" would
+    otherwise fire), it costs nothing extra, and CLAUDE.md 10.30/10.31's whole
+    catalogue is failures that looked like this until the corpus that would show them
+    finally existed. Call it what it is: insurance against a class of frame this
+    project has been burned by before, not a threshold sitting between two measured
+    populations.
 
     False means "the band does not spell NEW INNING", never "not a game screen" -- the
     caller is expected to try `is_reveal_recap` next.
@@ -1063,11 +1075,26 @@ def is_reveal_recap(full_frame):
 
     Edge alone sits INSIDE three other populations (CLAUDE.md 10.4) -- it cannot ship
     alone. Composed with the readers that already own two of those screens (`read_result`,
-    `table_prompt.at_table`) as exclusions, the brightness gate for the ban/pause page
-    shape, and "no 5-card fan" (`local_hand._fan_looks_present`, the same evidence
-    `read_hand` itself reads), it separates cleanly on every required negative (turn with
-    fan, result, ban, dealer prompt, pause book) -- see
-    `tests/minigame/test_transition_screens_recognised.py`.
+    `table_prompt.at_table`) as exclusions and the brightness gate for the ban/pause page
+    shape, it separates cleanly on every required negative (turn with fan, result, ban,
+    dealer prompt, pause book) -- see `tests/minigame/test_transition_screens_recognised.py`.
+
+    THE "NO 5-CARD FAN" TERM IS DEFENCE-IN-DEPTH WITH NO MEASURED CONTRIBUTION, NOT A
+    FOURTH SEPARATING SIGNAL -- corrected 2026-09-21 after the Opus skeptic checked it
+    (`agent_progress/issues/I-35-skeptic/progress.md`, mutant A). Over the same 9,966
+    frames: `edge >= 0.065` alone admits 2,577; adding the bright-page gate cuts that to
+    2,470; adding `read_result`/`table_prompt.at_table` cuts it to 2,408; the fan check
+    rejects **zero of those 2,470** -- every frame that ever clears edge+bright already
+    has no fan. It never once did the separating work on any frame that exists. It stays
+    because there is no PROOF a frame combining both cannot occur (a fast transition
+    where the reveal cards and the new hand are briefly both on screen, say), it costs one
+    already-shared crop plus a disc scan, and the required "turn with hand fan" negative
+    is a check this function's own contract promises -- a fan present must mean "not a
+    recap" regardless of what the diamond looks like. Pinned not by a live sighting (none
+    exists) but by `test_fixtures/screens/reveal_recap_with_fan_synthetic.jpg`, a MANUFACTURED
+    composite (`agent_progress/issues/I-35/build_fan_composite.py`: a real hand-with-fan
+    crop pasted onto a real recap frame, leaving the edge region untouched) that isolates
+    the fan check as the only thing rejecting it.
 
     NOT SAFE AGAINST, AND NOT CLAIMED SAFE: arbitrary world/navigation frames (the bar,
     a doorway, an NPC) and the OTHER readers' own hard negatives (a "top negative" that
