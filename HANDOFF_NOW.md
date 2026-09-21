@@ -173,9 +173,15 @@ Verbatim from the facts file's LATER list, plus what accumulated after it:
 ### Snoopy jobs (one at a time; VLM text reading and grunt work only)
 - Label the kept reveal frames (test_fixtures/reveal_kind_truth/auto/): opponent card name + power per frame -> ground truth for the reveal-miss rate and for reveal_cards.TACTICS_KIND_MIN (OPEN-24).
 - Type Brian Coker and Zachary Lee from their ban-grid type banners (the roster's two untyped cards; simulate.UNTYPED).
-- Second-opinion the 34 I-46 new raised-card digits (agent_progress/issues/I-46/skeptic.md lists the frames/slots).
+- ~~Second-opinion the 34 I-46 raised-card digits~~ DROPPED after job 1: the VLM misreads small digits the local reader gets right.
 - Mutation sweeps for I-48 once built, if the console is live (Snoopy_testing.md).
 Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter -- local scripts, seconds.
+
+### Snoopy job 1 DONE (reveal frames, agent_progress/census/reveal_vlm/)
+- 153 kept reveal frames; only 82 have a match_log row. The other 71 are the "turn not logged" misses -- the frame IS kept now, so the miss population is on disk for the first time.
+- VLM vs match_log (n=82): our_power 83%, opp_power 91%, tactics kind 77%. The one frame decoded at full res: local reader + log exactly right, VLM misread an 8 as 3. The VLM is WORSE than the local reader on digits -> job 3 (second-opinion raised digits) is DROPPED, no value.
+- WHAT THE MISSES ARE (13 tiles by eye, 2 at full res -- a hypothesis, not a census): 3/13 the kept "peak" frame is the NEXT turn's hand fan (reveal already cleared); 10/13 a 4-card cluster still bunched at the mound before the cards separate to home/mound, home plate empty; one had a RUNNER in the cluster. So the local reader's abstention is mostly CORRECT and the gap is CAPTURE TIMING (the watcher's peak is too early or too late), not recognition. The VLM "recoveries" are readings of the wrong card.
+- LATER (fix direction, not started): make the reveal watcher wait for the 2+2 cards to SEPARATE (home-plate zone occupied AND mound zone occupied) before keeping the frame, bounded by the reveal window (~2-3 s, memory: reveal-is-a-brief-centre-window); score it on the 71 orphan frames' turns in the next matches.
 
 ## 6. OPEN QUESTIONS
 
