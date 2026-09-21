@@ -1385,6 +1385,38 @@ offered again the moment it reads.
 
 **Status.** Open.
 
+### I-40  pause_menu.read_money misreads the wallet and refuses a legible one   P1  money record
+
+**Evidence.** `overnight/run_live_20260921p.log:159` — "[balance] read LOCALLY from the pause
+menu: $286" right after a Load Last Save that always restores $246 (every earlier reset today
+read 246). `run_cycles` then set `max_spend=286`, played four matches, and attempted a fifth
+with the game's wallet at 46: "[verify] start_match: FAILED after 5 attempts, state never left
+'prompt'" / "Match never started — stopping". The record was left at balance 36 with
+`match_in_progress` true — a phantom $50 debit, repaired by the next reset. At 10:50 the pause
+book plainly showed 46 (fixture `test_fixtures/pause_money_20260921.png`) and `read_money`
+returned None on it.
+
+**Root cause.** Not established — a 4->8 confusion at one OCR scale that passed the two-scale
+agreement, and a refusal on a two-digit value, are both candidates.
+
+**Proposed fix.** (a) Keep the pause-menu frame on every money read
+(`diagnostics/money_reads/<ts>.png`) so the next misread has evidence. (b) After a Load Last
+Save, `run_cycles` should refuse a read that is not the known reload wallet (246) instead of
+trusting it. (c) Measure `read_money` over every saved pause frame once there are some.
+
+**Status.** Open, agent dispatched for (a)+(b).
+
+### I-41  Four tools popped BASEBALL_TEST_RUN at import, silently disabling the offline input lockout   P1  rig
+
+**Evidence.** `tools/crawl_sheet.py:15` (and `label_batch.py:23`, `play_match_verified.py:16`,
+`turn_timer.py:21`) did `os.environ.pop("BASEBALL_TEST_RUN", None)` at import; the scanner only
+matched assignments/setdefault.
+
+**Proposed fix.** Merged `f7bd912808c3708b5e0d489d189a11164fb7dbaf` — refuse at the
+press/grab behind `<NAME>_DRIVE_IN_TESTS`, scanner widened to `.pop`.
+
+**Status.** Merged.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
