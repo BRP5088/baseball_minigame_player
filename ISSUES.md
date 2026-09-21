@@ -2902,3 +2902,135 @@ now asserted to produce.
 **Status.** merged 0a62bbf69c73cb343c3723d1bd92f0c2e523ee0c, skeptic CONFIRMED WITH
 NOTES (rows carry no match id beyond ts; the transition-timeout drop site ~9091
 still discards, 0/42 traced).
+
+### I-54  A truncated card name ('JOHNNY DRAW') passes the result-word OCR fallback: phantom draw #9 mid-match   P0  reader
+
+**Evidence.** Main checkout, `overnight/run_live_20260921t.log` ~634-640 (read-only):
+
+    [state] the templates missed this banner; OCR read it: 'JOHNNY DRAW'
+    [reveal] outcome unscorable: your_score missing from the follow-up read; dropping the pending row for our_power 8.
+    Draw logged (9 total).
+    [verify] close_result: a fresh frame reads is_result=False, not True -- nothing to close, and this is not a result screen. Refusing to press rather than button-mash a live screen.
+
+`close_result` refusing to press because a FRESH read says `is_result=False` is the
+tell: the match was still live, no banner had ever appeared. `progress_testing.json`'s
+draws count is over by one from this event; the match's real result, whatever it
+turns out to be, will be logged separately when it actually finishes.
+
+The opponent's card that turn is JOHNNY DRAWERS (confirmed from the frame: the
+reveal frame in `test_fixtures/reveal_kind_truth/auto/` nearest the log's own
+timestamp, `speed_boost_1790029528372177000.jpg`, shows a BATTER card "Johnny
+Drawers" power 7 speed 1 on the diamond, matching the log's own "ours 7, theirs 4"
+two lines earlier -- copied here to
+`test_fixtures/result_screens/negative_johnny_drawers_20260921.jpg`). I-34
+(2026-09-21, commit b8c033f) already fixed the CONTAINMENT form of this bug
+("DRAW" as a substring of "DRAWERS") with a whole-OCR-token match. This is the
+TRUNCATION form: OCR dropped DRAWERS' trailing letters instead of running them
+together, reading "JOHNNY DRAW" -- and once split on the space, "DRAW" is not a
+substring of anything, it IS the whole vocab word. `_similar` cannot refuse it; it
+is correctly being asked about "DRAW" alone.
+
+**Root cause.** `result_ocr.match_word` (the orchestrator's last-resort PaddleOCR
+fallback, distinct from `local_state.read_result_card`'s own I-30 whole-word fix,
+which this ticket does not touch) had no way to tell "the banner says DRAW" from
+"a card name got truncated down to DRAW" -- both produce the identical single
+token "DRAW" once split. Reproduced offline before this fix:
+`result_ocr.match_word([("JOHNNY DRAW", 1.0)])` -> `('draw', 'JOHNNY DRAW')`.
+
+**Fix.** A candidate token is now refused when the OCR TEXT IT CAME FROM also
+contains another alphabetic run of 3+ letters -- a real banner's OCR text is the
+word alone, plus trailing punctuation noise ("DRAW!", "DRAWI"), never a second
+word, while a card name is two. Checked PER OCR TEXT ENTRY (one `(text, conf)`
+tuple in `texts`), never pooled across the whole band crop.
+
+That per-entry scoping is load-bearing and is the reason this is not a
+rediscovery of the veto I-34's own skeptic reverted the same day ("refuse a match
+if the band has any other long alphabetic token"), which pooled every OCR text in
+the crop and always tripped on the matchbox-ring lettering (CAMEL BURN, SPARK-D,
+SAFETY MATCHES, SPIKE-D...) that sits somewhere in `BAND` on every class,
+including the phantom-draw frame itself. `tools/read_banner_paddle.py` returns
+one `texts` entry per PaddleOCR-DETECTED TEXT REGION (`rec_texts`/`rec_scores`
+zipped), not one entry for the whole crop -- the matchbox lettering and a card
+name banner are always SEPARATE detected regions, so a guard scoped to a single
+entry's own tokens never sees the matchbox text at all, and a card name's two
+words landing in ONE entry is exactly what it catches.
+
+No confidence floor from the template reader was added (the task considered one:
+"accept only when the template reader's best score for that word is at least some
+measured floor"). No such floor has been measured, and CLAUDE.md 10.32 is explicit
+that inventing one on the money path is exactly the mistake this file's history
+warns against -- the lone-token rule alone is what shipped.
+
+**Measured (agent_progress/issues/I-54/progress.md), via real PaddleOCR, before AND
+after this fix -- identical both times, so the fix costs nothing on a genuine
+banner:**
+
+    test_fixtures/reveal_kind_truth/auto/ (185 real reveal frames)   0 false positives, both arms
+    heldout_winner_a.jpg 'WINNER' / heldout_loser_a.jpg 'LOSER' /
+      heldout_draw_768.jpg 'DRAW!'                                    all three still read correctly
+    the new negative fixture (real OCR: PITCH/FOCUS/PITCHER)          None, both arms
+    phantom_draw_20260920.png (I-34's own fixture, real OCR:
+      JOHNNY/DRAWERS/JOHNNYDRAWERS/PITCHER)                           None, both arms
+
+A KNOWN, DECIDED LIMIT, PINNED RATHER THAN LEFT IMPLICIT: a run under 3 letters
+("JO", "A") does not count as a second real word, so a card name truncated on
+BOTH halves down to 2-letter fragments ("JO DRAW") is not caught by this fix.
+Nothing observed -- this module's own docstring, the live incident -- has ever
+shown OCR truncate a card's FIRST word that hard while leaving the second at a
+clean vocab length, so this is recorded rather than chased with an arbitrary
+lower floor (CLAUDE.md 10.4: a threshold sits between two MEASURED populations,
+and no population of 1-2 letter OCR fragments has been measured here). Pinned:
+`match_word([("JO DRAW", 1.0)])` still reads `draw`, deliberately.
+
+**Verify.** `tests/minigame/test_result_ocr_whole_word.py`, extended: (A) the exact
+bug, `match_word([("JOHNNY DRAW", 1.0)])` -> None; (B) the untruncated form stays
+refused (I-34 control, re-asserted here); (C) `DRAW`/`DRAW!`/`DRAWI` still read as
+draw; the mechanism generalises to `match_word([("THE WINNER", 1.0)])` -> None
+(a second real word, even a filler, refuses) with the JO DRAW limit pinned
+alongside it, and to a SEPARATE-entry control (`[("CAMEL BURN", ...), ("DRAW!",
+...)]` -> draw) proving the guard is per-entry, not pooled; (D) the three live
+result fixtures still read, through `read_banner`'s full wiring (worker stubbed to
+the REAL texts measured above -- no `paddle_venv` needed to run this
+deterministically, same pattern I-34's own wiring test uses); (E) the new negative
+fixture -> no result, both via `match_word` directly on its real measured OCR text
+and through `read_banner`'s full wiring on the real fixture file. Section 3's
+former `"THE WINNER" -> win` assertion is now `"A WINNER" -> win` (a filler under
+the 3-letter floor, which still demonstrates the tokeniser finding a word beside
+other text); the old input is re-asserted elsewhere as the new, correct answer --
+shown and adjusted, not silently dropped, per CLAUDE.md 10.32.
+
+**Mutants (4, `__pycache__` never written -- `-B` throughout; sha256-verified
+restore to `71e7b2f21aa735834ed502036e9dba83965a22b494009f97194fa3b0bae34966`
+between each):**
+
+    remove the `len(significant) > 1` guard entirely
+        -> FAILS the exact-bug check AND the 'THE WINNER' check (2)
+    `len(significant) > 1` -> `>= 1` (any significant token at all blocks)
+        -> FAILS 19 checks: every plain-vocabulary read, 'A WINNER', the pinned
+           'JO DRAW' case, three of the four recall-regression cases, the
+           SEPARATE-entry control, the wiring checks, and all three live-fixture
+           checks
+    the length floor `>= 3` -> `>= 1` (single letters count as "significant")
+        -> FAILS 6 checks: 'A WINNER', the pinned 'JO DRAW' case (its own "JO"
+           now counts as significant, which is exactly the known limit the pin
+           exists to name), and three of the four recall-regression cases --
+           their split forms are runs of 1-3 letter fragments
+    the length floor `>= 3` -> `>= 7` ('JOHNNY', 6 letters, no longer counts)
+        -> FAILS the exact-bug check AND the 'THE WINNER' check (2), reopening
+           the bug this ticket exists to close
+
+The negative fixture's real OCR text (PITCH/FOCUS/PITCHER) does not itself match
+any vocab word with or without the guard, so none of the four mutants above are
+caught BY that check specifically -- noted plainly rather than left to look like
+independent coverage it is not. It is a real-image control against the pooled-veto
+regression shape (mutant 2's kind, generalised) and against any future change that
+makes the OCR fallback newly loose on non-vocabulary text.
+
+Siblings run clean: `tests/minigame/test_result_reader.py` (one PRE-EXISTING,
+UNRELATED failure carried over from I-34 -- `diagnostics/20260910_103221_5018/
+screen_at_stall.png` does not exist in this worktree; reproduced identically
+before and after this ticket's changes), `test_result_card_is_read.py`,
+`test_run_debit_and_scoring.py`, `test_transition_screens_recognised.py`,
+`tests/harness/test_no_undefined_names.py`, `test_claude_md_constants.py`.
+
+**Status.** fixed on branch, awaiting skeptic (result path).
