@@ -728,6 +728,25 @@ give-up false positives.
 
 **Status.** Merged; live confirmation open. QA round 5 (41dd459cad89a71bff9af2bb63881dd78be8bf5e): the give-up test's stub answered from its own press flag rather than the frame, so a stale post-press read went uncaught; it now keys on the frame's capture sequence and that mutant fails.
 
+### I-31  A fresh match's first turn stalled forever on an unreadable phase banner   P0  reader/loop
+
+**Evidence.** overnight/run_live_20260921c.log: a fresh match's first hand held three
+tactics cards and two batters, one batter's disc hidden under the lifted neighbour, the
+SPEED BOOST's type unread; read_phase had one banner vote and abstained, 15 polls of
+"phase not read locally", and the run stopped with unreadable_screens. Frame:
+test_fixtures/phase/i31_fresh_match_tactics_batting.png.
+
+**Root cause.** read_phase voted only on BATTER/PITCHER banners, and local_game_state
+raised on abstention even on a fresh match whose half is known.
+
+**Fix.** MERGED 2026-09-21 (e23e0f6602267664261b71386d65d60bfba983ca): tactics kinds
+vote (swing/speed = batting, pitch/fielding = pitching), and when the reader still
+abstains on a readable hand the match's own half decides, logged.
+
+**Verify.** 12 checks, 3 mutants.
+
+**Status.** Merged; live confirmation: resume the parked match.
+
 ## C. Costs wins
 
 All four C items are simulator A/Bs first. Harness: `simulate.py` (`sweep`,
