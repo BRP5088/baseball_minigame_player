@@ -161,13 +161,24 @@ def _fan_discs(img):
 
     The shared candidate pool behind player_discs AND (I-31) read_phase's tactics votes,
     so there is exactly one place that decides which slot a disc belongs to.
+
+    I-37 REGRESSION (2026-09-21): this function's "is the fan there" gate used to be its
+    OWN reimplementation -- first a median-residual check, later untouched when
+    `local_hand.read_hand`'s gate was replaced by a COUNT rule (2026-09-20) and again when
+    that count rule was broadened to pool white-disc/wreath candidates, not just `strong`
+    (I-37). The docstring's claim ("exactly one place decides") was never true of the GATE,
+    only of the per-slot candidate assignment below it -- so `read_hand` and `_fan_discs`
+    drifted to two different answers for "is this a fan" on the same frame. Live effect:
+    a genuine hand with 2 of 5 cards occluded (read_hand -> 5 rows, 2 correctly marked
+    unreadable per CLAUDE.md 10.28) was accepted by read_hand and REJECTED by `_fan_discs`,
+    so `read_phase` saw zero votes and abstained on a hand with two perfectly legible
+    player banners. Fixed by delegating to the SAME gate `read_hand` uses, so the two
+    can no longer disagree about whether a fan is present -- only ever about a per-slot
+    assignment, which is what the docstring already promised.
     """
     strong = lh._strong_discs(img)
-    if len(strong) < lh.FIT_MIN_DISCS:
-        return None
     s = img.width / lh.ANCHOR_W
-    fit = sorted(lh._slot(c[0], c[1], s)[0] / s for c in strong)
-    if fit[len(fit) // 2] > lh.FIT_MAX:
+    if not lh._fan_looks_present(img, strong, s):
         return None
     g = np.asarray(img.convert("L"), dtype=np.uint8)
     taken = [(c[0], c[1]) for c in strong]

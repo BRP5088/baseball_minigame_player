@@ -155,6 +155,33 @@ finally:
      orchestrator.local_hand_cards, orchestrator.read_ban_counter,
      ls.read_result, ls.read_phase, ls.read_runners, table_prompt.at_table) = saved
 
+# ---- (d) I-37 REGRESSION: `_fan_discs` must not disagree with `read_hand` about --------
+# whether the fan is there at all. `local_state._fan_discs` used to carry its OWN
+# reimplementation of that gate (first a median-residual check, later untouched when
+# `local_hand.read_hand`'s gate moved to a COUNT rule and again when I-37 broadened that
+# count to pool white-disc/wreath candidates) -- so on a genuine hand with 2 of 5 slots
+# occluded, `read_hand` admitted the fan (5 rows, 2 correctly marked unreadable per
+# CLAUDE.md 10.28) while `_fan_discs` rejected it outright, and `read_phase` abstained
+# with ZERO votes on a hand carrying two perfectly legible player banners. Bisected in
+# the main checkout against tests/minigame/test_hand_memory_persists.py: with local_hand.py
+# at ccdd46b (pre-I-37) the test passed; with the I-37 gate it failed on exactly this
+# frame, kept here as a named fixture (never glob agent_progress/deal-frames/, which is
+# gitignored, absent in a fresh checkout, and live-written -- CLAUDE.md section 2).
+FAN_FIX = os.path.join(_ROOT, "test_fixtures", "hand_reads",
+                        "i37_fan_discs_disagreed_with_read_hand.png")
+_fimg = Image.open(FAN_FIX).convert("RGB")
+_frows = lh.read_hand(_fimg)
+check("I-37 regression fixture: read_hand recognises the fan (5 rows)",
+      len(_frows) == 5, f"got {len(_frows)} rows: {_frows!r}")
+_fbest = ls._fan_discs(_fimg)
+check("...and _fan_discs agrees a fan is present (not None)",
+      _fbest is not None, f"got {_fbest!r}")
+_fph, _fdetail = ls.read_phase(_fimg)
+check("...so read_phase gets real votes instead of abstaining at cards=0",
+      _fdetail.get("cards", 0) > 0, f"detail={_fdetail!r}")
+check("...and derives the correct phase (batting) from them",
+      _fph == "batting", f"got {_fph!r} detail={_fdetail!r}")
+
 print()
 if fails:
     print(f"{len(fails)} FAILED")
