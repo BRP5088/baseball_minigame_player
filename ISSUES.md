@@ -535,7 +535,9 @@ cursor readings above the new ceiling and 68 false ones, all `digit None` with
 HANDOFF_NOW.md is a pixel distance from the unrelated, unshipped vertical-bound patch, not
 a glow percentage -- do not conflate the two.)
 
-**Status.** Merged; live confirmation open: resume the parked match.
+**Status.** Merged; live confirmation open: resume the parked match. QA round 4 (dc47548):
+FALSE_CURSOR_EXCLUDE_MAX now has a test; because 4 equals the fan's natural exhaustion, the
+test also probes a lowered budget to prove the clause is load-bearing.
 
 ### I-26  `_clear_strays` refused on a flickered read, not a lift              P0  guard
 
@@ -828,7 +830,9 @@ reports: `slot(s) [N] were ALREADY unreadable`, `Decision: Playing` with no reve
 deal-timeout column had gone dead when I-09 reworded the message (a 10.1 shape in the
 scorecard itself); it now counts both wordings, and six refusal shapes (false_cursor,
 stray_guard, pre_press_guard, inferred_select, excluded, confirm_verify_fail) have
-columns.
+columns. QA round 4 (dc47548): the stray_guard column had gone dead a second time when
+I-26 reworded its message; it now counts both wordings and a stray_relook column shows
+recovered flickers.
 
 ### I-20  Coverage gaps on the match loop                                          P1  evidence
 
