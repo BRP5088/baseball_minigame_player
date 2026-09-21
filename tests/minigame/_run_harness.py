@@ -116,6 +116,14 @@ class _Clock:
     def strftime(self, fmt, *a):
         return _real_time.strftime(fmt, *a)
 
+    # Delegated for the same reason: a kept frame's FILENAME carries a wall-clock
+    # stamp (record_reveal_kind writes `<kind>_<ns>.jpg`), which is an identity, not
+    # a duration. Missing, it raised AttributeError inside that function's own
+    # never-raises `except` and wrote nothing -- indistinguishable from "this turn
+    # played no tactics card", which is what the test was asserting about (10.1).
+    def time_ns(self):
+        return _real_time.time_ns()
+
 
 class Harness:
     """Runs orchestrator.run() against a scripted list of screens.
