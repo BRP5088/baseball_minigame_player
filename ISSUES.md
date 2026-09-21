@@ -893,11 +893,64 @@ either gate sees them, matching the test. Re-run, it prints exactly:
 
 naming the four files above (`agent_progress/issues/I-37/probe6_corrected_output.txt`).
 
-**Status.** Fixed in this worktree, not yet merged. Independent skeptic round
-2026-09-21 (`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH
-NOTES -- the fix itself was never in question; two write-up/coverage gaps were
-found and both fixed on this branch (the corpus-regression probe's fixture
-scale bug, and the missing per-slot-dedup mutant), see above.
+**Status.** Merged to main (3bd69d5). Independent skeptic round 2026-09-21
+(`agent_progress/issues/I-37-skeptic/progress.md`): CONFIRMED WITH NOTES -- the
+fix itself was never in question; two write-up/coverage gaps were found and
+both fixed on this branch (the corpus-regression probe's fixture scale bug,
+and the missing per-slot-dedup mutant), see above.
+
+**FOLLOW-UP, found on main after merge: `local_state._fan_discs` was a SECOND,
+STALE copy of the same "is the fan there" gate, and I-37 never touched it.**
+Main's full suite showed one non-pre-existing failure,
+`tests/minigame/test_hand_memory_persists.py` -- "the file carries a half
+stamp derived from the hand itself: phase written by local_hand_cards was
+None". Bisected against the pre-I-37 `local_hand.py` (ccdd46b): passes there,
+fails with the I-37 gate. Untestable in this worktree before now because the
+test globs `agent_progress/deal-frames/` (gitignored, absent here) -- copied
+in read-only from the main checkout (`cp -r`, never symlinked) to reproduce.
+
+**Mechanism.** `local_state._fan_discs` (feeding both `player_discs` and
+`read_phase`'s tactics votes) carried its OWN inline reimplementation of the
+gate -- the OLD median-residual check, never updated through the 2026-09-20
+count fix or I-37's broadened pool. Its own docstring's claim ("exactly one
+place decides which slot a disc belongs to") was already false of the GATE,
+only true of the per-slot assignment below it. On a genuine hand with 2 of 5
+slots occluded (`agent_progress/deal-frames/20260908_235423_patch65_66_67/
+loss_0008448_slot4/f0008425.png`, now `test_fixtures/hand_reads/
+i37_fan_discs_disagreed_with_read_hand.png`): `local_hand._strong_discs` finds
+2 candidates at cost [19.3, 33.3]; `read_hand`'s fixed gate (I-37) admits it
+(pools in the two players' own discs among others) and returns 5 rows, 2
+correctly marked unreadable; `_fan_discs`'s stale median gate takes
+`fit[1] = 33.3 > FIT_MAX (20)` and rejects the SAME frame outright, so
+`read_phase` saw zero votes and abstained (`cards: 0`) on a hand with two
+perfectly legible player banners reading "batting" at 0.905 and 0.898.
+
+Not a case of the widened gate admitting a non-fan (`read_hand`'s call is
+correct: two of the five cards genuinely are unreadable, the hand plays
+without them per CLAUDE.md 10.28, and the two THAT read are plainly real
+player cards) -- it is a second, drifted copy of the gate never brought in
+step with the first.
+
+**Fix.** `local_state.py`: `_fan_discs` now calls `local_hand._fan_looks_present`
+instead of reimplementing the gate, so it cannot drift from `read_hand` again.
+`orchestrator.local_hand_cards` and `local_state.read_phase` themselves are
+untouched, per the diagnosis instruction -- the bug was one layer below both.
+
+**Verify.** New check (d) in `tests/minigame/test_phase_from_tactics_and_match_
+state.py`: on the fixture above, `read_hand` returns 5 rows, `_fan_discs`
+agrees a fan is present, `read_phase` gets 3 real votes and derives `batting`.
+One mutant (revert `_fan_discs` to the old inline median gate): all three new
+checks fail (`_fan_discs` -> None, `cards: 0`, phase -> None), exit 1;
+`local_state.py` restored byte-for-byte after (sha256
+89c96fe58f5d43fee210fd23161c0ac7feb7137555ace17db4fcc7508a88a3a5, verified
+equal before and after). Re-ran `test_hand_memory_persists.py` (now with the
+copied `agent_progress/deal-frames/` present), `test_hand_read_two_lifted.py`,
+`test_deal_gate_arms_on_confirmed_play.py`, `test_readable_hand_gate.py`,
+`test_phase_from_tactics_and_match_state.py` -- all five exit 0. The copied
+`agent_progress/deal-frames/` (gitignored, 1.4G) was deleted from the worktree
+afterward; the one crop that mattered is the committed fixture above.
+
+**Status.** Fixed on this branch, not yet merged.
 
 ## C. Costs wins
 
