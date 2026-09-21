@@ -1676,6 +1676,36 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
     kinds0-only behaviour, unchanged -- the same convention `kinds0` already
     uses, so every caller written before this needs no changes.
 
+    N-2 (I-44 skeptic round 2, QA6 Q2 RE-OPENED): `inferred_targets` closed
+    NOTHING on its own, because round 2 correctly widened `_InferredSel.
+    inferred` to every success path (S-1's fix), which means `_select_
+    verified`'s OWN inference is ALWAYS a member of whatever it reports --
+    `inferred_targets` and the inference are the SAME conclusion asked twice.
+    QA6 Q2's mechanism (a dropped press plus a transient disc misread) still
+    reproduces the identical three facts a real lift does, and threading the
+    inference in as its own corroboration cannot catch that.
+
+    WHAT DOES CLOSE, NARROWLY: candidate 1 (selection-lift geometry, `local_
+    hand.selected_cards`) is UNAVAILABLE for validating THIS inference by
+    construction -- it needs exactly the disc `y` a blind target has already
+    lost. Candidate 2 (this function's own `ys0`/`_baseline_readable`,
+    extracted below) already requires a `want` slot to have been READABLE at
+    THIS OPERATION's true start before the inference is trusted at all -- a
+    target that starts the operation already blind (occluded, or a target
+    `_select_verified`'s own LATER look disagreed with, see the "one unmarked
+    exit" comment near `want <= lifted`) can never satisfy it, and must
+    either show up in `sel` on its own (a real read; still committed, no
+    inference needed) or the commit refuses. That is QA6 Q2's ORIGINAL
+    repro -- `want={3}`, baseline readable+player-kind, `sel` permanently
+    empty -- reversed: baseline UNREADABLE, `sel` permanently empty, refused.
+    It does NOT close the harder, read-identical case control tests already
+    pin as a MUST-COMMIT (a target readable at `ys0`, genuinely selected, then
+    misread as blind by the same disc-fit noise I-21 exists to tolerate) --
+    that is indistinguishable from a legitimate inference with the signals
+    this function has, and closing it needs either a post-commit read (too
+    late to prevent a wrong card, a detector not a fix) or per-row digit
+    corroboration this function is never handed.
+
     `_MAYBE_LIFTED` GATES THE BASELINE-BLIND STRAY EXEMPTION (I-43).
     Symmetrically, a STRAY slot already blind at baseline is exempted below
     (I-26/I-28) on the strength of `blind_before` alone -- but `blind_before`
@@ -1816,9 +1846,34 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
     def _corroborated(k):
         return inferred_targets is None or k in inferred_targets
 
+    # N-2 (I-44 skeptic round 2, QA6 Q2 re-opened): a DROPPED press on a target
+    # whose disc was ALREADY blind before this operation ever pressed anything
+    # produces the identical read as a genuine lift -- readable-before/blind-
+    # after is what `_select_verified` infers from, and "before" there is ITS
+    # OWN look, taken after the walk, which can disagree with THIS operation's
+    # own earlier `ys0` (see the "the one unmarked exit" comment below `want <=
+    # lifted`). Named here, not inlined, because it is the one fact a false
+    # inference cannot manufacture: a slot that was NEVER readable at this
+    # operation's true start cannot have gone "readable, then blind" during
+    # it, whatever `_select_verified`'s own later look believed. It is exactly
+    # `_baseline_not_tactics`'s shape, checked against `ys0` instead of
+    # `kinds0`.
+    #
+    # WHAT THIS DOES NOT CLOSE, so it is not claimed here: a target that WAS
+    # genuinely readable at `ys0` and is then misread as blind by a transient
+    # circle-fit wobble (CLAUDE.md 10.26 -- "the fitted circle alternated
+    # between r=19 and r=20") is READ-IDENTICAL to a real lift that blinds its
+    # own disc (I-21's own stated mechanism), and nothing here -- or anywhere
+    # in this function -- tells them apart; that is candidate-1-unavailable
+    # by construction, because `selected_cards` needs exactly the disc `y`
+    # this scenario has already lost (see its own docstring: "skip a row
+    # whose y could not be measured").
+    def _baseline_readable(k):
+        return ys0 is not None and k < len(ys0) and ys0[k] is not None
+
     _want_inferred = {k for k in want
                        if k in _blind_now
-                       and ys0 is not None and k < len(ys0) and ys0[k] is not None
+                       and _baseline_readable(k)
                        and _baseline_not_tactics(k)
                        and _corroborated(k)}
     lifted = set(sel) | _want_inferred
@@ -1856,7 +1911,7 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         _blind_now = {i for i, y in enumerate(_ys) if y is None}
         _want_inferred = {k for k in want
                            if k in _blind_now
-                           and ys0 is not None and k < len(ys0) and ys0[k] is not None
+                           and _baseline_readable(k)
                            and _baseline_not_tactics(k)
                            and _corroborated(k)}
         lifted = set(sel) | _want_inferred
