@@ -1079,63 +1079,124 @@ I-37 (already merged into this branch) does NOT fix it -- 167 of 378 frames in t
 failing window (`08:14:49-08:15:27`, `screenshot_log/run_20260921_080311/`) still misread
 slot 3 exactly this way with I-37's fix in place.
 
-**Fix.** `orchestrator.hand_cursor_look` only (nothing else touched, per the
-investigator's proposed narrow option): a row is now ALSO treated as position-unknown
-when `kind == 'tactics'` AND `digit is None` AND `type is None`. `digit` is None for
-every tactics row by construction (no disc to read) and adds no selectivity of its own;
-`type` is read from the card's own banner and is populated whenever that banner is
-legible, which is the normal case for a genuine tactics card -- so `type is None` is the
-real discriminator between a genuine tactics card and a garbled lifted row typed
+**Fix v1.** `orchestrator.hand_cursor_look` only: a row is now ALSO treated as
+position-unknown when `kind == 'tactics'` AND `digit is None` AND `type is None`.
+`type` is read from the card's own banner and populated whenever that banner is
+legible, which is the normal case for a genuine tactics card -- so `type is None` is
+the discriminator between a genuine tactics card and a garbled lifted row typed
 'tactics' with no banner actually read. This lets the EXISTING I-21 "selected by
 inference" rescue in `_select_verified` catch the case, with no new machinery.
 
-**The control, traced rather than assumed.** A genuine tactics card whose type
-genuinely fails to read (an ordinary `find_tactics`/banner miss, unrelated to any lift)
-would also get its y nulled by this rule -- `type is None` cannot distinguish "garbled by
-an overlapping lift" from "this card's own banner just didn't read this frame", and
-`hand_cursor_look` sees one fresh frame with no memory of a prior read, so a
-baseline-vs-current comparison (which WOULD disambiguate the two, and is what the
-investigator's alternative-but-tighter suggestion -- "only when readable-at-baseline as a
-PLAYER card in ys0" -- would use) is not available without passing `ys0` into
-`hand_cursor_look`, which means touching `_select_verified`/`_clear_strays`'s call sites
-and is out of this fix's scope. Traced downstream in `input_controller._clear_strays`:
-for a slot OUTSIDE `want`, a newly-None y takes the SAME one-look-then-refuse path
-(I-26) an unrelated flicker already goes through -- never a wrong commit, only an extra
-re-look and, in the worst case, one refuse-and-retry cycle a poll later. For a slot
-INSIDE `want` (I-28), a newly-None y is read as "expected, not a stray" and, if readable
-at baseline, rescued by the SAME I-21 inference this ticket needs -- the intended effect.
-So the residual risk is real, narrow, and UNMEASURED (not zero, and not claimed to be):
-a transient type-read miss on a NON-target tactics card could cost one extra re-look:
-never a wrong play, always the safe direction (refuse/retry).
+**v1 WAS REFUTED, NARROWLY, BY AN INDEPENDENT SKEPTIC** (`agent_progress/issues/
+I-36-skeptic/progress.md`, two repros run against the real code, not committed).
+Before v1, `_ys[i]` could never go None for a `kind=='tactics'` row at all -- the
+pre-I-36 rule explicitly excluded `kind == "tactics"` -- so I-21's inference branch in
+`_select_verified` (~1323-1327) was STRUCTURALLY UNREACHABLE for a tactics target; only
+a real, geometric `target in sel` could confirm one. v1's widened null rule removed
+that exclusion for EVERY tactics row, garbled or genuine, which made the inference
+newly reachable on a TACTICS TARGET too -- not just on a misclassified player lift,
+which is the only case ISSUES.md's control paragraph had analysed. `_clear_strays`'s
+`_want_inferred` (~1554-1556, ~1577-1580) uses the IDENTICAL heuristic independently, at
+commit time. Both are exploitable: a genuine tactics target whose `select_card` press is
+DROPPED and whose banner transiently misreads `type=None` on the SAME look that follows
+is then named "selected by inference" although it never lifted -- `confirm_play`/
+`confirm_discard` then commits the OTHER (genuinely selected) card only, silently (a
+lost boost, not a wrong card, and nothing distinguishes it in the log). Measured against
+real frames (`screenshot_log/run_20260921_080311/`, unstubbed reader): the genuinely-
+ambient (not-lifted) version of this misread is RARE, ~0.4% of tactics-row instances (5
+of ~1,145 measured), longest observed run on the same slot 4 frames -- under
+`SELECT_RETRY_CONFIRM_SEC` (1.6s) -- but reachable through the shipped code exactly as
+v1 wrote it, confirmed by a working repro, not merely argued.
+
+**Fix v2 (this worktree).** The widened null rule in `hand_cursor_look` is UNCHANGED --
+it still cannot tell "garbled by an overlap" from "this banner just missed a read" from
+one frame alone, and does not try to. Instead the INFERENCE that CONSUMES the null is
+gated on what the row was typed AT BASELINE, before any press touched it:
+`_select_verified` now also captures the target's baseline `kind` (from the very first,
+pre-press look) and refuses to trust the inference when that baseline kind was
+'tactics' -- I-36's actual bug (a PLAYER card mid-lift, misread as tactics) always has a
+baseline kind of 'player', so it is unaffected and still rescued; the skeptic's exploit
+(a genuine, untouched tactics card) always has a baseline kind of 'tactics', so the
+inference is now refused and the ordinary retry-and-look loop runs instead -- exactly
+the pre-I-36 behaviour for that slot, restored. `_clear_strays`'s two `_want_inferred`
+sites get the SAME gate via a new `kinds0` parameter, threaded from its two callers
+(`_verified_select_and_play_inner`, `select_and_discard`) the same way `ys0` already is
+-- both already take an identical baseline look for `ys0`'s own sake, so `kinds0` is the
+same look's `.kinds`, not an extra capture.
+
+**The plumbing, because it decided where the gate could live.** `hand_cursor_look`'s
+4-element return (`glow, ys, n, sel`) is UNCHANGED in shape -- ~20 call sites in
+`input_controller.py` alone unpack it positionally, and so does every test's own
+`look()` stub, so widening it to 5 elements would be a breaking change everywhere
+rather than a fix in one place. Instead `sel` is now `orchestrator._CursorSel`, a `list`
+subclass that behaves as a plain list to every existing consumer (`in`, `sorted()`,
+`set()`, `==`, all defer to `list`) and additionally carries `.kinds`, the per-slot kind
+from the SAME look. `getattr(sel, "kinds", None)` is how a caller reads it; a `look()`
+that returns a plain list (any test stub, any caller written before this) supplies no
+kinds and the gate is then PERMISSIVE -- unchanged, pre-tightening behaviour -- which is
+why I-21's own sibling test (a player-only scenario) needed no changes.
+
+**"Never a wrong play" is WITHDRAWN as stated; replaced with what the gate actually
+proves.** The v1 write-up's control paragraph claimed the residual risk "always resolves
+in the safe direction ... never a wrong play" for ANY tactics row; the skeptic's repro is
+the direct counterexample, on the TARGET path specifically. v2's gate closes exactly
+that gap -- a TACTICS-baseline target can no longer reach a commit via inference alone,
+only via a real geometric read or an exhausted, refused retry -- and this is verified
+below (case 4), not merely argued. What is NOT re-proven, and is not claimed to be: that
+a PLAYER-baseline target could never ALSO produce a coincidental false-positive
+inference (i.e. read as tactics/typeless while genuinely never lifted). The mechanism
+I-36 itself measured -- pixel overlap between adjacent cards, which only occurs once a
+card is physically raised above its fan neighbours -- gives a REASON to expect a resting
+player card cannot trigger the same misclassification, but that reason is read from the
+code and the corpus census, not a fresh measurement of THIS specific sub-case, so it is
+recorded here as ESTABLISHED-by-mechanism rather than ESTABLISHED-by-measurement
+(CLAUDE.md 10.32).
 
 **Verify.** `tests/minigame/test_lifted_discard_row_rescued.py`, three copied real
 frames from the failing window (`test_fixtures/hand_reads/i36_lifted_discard_before.jpg`,
-`_garbled.jpg`, `_after.jpg`, real `cp`, never symlinked): (1) `_select_verified(3, ...)`
-driven with a stubbed `orchestrator._grab_settle_regions` returning the real
-before/garbled/garbled frame sequence is rescued by inference -- exactly ONE
+`_garbled.jpg`, `_after.jpg`, real `cp`, never symlinked) plus one synthetic pair and the
+skeptic's own repro shape, four cases: (1) `_select_verified(3, ...)` driven with a
+stubbed `orchestrator._grab_settle_regions` returning the real before/garbled/garbled
+frame sequence (a PLAYER-baseline target) is rescued by inference -- exactly ONE
 `select_card` press, `sel == [3]`; (2) CONTROL on the SAME garbled frame: slot 2
 (fielding_boost, a genuine tactics card whose banner DID read) keeps its measured y,
-while slot 3 is nulled; (3) a SYNTHETIC before/after row pair (stubbed
+while slot 3 is nulled; (3) a SYNTHETIC player-baseline before/after row pair (stubbed
 `local_hand.cursor_glow`) reproduces the same tactics/None/None-after-press shape and is
-also rescued with one press. Two mutants, each caught by a different check,
-sha256-verified restored byte for byte between them: (a) revert the widened condition to
-the pre-fix rule -- caught by (1), which then exhausts its 3 scripted look() frames
-retrying select_card a second time and crashes with an unconsumed-queue IndexError (the
-same "runs out of scripted frames" shape I-33's own tests use); (b) drop the `digit is
-None and type is None` guard (null unconditionally on any tactics/fallback row) --
-caught exactly by check (2), the CONTROL: slot 2's genuine, correctly-read tactics row
-gets wrongly nulled (`ys=[203, 152, None, None, 208]`). Siblings run clean, unmodified:
+also rescued with one press; (4) THE SKEPTIC'S REPRO -- a SYNTHETIC TACTICS-baseline
+target, its first press scripted as dropped (y never leaves rest across two garbled
+type=None looks) -- must NOT be named selected by inference, and the retry that actually
+lands (a genuine lift, banner reads fine again) must succeed on its own geometric merits;
+asserts exactly 2 presses and that every scripted frame was consumed (an early,
+wrongly-inferred return would have left frames unconsumed). Three mutants, each caught
+by a different check, sha256-verified restored byte for byte between them: (a) revert
+the widened null rule to the pre-v1 rule -- caught by (1), which exhausts its scripted
+look() frames retrying select_card a second time and crashes with an unconsumed-queue
+IndexError (the same "runs out of scripted frames" shape I-33's own tests use); (b) drop
+the `type is None` guard (null unconditionally on any tactics/fallback row) -- caught
+exactly by check (2), the CONTROL: slot 2's genuine, correctly-read tactics row gets
+wrongly nulled; (c, the skeptic's new mutant) revert the baseline-kind gate in
+`_select_verified` (`if _bk != "tactics":` -> `if True:`) -- caught exactly by check (4):
+the dropped press on the genuine tactics target is wrongly named selected on ONE press
+instead of retried, and a scripted frame is left unconsumed. `digit is None` in the null
+rule is DROPPED, not pinned: the skeptic's own mutant (drop only that half, keep `type is
+None`) SURVIVED v1's full suite -- `digit` never varies for a tactics row by
+construction, so the clause contributed no selectivity, and an untested clause that
+looks load-bearing is worse than none (CLAUDE.md 10.9); `type is None` is the
+semantically correct discriminator on its own. Siblings run clean, unmodified:
 `tests/minigame/test_select_stops_when_lift_unreadable.py` (I-21),
 `tests/minigame/test_verified_presses_on_match_path.py`,
 `tests/minigame/test_stray_guard_exempts_target.py`,
 `tests/minigame/test_stray_guard_ignores_flicker.py`,
 `tests/minigame/test_false_cursor_on_occluded_slot.py`,
 `tests/minigame/test_hand_read_two_lifted.py` (I-37),
+`tests/minigame/test_walk_retries_off_blind_slot.py` (I-33),
 `tests/harness/test_no_shadowed_module_defs.py`, `tests/harness/test_no_undefined_names.py`.
 
-**Status.** Fixed on branch (this worktree, merged with I-37 as
-`worktree-agent-ae8e1e3cee1e04f4a`), awaiting an independent skeptic pass -- in
-particular on the unmeasured non-target-tactics-card residual risk named above.
+**Status.** v1 REFUTED 2026-09-21 (reachable inference on a tactics TARGET, not just a
+non-target stray). v2 fixed on branch (this worktree, merged with I-37 as
+`worktree-agent-ae8e1e3cee1e04f4a`): the baseline-kind gate closes the specific path the
+skeptic demonstrated; the player-baseline path (I-36's own reported bug) is unaffected
+and remains fixed. Awaiting a second skeptic pass on v2.
 
 ### I-37  A selected card's own disc can be absent from `strong`, blinding the fan gate   P0  reader
 

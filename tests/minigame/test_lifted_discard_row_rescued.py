@@ -32,34 +32,70 @@ down. Three consecutive 5-attempt exhaustions on this exact target (never
 seen elsewhere in the same run) is the shape of a TOGGLE loop, not the
 measured ~15.2%-clustered ordinary press-drop rate (CLAUDE.md 5).
 
-FIX, in `orchestrator.hand_cursor_look` only (nothing else touched): a row is
-ALSO treated as position-unknown when `kind == 'tactics'` AND `digit is None`
-AND `type is None` -- a genuine tactics card almost always has its `type`
-read from its own banner (that is the normal case, not the exception; `digit`
-is None for every tactics row by construction, garbled or not, so it adds no
-selectivity of its own but is kept per the exact shape observed in the
-frames). This lets the EXISTING I-21 "selected by inference" rescue in
-`_select_verified` catch the case, without adding new machinery there.
+FIX v1, in `orchestrator.hand_cursor_look` only: a row is ALSO treated as
+position-unknown when `kind == 'tactics'` AND `type is None` -- a genuine
+tactics card almost always has its `type` read from its own banner (the
+normal case, not the exception). This lets the EXISTING I-21 "selected by
+inference" rescue in `_select_verified` catch the case, with no new machinery
+there. (An earlier draft also required `digit is None`; DROPPED, not pinned
+-- see "MUTANT (c)" below.)
 
-THE CONTROL THIS EARNS SPECIAL ATTENTION. A genuine tactics card whose type
-genuinely fails to read (a `find_tactics`/banner miss unrelated to any lift)
-would ALSO get its y nulled by this rule, since `type is None` cannot tell
-"garbled by an overlapping lift" from "this card's own banner did not read
-this frame" -- `hand_cursor_look` sees one fresh frame with no memory of
-prior reads, so a baseline-vs-current comparison (which WOULD disambiguate
-the two) is not available without touching `_select_verified`/`_clear_strays`
-to pass it in, which this fix is scoped not to do. Traced downstream in
-`input_controller._clear_strays`: for a slot OUTSIDE `want`, a newly-None y
-triggers the SAME one-look-then-refuse path (I-26) an unrelated flicker
-already goes through -- never a wrong commit, only an extra re-look and, in
-the worst case, one refuse-and-retry cycle a poll later. For a slot INSIDE
-`want` (I-28), a newly-None y is read as "expected, not a stray" and, if
-readable at baseline, rescued by the SAME I-21 inference this ticket needs --
-which is the intended effect for the actual target. The residual risk (a
-transient type-read miss on a NON-target tactics card causing one extra
-re-look) is real, narrow, UNMEASURED, and always resolves in the safe
-direction (refuse/retry, never a wrong play) -- CLAUDE.md 10.32 says so
-rather than asserting it is zero.
+**v1 WAS REFUTED, NARROWLY, BY AN INDEPENDENT SKEPTIC**
+(`agent_progress/issues/I-36-skeptic/progress.md`, two working repros against
+the real code, not committed): v1's widened null rule makes `_ys[i]` go None
+for ANY `kind=='tactics'`/`type is None` row, genuine or garbled, and BEFORE
+v1 that could never happen for a tactics row at all (the pre-I-36 rule
+explicitly excluded `kind == "tactics"`), so I-21's inference branch in
+`_select_verified` (and the identical heuristic in `_clear_strays`'s
+`_want_inferred`) was newly REACHABLE on a TACTICS TARGET, not just a
+misclassified player lift. A genuine tactics target whose select press is
+DROPPED and whose banner transiently misreads `type=None` on the SAME look
+that follows is then named "selected by inference" although it never lifted
+-- `confirm_play`/`confirm_discard` then commits the OTHER card only, silent
+(a lost boost, not a wrong card). Measured on real frames
+(`screenshot_log/run_20260921_080311/`): the ambient (genuinely-at-rest)
+version of this misread is RARE, ~0.4% of tactics-row instances (5 of
+~1,145), longest observed run 4 consecutive frames -- well under
+`SELECT_RETRY_CONFIRM_SEC` (1.6s) -- but reachable, not hypothetical.
+
+FIX v2 (this file). The widened null rule in `hand_cursor_look` is UNCHANGED
+from v1 -- it still cannot tell "garbled by an overlap" from "this banner
+just missed a read" from one frame alone, and does not try to. Instead the
+INFERENCE that CONSUMES the null is gated on what the row was typed AT
+BASELINE, before any press: `_select_verified` now also asks whether the
+target's row read `kind == 'tactics'` on the very first, pre-press look, and
+refuses to trust the inference if it did -- I-36's actual bug (a PLAYER card
+mid-lift, misread as tactics) always has a baseline kind of 'player', so it
+is unaffected; the skeptic's exploit (a genuine tactics card, untouched)
+always has a baseline kind of 'tactics', so it is now refused and the ordinary
+retry-and-look loop runs instead, exactly as it did before I-36 existed.
+`_clear_strays`'s two `_want_inferred` sites get the identical gate, sourced
+from the SAME baseline look its callers already take (threaded through as a
+new `kinds0` parameter, the same way `ys0` already is).
+
+THE PLUMBING. `hand_cursor_look`'s 4-element return (`glow, ys, n, sel`) is
+unchanged in SHAPE -- ~20 call sites in `input_controller.py` alone unpack it
+positionally, and so does every test's own `look()` stub, so widening it to 5
+elements would be a breaking change everywhere rather than a fix in one
+place. Instead `sel` (already a `list`) is an `orchestrator._CursorSel`, a
+`list` subclass that behaves as a plain list to every existing consumer and
+ALSO carries `.kinds`, the per-slot kind from the SAME look, for a caller
+that asks. `getattr(sel, "kinds", None)` is how `_select_verified`/
+`_clear_strays` read it; a `look()` that returns a plain list (any test stub,
+any caller written before this) supplies no kinds, and the gate is then
+PERMISSIVE -- i.e. unchanged, pre-tightening behaviour -- which is why every
+sibling test below (and I-21's own) still passes unmodified: none of them
+exercises a tactics target, so none of them has anything to gate.
+
+MUTANT (c), asked and resolved: is the (already-redundant) `digit is None`
+clause in the null rule worth PINNING with its own mutant, or dropping? The
+skeptic's own mutant -- drop ONLY `digit is None`, keep `type is None` --
+SURVIVED the full v1 suite, confirming it never varies for a tactics row
+(no disc to read a digit from, by construction) and contributes no
+selectivity. DROPPED here, not pinned: an untested clause that looks
+load-bearing is worse than none (CLAUDE.md 10.9), and `type is None` is the
+semantically correct discriminator on its own -- what makes a row "genuinely
+tactics" is that its banner read, not that an unrelated field is empty.
 
 Uses the same `check(cond, msg)` shape as
 `tests/minigame/test_hand_read_two_lifted.py` and
@@ -211,13 +247,75 @@ check(_presses3.count("select_card") == 1,
       f"exactly one select_card press on the synthetic pair too; got "
       f"{_presses3.count('select_card')} in {_presses3!r}")
 
+# =========================================================================
+print("(4) THE SKEPTIC'S REPRO: a GENUINE tactics target, its select press "
+      "DROPPED, misreads type=None twice running while its y never leaves "
+      "REST -- must NOT be named selected by inference. The walker retries; "
+      "when the retry actually lands and the lift is read, it succeeds.")
+# =========================================================================
+REST_Y = lh.SLOT_TACTICS[3][1]           # 150 at scale 1 -- genuinely AT REST
+LIFT_Y = REST_Y - lh.SELECTED_MIN_RISE - 25   # comfortably past the lift gate
+
+TACTICS_BASELINE_ROWS = [
+    _row("player", "5", 203, "disc"),
+    _row("player", "6", 152, "disc"),
+    _row("tactics", None, 135, "fallback", type_="fielding_boost"),
+    _row("tactics", None, REST_Y, "fallback", type_="fielding_boost"),  # slot 3
+    _row("player", "6", 208, "disc"),
+]
+# The DROPPED press: nothing moved (still REST_Y), only the banner glitched.
+GARBLED_AT_REST_ROWS = list(TACTICS_BASELINE_ROWS)
+GARBLED_AT_REST_ROWS[3] = _row("tactics", None, REST_Y, "fallback", type_=None)
+# The RETRY actually lands: genuinely lifted, banner reads fine again.
+GENUINE_LIFT_ROWS = list(TACTICS_BASELINE_ROWS)
+GENUINE_LIFT_ROWS[3] = _row("tactics", None, LIFT_Y, "fallback", type_="fielding_boost")
+
+# baseline, attempt-1 post-press (garbled), attempt-1 recheck (still garbled),
+# attempt-2 post-press (genuinely lifted this time)
+_skeptic_queue = [TACTICS_BASELINE_ROWS, GARBLED_AT_REST_ROWS,
+                  GARBLED_AT_REST_ROWS, GENUINE_LIFT_ROWS]
+
+
+def _fake_cursor_glow_skeptic(hand_img, rows=None, _boxes=None):
+    return None, [0.0] * 5, _skeptic_queue.pop(0)
+
+
+_presses4 = []
+try:
+    orch._grab_settle_regions = lambda names: {"hand": _hand_img, "home_plate": None}
+    lh.cursor_glow = _fake_cursor_glow_skeptic
+    ic.press = lambda key: _presses4.append(key)
+    ok4, sel4 = ic._select_verified(3, orch.hand_cursor_look)
+finally:
+    orch._grab_settle_regions = _real_grab
+    lh.cursor_glow = _real_cursor_glow
+    ic.press = _real_press
+
+check(ok4 is True,
+      f"a genuine tactics target must still be selected once the retry "
+      f"actually lands and the lift is read; got {ok4!r}")
+check(sel4 == [3],
+      f"slot 3 must be named selected on the GENUINE, geometric read (not "
+      f"inference); got {sel4!r}")
+check(_presses4.count("select_card") == 2,
+      f"the dropped first press must be RETRIED (not inferred-selected) and "
+      f"the second must land for real -- exactly 2 presses; got "
+      f"{_presses4.count('select_card')} in {_presses4!r}")
+check(len(_skeptic_queue) == 0,
+      f"every scripted frame must have been consumed -- if the inference had "
+      f"wrongly fired on the garbled-at-rest frame, the function would have "
+      f"returned early and left frames in the queue; {len(_skeptic_queue)} "
+      f"unconsumed")
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
-print("  the I-36 lift/overlap misread (kind='tactics', digit=None, "
-      "type=None on a fallback y) is now treated as position-unknown, so "
-      "the existing I-21 rescue names the target selected by inference "
-      "instead of pressing select_card a second time and toggling the "
-      "just-lifted card back down; a genuine tactics card whose banner DID "
-      "read keeps its measured position on the very same frame.")
+print("  the I-36 lift/overlap misread (kind='tactics', type=None on a "
+      "fallback y) is treated as position-unknown, so a PLAYER-baseline "
+      "target is named selected by inference instead of toggled back down "
+      "by a second press; a genuine tactics card whose banner DID read "
+      "keeps its measured position on the same frame; and -- the skeptic's "
+      "gap -- a TACTICS-baseline target is never trusted on inference alone, "
+      "so a dropped press against a genuine, untouched tactics card is "
+      "retried rather than falsely reported selected.")
