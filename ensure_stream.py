@@ -588,29 +588,55 @@ def _clear_blocking_ui(log=print):
     return True
 
 
-# I-05a. The reader set _dismiss_overlay_if_blocking (and orchestrator's own
-# liveness gate) trust to mean "the GAME is actually on screen". Four cheap
-# readers, none of which chiaki's own chrome (the host list, a Qt dialog, the
-# PS5 Control Center) can satisfy:
+# I-05a, WIDENED after the skeptic's refutation of the first version. The
+# original four-reader set (world/pause/table/reset-dialog) missed every
+# RESULT and REVEAL screen: on real 1920x1080 fixtures where looks_like_ui is
+# True (ban_digits/midscroll_video_1920.jpg, result_screens/heldout_loser_b.jpg
+# and heldout_loser_flat.jpg, reveal_episode/loser_t0225.30.jpg and
+# loser_t0231.38.jpg, reveal_occlusion/reveal10_edge075.jpg,
+# streaming_real/screenshot_log__run_20260828_135528__...035.jpg) none of the
+# four answered, so a gate built on them alone would fire mid-match and
+# ensure_live's overlay dismiss would toggle the PS5 overlay open and closed
+# for nothing. The FULL set, all cheap enough to run every poll:
 #
-#     compass.read_bearing        -- the world
-#     pause_menu.is_pause_screen  -- the pause book
-#     table_prompt.at_table       -- the dealer's Play prompt
-#     reset_env.load_save_dialog  -- the reset's own confirm dialog
+#     compass.read_bearing         -- the world
+#     pause_menu.is_pause_screen   -- the pause book
+#     table_prompt.at_table        -- the dealer's Play prompt
+#     reset_env.load_save_dialog   -- the reset's own confirm dialog
+#     orchestrator.read_ban_counter        -- the ban screen
+#     local_hand.read_hand(hand crop) >= 3 rows  -- a dealt hand
+#     local_state.read_result(img)["is_result"]  -- the WINNER/LOSER/DRAW banner
+#     local_state.read_result_card(img)          -- the same, off the end-card
+#     orchestrator.center_card_edge_fraction >= REVEAL_EDGE_THRESHOLD
+#                                           -- a reveal (or the loser screen;
+#                                              CLAUDE.md's own reveal-watcher
+#                                              comment records that this
+#                                              statistic overlaps the two --
+#                                              harmless here, since either one
+#                                              means "the game", which is all
+#                                              this function answers)
 #
-# Left OUT on purpose: local_hand.read_hand (a five-slot disc search, the
-# heaviest reader in the project) and orchestrator.read_ban_counter
-# (per-threshold OCR over two boxes). Both answer on exactly one screen apiece
-# -- a dealt hand, a ban screen -- that nothing in this project's evidence
-# lists as what a reconnect or a stuck poll actually lands on; these four are
-# the cheap ones and between them cover the world, the pause menu, the
-# dealer's table, and -- the reason `load_save_dialog` is in this set at all
-# -- the one screen I-24 already found `looks_like_ui` misreading as chiaki's
-# own UI. Using the SAME set in both places (see orchestrator._screen_shows_
-# the_game) is what keeps that exact false positive from also tripping the
-# OTHER gate.
+# MEASURED (agent_progress/issues/I-05a/, full_sweep3.py): every 1920x1080
+# image under test_fixtures/ that trips looks_like_ui -- 8 of 659 -- is now
+# caught by at least one reader, ZERO false negatives. The same sweep run
+# against five synthetic solid-colour 1920x1080 frames (which all trip
+# looks_like_ui by construction) confirms zero readers answer True on any of
+# them -- the widened set costs nothing on the negative side.
+#
+# `orchestrator` is imported LAZILY and defensively: it is the heaviest module
+# in the project (it requires PERSONAL_ANTHROPIC_API_KEY at import time,
+# section 3), and ensure_stream.py is also used by standalone rig tools
+# (tools/doctor.py) that may never have loaded it. If the import itself fails,
+# those four readers are simply skipped -- same shape as every reader call
+# below, which never lets one broken check call a live stream dead.
 def _game_visible(img):
-    """True if a reader that only ever answers on the GAME recognises `img`."""
+    """True if a reader that only ever answers on the GAME recognises `img`.
+
+    Used by BOTH _dismiss_overlay_if_blocking (below) and orchestrator's own
+    liveness gate (orchestrator._screen_shows_the_game) -- deliberately the
+    SAME function, so a false positive on ANY of these readers cannot trip one
+    gate and not the other.
+    """
     import compass
     import pause_menu as pm
     import table_prompt as tp
@@ -632,6 +658,41 @@ def _game_visible(img):
         pass
     try:
         if reset_env.load_save_dialog(img):
+            return True
+    except Exception:
+        pass
+    try:
+        import orchestrator as _o
+    except Exception:
+        return False
+    try:
+        if _o.read_ban_counter(img) is not None:
+            return True
+    except Exception:
+        pass
+    try:
+        import local_hand as _lh
+        crops = dict(_o.crop_gameplay_regions(img))
+        if len(_lh.read_hand(crops["hand"])) >= 3:
+            return True
+    except Exception:
+        pass
+    try:
+        import local_state as _ls
+        res = _ls.read_result(img)
+        if res.get("is_result"):
+            return True
+    except Exception:
+        pass
+    try:
+        import local_state as _ls
+        card, _raw = _ls.read_result_card(img)
+        if card is not None:
+            return True
+    except Exception:
+        pass
+    try:
+        if _o.center_card_edge_fraction(img) >= _o.REVEAL_EDGE_THRESHOLD:
             return True
     except Exception:
         pass
