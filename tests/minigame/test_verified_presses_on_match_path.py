@@ -187,7 +187,7 @@ def confirm_play_trial(drops):
     ic._look_settled = f.look_settled
     ic._walk_cursor_to = lambda target, look: (True, [])
     ic._select_verified = f.select_verified
-    ic._clear_strays = lambda want, look, blind_before=None: True
+    ic._clear_strays = lambda want, look, blind_before=None, **kw: True
     ic.invalidate_cursor = lambda *a, **k: None
     try:
         ok = ic._verified_select_and_play_inner(0, None, lambda: None)
