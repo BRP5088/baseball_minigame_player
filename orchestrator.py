@@ -7992,6 +7992,11 @@ def play_one_turn(state_json: dict, batters_used: int):
         elif _stalled:
             _why = (f"the discard was REFUSED {DISCARD_STALL_MAX}x on this "
                     "exact hand — PLAYING rather than looping forever")
+        elif getattr(state, "hand_incomplete", False):
+            # I-10's guard fired: a dropped player slot means max() is over the
+            # SURVIVORS, so "strong enough" is unknowable. Seen live 2026-09-21:
+            # best 5 < threshold 6 printed as "strong enough" (run_live_20260921d).
+            _why = "the hand is INCOMPLETE (an unreadable player slot) — its true max is unknown, not strong"
         else:
             _why = "hand is strong enough"
         print(f"  [redraw] keeping the hand: best power {_best} vs threshold "
