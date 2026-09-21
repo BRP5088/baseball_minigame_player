@@ -3073,6 +3073,32 @@ byte-for-byte (sha256-verified) after every mutant. Also green:
 (probe2.py R1); N1 applied 2bad7ab (shared re-verify covers the sibling shape
 j.log:620 / o.log:1040); 9/9 mutants.
 
+**REGRESSION TRIAGE, 2026-09-21 (offline, HEAD 3df988b).**
+`tests/minigame/test_lifted_discard_row_rescued.py` FAILS at HEAD
+(`IndexError: pop from empty list`, its case (5) queue exhausted at
+`test_lifted_discard_row_rescued.py:346`) because the shared re-check
+(`input_controller.py:2182-2194`) takes at least one MORE `_look_settled`
+call before `_clear_strays` than case (5)'s 4-frame script budgeted for. Not
+just a script-length problem: extending the queue (repeating the commit-glitch
+frame) shows `ok5` still ends False, matching the test's own assertion, but
+`_walk_cursor_to`'s blind-nudge loop now fires 8 real `move_left` presses
+before giving up — falsifying case (5)'s own `check(_presses5 == [], ...)`
+at `test_lifted_discard_row_rescued.py:364`, whose comment says a press there
+"would itself be evidence the threading test is not isolating what it
+claims to." The shared re-check at :2182-2194 retries via `_walk_cursor_to`
+unconditionally (no `kinds0`/`_baseline_not_tactics` gate, unlike
+`_clear_strays`'s own inference logic a few lines below it), so a genuine,
+untouched tactics card whose banner merely glitches at commit time now costs
+real navigation presses it never cost before I-48b, even though the shipped
+mutant 9 (skeptic M4, above) already pins `_walk_cursor_to` being called here
+as intended behaviour. Per this triage's own decision rule this is case (b)
+(an extra press, not a script-length fix), so the test was left UNCHANGED
+rather than loosening its zero-press assertion; reproduction script at
+`agent_progress/issues/I-48b/probe_i48b_case5_extra_presses.py` (not
+committed here — offline scratch only). Needs a human call: either give the
+shared re-check the same `kinds0` gate `_clear_strays` uses before it presses,
+or accept the extra presses and update case (5)'s invariant deliberately.
+
 ### I-48d  An invisible (chronically occluded) stray can still be committed through the I-26/I-28 exemption    P2  play
 
 **Evidence.** Skeptic review of I-48b (`agent_progress/issues/I-48b/skeptic.md`
