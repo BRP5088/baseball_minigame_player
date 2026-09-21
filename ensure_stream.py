@@ -636,66 +636,110 @@ def _game_visible(img):
     liveness gate (orchestrator._screen_shows_the_game) -- deliberately the
     SAME function, so a false positive on ANY of these readers cannot trip one
     gate and not the other.
+
+    SKEPTIC HOLE 3 (2026-09-21): every reader below sat in a bare
+    `except Exception: pass`, which made "no reader answered" indistinguishable
+    from "every reader RAISED" -- a broken numpy/cv2/tesseract install would
+    make every one of them throw, this function would return False on every
+    frame, and the caller would read that as a real overlay: two blind
+    ps_button presses at a live match, then a stopped run. CLAUDE.md 10.1's
+    family, one level in. Fixed by counting how many readers actually RAN
+    (returned an answer, right or wrong, without raising); zero means the
+    environment itself is broken, not that chiaki's chrome is on screen, so
+    this answers True (fail open, the safe direction here -- see the module
+    docstring's own "never let this turn into a reason to call a live stream
+    dead") and prints once so the failure is not silent.
     """
     import compass
     import pause_menu as pm
     import table_prompt as tp
     import reset_env
+    ran = 0
     try:
-        if compass.read_bearing(img) is not None:
+        hit = compass.read_bearing(img) is not None
+        ran += 1
+        if hit:
             return True
     except Exception:
         pass
     try:
-        if pm.is_pause_screen(img):
+        hit = pm.is_pause_screen(img)
+        ran += 1
+        if hit:
             return True
     except Exception:
         pass
     try:
-        if tp.at_table(img):
+        hit = tp.at_table(img)
+        ran += 1
+        if hit:
             return True
     except Exception:
         pass
     try:
-        if reset_env.load_save_dialog(img):
+        hit = reset_env.load_save_dialog(img)
+        ran += 1
+        if hit:
             return True
     except Exception:
         pass
+    # The five readers below live in orchestrator (directly, or via a crop it
+    # produces) -- imported lazily and defensively, same reasoning as the
+    # module comment above this function. A failed import skips all five
+    # (they cannot run at all) without touching `ran`; it does NOT short-
+    # circuit the whole function, unlike the old version, because the four
+    # readers above may still have executed and answered.
+    _o = None
     try:
         import orchestrator as _o
     except Exception:
-        return False
-    try:
-        if _o.read_ban_counter(img) is not None:
-            return True
-    except Exception:
-        pass
-    try:
-        import local_hand as _lh
-        crops = dict(_o.crop_gameplay_regions(img))
-        if len(_lh.read_hand(crops["hand"])) >= 3:
-            return True
-    except Exception:
-        pass
-    try:
-        import local_state as _ls
-        res = _ls.read_result(img)
-        if res.get("is_result"):
-            return True
-    except Exception:
-        pass
-    try:
-        import local_state as _ls
-        card, _raw = _ls.read_result_card(img)
-        if card is not None:
-            return True
-    except Exception:
-        pass
-    try:
-        if _o.center_card_edge_fraction(img) >= _o.REVEAL_EDGE_THRESHOLD:
-            return True
-    except Exception:
-        pass
+        _o = None
+    if _o is not None:
+        try:
+            hit = _o.read_ban_counter(img) is not None
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_hand as _lh
+            crops = dict(_o.crop_gameplay_regions(img))
+            hit = len(_lh.read_hand(crops["hand"])) >= 3
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_state as _ls
+            res = _ls.read_result(img)
+            hit = bool(res.get("is_result"))
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            import local_state as _ls
+            card, _raw = _ls.read_result_card(img)
+            hit = card is not None
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+        try:
+            hit = _o.center_card_edge_fraction(img) >= _o.REVEAL_EDGE_THRESHOLD
+            ran += 1
+            if hit:
+                return True
+        except Exception:
+            pass
+    if ran == 0:
+        print("  [stream] _game_visible: every reader raised -- treating "
+              "this as the game (fail open), not a blocked overlay.")
+        return True
     return False
 
 

@@ -143,6 +143,14 @@ class Harness:
         self.screens = list(screens)
         self.idx = 0
         self.next_state_calls = 0
+        # I-05a HOLE 2/M5: how many times the liveness gate actually captured
+        # a frame (_fast_grab), counted separately from next_state_calls --
+        # this is what distinguishes "ensure_live was tried once" (which
+        # liveness_recovery_tried alone already guarantees) from "the reader
+        # sweep was SKIPPED for the rest of the stall because ensure_live
+        # returned False" (liveness_recovery_failed). See
+        # test_run_gates_on_liveness.py's M5 scenario.
+        self.fast_grab_calls = 0
         # I-05a: orchestrator._screen_shows_the_game() runs before EVERY read,
         # even before the ones _fast_grab's blank default frame satisfies
         # harmlessly (read_result etc.) -- unpatched, a solid-colour frame
@@ -268,10 +276,16 @@ class Harness:
         Consumes from the front; once one element remains it repeats forever
         (mirrors test_overlay_dismiss_is_verified.py's fake_capture).
         """
+        self.fast_grab_calls += 1
         seq = self._liveness_frames
         if len(seq) > 1:
             return seq.pop(0)
         return seq[0] if seq else self.liveness_frame
+
+    def _single_liveness_frame(self):
+        """_fast_grab when liveness_frame is a single (non-list) image."""
+        self.fast_grab_calls += 1
+        return self.liveness_frame
 
     def _frame_bytes(self):
         """Stand-in for a captured crop, feeding the frame-identity guard.
@@ -430,7 +444,7 @@ class Harness:
             if self._liveness_frames is not None:
                 patches["_fast_grab"] = lambda *a, **k: self._next_liveness_frame()
             else:
-                patches["_fast_grab"] = lambda *a, **k: self.liveness_frame
+                patches["_fast_grab"] = lambda *a, **k: self._single_liveness_frame()
         for name, fn in patches.items():
             saved[name] = getattr(o, name)
             setattr(o, name, fn)

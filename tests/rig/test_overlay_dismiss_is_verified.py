@@ -102,5 +102,58 @@ check("overlay forever: bounded at exactly two presses (never a blind third)",
 check("overlay forever: reports False -- the budget ran out, still blocked",
       ok is False)
 
+# =============================================================================
+# HOLE 3 (skeptic, 2026-09-21): _game_visible could not tell "no reader
+# answered" from "every reader RAISED" -- all nine sat in a bare
+# `except Exception: pass`. A broken numpy/cv2/tesseract makes every one of
+# them throw, _game_visible returns False on every frame, and that reads as a
+# real overlay: two blind ps_button presses at a live match, then a stopped
+# run. Fixed by counting readers that actually RAN and answering True (fail
+# open) when that count is zero. This drives the REAL _game_visible (not the
+# fake used above) with every underlying reader stubbed to raise.
+# =============================================================================
+import orchestrator as _orch
+import pause_menu as _pm
+import table_prompt as _tp
+import reset_env as _re
+import local_hand as _lh
+import local_state as _ls
+
+
+def _boom(*a, **k):
+    raise RuntimeError("boom -- simulating a broken reader")
+
+
+def _run_all_readers_raise():
+    """Stub every reader _game_visible calls to raise, call the REAL
+    function, and restore everything in a finally."""
+    saved = {
+        (compass, "read_bearing"): compass.read_bearing,
+        (_pm, "is_pause_screen"): _pm.is_pause_screen,
+        (_tp, "at_table"): _tp.at_table,
+        (_re, "load_save_dialog"): _re.load_save_dialog,
+        (_orch, "read_ban_counter"): _orch.read_ban_counter,
+        (_orch, "crop_gameplay_regions"): _orch.crop_gameplay_regions,
+        (_lh, "read_hand"): _lh.read_hand,
+        (_ls, "read_result"): _ls.read_result,
+        (_ls, "read_result_card"): _ls.read_result_card,
+        (_orch, "center_card_edge_fraction"): _orch.center_card_edge_fraction,
+    }
+    for mod, name in saved:
+        setattr(mod, name, _boom)
+    try:
+        from PIL import Image
+        dummy = Image.new("RGB", (1920, 1080), (40, 40, 40))
+        return es._game_visible(dummy)
+    finally:
+        for (mod, name), fn in saved.items():
+            setattr(mod, name, fn)
+
+
+ok = _run_all_readers_raise()
+check("every reader raises: _game_visible answers True (fail open), not "
+      "False (which would read as a blocked overlay and fire two blind "
+      "ps_button presses at a live match)", ok is True)
+
 print(f"\n{len(FAILS)} FAIL" if FAILS else "\nall green")
 sys.exit(1 if FAILS else 0)

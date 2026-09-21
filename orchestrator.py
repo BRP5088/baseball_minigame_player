@@ -2469,20 +2469,59 @@ def _screen_shows_the_game(img):
     return ensure_stream._game_visible(img)
 
 
-# I-05a: how many CONSECUTIVE misses ("looks_like_ui True, no game reader
-# answers") the liveness gate absorbs before it acts. Not for a size mismatch
-# -- that fires at once, see the gate below -- only for this ambiguous case,
-# because a single miss is EXPECTED at a screen transition and is not evidence
-# of anything. wait_for_reveal_cards' own measurement (above) puts a settled
-# reveal frame's arrival under REVEAL_MAX_WAIT with individual polls at
-# poll_interval=0.25s there, but THIS gate's poll is the outer ~2s loop
-# (screen_is_moving's settle_pause plus the read itself) -- so one poll can
-# land squarely inside a sub-2.5s transition (a card flipping face-up, the
-# result banner animating in) and read as neither UI nor a recognised game
-# screen. Three consecutive misses -- past one transition's width even at this
-# coarser poll rate -- is what turns "a transition" into "actually not the
-# game".
-LIVENESS_MISS_STREAK = 3
+# I-05a HOLE 1 (skeptic review of 3731b5e): how long an UNINTERRUPTED run of
+# misses ("looks_like_ui True, no game reader answers") the liveness gate
+# absorbs before it acts, in SECONDS OF WALL-CLOCK TIME -- not a poll count.
+# The first version counted polls (LIVENESS_MISS_STREAK = 3), reasoning that
+# "this gate's poll is the outer ~2s loop" -- WRONG: orchestrator.py's motion
+# gate does a bare `continue` with NO sleep when screen_is_moving() is True
+# (settle_pause is 0.12s, ~2735), so DURING AN ANIMATION -- exactly when a
+# miss is expected -- the poll period can drop to ~0.2-0.4s, and three
+# consecutive misses could complete in well under a second. A poll count is
+# not a safe proxy for "past one transition's width" when the loop's own
+# sleep is conditional.
+#
+# MEASURED (agent_progress/issues/I-05a/measure_miss_runs.py, output saved
+# alongside it as miss_runs.json and miss_runs_full.log): every archived
+# deal-timing probe on disk, diagnostics/deal_frames/deal_*/t<ms>.png -- a
+# live ~6.5Hz capture of exactly the transition this debounce exists for,
+# because a card deal is a real animation, not a static screen, and
+# ensure_stream._game_visible() has no reason to answer True on every one of
+# its frames. Scored the REAL _game_visible() (not a fake) over all 34
+# archived deal_* directories:
+#
+#   longest UNINTERRUPTED _game_visible-miss run per directory, ms:
+#     10 of 34 dirs: 0 (every frame recognised -- includes the two ~19.8s,
+#                       125/126-frame long captures)
+#     24 of 34 dirs: nonzero, sorted: 344, 809, 1117, 1439, 1440, 1445,
+#       1903, 1908, 1920, 1932, 1937, 2084, 2086, 2086, 2228, 2282, 2399,
+#       2405, 2408, 2540, 2723, 2742, 3208, 3242  (median 2086)
+#   MAX observed: 3242ms, in deal_1789948058834858000 -- 21 of 21 frames of
+#   that ~3.24s probe read as a miss, i.e. the ENTIRE capture. Not a fluke of
+#   one frame: several other dirs clear 2.4-2.7s the same way.
+#
+# So an ordinary deal can hold _game_visible() at False, alone, for the
+# WHOLE ~3.2s it takes -- this constant cannot sit right above that without
+# risking a false fire on a plain deal. Set with margin above the measured
+# max rather than at it (§10.4: no paired "definitely blocked" population
+# exists to sit BETWEEN, only this one-sided ceiling, so the honest move is
+# margin, not a midpoint):
+#
+#   LIVENESS_MISS_SEC = 6.0   (~1.85x the measured 3242ms max)
+#
+# This does not by itself bound false fires during a deal: the real gate is
+# `looks_like_ui(img) AND not _game_visible(img)` (see
+# _screen_shows_the_game() above), and looks_like_ui fires on ~1.2% of real
+# streaming frames (§3 of CLAUDE.md, the Qt-flat-fill test) -- a card
+# animation is real H.264 video content, not a Qt overlay, so the compound
+# condition should be far rarer than _game_visible-alone misses. That
+# narrower population (deal frames that ALSO pass looks_like_ui) was not
+# measured here; 6.0s is deliberately sized to survive even if it turns out
+# not to be rare. At the far end, MAX_STUCK_ATTEMPTS (15) still bounds the
+# total stall budget at 15 * 6.0s = 90s worst case before the run gives up,
+# which is the existing runaway guard this debounce sits inside of, per the
+# skeptic's own fallback guidance.
+LIVENESS_MISS_SEC = 6.0
 
 
 def _grab_settle_regions(region_names):
@@ -8229,10 +8268,16 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
     # poll (a capture, looks_like_ui, and up to nine readers) buys nothing --
     # skip straight to counting the poll until MAX_STUCK_ATTEMPTS ends it.
     liveness_recovery_failed = False
-    # How many CONSECUTIVE "looks_like_ui True, no game reader answers" polls
-    # in a row, against LIVENESS_MISS_STREAK -- see that constant's comment.
-    # Not used for a size mismatch, which fires at once regardless.
-    liveness_miss_streak = 0
+    # When the CURRENT uninterrupted run of "looks_like_ui True, no game
+    # reader answers" misses started (wall-clock time.time()), or None
+    # between runs -- against LIVENESS_MISS_SEC, see that constant's comment.
+    # A TIME window, not a poll count: skeptic review of 3731b5e found that
+    # screen_is_moving()'s `continue` (below) carries NO sleep, so during an
+    # animation the poll period can drop to ~0.2-0.4s and a poll-count
+    # debounce could complete in well under a second -- exactly when a miss
+    # is expected. Not used for a size mismatch, which fires at once
+    # regardless.
+    liveness_miss_since = None
     # Turns where the card we played was not the card we chose. This is the
     # ONLY signal that input is being dropped — everything else about a
     # misfire looks like a normal turn.
@@ -8376,19 +8421,25 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
             if not _looking_at_game:
                 # A wrong SIZE is unambiguous -- chiaki's own window (the
                 # host list, the desktop fallback), never a transient game
-                # frame -- so it fires AT ONCE, no streak needed. An
+                # frame -- so it fires AT ONCE, no debounce needed. An
                 # ambiguous miss (right size, looks_like_ui True, no reader
-                # answered) gets LIVENESS_MISS_STREAK consecutive chances
-                # first: see that constant's comment for why one miss there
-                # is expected and not evidence of anything.
+                # answered) only fires once LIVENESS_MISS_SEC of
+                # UNINTERRUPTED wall-clock time has passed since the first
+                # miss of this run -- a TIME window, not a poll count (see
+                # that constant's comment for why).
+                _now = time.time()
                 if _wrong_size:
-                    liveness_miss_streak = LIVENESS_MISS_STREAK
+                    _liveness_fire = True
+                    _liveness_desc = "wrong size"
                 else:
-                    liveness_miss_streak += 1
-                if liveness_miss_streak >= LIVENESS_MISS_STREAK:
+                    if liveness_miss_since is None:
+                        liveness_miss_since = _now
+                    _elapsed = _now - liveness_miss_since
+                    _liveness_fire = _elapsed >= LIVENESS_MISS_SEC
+                    _liveness_desc = f"{_elapsed:.1f}s of misses running"
+                if _liveness_fire:
                     print(f"  [liveness] not looking at the game "
-                          f"({'wrong size' if _wrong_size else f'{liveness_miss_streak} misses running'}) "
-                          f"— ({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
+                          f"({_liveness_desc}) — ({stuck_count}/{MAX_STUCK_ATTEMPTS}).")
                     if not liveness_recovery_tried:
                         import ensure_stream
                         liveness_recovery_tried = True
@@ -8401,11 +8452,11 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         break
                     time.sleep(2)
                     continue
-                # Below the streak threshold: fall through to the normal
+                # Below the time threshold: fall through to the normal
                 # poll below, trusting that a real game frame caught
                 # mid-transition will still read fine downstream.
             else:
-                liveness_miss_streak = 0
+                liveness_miss_since = None
                 liveness_recovery_tried = False
                 liveness_recovery_failed = False
 
