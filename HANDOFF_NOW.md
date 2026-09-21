@@ -183,6 +183,11 @@ Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter
 - WHAT THE MISSES ARE (13 tiles by eye, 2 at full res -- a hypothesis, not a census): 3/13 the kept "peak" frame is the NEXT turn's hand fan (reveal already cleared); 10/13 a 4-card cluster still bunched at the mound before the cards separate to home/mound, home plate empty; one had a RUNNER in the cluster. So the local reader's abstention is mostly CORRECT and the gap is CAPTURE TIMING (the watcher's peak is too early or too late), not recognition. The VLM "recoveries" are readings of the wrong card.
 - LATER (fix direction, not started): make the reveal watcher wait for the 2+2 cards to SEPARATE (home-plate zone occupied AND mound zone occupied) before keeping the frame, bounded by the reveal window (~2-3 s, memory: reveal-is-a-brief-centre-window); score it on the 71 orphan frames' turns in the next matches.
 
+### Snoopy job 2 DONE (roster typing, agent_progress/census/roster_type_vlm/)
+- Brian Coker (8/1) and Zachary Lee (6/2) are BOTH BATTERS: 3 distinct ban-grid frames each, the type banner read "BATTER" by the agent's eye AND by the VLM on 6/6 crops. The NAME banner fades on a locked card; the TYPE banner survives.
+- Both cards are LOCKED (not owned) in this save: ban_grid.is_locked True at exactly those cells on all 29 frames that reach their rows, neighbours False.
+- PROPOSED EDIT, NOT APPLIED (user to approve): simulate.py PlayerCard("Zachary Lee", 6, 2, "") -> role "batter", same for Brian Coker; orchestrator.KNOWN_BAN_ROSTER entries (~:5679, :5691) role="batter"; test_known_ban_roster.py enforces the two tables agree. simulate.UNTYPED updates itself.
+
 ## 6. OPEN QUESTIONS
 
 Verbatim from the facts file, plus two new ones from today's close:
@@ -214,6 +219,7 @@ Verbatim from the facts file, plus two new ones from today's close:
   that the same rate as before today?** Cycle 4: 11 misses, cycle 5: 15
   misses — stated in the facts as "not a regression" but never compared
   against a pre-today baseline; worth a real before/after count.
+- **Locked cards in the pool?** Coker and Lee are LOCKED in this save. Does simulate's player_pool / choose_bans treat all 33 as owned? If locked cards are not in our deck, the pool is 31 and two ban targets could be wasted on cards we cannot draw. Check with `ban_grid.is_locked` per roster card and compare against the pool.
 
 ## 7. RULES IN FORCE
 
