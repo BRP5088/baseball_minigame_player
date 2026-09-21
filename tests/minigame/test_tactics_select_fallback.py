@@ -214,25 +214,38 @@ try:
     # guard survives on any machine where the stub -- or a real screen -- succeeds.
     # The stub proves the guard itself is what refuses the write, not a coincidental
     # capture failure.
+    #
+    # CLAUDE.md Sec2 "a test must never glob a directory a live run writes to": the
+    # real DEAL_FRAME_DIR is exactly that -- diagnostics/deal_frames/ picks up
+    # refused_select_* dirs from live cycles, and asserting against it made this case
+    # fail whenever one was sitting there, unrelated to the guard under test. The
+    # guard returns None BEFORE `d = d or DEAL_FRAME_DIR` is ever reached, so
+    # DEAL_FRAME_DIR is monkeypatched to a fresh temp root here purely so the *mutant*
+    # below (guard stripped) has somewhere harmless to write instead of the real
+    # corpus -- and so this case can assert on that temp root instead of reading the
+    # live directory at all.
     _real_grab_d = orch._grab_settle_regions
     _real_look_d = orch.hand_cursor_look
+    _real_deal_dir_d = orch.DEAL_FRAME_DIR
     orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
     orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [2])
     _os.environ["BASEBALL_TEST_RUN"] = "1"
     try:
         with tempfile.TemporaryDirectory() as _watch:
+            orch.DEAL_FRAME_DIR = _watch
             # No out_dir and no env override -- the same _running_under_test() gate
             # record_reveal_kind / record_money_read_frame already use.
             _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
             got = orch.record_refused_select(0, "player+tactics", 1)
             check("(D) returns None under the test flag", got is None)
-            check("(D) writes nothing to the real corpus",
-                  not _os.path.isdir(orch.DEAL_FRAME_DIR)
+            check("(D) writes nothing to the temp root",
+                  not _os.path.isdir(_watch)
                   or not any(n.startswith("refused_select_")
-                             for n in _os.listdir(orch.DEAL_FRAME_DIR)))
+                             for n in _os.listdir(_watch)))
     finally:
         orch._grab_settle_regions = _real_grab_d
         orch.hand_cursor_look = _real_look_d
+        orch.DEAL_FRAME_DIR = _real_deal_dir_d
 
     # =====================================================================
     print("(E) record_refused_select writes the dir + why.json when not "

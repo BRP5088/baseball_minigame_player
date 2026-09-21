@@ -2696,6 +2696,12 @@ dropping `kind`/`already_selected`/`attempt` from `record_refused_select`'s
 `json.dump` makes case E's field checks fail. All three caught; all three restored
 (`git status --porcelain` clean; sha256 matches HEAD).
 
+**2026-09-21 fix:** case D re-pointed at a temp root (`orch.DEAL_FRAME_DIR`
+monkeypatched) instead of the real `diagnostics/deal_frames/` — CLAUDE.md §2, it was
+reading the live directory and failing whenever a live cycle had left
+`refused_select_*` entries there. orchestrator.py sha
+`f8f98603fa7d499e0b2c90faa315bb706206e9fb3001af47a5bc30ae1a1b3acd` (unchanged).
+
 Also green: `tests/minigame/test_verified_selection.py`,
 `test_commit_refuses_unseen_strays.py`, `test_i22_pitch_boost_slot3.py`,
 `test_hand_memory_persists.py`, `test_run_debit_and_scoring.py`,
