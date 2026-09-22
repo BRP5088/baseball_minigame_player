@@ -6763,8 +6763,22 @@ def _close_pause_menu_verified(log=print):
     ok=False after PRESS_VERIFY_TRIES means the menu would not close; callers
     should treat that as a real, bounded failure and fall through to their own
     recovery rather than retrying with a bare press.
+
+    I-58 skeptic N1: press_verified's ok=True proves a CHANGE happened between
+    the baseline read and the last one, not that the menu is now CLOSED --
+    toggle_pause is a toggle, so entered ALREADY CLOSED, one press OPENS it,
+    the observe reads False -> True, and press_verified reports that as
+    success. Both production call sites confirm the menu is open immediately
+    before calling this, so that state is not reachable today -- but the
+    return value should carry what its name promises regardless. One more
+    FRESH read after press_verified returns proves the STATE rather than
+    trusting the CHANGE: ok only if a fresh look now shows the menu closed.
     """
-    return input_controller.press_verified("toggle_pause", _pause_menu_open, log=log)
+    ok, presses = input_controller.press_verified(
+        "toggle_pause", _pause_menu_open, log=log)
+    if ok:
+        ok = not _pause_menu_open()
+    return ok, presses
 
 
 def _match_start_screen():
@@ -9243,7 +9257,29 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print("  [pause] the pause menu is open with no match "
                               "in progress -- closing it rather than counting "
                               "this poll as unreadable.")
-                        _pz_ok, _pz_presses = _close_pause_menu_verified(log=print)
+                        try:
+                            _pz_ok, _pz_presses = _close_pause_menu_verified(log=print)
+                        except Exception as _pz_e:
+                            # I-58 skeptic N4: every OTHER capture in this branch
+                            # (_fast_grab above, is_pause_screen, read_ban_counter)
+                            # is guarded the same way -- _close_pause_menu_verified
+                            # was the one bare call, and it does 1 + up to
+                            # PRESS_VERIFY_TRIES more _fast_grab() calls. Unguarded,
+                            # an mss failure there raises OUT of this except block
+                            # (an exception inside an except body is not caught by
+                            # its own try), past the "Couldn't read the screen"
+                            # print below and into the outer unhandled-exception
+                            # handler -- silently masking the ORIGINAL
+                            # PaidModelDisabled/unreadable-screen exception this
+                            # whole branch exists to recover from. Same shape as
+                            # QA1-F9: "a motion check that cannot answer should
+                            # fall through to the normal read, not end the
+                            # session." Treated as a failed close, not a stop.
+                            _pz_ok, _pz_presses = False, 0
+                            print(f"  [pause] closing it raised ({_pz_e!r}) -- "
+                                  f"treating as a failed close rather than "
+                                  f"letting it mask the read failure this poll "
+                                  f"is already recovering from.")
                         if _pz_ok:
                             print(f"  [pause] closed after {_pz_presses} "
                                   f"press(es) -- not counting this poll as "

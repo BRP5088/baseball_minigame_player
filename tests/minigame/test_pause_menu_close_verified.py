@@ -51,6 +51,7 @@ os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 import input_controller as ic                                     # noqa: E402
 import orchestrator as o                                          # noqa: E402
 import pause_menu as pm                                           # noqa: E402
+import reset_env                                                  # noqa: E402
 from _run_harness import Harness                                  # noqa: E402
 
 failures = []
@@ -130,6 +131,99 @@ check(ok is False and sent == ic.PRESS_VERIFY_TRIES,
       f"a menu that never closes must fail BOUNDED at PRESS_VERIFY_TRIES "
       f"({ic.PRESS_VERIFY_TRIES}), not loop forever or silently give up early: "
       f"ok={ok!r} sent={sent}")
+
+
+def _close_with_toggle(start_open, drop_first=0):
+    """Same idea as _close_with, but models a REAL TOGGLE: the observed state
+    flips on every LANDED press, starting from `start_open`, rather than
+    "closes after N landed presses". _close_with cannot express "entered
+    already CLOSED" (it always starts from open); this can.
+    """
+    state = {"presses": [], "landed": 0}
+
+    def fake_press(action, *a, **kw):
+        state["presses"].append(action)
+        if len(state["presses"]) <= drop_first:
+            return
+        state["landed"] += 1
+
+    def fake_is_pause_screen(img):
+        return start_open != (state["landed"] % 2 == 1)   # XOR
+
+    saved_press, saved_settle, saved_grab, saved_ips = (
+        ic.press, o.wait_for_screen_to_settle, o._fast_grab, pm.is_pause_screen)
+    ic.press = fake_press
+    o.wait_for_screen_to_settle = lambda *a, **k: True
+    o._fast_grab = lambda *a, **k: object()
+    pm.is_pause_screen = fake_is_pause_screen
+    try:
+        ok, sent = o._close_pause_menu_verified(log=lambda *a, **k: None)
+    finally:
+        ic.press, o.wait_for_screen_to_settle, o._fast_grab, pm.is_pause_screen = (
+            saved_press, saved_settle, saved_grab, saved_ips)
+    return ok, sent, state["presses"]
+
+
+# --- (N1) I-58 skeptic: ok must prove the STATE, not a CHANGE. Entered with
+#         the menu ALREADY CLOSED, one press only OPENS it (toggle_pause is a
+#         toggle) -- press_verified alone reports that as success (baseline
+#         False -> after True IS a change), but the menu is now OPEN, so ok
+#         must be False. This is what keeps _close_pause_menu's WARNING
+#         branch from being skipped and its "pause menu closed after N
+#         press(es)" success line from printing on a menu that is, in fact,
+#         still open.
+ok, sent, presses = _close_with_toggle(start_open=False)
+check(ok is False,
+      f"(N1) entered CLOSED, one press only OPENS it: ok must be False (the "
+      f"function must confirm the menu now reads closed, not just that "
+      f"press_verified saw a change), got ok={ok!r} sent={sent} "
+      f"presses={presses}")
+
+# --- (N1) CONTROL: entered OPEN, one press closes it -> ok stays True ------
+ok, sent, presses = _close_with_toggle(start_open=True)
+check(ok is True and sent == 1 and presses == ["toggle_pause"],
+      f"(N1) CONTROL: entered OPEN, one press closes it -- ok must still be "
+      f"True: ok={ok!r} sent={sent} presses={presses}")
+
+
+def _settle_precedes_every_grab():
+    """N2 (I-58 skeptic, mutant M1: delete wait_for_screen_to_settle from
+    _pause_menu_open). `settled` is set True only inside the settle stub and
+    is cleared by every grab immediately after reading it -- so a grab can
+    only see True if ITS OWN preceding settle call actually ran. Drives the
+    REAL _close_pause_menu_verified (not _pause_menu_open directly) so this
+    is checked on every retry, not just the first call.
+    """
+    state = {"settled": False, "seen": []}
+
+    def fake_settle(*a, **k):
+        state["settled"] = True
+        return True
+
+    def fake_grab(*a, **k):
+        state["seen"].append(state["settled"])
+        state["settled"] = False   # must be re-earned by the NEXT settle call
+        return object()
+
+    def fake_ips(img):
+        return True   # menu always reads open -- press_verified exhausts its budget
+
+    saved = (o.wait_for_screen_to_settle, o._fast_grab, pm.is_pause_screen)
+    o.wait_for_screen_to_settle, o._fast_grab, pm.is_pause_screen = (
+        fake_settle, fake_grab, fake_ips)
+    try:
+        o._close_pause_menu_verified(log=lambda *a, **k: None)
+    finally:
+        o.wait_for_screen_to_settle, o._fast_grab, pm.is_pause_screen = saved
+    return state["seen"]
+
+
+seen = _settle_precedes_every_grab()
+check(len(seen) == ic.PRESS_VERIFY_TRIES + 1 and all(seen),
+      f"(N2) every read of the pause-screen observe must be preceded by its "
+      f"OWN settle call -- got {seen} (expected "
+      f"{ic.PRESS_VERIFY_TRIES + 1} entries, all True; deleting the settle "
+      f"call from _pause_menu_open leaves every entry False)")
 
 
 # =============================================================================
@@ -229,6 +323,47 @@ try:
     check("Stuck too long on unreadable screens — stopping." in _buf.getvalue(),
           "(E) must stop with the EXISTING stop message/reason "
           "(unreadable_screens), not a new one invented for this feature")
+
+    # --- (N3) I-58 skeptic: OPTIONS must NEVER be pressed at a pause-looking
+    #         frame while a match is in progress -- mid-match OPTIONS opens
+    #         "Give up?" (CLAUDE.md sec4), one Cross from forfeiting a paid
+    #         match. `elif not match_in_progress:` is the gate that stops it;
+    #         this pins that gate directly (skeptic mutant M2: de-chain it to
+    #         `if True:`, which fires the close mid-match too).
+    N3 = 5
+    saved_gud = reset_env.give_up_dialog
+    reset_env.give_up_dialog = lambda img: False   # no "Give up?" dialog up
+    try:
+        h = Harness([RuntimeError("LOCAL STATE GAP: UNRECOGNISED SCREEN")] * N3,
+                    balance=500, ban_counter=None)
+        h.seed["match_in_progress"] = True
+        saved_ips = pm.is_pause_screen
+        pm.is_pause_screen = lambda img: True   # looks exactly like an open pause menu
+        try:
+            h.run(target_wins=99, max_spend=500)
+        finally:
+            pm.is_pause_screen = saved_ips
+        check("toggle_pause" not in h.presses,
+              f"(N3) match_in_progress=True must NEVER press toggle_pause at "
+              f"a pause-looking frame -- OPTIONS mid-match opens 'Give up?', "
+              f"one Cross from forfeiting the match; presses={h.presses}")
+
+        # CONTROL: the identical pause-looking frame, match_in_progress=False
+        # -- proves the gate is doing something, not that toggle_pause is
+        # simply never sent by this harness at all.
+        h2 = Harness([RuntimeError("LOCAL STATE GAP: UNRECOGNISED SCREEN")] * N3,
+                     balance=500, ban_counter=None)
+        saved_ips = pm.is_pause_screen
+        pm.is_pause_screen = lambda img: True
+        try:
+            h2.run(target_wins=99, max_spend=500)
+        finally:
+            pm.is_pause_screen = saved_ips
+        check("toggle_pause" in h2.presses,
+              f"(N3) CONTROL: match_in_progress=False must press toggle_pause "
+              f"at the same pause-looking frame; presses={h2.presses}")
+    finally:
+        reset_env.give_up_dialog = saved_gud
 finally:
     ic.PRESS_VERIFY_SETTLE = _saved_settle_const
 
