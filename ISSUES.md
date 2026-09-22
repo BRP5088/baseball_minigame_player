@@ -2491,6 +2491,94 @@ own output; mutation-tested (dropping the x write makes it fail, restored and
 sha256-verified). `local_hand.py` and the new test are the only files touched besides
 this entry.
 
+### I-62  A card raised past SLOT_TOL with NO candidate at all skips every digit search   P2  reader
+
+**Evidence.** `agent_progress/issues/i21-census/progress.md` (prior census): of 412
+dropped/refused `local_hand` rows re-read offline, 128 are "position found via
+SLOT_TOL, no disc circle" (69 player-kind, 59 tactics-kind, `y_from=="fallback"`) and
+171 more are "no candidate reached this slot at all" (`y_measured=False`, no
+`_slot_i`). `agent_progress/issues/lift-transition/progress.md`: one `refused_select_*`
+frame is genuinely blind on disk this way — its disc sits ~43-54 anchor px above the
+slot anchor, and a nearby "Rare" wreath graphic scored `type_score=0.663` (clears
+`TACTICS_PRESENT_MIN` 0.58), so it was emitted `kind="tactics"` with no measured
+position at all.
+
+**Root cause, measured** (`agent_progress/issues/I-62/progress.md`). `_read_fan`'s
+raised-digit third pass (the I-46 fix, :1195 at HEAD) only revisits rows already in
+`out` with `kind=="player"` and a `_slot_i` — i.e. rows that survived the SLOT_TOL cost
+pass with SOME candidate, however unreadable. A slot NO candidate reached at all is
+emitted through a separate branch (`best[i] is None`, :970) that decides kind from the
+tactics banner alone and never sets `_slot_i` — structurally invisible to the raised
+search regardless of window size. The refused_select frame above is exactly this: a
+brute `read_digit` raster at the SHIPPED `RAISED_SEARCH_DY`/`DX` bounds (unwidened)
+finds its digit at 0.868-0.882, comfortably clear of `MIN_SCORE` 0.80 — the search
+would have worked, it just never ran.
+
+**The 128-row hypothesis this ticket started from is REFUTED, not confirmed.** A
+census over all 128 SLOT_TOL-fallback rows, brute `read_digit` at 3x the shipped
+`RAISED_SEARCH_DY`/`DX` window: **0/69 player-kind rows recover a digit** (max score
+0.798, under `MIN_SCORE`); visual inspection shows why — 48/69 are the game's own
+"raised card detail portrait" UI state, whose disc sits entirely above the 307px-tall
+hand crop's top edge at ANY window width, and the rest are near-anchor occlusion
+near-misses (CLAUDE.md: "a card under another card is unreadable by design"). The
+59 tactics-kind rows are a red herring: `orchestrator.hand_to_cards`/`local_hand_cards`
+drop a tactics card on `type is None or bonus is None`, never on `digit` — and 52/59
+already have `bonus` read correctly (via `read_bonus`'s own wide `BONUS_WIN` search),
+blocked only on `type` (a DIFFERENT, narrower window, `_best_banner`'s `BANNER_SEARCH`
+±12x/±6y — flagged, not fixed here, out of scope). Consulting the raised search
+unconditionally (no kind/`_slot_i` gate) was also measured directly: over 650 slots in
+130 genuinely-settled frames of `run_20260921_080311`, **28 (4.3%) would return a wrong
+digit** (a tactics card's own bonus disc, scored as a player digit). So `SLOT_TOL`,
+`RAISED_SEARCH_DY`, `RAISED_SEARCH_DX`, `RAISED_SEARCH_STEP` and `RAISED_SEARCH_R` are
+all UNCHANGED — no new constant, and no widening.
+
+**Fix** (`local_hand.py` only): factored the raised-digit raster into
+`_raised_digit_search(img, anchor_x, anchor_y, s)` (unchanged constants, shared by
+both call sites so any future window change is felt everywhere at once), and added a
+new call from the `best[i] is None` branch — try the player-anchor raised search
+FIRST; if it clears `MIN_SCORE`, emit a normal player row (with `read_shield` for
+`secondary`) instead of falling through to the banner-decided `unknown`/`tactics`
+default. It can only ADD a reading: the branch is reached only when literally nothing
+was found for a slot, which a fully-settled hand never does, so an already-correct row
+can never be overwritten by it.
+
+**Verify.** `tests/minigame/test_lifted_disc_assigned.py`, fixtures in
+`test_fixtures/lifted_disc_i62/` (copies of the exact evidence frames; `diagnostics/`
+is gitignored). 14 checks: the refused_select frame and one more from the 171-row
+"no candidate at all" population (`dropped_1789956238428199000`, recovered
+independently — the 128-row population contributed no recoverable frame, so the
+ticket's literal "two dropped_* frames from the 128" could not be satisfied honestly
+and was substituted with this one plus a SAFETY pair) now read their digits; two
+representative frames FROM the refuted 128-row population stay correctly unread (no
+invented digit); a fully-settled control frame is byte-for-byte unchanged (verified
+independently: main HEAD's `read_hand()` output vs. the worktree's on the same frame,
+`diff` clean). Mutants: revert (`git stash`) fails 5 checks; widening the GATE to
+`if True:` (consult the search for every slot, the literal "widen beyond its measured/
+safe scope" case — matches the measured 4.3% false-column risk above) fails 2 control
+checks. A literal DY/DX pixel-widening mutant was tried first and does not reliably
+fail this specific test (the two fixtures that exercise the new branch keep reading
+the same correct digit even at 3x width, because the nearest neighbour slot sits
+~157px+ away); the gate-widening mutant is the one that actually reproduces the
+measured risk. `__pycache__` cleared, sha256 restore verified
+(`4ba88e652c5427c78ebc0e3453d4856c017a2827e01d15024bdfbb6cda51aa17`).
+
+Also run, all exit 0: `test_verified_selection.py`, `test_local_hand_reader.py`,
+`test_false_cursor_on_occluded_slot.py`, `tests/harness/test_no_undefined_names.py`,
+`test_claude_md_constants.py`, plus every other test under `tests/` importing
+`local_hand` (24 files) — one pre-existing, unrelated failure noted below.
+
+**Pre-existing failure, not caused by this change.**
+`tests/minigame/test_hand_memory_forgets.py` fails on this branch's own base commit
+(ef2da17) with zero edits applied (`orchestrator.py` untouched, byte-identical to
+`git show ef2da17:orchestrator.py`) — main has since advanced to 593553d with a
+`forget_hand_slot`/spend line-ordering fix in `orchestrator.py` this branch predates
+and never touches. Confirmed passing against main's current `orchestrator.py`
+unmodified. Not this ticket's to fix.
+
+**Status.** fixed on branch `worktree-I62`, unmerged. `agent_progress/issues/I-62/`
+carries both census tables in full, the scripts that produced them, and the "out of
+scope" `BANNER_SEARCH` finding for a future ticket.
+
 ### I-47  Two silent permissive defaults in offline tools (QA7)                     P2  evidence
 
 **F1. `load_log_distribution()` in `tools/ab_engine_i15_16_17.py` fell back to the
