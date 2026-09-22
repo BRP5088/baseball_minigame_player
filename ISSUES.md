@@ -4790,10 +4790,9 @@ restore to `5f6c5a34f6952698d9118c6fe585e68dc52394862ce4822b7f53c9d3ec0016d2`;
     [round 1] top up even when never moved
         -> (X) FAILS
 
-**Status.** REDONE here after REFUTED on fda9436; tests green, all 7 mutants
-this round caught (plus 2 round-1 mutants re-verified), both skeptic repros
-clean; not yet merged. The enforced bound is **13**, always, regardless of what
-consumed the budget first.
+**Status.** merged c705e52 (fda9436 + 41dc5f7 + c865555; Sonnet skeptic
+CONFIRMED round 2; _ever_moved note closed). The enforced bound is **13**,
+always, regardless of what consumed the budget first.
 
 ### I-51b  A refusal that never probed this call can still carry a STALE probe_attempts list from a previous play   P2  evidence
 
