@@ -1577,23 +1577,43 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
     one look, and at most one re-raise, no loop -- and it RESOLVES the
     ambiguity with a press-and-look rather than guessing at it from one frame:
 
-        lower t_slot, then look
-        m_slot now READS (its own disc/badge is no longer covered)
+        walk to t_slot, lower it, then look
+        m_slot now READS AT REST (its own disc/badge is no longer covered,
+        and it is not itself among the currently selected slots)
             -> t_slot's own lift explains m_slot's blindness, proven rather
-               than inferred. Clear the mark, put t_slot BACK UP, and hand
-               back to the caller's ordinary commit path.
-        m_slot is STILL blind with t_slot down
-            -> t_slot's lift cannot be the explanation, so m_slot really is
-               up on its own. t_slot is left DOWN (nothing here re-raises
-               it) and the mark SURVIVES -- the existing refusal/unwind path
-               handles it, now with a positive finding instead of a guess.
+               than inferred. Walk back to t_slot, put it BACK UP, and only
+               once THAT is confirmed clear the mark and hand back to the
+               caller's ordinary commit path.
+        m_slot is STILL blind, OR reads but is ITSELF lifted, with t_slot down
+            -> t_slot's lift cannot be the (sole) explanation: a blind m_slot
+               really is up on its own, and a m_slot that reads but is LIFTED
+               is a real, independent stray, not an occlusion -- committing
+               it because it happened to become readable once a neighbour
+               came down would play a card the engine never chose. t_slot is
+               left DOWN (nothing here re-raises it) and the mark SURVIVES --
+               the existing refusal/unwind path handles it, now with a
+               positive finding instead of a guess.
         the re-raise of t_slot itself fails
-            -> refuse. t_slot is left DOWN (nothing partially lifted) and the
-               caller must not commit -- there is nothing to commit.
+            -> refuse. t_slot is left DOWN (nothing partially lifted), the
+               mark SURVIVES (cleared only on a re-raise that actually
+               landed -- a proof this function obtained must not be thrown
+               away on a press that did not), and the caller must not
+               commit -- there is nothing to commit.
 
     Returns (ok, detail). `ok` is True only when t_slot is confirmed back up
     AND m_slot's mark has been cleared -- i.e. the caller's ordinary commit
     may proceed. `detail` is a short string naming which branch fired.
+
+    WALKS THE CURSOR TO t_slot BEFORE EVERY TOGGLE (I-52 skeptic round 2,
+    N1). `_deselect_verified`/`_select_verified` toggle whatever the cursor
+    ALREADY holds -- they do not navigate, matching every other pair of
+    calls in this file (`_walk_cursor_to` then `_select_verified`/
+    `_deselect_verified`, e.g. the extra-clearing loop and the main target
+    loop above). The play path selects the batter FIRST, so the cursor sits
+    on the TACTICS slot when this function runs -- a marked slot adjacent to
+    the BATTER would otherwise toggle the wrong card. A walk failure refuses
+    with zero presses sent past that point, same as any other unreachable
+    target in this file.
 
     WIRED IN, at the one place this disambiguation is needed: `_clear_strays`'s
     `_unproven` branch (I-43's refusal site), which every commit -- play and
@@ -1606,23 +1626,39 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE or t_slot not in sel or _ys[m_slot] is not None:
         return False, "not applicable -- t_slot not confirmed lifted, or m_slot already reads"
+    ok, _sel = _walk_cursor_to(t_slot, look)
+    if not ok:
+        return False, f"could not walk to slot {t_slot} -- refusing, unresolved"
     ok, sel = _deselect_verified(t_slot, look)
     if not ok:
         return False, "t_slot would not go down -- refusing, its state is unproven"
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE:
         return False, "cannot read the fan with t_slot down -- refusing"
-    if _ys[m_slot] is None:
-        # STILL blind with the neighbour down: t_slot's lift is not the
-        # explanation. Leave t_slot DOWN and hand back to the caller's
-        # existing refusal/unwind path -- m_slot's mark now rests on a
-        # positive finding (occlusion ruled OUT) rather than a guess.
-        return False, f"slot {m_slot} still blind with slot {t_slot} down -- genuine stray, marked"
-    # m_slot reads once t_slot is down: t_slot's own lift explains it.
-    _MAYBE_LIFTED.discard(m_slot)
+    if _ys[m_slot] is None or m_slot in sel:
+        # STILL blind, OR reading but ITSELF lifted (I-52 skeptic round 2,
+        # N2): a lifted m_slot that merely became readable once its
+        # neighbour came down is a real stray with its own selection, not
+        # an occlusion -- `_ys[m_slot] is not None` alone cannot tell that
+        # apart from a resting card, and waving it through here would
+        # commit a card the engine never chose. t_slot is left DOWN;
+        # nothing here re-raises it, and the mark SURVIVES either way.
+        return False, (f"slot {m_slot} still blind or itself lifted with slot "
+                        f"{t_slot} down -- genuine stray, marked")
+    # m_slot reads AT REST once t_slot is down: t_slot's own lift explains it.
+    ok, _sel = _walk_cursor_to(t_slot, look)
+    if not ok:
+        return False, (f"slot {m_slot} explained but the cursor would not walk "
+                        f"back to slot {t_slot} -- refusing, nothing lifted")
     ok, sel = _select_verified(t_slot, look)
     if not ok:
-        return False, f"slot {m_slot} cleared but slot {t_slot} would not re-raise -- refusing, nothing lifted"
+        return False, f"slot {m_slot} explained but slot {t_slot} would not re-raise -- refusing, nothing lifted"
+    # CLEAR THE MARK ONLY NOW (I-52 skeptic round 2, N3): the re-raise just
+    # landed, so the mark is discarded on a proof that is fully obtained --
+    # a failed re-raise above returns before this line, leaving m_slot's
+    # mark in place rather than throwing away a real finding on a press
+    # that never took.
+    _MAYBE_LIFTED.discard(m_slot)
     return True, f"slot {m_slot} explained by slot {t_slot}'s lift -- cleared, {t_slot} restored"
 
 

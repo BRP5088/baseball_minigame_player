@@ -148,48 +148,84 @@ class DiscardRig:
 
 
 M_SLOT, T_SLOT = 1, 0
+# Any slot that is neither M_SLOT nor T_SLOT -- the play path selects the
+# batter FIRST, so the cursor sits on a THIRD slot (the tactics target it
+# just selected) when the resolver runs against a marked slot beside the
+# BATTER. Live shape: 5 presses landed on slot 4 while t_slot was 1.
+CURSOR_START = 3
 
 
 class NeighbourRig:
-    """Drives resolve_neighbour_occlusion(M_SLOT, T_SLOT, look) in isolation.
+    """Drives resolve_neighbour_occlusion(M_SLOT, T_SLOT, look) in isolation,
+    with a REAL cursor the resolver must walk to T_SLOT before every toggle
+    (I-52 skeptic round 2, N1) -- `_deselect_verified`/`_select_verified`
+    toggle whatever the cursor already holds, they do not navigate. `press`
+    toggles whichever slot the cursor is ACTUALLY on, so a resolver that
+    forgets to walk corrupts CURSOR_START instead of T_SLOT.
 
-    Models the cursor as always sitting on T_SLOT -- the only slot this
-    function ever presses select_card against -- matching
-    _deselect_verified/_select_verified's own contract: they toggle whatever
-    the cursor already holds, no walking. `m_readable_when_t_down` decides
-    which real-episode shape this is: True is occlusion (F2), False is a
-    genuine stray (F3). `reraise_lands=False` models the re-raise itself
-    being swallowed (F4).
+    `m_readable_when_t_down`: does M_SLOT's disc/badge read once T_SLOT is
+    down. `m_lifted`: is M_SLOT ITSELF independently selected (I-52 skeptic
+    round 2, N2) -- a lifted card can still read once its occluding
+    neighbour is gone, and that combination is a genuine stray, not an
+    occlusion. `t_starts_lifted=False` models T resting (N3): the resolver
+    must refuse before ever pressing.
     """
 
-    def __init__(self, m_readable_when_t_down, deselect_lands=True, reraise_lands=True):
-        self.t_lifted = True
-        self.m_blind = True
+    def __init__(self, m_readable_when_t_down, deselect_lands=True,
+                 reraise_lands=True, cursor=None, m_lifted=False,
+                 t_starts_lifted=True, flicker_m_blind_once=False):
+        self.cursor = T_SLOT if cursor is None else cursor
+        self.lifted = set()
+        if t_starts_lifted:
+            self.lifted.add(T_SLOT)
+        if m_lifted:
+            self.lifted.add(M_SLOT)
         self.m_readable_when_t_down = m_readable_when_t_down
         self.deselect_lands = deselect_lands
         self.reraise_lands = reraise_lands
+        # N3 (skeptic M6): T resting, M misread blind on the FIRST look only
+        # (I-26's own flicker) -- the ONLY shape that actually exercises the
+        # top guard's `t_slot not in sel` clause rather than being masked by
+        # the later `_ys[m_slot] is None` refusal reaching the same verdict
+        # either way. True on call 1, readable (and never lifted) after.
+        self.flicker_m_blind_once = flicker_m_blind_once
+        self._looks = 0
         self.sent = []
+
+    @property
+    def t_lifted(self):
+        return T_SLOT in self.lifted
 
     def press(self, key, **kw):
         self.sent.append(key)
+        if key == "move_left":
+            self.cursor = max(0, self.cursor - 1)
+            return
+        if key == "move_right":
+            self.cursor = min(ic.MAX_HAND_SIZE - 1, self.cursor + 1)
+            return
         if key != "select_card":
             return
-        if self.t_lifted:
-            if self.deselect_lands:
-                self.t_lifted = False
-                if self.m_readable_when_t_down:
-                    self.m_blind = False
+        slot = self.cursor
+        if slot in self.lifted:
+            lands = self.deselect_lands if slot == T_SLOT else True
+            if lands:
+                self.lifted.discard(slot)
         else:
-            if self.reraise_lands:
-                self.t_lifted = True
+            lands = self.reraise_lands if slot == T_SLOT else True
+            if lands:
+                self.lifted.add(slot)
 
     def look(self):
-        sel = [T_SLOT] if self.t_lifted else []
+        self._looks += 1
         ys = list(REST)
-        if self.m_blind:
+        if T_SLOT in self.lifted or not self.m_readable_when_t_down:
+            ys[M_SLOT] = None
+        if self.flicker_m_blind_once and self._looks == 1:
             ys[M_SLOT] = None
         glow = [0.0] * ic.MAX_HAND_SIZE
-        return glow, ys, ic.MAX_HAND_SIZE, sel
+        glow[self.cursor] = 30.0
+        return glow, ys, ic.MAX_HAND_SIZE, sorted(self.lifted)
 
 
 class HandRig:
@@ -449,6 +485,90 @@ try:
     check("(F4) exactly 6 select_card presses -- 1 lower + SELECT_ATTEMPTS "
           "failed re-raises, no more",
           rig.sent.count("select_card") == 1 + ic.SELECT_ATTEMPTS, str(rig.sent))
+    check("(F4) M's mark SURVIVES a failed re-raise (I-52 skeptic round 2, "
+          "N3) -- the clear moved to AFTER a landed re-raise, so a proof "
+          "obtained is never thrown away on a press that did not take",
+          M_SLOT in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+
+    # =====================================================================
+    print("(F1) resolve_neighbour_occlusion WALKS to T_SLOT before every "
+          "toggle (I-52 skeptic round 2, N1) -- t_slot is the BATTER and the "
+          "cursor starts on a third slot (the tactics target just selected)")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=True, cursor=CURSOR_START)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F1) ok=True: the walk landed on T_SLOT, occlusion proven", ok is True, detail)
+    check("(F1) the cursor ends on T_SLOT, not CURSOR_START",
+          rig.cursor == T_SLOT, str(rig.cursor))
+    check("(F1) CURSOR_START was never toggled -- the walk moved the cursor "
+          "off it before the first press",
+          CURSOR_START not in rig.lifted, str(rig.lifted))
+    check("(F1) 3 move_left presses walk cursor 3 -> 0 once; the second "
+          "walk (before the re-raise) is already there, 0 more",
+          rig.sent.count("move_left") == 3, str(rig.sent))
+    check("(F1) exactly 2 select_card presses -- one lower, one re-raise, "
+          "both landing on T_SLOT",
+          rig.sent.count("select_card") == 2, str(rig.sent))
+    check("(F1) M's mark is cleared", M_SLOT not in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    check("(F1) T ends back up (re-raised)", rig.t_lifted is True, str(rig.t_lifted))
+
+    # =====================================================================
+    print("(F5) resolve_neighbour_occlusion: M reads once T is down, but M "
+          "is ITSELF lifted (I-52 skeptic round 2, N2) -- a real, "
+          "independent stray, not an occlusion; must refuse, not commit it")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=True, m_lifted=True)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F5) ok=False: M reads but is itself lifted -- not occlusion", ok is False, detail)
+    check("(F5) M's mark SURVIVES -- a genuine, independent stray",
+          M_SLOT in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    check("(F5) T is left DOWN -- nothing here re-raises it",
+          rig.t_lifted is False, str(rig.t_lifted))
+    check("(F5) M stays lifted throughout -- this function never toggles it",
+          M_SLOT in rig.lifted, str(rig.lifted))
+    check("(F5) exactly 1 select_card press -- the lower only, bounded, no "
+          "loop chasing this stray",
+          rig.sent.count("select_card") == 1, str(rig.sent))
+
+    # =====================================================================
+    print("(F6) resolve_neighbour_occlusion: T is NOT lifted (resting), M "
+          "misread blind on the FIRST look only -- must refuse with ZERO "
+          "presses off the TOP guard (I-52 skeptic round 2, N3/M6): a later "
+          "'still blind' refusal would reach the same verdict even with the "
+          "t_slot-in-sel precondition deleted, which is why THAT shape "
+          "cannot catch the mutant -- this one can, because dropping the "
+          "precondition here lets the resolver reach a second, un-flickered "
+          "look that finds M readable and RAISES a resting T")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({M_SLOT})
+    rig = NeighbourRig(m_readable_when_t_down=True, t_starts_lifted=False,
+                        flicker_m_blind_once=True)
+    _old_press = ic.press
+    ic.press = rig.press
+    try:
+        ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
+    finally:
+        ic.press = _old_press
+    check("(F6) ok=False: not applicable, T is resting", ok is False, detail)
+    check("(F6) ZERO presses of any kind -- refused before the precondition "
+          "check ever presses anything",
+          rig.sent == [], str(rig.sent))
+    check("(F6) M's mark SURVIVES", M_SLOT in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
 
     # =====================================================================
     print("(G) I-43 TRUE POSITIVE: an isolated stray, nothing selected beside "
