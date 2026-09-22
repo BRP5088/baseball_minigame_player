@@ -4093,3 +4093,321 @@ before and after this ticket's changes), `test_result_card_is_read.py`,
 disagreements on true results, 0 FP on 285 non-result frames); N1 pinned, N3 fixture
 added; LATER: VOCAB lacks DEFEAT (a live run retried 15/15 and ended unscored) and
 PaddleOCR fails on the mid-animation flat banner 10/231.
+
+### I-55  Result commits leave no evidence: three draws today with no numbers and no frame   P1  evidence
+
+**Evidence.** Main checkout, three result commits with nothing behind them, same day:
+
+    overnight/run_live_20260921r.log ~555-556   "Draw logged (8 total)" right after a
+        poll that printed the templates were distrusted -- draw #8 is unverifiable
+        after the fact
+    overnight/run_live_20260921t.log ~634-636   a PHANTOM draw from a truncated card
+        name (I-54's own incident) -- the ONLY reason this one is explained is that
+        a frame happened to survive in test_fixtures/reveal_kind_truth/auto/ from an
+        unrelated keeper (record_reveal_kind) and someone went and found it by hand
+    overnight/run_live_20260921u.log ~724-725   "Draw logged (9 total)" with no
+        `[state]` line at all -- the next match's ban scan followed, so it was
+        PROBABLY real, but nothing on disk says so either way
+
+`HANDOFF_NOW.md`'s LATER list already named the gap: "log the evidence (template
+scores + OCR words + scoreboard) on every result commit and keep the result frame --
+the reveal/money keepers exist, the result screen has none."
+
+**Root cause.** `local_game_state`'s "result" branch (orchestrator.py ~4388, ~4463)
+computes the template scores dict, which reader answered (`why`, which names the
+CARD path when the arched-banner templates missed) and the OCR outcome/detail --
+and returns NONE of it. Its return dict for a "result" screen carries only
+`result_outcome`/`result_won`/`your_score`/`opp_score` (the last two always None on
+the local path, per that function's own comment on why it supplies no scores). So
+by the time run() reaches the commit block and prints "WIN #N logged" / "Draw
+logged" / "Loss logged", the numbers behind the word are already gone -- there was
+never anywhere for them to survive the round trip, unlike the reveal path
+(`record_reveal_kind`, OPEN-24) and the refused-select path (`record_refused_select`,
+I-48), which both already keep a frame + why.json at their own decision point.
+
+**Fix.** `record_result_frame(outcome, evidence, row=None, out_dir=None)`, beside
+`record_reveal_kind` / `record_refused_select`, same contract as both: never raises
+into the turn loop, writes nothing under `BASEBALL_TEST_RUN` unless a test hands it
+`out_dir` (or sets `BASEBALL_RESULT_FRAME_DIR`), REFUSES past
+`RESULT_FRAME_MAX_FILES` (200) rather than pruning. One call site, run()'s shared
+commit block, right after the WIN/Draw/Loss print and before `match_in_progress`
+is cleared.
+
+`evidence` is exactly what run() still has at that point -- `your_score`,
+`opp_score`, `result_outcome`, `result_won` off `state_json` -- threaded straight
+through, no re-read. The template scores per word and the OCR fallback's answer are
+genuinely gone (see Root cause), so the keeper re-derives them from a FRESH capture
+taken there, before the screen is dismissed, by calling `local_state.read_result`
+and `result_ocr.read_banner` again on it -- and says so explicitly, in both the
+printed line and `why.json`'s `note` field, so a re-derivation taken a poll or two
+after the real decision is never mistaken for the decision frame itself. Neither
+reader's own code was touched, and nothing about how the outcome is DECIDED changed
+-- this call sits after `outcome` is already settled.
+
+Frame + why.json land at `diagnostics/result_frames/<outcome>_<ns>.png` /
+`<outcome>_<ns>.why.json` (`diagnostics/` is gitignored, `.gitignore:75`). `row`,
+when given (run() passes `state_json`), is stamped with the frame's relative path
+the way `record_reveal_kind` stamps `matchup_info` -- there is no per-match result
+row persisted anywhere today, so this is a forward-looking no-op until one exists.
+
+**The evidence line**, printed once per commit -- captured verbatim from
+`tests/minigame/test_result_commit_evidence.py` case (A), run against this
+worktree's blank harness frame (real numbers, not an invented example; the
+`paddle venv missing at ...` detail is genuine too -- `paddle_venv/` does not
+exist in this worktree, CLAUDE.md section 2):
+
+    [result] win decided from state_json (your_score=7, opp_score=3,
+    result_outcome=None, result_won=True); re-derived template scores
+    {'winner': 0.0, 'loser': 0.0, 'draw': 0.0} (no result word found (best
+    0.000 < 0.8; card band read '')); re-derived OCR None (paddle venv missing
+    at .../paddle_venv/bin/python); frame -> win_1790037824847166000.png
+
+**Verify.** `tests/minigame/test_result_commit_evidence.py`, driven end to end
+through `_run_harness.Harness` (the same harness `test_run_debit_and_scoring.py`
+uses) plus two direct calls for the cases that would otherwise fight the harness's
+own `_fast_grab` patch, its own `check(name, cond)` NAME-FIRST (deliberately not
+`_run_harness`'s COND-FIRST `check`, to keep the two orders out of one file --
+CLAUDE.md's nine-signatures trap): (A) a WIN commit prints the evidence line
+(state_json's numbers plus the re-derived template scores and OCR) and writes
+frame + why.json into a temp root (`BASEBALL_RESULT_FRAME_DIR`, never the live
+dir); (B) a DRAW commit, with `local_state.read_result` monkeypatched to a
+card-reader answer, names the CARD path in both the print and why.json; (C) under
+`BASEBALL_TEST_RUN` with no seam, `_fast_grab` stubbed to SUCCEED, nothing is
+written and capture is never even called -- proves the guard fires before
+capture, not that capture happened to fail; (D) `PIL.Image.Image.convert`
+monkeypatched to raise, driven through a real WIN commit -- the match still
+scores (`wins == 1`) and nothing is left half-written; (E) the 200-file cap
+refuses out loud and does not prune the oldest frame.
+
+**Mutants (3, `__pycache__` cleared between each -- `-B` throughout; sha256-verified
+restore to `8cc8afe21e79c3136eacc59212ea8d3a3190f0b22eb4d8143f1df1c736556896`
+between each):**
+
+    drop the print call (lines 7598-7604)
+        -> FAILS 5: all four (A) evidence-line checks, and (B)'s CARD-path check
+    `why = {...}` -> `why = {"outcome": outcome}` (the numbers dropped)
+        -> FAILS 5: all four (A) why.json-content checks, and (B)'s why.json
+           CARD-path check
+    remove `if d is None and _running_under_test(): return None`
+        -> FAILS 3: all three (C) checks -- returns a filename instead of None,
+           writes into the watched temp root, and (moot at that point) the
+           guard-before-capture ordering check
+
+Run clean (`BASEBALL_TEST_RUN=1`, offline, single process): the new file, plus
+`test_run_debit_and_scoring.py`, `test_stale_flag_never_presses_unpaid.py`,
+`test_run_resume_and_persist.py`, `test_transition_screens_recognised.py`,
+`test_reveal_frame_kept.py`, `test_unscored_reveal_rows_kept.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`.
+
+**FOLLOW-UP, SAME DAY: THE FIRST FIX WAS RE-DERIVING, NOT RECORDING.** The evidence
+line above IS the tell, read correctly: template scores of
+`{'winner': 0.0, 'loser': 0.0, 'draw': 0.0}` on a screen that had just been scored a
+WIN. A skeptic caught it from that own sample -- `record_result_frame`'s first
+version called `_fast_grab()` fresh at the commit site, one or more polls AFTER
+`local_game_state` had already decided the outcome, so the "evidence" it printed and
+saved was a picture of whatever the result screen looked like a beat later (already
+fading, already dismissed, or simply re-photographed), never the frame the decision
+was actually made on. The fix was correctly scoped (no re-read unless the values are
+gone) but wrong about WHERE the values were gone from: they were gone from
+`state_json`, not from existence -- `local_game_state` had them the whole time and
+simply never returned them.
+
+**Root cause, precisely.** `local_game_state`'s "result" branch (orchestrator.py, both
+return sites) already computes `res["scores"]` (the template bank's per-word dict),
+`res["why"]` (which names the CARD path when the arched-banner templates missed) and
+the OCR outcome/detail from `result_ocr.read_banner`, and held `full` -- the exact
+frame it read them from -- in a local variable that went out of scope the moment the
+function returned. None of that survived into `state_json`.
+
+**Fix.** `local_game_state` now threads five new keys on every "result" return --
+`result_scores`, `result_source` ("template"|"card"|"ocr", derived from `why` and
+whether OCR overrode the templates -- no new reader call, just naming the path already
+taken), `result_card_word` (regex-extracted from `why`'s own `CARD read 'X' -> ...`
+text when the card path fired), `result_ocr_words` and `result_frame_ns` -- and stashes
+the frame itself in a new module-level `_LAST_RESULT_FRAME = (PIL Image, ns)`, set
+ONLY inside the "result" branch (never touched by a `"turn"`/`"ban_screen"`/etc read),
+paired with the same timestamp so a consumer can refuse a mismatched pairing rather
+than trust a global that might belong to an earlier poll -- same shape as
+`input_controller._LAST_PROBE_ATTEMPTS` / `_LAST_PLAY_DROPPED_TACTICS`. Neither reader
+was touched and the outcome decision is untouched; this only threads what was already
+computed.
+
+`record_result_frame` now prefers that exact pairing: when `evidence["result_frame_ns"]`
+matches `_LAST_RESULT_FRAME`'s own timestamp, it saves THAT frame and prints the
+threaded numbers verbatim -- no second call to either reader. It falls back to the old
+re-derive-and-say-so behaviour only when the fields are genuinely absent (the paid
+path, or a hand-built state dict), and the fallback is now unmistakably labelled
+`path='re-derived'` in both the print and `why.json`, rather than looking like ordinary
+evidence.
+
+**The evidence line, now on the decision frame** (captured verbatim,
+`tests/minigame/test_result_commit_evidence.py` case A, `local_state.read_result`
+seeded with a known dict so the assertion is exact, not eyeballed):
+
+    [result] win decided from state_json (your_score=None, opp_score=None,
+    result_outcome='win', result_won=True); path='template'
+    scores={'WINNER': 0.987, 'LOSER': 0.012, 'DRAW': 0.034} card_word=None
+    ocr_words='paddle venv missing at /nope'; frame is the DECISION frame --
+    local_game_state's own 'result' branch read this exact picture and produced
+    these exact numbers; nothing here was re-derived; kept -> win_<ns>.png
+
+The seeded `{'WINNER': 0.987, ...}` appears verbatim -- proof this is the threaded
+value, not a fresh read of a 1920x1080 solid-colour test frame (which would score
+near 0.000 on every word, exactly what the FIRST fix's sample showed).
+
+**Verify, updated.** `test_result_commit_evidence.py` cases A and B now call
+`orchestrator.local_game_state()` directly with `local_state.read_result` /
+`result_ocr.read_banner` / `_fast_grab` seeded to known values (a helper,
+`_seed_and_read`), so the threaded fields and the stashed frame are checked against
+exactly what was seeded, not against whatever a live screen happens to show. New
+**case F**: seeds `local_game_state` with one known frame (`_DECISION_FRAME`), then --
+before calling `record_result_frame` -- swaps the live capture over to a SECOND, 
+distinct known frame (`_FALLBACK_FRAME`, standing in for a screen that has "moved on"
+by commit time) and asserts the kept PNG's pixel bytes are byte-identical to
+`_DECISION_FRAME` and NOT `_FALLBACK_FRAME`. A trailing control keeps one full
+Harness-driven WIN commit through `run()`, confirming the commit site still wires
+`state_json` into the keeper rather than something ad hoc.
+
+**Mutants, 5 total now (all `__pycache__`-cleared, sha256-verified restore to
+`ec7dbf24d7972041df39fac3ae3a922c510f58c58b6c77d311970461d5de8acf` between each --
+note the first fix's sha `8cc8afe2...` above is now stale, superseded by this
+follow-up):**
+
+    drop the print call                                   -> FAILS 6 (A x2, B x2)
+    `why = {...}` -> `why = {"outcome": outcome}`          -> FAILS 2 (A's why.json checks)
+    remove record_result_frame's OWN test-run gate
+      (there are 4 near-identical gates in this file --
+      record_reveal_kind's, record_money_read_frame's,
+      record_refused_select's, and this one; a naive
+      `lines.index()` on the first match hit
+      record_reveal_kind's and produced a SILENT FALSE PASS,
+      caught only by re-running: exit 0, zero failures, on
+      a mutant that should have broken case C outright --
+      CLAUDE.md 10.10, "count the occurrences first")       -> FAILS 3 (all of C)
+    print the RE-DERIVED numbers instead of the threaded
+      ones (swap evidence.get(...) for a fresh
+      local_state.read_result(full) call even when the
+      decision frame is available)                          -> FAILS 6 (A x4, B x2)
+    keep a FRESH capture instead of the stashed decision
+      frame (`full = stashed[0]` -> `full = _fast_grab()`,
+      leaving the threaded scores/source/etc untouched)      -> FAILS 2 (both of F)
+
+The fourth mutant's near-miss is worth keeping: the first attempt at it targeted the
+wrong `if d is None and _running_under_test():` occurrence (this file has four) and
+the test suite reported clean on code that no longer guarded anything. Re-running the
+test after EVERY mutant, not just trusting the diff, is what caught it -- the same
+discipline CLAUDE.md 10.9 already asks for.
+
+Battery re-run clean against this follow-up (`BASEBALL_TEST_RUN=1`, offline, single
+process, 11 files): the new test, `test_run_debit_and_scoring.py`,
+`test_stale_flag_never_presses_unpaid.py`, `test_run_resume_and_persist.py`,
+`test_transition_screens_recognised.py`, `test_reveal_frame_kept.py`,
+`test_unscored_reveal_rows_kept.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`,
+`test_validate_game_state.py` -- all exit 0. `test_result_reader.py` exits 1 on ONE
+PRE-EXISTING, UNRELATED failure already documented under I-54 ("the dealer prompt
+classifies as match_start_prompt" -- `diagnostics/20260910_103221_5018/
+screen_at_stall.png` does not exist in this worktree), reproduced identically before
+and after every edit in this ticket; confirmed by reading the failure -- it dies
+inside `local_game_state`'s own `except Exception as exc: return None, f"could not
+capture ({exc})"` branch, before reaching any of the code this ticket touches. Also
+grepped `state_json\[` / `.get("result_` across the whole tree: the only other
+consumers are `validate_game_state` (paid-path only, never sees `local_game_state`'s
+output -- checked its one call site) and `tools/match_crawl.py` (reads a different,
+unrelated dict shape via plain `.get()`), neither affected by adding five new keys.
+
+**SKEPTIC VERDICT: CONFIRMED WITH NOTES (`agent_progress/issues/I-55/skeptic.md`).**
+Every claim in the follow-up checked out -- decision untouched, consumer safety,
+`record_result_frame`'s never-raises/capped/gated contract, timing at the commit
+site (12.4ms measured PNG save against a >=4.0s banner hold, no hazard) -- but
+THREE independently-constructed mutants, each targeting the exact failure class
+this whole ticket exists to prevent, survived the shipped 5-mutant campaign AND
+the regression battery:
+
+    loosen the ns equality check (`stashed is not None` alone, dropping
+      `stashed[1] == wanted_ns`)                    NOT CAUGHT
+    drop the threading at the SECOND return site
+      (the OCR-only fallback when the templates
+      never score `is_result` at all)               NOT CAUGHT
+    make the fallback's provenance text claim
+      "the DECISION frame" instead of "RE-DERIVED"   NOT CAUGHT
+
+None of these are refutations of the code -- the skeptic verified all three
+scenarios by hand against the UNMUTATED worktree and confirmed the code handles
+each one correctly (a genuine stale stash correctly falls back and says so; the
+second return site's diff already threads all five keys; the fallback's real
+provenance text already says "RE-DERIVED"). The gap was entirely in test
+COVERAGE: `_seed_and_read`'s stub always answers `is_result: True`, so every
+existing case takes the FIRST return site with a single, internally-consistent
+`local_game_state()` call -- nothing in the shipped suite ever (a) reads two
+DIFFERENT results in sequence and commits on the stale one, (b) drives the
+second return site at all, or (c) inspects the fallback path's own provenance
+text rather than only checking the decision path avoids it.
+
+**Three cases added, no orchestrator.py change:**
+
+    (G) genuine ns MISMATCH. Reads result A (frame A, scores A), then reads a
+        SECOND, different result B -- overwriting `_LAST_RESULT_FRAME` with B's
+        frame and timestamp, the way the next poll in run()'s own loop would --
+        then commits on A's now-stale state_json. Asserts the kept frame is a
+        FRESH capture (a third, distinct known image, standing in for "the
+        screen at commit time"), NOT B's stashed picture stamped with A's
+        numbers, and that the print/why.json say `path='re-derived'` and "did
+        not match the stashed frame".
+    (H) the SECOND return site. `local_state.read_result` seeded to MISS
+        (`is_result: False`) with partial scores; `result_ocr.read_banner`
+        seeded to answer; ban/prompt/hand stubbed to fall through
+        deterministically (`crop_gameplay_regions`, `read_ban_counter`,
+        `homeplate_runner_present`, `local_hand_cards`, `table_prompt.at_table`)
+        so the test does not depend on how the real readers happen to score a
+        synthetic frame. Asserts `result_source`/`result_card_word`/
+        `result_ocr_words`/`result_scores`/`result_frame_ns` all thread from
+        THIS site, `_LAST_RESULT_FRAME` is stashed here too, and the evidence
+        line names the ocr path.
+    (I) the fallback's provenance text. Calls `record_result_frame` with NO
+        threaded fields at all (`_LAST_RESULT_FRAME` is None) and asserts the
+        print AND why.json's `frame_provenance` say "RE-DERIVED" and do NOT say
+        "DECISION frame" -- the converse of what case A already checked (that
+        the decision path's own print avoids "re-derived").
+
+Verified independently by direct call to `local_game_state()` outside the test
+file (`local_game_state()` with the same five stubs as case H) before trusting
+the assertion -- reproduces state_json exactly as the test expects, `_LAST_
+RESULT_FRAME` set, before any mutant was applied.
+
+**Mutants (3, matching the skeptic's own three exactly; `__pycache__` cleared,
+sha256-verified restore to `ec7dbf24d7972041df39fac3ae3a922c510f58c58b6c77d311970461d5de8acf`
+between each):**
+
+    loosen `stashed[1] == wanted_ns` to `stashed is not None` alone
+        -> FAILS 4: all of (G) -- the kept frame becomes B's stashed picture
+           and the print falsely claims the decision frame
+    revert the SECOND return site's dict to the pre-I-55 four-key shape
+        -> FAILS 8: all of (H) -- result_source/ocr_words/scores/frame_ns all
+           come back None, and record_result_frame silently falls through to
+           its own honestly-labelled fallback (which is not what (H) is
+           testing: it is testing that the SITE threads, not that the
+           fallback still works when it doesn't)
+    replace the fallback's provenance string with the literal "the DECISION
+    frame" text
+        -> FAILS 5: all of (I), AND 2 of (G) -- (G) also takes the fallback
+           branch (a genuine ns mismatch IS a fallback), so the same lie
+           reaches it too; this is a feature of the mutant, not a leak between
+           tests, since both cases legitimately exercise the same provenance
+           code
+
+Every mutant's FAIL list is scoped to exactly the case(s) whose branch it
+touches; no mutant produced a failure outside G/H/I, and no pre-existing case
+(A-F, the trailing control) was disturbed by writing them.
+
+Regression battery re-run clean against this addition (`BASEBALL_TEST_RUN=1`,
+offline, single process, 11 files): the new test, `test_run_debit_and_scoring.py`,
+`test_stale_flag_never_presses_unpaid.py`, `test_run_resume_and_persist.py`,
+`test_transition_screens_recognised.py`, `test_reveal_frame_kept.py`,
+`test_unscored_reveal_rows_kept.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`,
+`test_validate_game_state.py` -- all exit 0. `test_result_reader.py` still exits 1
+on the same pre-existing, unrelated fixture gap documented above and under I-54.
+
+**Status.** fixed on branch (follow-up + skeptic gaps closed), awaiting re-review.
