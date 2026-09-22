@@ -4484,9 +4484,101 @@ Full battery re-run, all exit 0: `test_tactics_select_fallback.py`,
 `tests/rig/test_no_real_input_under_test_run.py`,
 `tests/harness/test_claude_md_constants.py`.
 
-**Status.** Fixed on branch after the skeptic's refutation and the coordinator's
-I-48f addition; redo complete, all three R1-R4 findings addressed with a single
-per-operation press-ledger mechanism, I-48f fixed alongside it, 20/20 mutants
-caught, 13/13 battery files green. Awaiting re-review. The 13/15-row "persistent
-across retries of the same hand" shape from the original write-up is still OPEN
-and still out of scope (a reader-quality question, not a cursor-logic one).
+**Status (superseded by round 2 below).** Fixed on branch after the skeptic's
+refutation and the coordinator's I-48f addition; redo complete, all three R1-R4
+findings addressed with a single per-operation press-ledger mechanism, I-48f
+fixed alongside it, 20/20 mutants caught, 13/13 battery files green. The
+13/15-row "persistent across retries of the same hand" shape from the original
+write-up is still OPEN and still out of scope (a reader-quality question, not a
+cursor-logic one) -- unaffected by round 2, below.
+
+---
+
+**ROUND 2 (2026-09-22): an independent Opus skeptic re-reviewed d525913.
+VERDICT: CONFIRMED WITH NOTES.** R1/R2/R3 all reproduce as fixed against the
+skeptic's own round-1 probes, re-run unmodified; both live cases the
+coordinator supplied (`run_live_20260922c.log` cycle 18, and the Q17 user-truth
+frame) come out right; the common press-for-press path is unchanged. Two
+findings required a fix before merge; a third and fourth were noted but did not
+block (NOTE 1, I-48f's blind-toggle cost on a wrong inference; NOTE 4, the
+probe-budget file's anchor updates carry no new coverage of their own -- both
+are follow-up, not required here).
+
+**The `gone` hole (skeptic's finding (d)).** `_probe_select_blind_target`'s B1
+disappearance branch computed `gone = [i for i in before if i not in sel]` and
+credited the vacated slot as ACCOUNTED unconditionally -- but `selected_cards`
+skips a row whose disc is unreadable (I-21), so a slot leaves `sel` for TWO
+different reasons: it went DOWN, or it went BLIND while still UP. A real stray
+this same press raised elsewhere on an already-blind row reads exactly like
+`back` going down, and the ledger's own stated invariant ("accounted only when
+a look positively named the slot it changed") was cleared by a negative that
+never checked which. Reproduced end to end (skeptic's `probe_d2_wrongcommit.py`
+shape, NOT a regression -- main a99bc6e commits the same wrong card on this
+exact scenario): OP1 refuses without marking anything ("nothing this operation
+pressed can explain it"), OP2 then COMMITS a card the engine never chose.
+
+**Fix (2 lines, `_probe_select_blind_target`).** The `gone` branch now checks
+`_ys[back]` before crediting: `if _ys[back] is None: _note_unaccounted_press()`
+(absence is not proof of down) `else: _note_accounted_press(back)` (a readable,
+vacated slot genuinely was observed to go down).
+
+**Verify.** New/changed tests, both driven through the REAL production entry
+points, not synthetic direct calls alone:
+
+- `tests/minigame/test_tactics_select_fallback.py`:
+  - **(AA1)** MY-M1: a ledger poisoned exactly as a prior, unrelated operation
+    would leave it (skeptic's `probe_acd.py` shape), sent through
+    `_verified_select_and_play_inner` via `_play()` with NO manual reset --
+    production's own `_reset_press_ledger()` must be what isolates this
+    operation, so a slot that goes blind for reasons THIS operation cannot
+    explain (`NewBlindNonWantPlayScreen`) must NOT be marked.
+  - **(BB1)** MY-M3: the live Q17 frame (`run_live_20260921x.log` 651-672,
+    user ground truth slot 0; `Q17FrameScreen` reproduces the exact
+    `_ys`/`glow`/`sel`/kinds) must COMMIT slot 0 with exactly one select and
+    one confirm, zero presses near slot 1.
+  - Mutants 21 (MY-M1: delete `_verified_select_and_play_inner`'s own
+    `_reset_press_ledger()` call) and 22 (MY-M3: restore BOTH
+    `_clear_strays`' `_untouched_blind & _MAYBE_LIFTED` intersection AND
+    `resolve_neighbour_occlusion`'s "still blind" branch to unconditional
+    marking -- verified by direct reproduction that mutating either one
+    ALONE measures nothing, because `_clear_strays`' own gate is what decides
+    whether the disambiguation is ever TRIED on a slot this operation never
+    marked) -- both caught, each with a post-restore sanity re-check.
+- `tests/minigame/test_probe_select_budget.py`:
+  - **(CC1)** MY-M5: the probe's own "raised nothing" retry marks the ledger
+    UNACCOUNTED, and a LATER target in the SAME operation depends on that
+    mark to know its own baseline cannot be trusted -- not a check on the
+    flag itself, but the actual press-or-refuse DECISION it drives.
+  - **Mutant 9** (MY-M5: the probe's "raised nothing" branch no longer marks
+    UNACCOUNTED) -- caught, with a post-restore sanity re-check.
+  - Mutants 5 and 8's own anchors needed a second round of extension (the
+    `gone`-branch fix above added the `_ys[back]` check inside the exact text
+    they mutate); fixed, both still caught.
+
+**Mutants, this round (25 total across the two files, all caught, sha256-
+restore-verified against `97d7121f618c618cdb59f61069742bb776bbf5c14ba4fddf7a30abe602166212`,
+`__pycache__` cleared before every mutant):**
+
+    test_tactics_select_fallback.py   1-20 (unchanged from the first redo)
+                                       21 MY-M1  reset deleted -> (AA1) marks a
+                                                  slot the operation never touched
+                                       22 MY-M3  unconditional marking restored
+                                                  (both sites) -> Q17 refuses
+    test_probe_select_budget.py       1-8 (unchanged; 5 and 8 re-anchored for
+                                            the `gone` fix)
+                                       9  MY-M5  unaccounted mark on "raised
+                                                  nothing" dropped -> a later
+                                                  target's baseline-trust
+                                                  bypass wrongly fires
+
+Final sha256 of `input_controller.py`:
+`5cd6549ad6a8eea73746c0e2fb53bad840f5e3d56bd2c3a0021da4cb6f4afa46`.
+
+`check()` audit: both changed test files are name-first `def check(name,
+cond)`; 176 + 53 calls; zero `^ *(PASS|ok|FAIL) +(True|False)$` lines in either
+run.
+
+**Status.** Fixed on branch after the round-2 skeptic's confirmation-with-notes;
+the `gone` hole is closed, MY-M1/MY-M3/MY-M5 all have guards that bite, and the
+13-file battery is green. The 13/15-row "persistent across retries of the same
+hand" shape remains OPEN and out of scope, unchanged by either round.

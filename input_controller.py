@@ -1006,9 +1006,20 @@ def _probe_select_blind_target(target, ys, before_sel, look):
         gone = [i for i in before if i not in sel]
         if gone:
             back = gone[0]
-            # I-56 skeptic R1/R4: ACCOUNTED -- we directly observed `back`
-            # go down, the whole effect of this press.
-            _note_accounted_press(back)
+            # I-56 SKEPTIC ROUND 2 (d): `sel` comes from selected_cards(),
+            # which SKIPS a row whose disc is unreadable (I-21) -- so a slot
+            # leaves `sel` for two different reasons, going DOWN or going
+            # BLIND while still UP, and the round-1 code credited ACCOUNTED
+            # on the absence alone without ever checking which. A real stray
+            # this same press raised elsewhere reads exactly like `back`
+            # going down. Only a slot that reads DOWN WITH A READABLE DISC
+            # was actually OBSERVED to go down; a slot that is merely
+            # unreadable now is the same "absence != down" shape as
+            # _select_verified's own `gone`-adjacent inference branches.
+            if _ys[back] is None:
+                _note_unaccounted_press()
+            else:
+                _note_accounted_press(back)
             print(f"  [cursor] probe-select made {back} disappear (it was already "
                   "selected before this probe) — the true cursor is there; "
                   "re-selecting it rather than pressing blind again")

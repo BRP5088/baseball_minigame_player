@@ -433,6 +433,34 @@ check("(I) exactly one press -- the row-count guard returns on the very "
       "first unreadable look, no further attempts",
       s.sent.count("select_card") == 1)
 
+# --- CC1 (I-56 skeptic round 2, MY-M5): the probe's own "raised nothing" ---
+# retry must mark the ledger UNACCOUNTED, and it is that marking a LATER
+# target in the SAME operation depends on to know its own baseline cannot be
+# trusted -- not a self-referential check on the flag, but the actual
+# DECISION (press or refuse) the flag exists to drive.
+ic._reset_press_ledger()
+s = ProbeFakeScreen(select_queue=[None, 4])
+ic.press = s.press
+try:
+    ok, cur, sel = ic._probe_select_blind_target(4, s.ys, [], s.look)
+finally:
+    ic.press = _real_press
+check("(CC1) the probe still lands on the second attempt", ok is True and cur == 4)
+check("(CC1) attempt 1 raised nothing (a genuinely dropped press) -- the "
+      "ledger is UNACCOUNTED from it", ic._UNACCOUNTED_SELECT_PRESS is True)
+
+s2 = ToggleFakeScreen(cursor=2, selected=[], drops=[], ys=[100 if _i != 2 else None for _i in range(N)])
+ic.press = s2.press
+try:
+    ok2, sel2 = ic._select_verified(2, s2.look, ys0=[100] * N, sel0=set())
+finally:
+    ic.press = _real_press
+check("(CC1) a later target's baseline-trust bypass is DISABLED by the "
+      "probe's own unaccounted press this operation -- zero presses, the "
+      "ORIGINAL refusal, not the I-56 baseline-trust press",
+      ok2 is False and s2.sent == [])
+ic._reset_press_ledger()
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
@@ -603,9 +631,20 @@ try:
         '        gone = [i for i in before if i not in sel]\n'
         '        if gone:\n'
         '            back = gone[0]\n'
-        '            # I-56 skeptic R1/R4: ACCOUNTED -- we directly observed `back`\n'
-        '            # go down, the whole effect of this press.\n'
-        '            _note_accounted_press(back)\n'
+        '            # I-56 SKEPTIC ROUND 2 (d): `sel` comes from selected_cards(),\n'
+        '            # which SKIPS a row whose disc is unreadable (I-21) -- so a slot\n'
+        '            # leaves `sel` for two different reasons, going DOWN or going\n'
+        '            # BLIND while still UP, and the round-1 code credited ACCOUNTED\n'
+        '            # on the absence alone without ever checking which. A real stray\n'
+        '            # this same press raised elsewhere reads exactly like `back`\n'
+        '            # going down. Only a slot that reads DOWN WITH A READABLE DISC\n'
+        '            # was actually OBSERVED to go down; a slot that is merely\n'
+        '            # unreadable now is the same "absence != down" shape as\n'
+        '            # _select_verified\'s own `gone`-adjacent inference branches.\n'
+        '            if _ys[back] is None:\n'
+        '                _note_unaccounted_press()\n'
+        '            else:\n'
+        '                _note_accounted_press(back)\n'
         '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
         '                  "selected before this probe) — the true cursor is there; "\n'
         '                  "re-selecting it rather than pressing blind again")\n'
@@ -719,9 +758,20 @@ try:
         '        gone = [i for i in before if i not in sel]\n'
         '        if gone:\n'
         '            back = gone[0]\n'
-        '            # I-56 skeptic R1/R4: ACCOUNTED -- we directly observed `back`\n'
-        '            # go down, the whole effect of this press.\n'
-        '            _note_accounted_press(back)\n'
+        '            # I-56 SKEPTIC ROUND 2 (d): `sel` comes from selected_cards(),\n'
+        '            # which SKIPS a row whose disc is unreadable (I-21) -- so a slot\n'
+        '            # leaves `sel` for two different reasons, going DOWN or going\n'
+        '            # BLIND while still UP, and the round-1 code credited ACCOUNTED\n'
+        '            # on the absence alone without ever checking which. A real stray\n'
+        '            # this same press raised elsewhere reads exactly like `back`\n'
+        '            # going down. Only a slot that reads DOWN WITH A READABLE DISC\n'
+        '            # was actually OBSERVED to go down; a slot that is merely\n'
+        '            # unreadable now is the same "absence != down" shape as\n'
+        '            # _select_verified\'s own `gone`-adjacent inference branches.\n'
+        '            if _ys[back] is None:\n'
+        '                _note_unaccounted_press()\n'
+        '            else:\n'
+        '                _note_accounted_press(back)\n'
         '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
         '                  "selected before this probe) — the true cursor is there; "\n'
         '                  "re-selecting it rather than pressing blind again")\n'
@@ -819,9 +869,67 @@ finally:
 check("post-restore sanity: case I passes again",
       ok is False and m8_calls_post == [])
 
+# --- mutant 9 (I-56 skeptic round 2, MY-M5): the probe's "raised nothing" --
+# no longer marks the ledger UNACCOUNTED -- CC1's later target must be waved
+# through by the baseline-trust bypass instead of refusing
+print("mutant 9: the probe's 'raised nothing' branch no longer calls "
+      "_note_unaccounted_press() -- CC1's later target must be pressed by "
+      "the baseline-trust bypass instead of refusing")
+try:
+    _mutate(
+        IC_PATH,
+        '        # RAISED NOTHING VISIBLE -- I-56 skeptic R1/R4\'s own named case ("a\n'
+        '        # probe attempt that raised nothing"): UNACCOUNTED. Indistinguishable\n'
+        '        # from a genuinely dropped press (CLAUDE.md section 5, 15.20%) from\n'
+        '        # here, and neither rules out an invisible landing elsewhere.\n'
+        '        _note_unaccounted_press()\n'
+        '        if attempt < PROBE_SELECT_MAX:\n',
+        '        # I-56 mutant (MY-M5): the unaccounted mark is dropped\n'
+        '        if attempt < PROBE_SELECT_MAX:\n')
+    _reload_ic()
+    ic._reset_press_ledger()
+    s = ProbeFakeScreen(select_queue=[None, 4])
+    ic.press = s.press
+    try:
+        ok9, cur9, sel9 = ic._probe_select_blind_target(4, s.ys, [], s.look)
+    finally:
+        ic.press = _real_press
+    s9b = ToggleFakeScreen(cursor=2, selected=[], drops=[], ys=[100 if _i != 2 else None for _i in range(N)])
+    ic.press = s9b.press
+    try:
+        ok9b, sel9b = ic._select_verified(2, s9b.look, ys0=[100] * N, sel0=set())
+    finally:
+        ic.press = _real_press
+    check("mutant 9 caught: the later target's baseline-trust bypass fires "
+          "when the ledger has no right to be clean",
+          s9b.sent != [])
+finally:
+    _restore_ic()
+
+# --- sanity: CC1 still holds after mutant 9 -------------------------------
+ic._reset_press_ledger()
+s = ProbeFakeScreen(select_queue=[None, 4])
+ic.press = s.press
+try:
+    ok, cur, sel = ic._probe_select_blind_target(4, s.ys, [], s.look)
+finally:
+    ic.press = _real_press
+check("post-restore sanity: CC1's probe still lands", ok is True and cur == 4)
+check("post-restore sanity: CC1's ledger is unaccounted again",
+      ic._UNACCOUNTED_SELECT_PRESS is True)
+s2 = ToggleFakeScreen(cursor=2, selected=[], drops=[], ys=[100 if _i != 2 else None for _i in range(N)])
+ic.press = s2.press
+try:
+    ok2, sel2 = ic._select_verified(2, s2.look, ys0=[100] * N, sel0=set())
+finally:
+    ic.press = _real_press
+check("post-restore sanity: CC1's later target refuses again",
+      ok2 is False and s2.sent == [])
+ic._reset_press_ledger()
+
 if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
-print("  all eight mutants caught, input_controller.py and orchestrator.py "
+print("  all nine mutants caught, input_controller.py and orchestrator.py "
       "restored byte-for-byte")

@@ -380,6 +380,59 @@ class InferredSelectPlayScreen(PlayScreen):
         return glow, ys, N, sel
 
 
+class NewBlindNonWantPlayScreen(PlayScreen):
+    """I-56 SKEPTIC ROUND 2, MY-M1: slot 2 is never `want`, never pressed and
+    never walked near -- it reads fine on THIS operation's own baseline look
+    (call 1) and then goes unreadable from the very next look onward, modelling
+    an unrelated animation glitch rather than anything this operation raised.
+    That is the exact `_new_blind` shape `_clear_strays`' ledger-gated mark
+    exists for (I-56 R1): the mark must fire only when THIS operation's own
+    ledger shows an unaccounted press that could explain it, never merely
+    because a PRIOR, unrelated operation left the ledger dirty and nothing
+    reset it."""
+
+    def __init__(self, cur=0, blind_from_call=2, **kw):
+        super().__init__(cur=cur, **kw)
+        self.blind_from_call = blind_from_call
+        self._look_n = 0
+
+    def look(self):
+        self._look_n += 1
+        if self.fan_gone:
+            return [0.0] * N, [None] * N, 0, []
+        glow = [0.0] * N
+        glow[self.cur] = 27.0
+        ys = list(REST)
+        if self._look_n >= self.blind_from_call:
+            ys[2] = None
+        sel = sorted(self.lifted)
+        return glow, ys, N, sel
+
+
+class Q17FrameScreen(PlayScreen):
+    """I-56 SKEPTIC ROUND 2, MY-M3: the exact live Q17 frame
+    (`test_fixtures/user_truth/20260922_0215/Q17_1790041074877095000_hand.png`,
+    `run_live_20260921x.log` 651-672). `_ys = [201, None, 139, 157, 217]`,
+    `glow = [28.2, 1.1, 0.4, 0.5, 0.6]`, `sel = []` -- slot 1 is a genuine
+    fielding_boost whose TYPE banner missed the read (type_score 0.805,
+    I-36's own misread shape), CHRONIC and UNTOUCHED: it is not `want`, this
+    operation never presses near it, and nothing has ever marked it. Slot 0
+    (the pitcher) is the user's own ground truth and is readable and
+    unselected."""
+
+    def __init__(self, **kw):
+        super().__init__(cur=0, **kw)
+
+    def look(self):
+        if self.fan_gone:
+            return [0.0] * N, [None] * N, 0, []
+        glow = [28.2, 1.1, 0.4, 0.5, 0.6]
+        ys = [201, None, 139, 157, 217]
+        sel = sorted(self.lifted)
+        kinds = ["player", "tactics", "player", "player", "player"]
+        return glow, ys, N, orch._CursorSel(sel, kinds)
+
+
 def _play(card_index, tactics_index):
     """Run one play through the REAL function, capturing stdout and every
     `_unwind_selection` call (target set only) without altering its behaviour."""
@@ -1115,6 +1168,50 @@ try:
           "missing", "no longer lifted" not in out_z1)
 
     # =====================================================================
+    print("(AA1) I-56 SKEPTIC ROUND 2, MY-M1: the LIVE ENTRY POINT must reset "
+          "the ledger itself -- poison it exactly as a prior, unrelated "
+          "operation would leave it (skeptic's probe_acd.py shape), send NO "
+          "reset here, and drive the REAL _verified_select_and_play_inner "
+          "through _play(). This operation's own press (batter, slot 0) is "
+          "fully accounted, so a fresh ledger enters _clear_strays clean; "
+          "slot 2 -- never `want`, never pressed, never walked near -- goes "
+          "unreadable for reasons this operation cannot explain, and a clean "
+          "ledger must NOT mark it. If the ledger enters dirty because "
+          "production's own reset never ran, slot 2 gets marked anyway.")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._note_unaccounted_press()
+    for _slot in range(N):
+        ic._note_accounted_press(_slot)
+    s = NewBlindNonWantPlayScreen(cur=0, blind_from_call=2)
+    ok_aa1, out_aa1, calls_aa1 = _play(0, None)
+    check("(AA1) slot 2 is NOT marked -- this operation's own ledger, reset "
+          "by the entry point itself, shows nothing it pressed could explain "
+          "slot 2's blindness", 2 not in ic._MAYBE_LIFTED)
+    check("(AA1) the refusal fired for the right, unrelated reason (slot 2 "
+          "unreadable), not because of anything carried over from before",
+          ok_aa1 is False)
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+
+    # =====================================================================
+    print("(BB1) I-56 SKEPTIC ROUND 2, MY-M3: the live Q17 frame "
+          "(run_live_20260921x.log 651-672, user ground truth slot 0) -- "
+          "slot 1's wreath is chronic, untouched, never marked, and NOT "
+          "`want`. Must COMMIT slot 0 with exactly one select and one "
+          "confirm, and ZERO presses anywhere near slot 1.")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    s = Q17FrameScreen()
+    ok_bb1, out_bb1, calls_bb1 = _play(0, None)
+    check("(BB1) commits the user's own ground truth (slot 0)",
+          ok_bb1 is True and s.confirmed_sel == [0])
+    check("(BB1) exactly one select_card and one confirm_play, zero presses "
+          "touching slot 1 -- cur never leaves 0",
+          s.sent == ["select_card", "confirm_play"])
+
+    # =====================================================================
     print()
     print("MUTATION TESTING")
     # =====================================================================
@@ -1822,6 +1919,133 @@ try:
     ok_z1b, _out_z1b, _calls_z1b = _play(0, 1)
     check("post-restore sanity: case (Z1) passes again",
           ok_z1b is True and s.confirmed_sel == [0, 1])
+
+    # --- mutant 21 (I-56 skeptic round 2, MY-M1): the LIVE ENTRY POINT's own
+    # ledger reset is deleted -- (AA1) must go from "clean and unmarked" to
+    # "a prior operation's leftover state marks a slot this operation never
+    # touched"
+    print("mutant 21: _verified_select_and_play_inner's own "
+          "_reset_press_ledger() call is deleted -- (AA1) must let a "
+          "poisoned, left-over ledger from a prior operation mark a slot "
+          "this operation never pressed near")
+    try:
+        _mutate(
+            IC_PATH,
+            "    # I-56 skeptic R1/R4: a fresh per-operation press ledger -- nothing this\n"
+            "    # operation has pressed yet, so no slot's baseline can already be stale.\n"
+            "    _reset_press_ledger()\n",
+            "    # I-56 mutant (MY-M1): the reset never runs\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._note_unaccounted_press()
+        for _slot in range(N):
+            ic._note_accounted_press(_slot)
+        s = NewBlindNonWantPlayScreen(cur=0, blind_from_call=2)
+        ok21, out21, calls21 = _play(0, None)
+        check("mutant 21 caught: slot 2 is marked once the entry point's own "
+              "reset stops running", 2 in ic._MAYBE_LIFTED)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- sanity: (AA1) still holds after mutant 21 ----------------------------
+    ic.clear_maybe_lifted()
+    ic._note_unaccounted_press()
+    for _slot in range(N):
+        ic._note_accounted_press(_slot)
+    s = NewBlindNonWantPlayScreen(cur=0, blind_from_call=2)
+    ok_aa1b, _out_aa1b, _calls_aa1b = _play(0, None)
+    check("post-restore sanity: case (AA1) passes again",
+          2 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+
+    # --- mutant 22 (I-56 skeptic round 2, MY-M3): resolve_neighbour_
+    # occlusion's "still blind" branch is restored to the OLD, pre-I-56
+    # behaviour -- mere blindness is unconditionally treated as a genuine,
+    # positively-evidenced stray again (marked, t_slot left down), the exact
+    # rule whose docstring names 14 firings and 0 true positives on
+    # `run_live_20260921x.log` ~655-680. The live Q17 frame
+    # (`run_live_20260921x.log` 651-672, user ground truth slot 0) reaches
+    # this SAME branch -- slot 1 is adjacent to slot 0 once slot 0 is
+    # selected, and slot 1's wreath never reads -- so it must go from a
+    # clean commit to a refusal. TWO edits: `_clear_strays`' own
+    # `_untouched_blind & _MAYBE_LIFTED` intersection is ALSO what decides
+    # whether the disambiguation is even TRIED on a mark this operation
+    # never carried in -- without also dropping it, resolve_neighbour_
+    # occlusion is never called at all for a fresh, unmarked chronic slot,
+    # and mutating it alone measures nothing (verified: `ok` stays True).
+    print("mutant 22: BOTH `_clear_strays`' ledger-gated intersection AND "
+          "resolve_neighbour_occlusion's 'still blind' branch are restored "
+          "to unconditional marking -- the live Q17 frame must go from a "
+          "clean commit to a refusal")
+    try:
+        _mutate(
+            IC_PATH,
+            "    _untouched_blind = _blind_now - set(want)\n"
+            "    if _untouched_blind:\n"
+            "        # I-43: a slot this operation cannot have raised (it was ALREADY blind\n"
+            "        # before anything was pressed) is not automatically safe to wave\n"
+            "        # through -- if an EARLIER refused attempt could not prove it clean,\n"
+            "        # `blind_before` alone (which only asks \"was it blind before THIS\n"
+            "        # call\") cannot tell that apart from a genuinely chronic occlusion.\n"
+            "        # See _MAYBE_LIFTED and this function's own docstring.\n"
+            "        _unproven = _untouched_blind & _MAYBE_LIFTED\n",
+            "    _untouched_blind = _blind_now - set(want)\n"
+            "    if _untouched_blind:\n"
+            "        # I-56 mutant: unconditional (MY-M3, part 1 of 2)\n"
+            "        _unproven = _untouched_blind\n")
+        _mutate(
+            IC_PATH,
+            "    if _ys[m_slot] is None:\n"
+            "        # STILL BLIND IS *NOT* THE SAME EVIDENCE (I-56). The branch above\n"
+            "        # requires a POSITIVE rise; this one used to treat mere blindness as\n"
+            "        # proof of the same thing, and blindness carries no such proof --\n"
+            "        # occlusion by a DIFFERENT card, or a chronic wreath misread on a\n"
+            "        # resting tactics card (I-36), read identically to a real lift. Live:\n"
+            "        # `run_live_20260921x.log` ~655-680 -- a resting FIELDING PLAY card\n"
+            "        # next to a selected pitcher card would not read no matter what, was\n"
+            "        # scored \"genuine stray, marked\" by the old rule, refused 3 straight\n"
+            "        # commits (I-43 firings that day: 14, true positives: 0), and\n"
+            "        # excluded the engine's own chosen card. Restore t_slot -- the\n"
+            "        # caller may still need it committed -- and report UNRESOLVED, not a\n"
+            "        # stray. And CLEAR any existing mark on m_slot: the one thing that\n"
+            "        # could have put it there is this exact blind-means-lifted\n"
+            "        # assumption, which this branch has just shown false.\n"
+            "        ok, _sel = _walk_cursor_to(t_slot, look)\n"
+            "        if ok:\n"
+            "            ok, _sel = _select_verified(t_slot, look)\n"
+            "        _MAYBE_LIFTED.discard(m_slot)\n"
+            "        if not ok:\n"
+            "            return False, (f\"slot {m_slot} still blind with slot {t_slot} down -- \"\n"
+            "                            f\"not proof of a lift, AND {t_slot} would not \"\n"
+            "                            \"re-raise -- refusing\")\n"
+            "        return False, (f\"slot {m_slot} still blind with slot {t_slot} down -- \"\n"
+            "                        \"not proof of a lift (I-56); restored, unresolved\")\n",
+            "    if _ys[m_slot] is None:\n"
+            "        # I-56 mutant (MY-M3): mere blindness is treated as a genuine,\n"
+            "        # positively-evidenced stray again -- marked, t_slot left down.\n"
+            "        _mark_maybe_lifted({m_slot})\n"
+            "        return False, (f\"slot {m_slot} still blind with slot \"\n"
+            "                        f\"{t_slot} down -- genuine stray, marked (I-56 mutant)\")\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._reset_press_ledger()
+        s = Q17FrameScreen()
+        ok22, out22, calls22 = _play(0, None)
+        check("mutant 22 caught: the live Q17 frame no longer commits once "
+              "mere blindness is unconditionally treated as a stray again",
+              ok22 is not True)
+    finally:
+        _restore_ic()
+
+    # --- sanity: Q17 still commits after mutant 22 ----------------------------
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    s = Q17FrameScreen()
+    ok_bb1b, _out_bb1b, _calls_bb1b = _play(0, None)
+    check("post-restore sanity: the Q17 case commits again",
+          ok_bb1b is True and s.confirmed_sel == [0])
 
     # --- sanity: P2/Q2/R2 all still hold after mutants 16-18 ----------------
     ic._reset_press_ledger()
