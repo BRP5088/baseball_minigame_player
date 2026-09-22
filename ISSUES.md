@@ -4412,3 +4412,53 @@ on the same pre-existing, unrelated fixture gap documented above and under I-54.
 
 **Status.** merged c55d2cc; Sonnet skeptic CONFIRMED WITH NOTES, three surviving
 mutants closed by cases G/H/I (f5c14be).
+
+### I-59  Questionable-card queue for the user (tools/questions_sheet.py)                D  evidence
+
+**What it does.** The user's request (2026-09-22): keep screenshots of questionable
+cards for them to answer later, in case a live notification is missed. The run already
+keeps a frame for exactly this population -- `diagnostics/deal_frames/refused_select_<ns>/`
+(`orchestrator.record_refused_select`) and `dropped_<ns>/` (`_save_dropped_hand`), each a
+`hand.png` + `why.json` naming the slot the run could not resolve. `tools/questions_sheet.py
+--since <ns-or-ISO> [--out DIR] [--log FILE]` scans both families newer than `--since`,
+crops the questionable slot out of each `hand.png` (full card height, 15% margin each side,
+boundary derived from `local_hand.SLOT_PLAYER`/`SLOT_TACTICS` and scaled by the capture --
+never a raw pixel, CLAUDE.md section 3), dedupes the same slot across consecutive frames
+within 60s (keeps the first frame, counts the rest), tiles the crops into numbered contact
+sheets (24 tiles/sheet), and writes `questions.md` (a table with an empty "Your answer"
+column) plus `questions.json` (the same rows, machine-readable) beside them. Read-only
+against the source tree; never modifies or deletes a frame.
+
+**Evidence.** `tests/harness/test_questions_sheet.py` builds a synthetic
+`diagnostics/deal_frames`-shaped tree (3 `refused_select_*` dirs at distinct slots 200s
+apart, 2 `dropped_*` dirs at the same slot 30s apart) with 979x300 hand.png fixtures painted
+in five distinguishable per-slot colours, runs the tool, and checks: the sheet PNG exists at
+the tile-grid size the row count implies, `questions.md` has exactly 4 rows (5 raw questions
+minus the one dedupe merge) each with an empty answer column, `questions.json` matches
+`build()`'s own rows exactly, the merged row remembers it was seen 2x, and a sha256 of the
+source tree is identical before and after (nothing touched). The slot-crop check derives its
+expected colour boundary independently from the same `local_hand.SLOT_PLAYER`/`SLOT_TACTICS`
+data the tool reads -- not by calling `slot_box()` to paint the fixture -- so a mutant in the
+crop math shows up as a wrong dominant colour rather than trivially agreeing with itself.
+`.venv/bin/python -B tests/harness/test_questions_sheet.py` exits 0, no warnings.
+
+**Mutants (2, sha256-verified restore to `51ab7beec20a49c0e93a9ddff2ce3bcba1ba18aabeeab7da9b7f9748b0730f42`
+between each):**
+
+    DEDUPE_WINDOW_S 60.0 -> 10.0 (the 30s-apart pair no longer merges)
+        -> FAILS 3: the row-count check (5 rows, wanted 4), the "remembers 2x" check,
+           and the slot-order check
+    slot_box() silently shifted every slot index one to the left before computing
+    the boundary
+        -> FAILS 2: slot 1's and slot 2's crops come back dominated by their
+           neighbour's colour instead of their own; slot 0 (nothing to shift into)
+           still passes, which is the expected shape for an off-by-one
+
+**Real run.** `.venv/bin/python -B tools/questions_sheet.py --since 2026-09-21T18:00`
+against the live `diagnostics/deal_frames/` (413 refused_select_*/dropped_* dirs on disk)
+produced **93 questions** -> `diagnostics/questions/20260921_2307/` (4 sheets, `questions.md`,
+`questions.json`). `git status --porcelain diagnostics/deal_frames` is clean after the run --
+nothing under the source tree was written. Nothing was sent to the user; the files sit on
+disk for the next handoff.
+
+**Status.** built and tested offline, not yet reviewed by a skeptic.

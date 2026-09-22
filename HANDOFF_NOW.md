@@ -112,6 +112,8 @@ grep -E "logged|WIN #|LOSS #|Draw logged|REFUSED|playing the batter alone|DROPPE
 (the two new terms are I-48's fallback lines — watch them alongside the old
 ones.)
 
+Between cycles, or at handoff: `.venv/bin/python -B tools/questions_sheet.py --since <last handoff's ns or ISO time>` (I-59) writes a contact sheet + `questions.md`/`questions.json` of every refused-select/dropped-slot frame since then to `diagnostics/questions/<stamp>/` for the user to answer whenever they get to it.
+
 ## 5. LATER (do not start without the user)
 
 Carried from before, plus what today's cycle 7 and QA8 round surfaced.
