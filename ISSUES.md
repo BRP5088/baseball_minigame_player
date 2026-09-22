@@ -2575,7 +2575,7 @@ Also run, all exit 0: `test_verified_selection.py`, `test_local_hand_reader.py`,
 and never touches. Confirmed passing against main's current `orchestrator.py`
 unmodified. Not this ticket's to fix.
 
-**Status.** fixed on branch `worktree-I62`, unmerged. `agent_progress/issues/I-62/`
+**Status.** fixed on branch `worktree-I62` @ c1fcebc, unmerged. `agent_progress/issues/I-62/`
 carries both census tables in full, the scripts that produced them, and the "out of
 scope" `BANNER_SEARCH` finding for a future ticket.
 
