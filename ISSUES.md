@@ -5410,8 +5410,7 @@ exit 0: `test_tactics_select_fallback.py`, `test_discard_confirm_verified.py`,
 `tests/rig/test_no_real_input_under_test_run.py`,
 `tests/harness/test_claude_md_constants.py`.
 
-**Status.** Fixed on branch after the round-3 skeptic's confirmation-with-
-notes; all three `_new_blind`/`_mark_candidates` marking sites now have a
-mutant-caught guard, the 13-file battery is green, and `input_controller.py`
-is unchanged from round 2's sha. The 13/15-row "persistent across retries of
-the same hand" shape remains OPEN and out of scope, unaffected by any round.
+**Status.** merged 29c0420 (d525913 + 5be4556 + c0953b8; Opus skeptic
+CONFIRMED WITH NOTES r3, notes closed). The 13/15-row "persistent across
+retries of the same hand" shape remains OPEN and out of scope, unaffected by
+any round.
