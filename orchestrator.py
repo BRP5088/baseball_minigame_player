@@ -8745,12 +8745,6 @@ def play_one_turn(state_json: dict, batters_used: int):
     # committed". It broke three test files the moment it landed, which was the cheap
     # version of the same mistake happening live.
     #
-    # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND: test_hand_memory_forgets
-    # asserts they stay within a few lines of each other, so prose goes above them,
-    # never between them.
-    #
-    # Both slots are SPENT (the tactics one too, when one was attached).
-    forget_hand_slot(player_idx, tactics_idx)
     # I-51b: `_LAST_PROBE_ATTEMPTS` is reset only INSIDE _probe_select_blind_target,
     # so a play that refuses without a probe ever running this call (the walk itself
     # failed, or I-57's top-up ran instead) still points at whatever list the LAST
@@ -8761,6 +8755,12 @@ def play_one_turn(state_json: dict, batters_used: int):
     # probe ran; snapshot it before the play and attach the real list only if that
     # identity moved -- a stale list must never be attached.
     _probe_attempts_before = id(input_controller._LAST_PROBE_ATTEMPTS)
+    # KEEP forget_hand_slot IMMEDIATELY BEFORE THE SPEND: test_hand_memory_forgets
+    # asserts they stay within a few lines of each other, so prose goes above them,
+    # never between them.
+    #
+    # Both slots are SPENT (the tactics one too, when one was attached).
+    forget_hand_slot(player_idx, tactics_idx)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
         # I-51 SKEPTIC B2: without `extra`, input_controller._LAST_PROBE_ATTEMPTS
