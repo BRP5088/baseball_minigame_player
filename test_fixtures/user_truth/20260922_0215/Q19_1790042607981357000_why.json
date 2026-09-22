@@ -1,0 +1,9 @@
+{
+ "target": 0,
+ "kind": "player+tactics",
+ "already_selected": [
+  0
+ ],
+ "attempt": 1,
+ "probe_attempts": []
+}

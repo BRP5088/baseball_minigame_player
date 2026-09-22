@@ -1,0 +1,28 @@
+{
+ "target": 0,
+ "kind": "player",
+ "already_selected": [],
+ "attempt": 2,
+ "probe_attempts": [
+  {
+   "attempt": 1,
+   "glow": [
+    0.4,
+    0.2,
+    0.4,
+    0.0,
+    14.4
+   ],
+   "ys": [
+    202,
+    161,
+    150,
+    149,
+    173
+   ],
+   "selected": [
+    4
+   ]
+  }
+ ]
+}
