@@ -4118,47 +4118,114 @@ fires when `cur == first_cur` (the cursor never moved at all since the walk
 began), so a cursor that moved PART of the way and then got stuck by a drop
 cluster falls straight through to the plain refusal.
 
-**Fix**, `input_controller._walk_cursor_to` only, inside the
-`if steps >= CURSOR_MAX_STEPS:` branch, after the existing false-cursor-exclude
-check: granted AT MOST ONCE per walk (`_topup_used`), when the cap is hit
-while the latest confident read shows the walk is LIVE -- the cursor moved
-since it began (`cur != first_cur`) or it already sits one hop from the
-target (`abs(cur - target) == 1`) -- press up to `PRESS_VERIFY_TRIES` (5,
-reused, nothing invented) further look-gated presses toward the target before
-refusing. A walk that never moved at all still gets zero top-up: the
-false-cursor-exclude branch's own `cur == first_cur` check runs first and
-takes priority on the common (first-round) case, and this branch's own guard
-independently refuses the rarer case where that branch's exclusion budget is
-already exhausted and the cursor is still pinned at `first_cur`. Bound: total
-presses per walk <= `CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES` (13).
+**Fix, ROUND 1** (commit fda9436), `input_controller._walk_cursor_to` only, inside
+the `if steps >= CURSOR_MAX_STEPS:` branch, after the existing
+false-cursor-exclude check: granted AT MOST ONCE per walk (`_topup_used`), when
+the cap is hit while the latest confident read shows the walk is LIVE -- the
+cursor moved since it began (`cur != first_cur`) or it already sits one hop
+from the target (`abs(cur - target) == 1`) -- press up to `PRESS_VERIFY_TRIES`
+(5, reused, nothing invented) further look-gated presses toward the target
+before refusing.
 
-**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`, four new cases
-appended after the existing I-32/I-53 families: (W) 8 presses, 6 dropped in a
-cluster at the end, cursor moved 1 -> 3 toward target 4 -> the top-up reaches
-4, no refusal, total presses <= 13; (X) CONTROL -- the cursor never moved in 8
-presses (chronic-occlusion shape) -> refused with ZERO top-up, exactly as
-before this fix (`ic.FALSE_CURSOR_EXCLUDE_MAX` dropped to 0 for this case so
-the false-cursor-exclude branch's own priority does not mask the guard this
-test exists to pin); (Y) the cursor moves during the first 8 (granting the
-top-up), but every one of the top-up's own presses is ALSO dropped -> refuses,
-having spent EXACTLY `CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES` presses; (Z)
-CONTROL -- a normal walk with no drops never reaches the cap, so the top-up
-never fires and the press count is exactly what it always was. Also green,
-unchanged: the existing I-32/I-53 cases in the same file, and
-`tests/minigame/test_false_cursor_on_occluded_slot.py` (the false-cursor-exclude
-branch's own priority over this new one, confirmed by inspection and by (X)).
+**REFUTED, `agent_progress/issues/I-57/skeptic.md`, fda9436.** Two findings,
+both reproduced against the unmodified commit before anything was touched:
 
-**Mutants (3, `__pycache__` cleared before/after each, sha256-verified restore
-to `9e4cb459400386c043680274971e0ee303505e3bc6cfb05f3d7566ecda86b083`):**
+    finding 1 (fatal)   a blind read (`cur is None`, routine everywhere else in
+                       this function) DURING the top-up left `cur` None, and
+                       the NEXT iteration's `press("move_right" if cur < target
+                       else "move_left")` raised `TypeError: '<' not supported
+                       between instances of 'NoneType' and 'int'` --
+                       repro_none_crash.py. Escapes into run()'s broad except
+                       AFTER forget_hand_slot already marked the card spent
+                       (hand-memory desync), not merely "caught and retried".
+    finding 2           the true worst case was 18 presses, not the claimed 13:
+                       I-53's own `was_dead_reckoned` retry increments the SAME
+                       `steps` the cap reads, and the cap is only checked at
+                       the TOP of the outer `while` -- so `steps` can already
+                       be at 13 (from 6 ordinary presses + a dead-reckon + a
+                       full 5-try I-53 retry) BEFORE the top-up is even
+                       granted, which then adds its own 5 on top --
+                       repro_overrun2.py, "VIOLATION (18 vs 13)".
+    note 3              an oscillating cursor landing back on `first_cur`
+                       exactly when the cap fires got NO top-up, because the
+                       pre-existing (I-25) false-cursor-exclude branch has
+                       priority on `cur == first_cur` regardless of whether the
+                       cursor was ever seen anywhere else.
 
-    drop the top-up (`if not _topup_used and (...)` -> `if False and ...`)
-        -> (W) FAILS (never arrives, no top-up logged)
-    top up even when never moved (`if not _topup_used and (...)` -> `if not _topup_used:`)
-        -> (X) FAILS (top-up fires and presses even though the cursor never moved)
-    unbounded top-up (drop the `_topup_used = True` latch)
-        -> (Y) FAILS (grants another round instead of refusing at the bound)
+**Fix, ROUND 2 (this redo), same function, all three:**
 
-**Status.** built here, tests green, mutants caught; not yet merged.
+1. **None-safety (finding 1).** The top-up loop now tracks the last CONFIRMED
+   direction in `_topup_dir`, set once before the loop and updated ONLY on a
+   non-None read -- never compared against `cur` directly. A blind top-up
+   press still counts against the budget and re-looks on the next iteration
+   toward the same retained direction; if every extra press stays blind, it
+   falls through to the existing refusal exactly as before. No `cur < target`
+   comparison exists anywhere `cur` can be `None`.
+2. **Enforced bound, 13, not 18 (finding 2).** `_topup_budget = CURSOR_MAX_STEPS
+   + PRESS_VERIFY_TRIES`, checked BEFORE every top-up press against `steps`
+   (which already counts every press this call has sent, including whatever
+   I-53's own retry spent before the top-up was granted). If the budget is
+   already gone, the top-up sends ZERO of its own presses and the walk refuses
+   at exactly the number `steps` already holds. **Total presses per walk are
+   hard-capped at `CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES` == 13, always** --
+   not "13 more on top of whatever else ran first".
+3. **`_ever_moved`, moved-and-back counts as moved (note 3).** A flag set
+   (never cleared) the instant a confirmed read differs from `first_cur`,
+   checked at the top of every iteration. The false-cursor-exclude branch's
+   guard gained `and not _ever_moved` (so it no longer claims a cursor that
+   demonstrably moved at some point); the top-up branch's guard gained
+   `or _ever_moved` (so that cursor gets the top-up instead).
+
+Both repro scripts re-run clean against the fixed code: `repro_none_crash.py`
+now returns `False []` (refuses at 13, no exception); `repro_overrun.py` and
+`repro_overrun2.py` both report `TOTAL PRESSES SENT: 13`, `within bound`.
+
+**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`: round-1 cases
+(W) 8 presses, 6 dropped at the end, cursor moved 1 -> 3 -> top-up reaches 4,
+total <= 13; (X) CONTROL, never moved (chronic-occlusion shape,
+`FALSE_CURSOR_EXCLUDE_MAX` dropped to 0 so the priority branch doesn't mask
+this one) -> refused with ZERO top-up; (Y) top-up granted but every one of its
+own presses also dropped -> refuses at EXACTLY 13; (Z) CONTROL, a normal walk
+never reaches the cap. Round-2 cases, via a `ScriptedScreen` fixture
+(`local_hand.cursor_slot` monkeypatched to an explicit read sequence -- neither
+finding is representable through `Screen`'s press-tracked movement model): (V)
+two consecutive None reads inside the top-up (the skeptic's own crash shape)
+-> no exception, arrives at 11 presses; (U) I-53's retry stacks with the
+top-up (6 ordinary presses, an occluded-slot dead-reckon, I-53's own 5-try
+retry resolving off-target at steps=13) -> refuses at EXACTLY 13, top-up
+granted but sends zero of its own, 18 never appears; (M) cursor moves away on
+press 1, oscillates back to `first_cur`, stays there -> top-up fires (not
+false-cursor exclusion), arrives at 12 presses. Also green, unchanged:
+`tests/minigame/test_false_cursor_on_occluded_slot.py`.
+
+**Mutants (7 this round, `__pycache__` cleared before/after each, sha256-verified
+restore to `5f6c5a34f6952698d9118c6fe585e68dc52394862ce4822b7f53c9d3ec0016d2`;
+2 from round 1 re-verified against the new code):**
+
+    direction inverted (skeptic's #1: `cur < target` -> `cur > target` on the
+    ONE line that sets `_topup_dir` before the loop)
+        -> (W) FAILS ("every press sent was toward the target")
+    unbounded top-up, `_topup_used` latch dropped (skeptic's #2)
+        -> HANGS (infinite loop: the cap re-fires every outer iteration, grants
+           "another" top-up each time, and the budget check sends zero presses
+           forever with no forward progress -- confirms BOTH guards are load-
+           bearing, not just the budget check alone)
+    finding 1 reintroduced: `press(_topup_dir)` -> raw `cur < target` compare
+        -> (V) CRASHES with the exact TypeError the skeptic reported
+    finding 2 reintroduced: the `steps >= _topup_budget` check dropped
+        -> (U) FAILS (StopIteration -- the walk tries to press past what a
+           13-press-bounded scenario provisions, i.e. it exceeds 13)
+    note 3 reintroduced: `_ever_moved` dropped from both guards
+        -> (M) FAILS all four checks (routed into false-cursor-exclude instead)
+    [round 1] drop the top-up entirely
+        -> (W)(Y)(V)(U)(M) FAIL
+    [round 1] top up even when never moved
+        -> (X) FAILS
+
+**Status.** REDONE here after REFUTED on fda9436; tests green, all 7 mutants
+this round caught (plus 2 round-1 mutants re-verified), both skeptic repros
+clean; not yet merged. The enforced bound is **13**, always, regardless of what
+consumed the budget first.
 
 ### I-51b  A refusal that never probed this call can still carry a STALE probe_attempts list from a previous play   P2  evidence
 
