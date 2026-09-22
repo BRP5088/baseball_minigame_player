@@ -1,270 +1,243 @@
-# HANDOFF — 2026-09-21, end of session 2
+# HANDOFF — 2026-09-22, session 2 close-out (~00:30–01:00)
 
 ## 1. STATE RIGHT NOW
 
-- `main` HEAD **`214650e`**.
-- Record (`progress_testing.json`): **71W 14L 8D**, balance **46**,
-  `match_in_progress: false`, `bans_done_this_match: true`. The `true` flag is
-  **harmless** — nothing is mid-match, it's left from the last match and the
-  next reset clears it (preflight only keys on `match_in_progress`).
-- Console: left at the **dealer table**, **$46 in-game** (matches the tracked
-  balance). **Not put to sleep** — it auto-sleeps on its own when nothing
-  reaches it (CLAUDE.md §1); confirm with the three tells before any press.
-  `ensure_live()` started chiaki and woke the PS5 this session (86 s).
-- **Snoopy is ON and idle.** Port is rediscovered per job (changes with model
-  load — re-check via `/props`, don't reuse a cached port). **The VLM is
-  useless for scene-state questions, text only**: `reveal_timing` scored it
-  "no reveal" on 70% of KNOWN-GOOD controls (21.6% agreement) — never wire it
-  into anything that decides what's on screen, only OCR-shaped text reads.
-- **Paid vision model is OFF** (`orchestrator.PAID_MODEL_ENABLED = False`, as always).
-- **No agent is running.** Nothing in flight.
+- `main` HEAD **`49d18db`** (line-window fix for I-57's regression; test_hand_memory_forgets green).
+- **Cycles 19–26 are CHAINED AND RUNNING as this is written** (one Python loop
+  calling `run_cycles.cycle(n)` for n=19..26, stops on `reset_failed` or an
+  exception): `overnight/run_live_20260922e.log`, monitor id `b3p1mc61u`
+  (expires 30 min after being armed — re-arm if you land after it lapses).
+  **The log is the record** — read its tail for the live tally before trusting
+  any number below.
+- **Last fully-verified count (facts2.md, before cycle 19 launched): 100W 15L
+  11D**, `progress_testing.json` balance 196 at that point (the probe's parked
+  match, since abandoned by cycle 19's reset — see §3 "measurements").
+- A read-only QA round (2 finders: silent-paths/guards, test quality) is
+  running over the diff `204bb5b..49d18db`, report-only. Its findings go
+  straight to §5 LATER — do not act on them without reading first.
+- **I-56** (round 3, `5be4556`, branch `worktree-agent-a80c04eaab6c82f8d`):
+  skeptic round 3 CONFIRMED WITH NOTES, but the fixer still owes **two guard
+  cases** before merge (MY-M3 at `_mark_candidates`, M3d at `_new_blind`'s
+  cannot-read-fan path — both currently unguarded on that branch). Merge only
+  after those land + a short skeptic re-check, and only in a gap between
+  cycles (not while a cycle is running).
+- **I-62** (accept a disc at the lifted position in slot assignment) is a
+  **candidate only** — no branch yet. Census first (see §3).
+- Console: mid the cycle 19–26 chain. Confirm the three tells (CLAUDE.md §1)
+  before any manual press if you take over mid-chain.
+- User, 00:30: work one more hour then stop with this close-out; deadline
+  01:30. User, 00:5x: Snoopy OFF; *"finish the cycles left ... all current
+  todos; anything new is added to future sessions todo list"* — no new
+  dispatches after this point; overnight unattended chaining is the stated
+  default, not contradicted.
+- Paid vision model OFF (`orchestrator.PAID_MODEL_ENABLED = False`). Never
+  save the game — resets / `Load Last Save` only.
 
-## 2. TODAY'S RESULT
+## 2. RESULT / STREAK
 
-**16-match stall census, cycles 4–7, on `main` with every fix from today
-merged as it landed:**
+**Bar** (user, escalated twice tonight): first *"30 matches in a row without
+any issues = rock solid"* (18:3x), then *"bar raised to 50 CONSECUTIVE PERFECT
+MATCHES (no stalls, no issues; losses and draws are fine)"* (23:0x).
 
-    cycles 4-6 (pre-I-48, runs 21p/21q/21r)   10 W, 1 L, 1 unverified D
-    cycle 7    (post-I-48, run 21s)            4 W, 0 L, 0 D  -- WIN #68-71, 4/4
-    -----------------------------------------------------------------------
-    TOTAL      14 W, 1 L, 1 unverified D over 16 matches
+**Strict streak rule** (user, 18:4x, verbatim): *"Any stalls, any issues
+count. Things need to be run perfectly like a nuclear power plant."* A clean
+match = zero refusals of any kind, zero retries that cost a poll, zero ban
+shortfalls, zero unverified results. Losses/draws don't break it; any
+stall/issue does. **Streak resets whenever a fix merges** — it is scored
+against frozen code only, never carried across a build change.
 
-    refusals: 9 total (6 in one hand, pre-I-48; 2 in cycle 7, one per match,
-              each cleared on the NEXT poll)
-    hand-assisted stalls: 0        runs ended by a human: 0
+### Per-cycle table, cycles 9–18 (all `overnight/run_live_20260921{u..y,z},20260922{a..d}.log`)
 
-**Before/after I-48, the number that mattered — refusal cost per stall:**
+| Cycle | `run_live_...` | main build | Matches | What broke the streak | Streak after |
+|---|---|---|---|---|---|
+| 9 | 21u | `ff2d69f` (+I-50/48b/53/51/54/48e) | WIN74 (discard-unconf, landed next poll), WIN75 (clean), DRAW9 (**no evidence line**, +2nd discard-unconf), WIN76 (clean) | discard-unconfirmed x2; evidence-less draw | 1 (m4) |
+| 10 | 21v | `a99bc6e` (+I-52) | LOSS15, WIN77, WIN78, WIN79 — **ALL 4 CLEAN** | — | 5 (c9m4+c10) |
+| 11 | 21w | `a99bc6e` | WIN80–83 — **ALL 4 CLEAN** | — | 9 |
+| 12 | 21x | `a99bc6e` | WIN84 (clean); WIN85 (I-56-shape: tactics select unreadable behind lifted batter neighbour → boost dropped; +half-boundary refusal, recovered); WIN86 (I-52 resolver's first live firing was a **false** "genuine stray" → 3 I-43 refusals → worse card played, ~75s); WIN87 (clean) | boost dropped; false stray mark | broken at 10 (m2), ends 1 (m4) |
+| 13 | 21y | `204bb5b` (+I-55) | WIN88 (**3rd I-56 occurrence**: boost dropped + false "lifted them" mark → REFUSED); WIN89/90/91 (clean, first live I-55 evidence lines: winner 0.985/0.983/0.981) | I-56 shape | reset 0→3 |
+| 14 | 21z | `204bb5b` | **STALLED before any match** — pause-menu close press dropped, 15 unreadable polls, run stopped, no money spent → I-58 filed | pause-menu close drop | cycle-level stall (no match) |
+| 15 | (same log continued) | `204bb5b` | **SAME STALL again** (2nd in a row, p≈3.8% under §5 clustering) | pause-menu close drop | cycle-level stall |
+| 16 | 20260922b | `204bb5b` | WIN92/93 (clean, streak reached 5); WIN94/m3 (I-57-shape: walk stalled one hop short of an 8-press cap → boost dropped); m4 **ABORTED BY THE RIG** — chiaki died mid-match, rig not engine, $50 recovered by next reset, unscored | boost dropped; rig death | 0 |
+| 17 | 20260922c | `204bb5b` | WIN95 (clean, 1); WIN96 (clean, 2); DRAW10 (clean, first draw **with** evidence: draw 0.981/winner 0.660/loser 0.490, OCR 'DRAW!', 3); WIN97 (I-48f refusal, recovered) | I-48f | reset 0 |
+| 18 | 20260922d | `204bb5b` | WIN98 (clean,1); WIN99 (clean,2); DRAW11 (**I-56-family** discard refusal — neighbour blind beside the walk target,0); WIN100 (clean) | I-56 family | 1 (m4) |
 
-    before (cycle 6, pre-I-48)   6 refusals in ONE hand, ~5 minutes to clear,
-                                 the loop stumbling onto a batter whose walk
-                                 happened to avoid the occluded slot
-    after  (cycle 7, post-I-48)  2 refusals total, ~25 s each, cleared on the
-                                 very next poll (fallback drops the tactics
-                                 attachment and plays the batter alone)
+**Record after each cycle** (all from `progress_testing.json` snapshots quoted
+in facts2.md): c9 76W14L9D → c10 79W15L9D → c11 83W15L9D → c12 87W15L9D →
+c13 91W15L9D → c16 94W15L10D → c17 97W15L10D → **c18 100W15L11D**.
 
-**Cycle 7 detail (run 21s, main `b96f0f1` — before I-44 N-2/case-D/spend_and_play
-landed on top of it):** 4/4 wins, 2 refusals (both recovered on the next poll,
-~25 s each — match 2 the I-48 fallback fired with the batter not yet lifted;
-match 4 a blind cursor on a fully readable hand, probe-select x2), 1 fallback
-event (first ever live), 0 never-landed-after-5, 8 reveal misses, 0 unscored
-rows (I-49 never triggered — no staged row was dropped this cycle), 0
-physically-lifted lines (I-43 clean), 1 ban shortfall (1 of 3 bans registered,
-match 2), 51 unreadable-screen retries. Two `refused_select_*` frames kept.
+**Every streak break across cycles 9–18 traces to one of two families**: the
+I-56 shape (a tactics/wreath read fails beside a lifted neighbour or after a
+walk crosses an occlusion — cycles 12, 13, 18) or a press-drop cluster hitting
+a walk/press budget (I-57 shape — cycles 12, 16) or a rig/OS event (cycle 16
+m4, chiaki died). Ban shortfalls and evidence-less results, the two other big
+families from cycles 4–8, are **gone** — I-50 (bans) and I-55 (evidence) both
+show zero recurrences once merged (cycles 9–18 ban tally: 4/4 cycles at 3/3
+bans from cycle 9 on, per the guard census).
 
-## 3. WHAT MERGED THIS SESSION
+## 3. MEASUREMENTS THAT SETTLED QUESTIONS TONIGHT
 
-- **I-48** A failed TACTICS select was burning every batter in turn before the
-  loop stumbled onto a workable one. Fix: on a tactics-only failure, drop the
-  attachment and commit the batter alone instead of unwinding everything.
-  Merged `db3bfcb` (skeptic: **Opus, CONFIRMED WITH NOTES** — census over 506
-  decision blocks found 0 boost loss from the fallback itself, but flagged
-  S-2 a guard true when `card_index` is `None`, S-3 a REAL bug — the fallback
-  still logged the boost that never went in, S-4 case D passing when capture
-  raises). Round 2 `2c6cca5` fixed S-2/S-3/S-4 (S-3 via
-  `tactics_dropped_last_play()` flag zeroing the fields and setting
-  `tactics_dropped: true`), **7/7 mutants caught**. Test-file reconciliation
-  `307408c`/`b96f0f1` (the old full-refuse test pinned the wrong contract on 3
-  scenarios). `c7ed3f4` fixed case D reading the LIVE `diagnostics/deal_frames`
-  dir instead of a temp root (QA8-adjacent). `214650e` fixed the last gap:
-  `spend_and_play` (the `tools/match_crawl.py` entry point) never read the
-  drop flag and printed "COMMITTED" on a batter-alone fallback (QA8 finding,
-  see below).
-- **I-49** A readable reveal's row was staged, then discarded outright by a
-  later poll's failure (21 of 36 traced orphans). Fix: append the staged row
-  with `row_status: "unscored"` instead of dropping it. Merged `0a62bbf`
-  (skeptic: **Sonnet, CONFIRMED WITH NOTES** — no stale `pending_matchup`
-  across a match boundary, fabricated-outcome mutant caught by three tests,
-  consumers verified live: rates use scored rows only, distribution uses all).
-- **I-44 N-2** `_clear_strays`'s corroboration gate now has a named,
-  test-covered branch (`_baseline_readable`) for the case QA6 Q2 flagged.
-  Merged `69e77a4` (baseline mutant caught). **Narrow, and says so**: the
-  hard case (a dropped press plus a coincidentally-blind post-press read that
-  still commits a false inference) reproduces unmodified on 0/28 archived
-  events and is **still open** — it can't be closed inside
-  `input_controller`, it needs corroboration the inference itself can't
-  manufacture. Stays a LATER item.
-- **QA8** (round over `f9f9ede..758f2ed`): silent-paths/state finder — 1
-  CONFIRMED low finding (`spend_and_play`, fixed in `214650e`), everything
-  else checked and found correct (tactics-dropped flag resets cleanly, no
-  reveal-frame dangling, no keeper race, N-2 is a pure refactor). Test-quality
-  finder — clean, 7 files, 8/8 mutants caught, no live-dir globs, no bare
-  bools. Round came back dry after the one fix → stopped.
+| Question | Answer | n / source |
+|---|---|---|
+| Is "cards dancing around" real card drift? | **REFUTED.** Only motion in a settled plateau is the selection lift (42–43px, eased ~5 frames) plus deal/select transients. | 9,290 frames, 2 runs @10Hz, 56 settled plateaus, 295 within-plateau samples: x/y amplitude p50 1px, p95 3px, max 6px (vs SLOT_TOL 34). `agent_progress/issues/card-drift/` |
+| Does a lifted card's disc go blind *because it's lifted*? | **NO**, live-verified. Disc stays crisp at rest, mid-lift (~400–500ms), and lifted (dy −41). | Archive: 14/14 lifts disc-readable on every frame (`agent_progress/issues/lift-transition/`). Live probe: **0/187 frames unreadable**, 10.3fps, 3 select/deselect events (`agent_progress/issues/lift-live-probe2/`). |
+| What actually caused the probe's drops then? | **Press delivery**, not the reader: of 6 presses across 3 slots, **3 dropped** — slot 1 both presses no-ops, slot 4 first press dropped and the retry (meant as deselect) instead *selected* it (a toggle trap), slot 2 clean. | Same live probe, `agent_progress/issues/lift-live-probe2/`. |
+| Is I-21 (select-time inference) safe to keep? | **YES — do not remove it.** 32 firings over 34 run logs: **28 committed and correct** (26 confirmed by the next hand read, 2 by reveal+WIN), 0 wrong, 4 refusals (3 pre-I-28 bug, 1 the I-48f case). Removing it would turn ~28 clean commits into refusals. | `agent_progress/issues/i21-census/` |
+| So why do 32 real "went blind after a select press" events happen in production if lifting itself doesn't blind the disc? | **OPEN — unresolved contradiction, recorded not guessed at.** The I-21 census agent's own claim ("a lifted card's disc stays blind while lifted") is *unmeasured*, sourced from code comments; the live probe and the archive both refute it directly (disc reads fine lifted). Both facts can coexist: production reads *do* go blind after some select presses, but the lift itself is not the cause. Candidate mechanisms, neither measured: cursor glow interference on the just-selected card, or a ~0.6s settle-timing gap in the read. **This is the standing open question for next session — see §6.** | `agent_progress/issues/i21-census/` vs `agent_progress/issues/lift-live-probe2/` |
+| What's actually in the `dropped_*` population (400 dirs)? | 299/412 slot reads are genuinely blind on disk: 160 nothing in the slot (occlusion), 69 player + 59 tactics "position found but no disc within SLOT_TOL", 11 banner-only, 50 deal-in-flight. → feeds the I-62 candidate (accept a disc at the lifted position, `RAISED_SEARCH_DY`, in slot assignment — census first, with a FALSE column for wrong-slot assignments). | `agent_progress/issues/i21-census/` |
 
-## 4. HOW TO RUN THE NEXT CYCLE
+## 4. WHAT MERGED THIS SESSION (all on `main`, one at a time, each skeptic-confirmed before merge)
 
-Before launching: `ensure_stream.ensure_live()`, then **read the frame by
-eye** and confirm the GAME is actually on screen (an `ensure_live` success
-does not by itself mean the game is up — CLAUDE.md §3). Then:
+| Ticket | Fix sha(s) | Merge sha | Status sha | Skeptic verdict |
+|---|---|---|---|---|
+| I-48b/I-48c (batter-alone fallback fires before batter verified) | `0fe4a16`, `2bad7ab` | `0748b80` | `c308e00` | Opus CONFIRMED — blind-probe-toggles-batter mechanism proven by elimination + reproduced |
+| I-48e (shared re-check retries a flickering tactics read, 8 phantom presses) | `2649ff7` | `99000b4` | `ff2d69f` | Sonnet CONFIRMED |
+| I-50 (dropped ban press never retried, 15/37 matches short) | `9af16f2`, `d92e81d`, `3f39ed8` (case H) | `59bb0b7` | `136fb0a` | Opus CONFIRMED WITH NOTES, both rounds closed |
+| I-51 (blind-target probe gives up after 2 presses) | `7454be4`, `48892cf` | `af9a5bb` | `f5e3a24` | Opus CONFIRMED (round 2) |
+| I-52 (confirm_discard verified once; late landings misread as strays) | `62fb7be`(refuted)→`5d10639`(refuted)→`ac40df0`→`7a42d46` | `5d7dc88` | `a99bc6e` | Opus CONFIRMED after 2 refutations + round-4 notes; M4/M5/M6 spot-checked at merge |
+| I-53 (cursor lost after dead-reckoning across an occlusion) | `111837b` | `39f160a` | `3df988b` | Sonnet CONFIRMED |
+| I-54 (truncated card name 'JOHNNY DRAW' passes result OCR) | `064bb3a` | `ca202d1` | `a97a1da` | Opus CONFIRMED WITH NOTES (N1/N3 closed at merge) |
+| I-55 (result commits keep no evidence) | `3c477fa`, `9ce856e`, `f5c14be` | `c55d2cc` | `204bb5b` | Sonnet CONFIRMED WITH NOTES, 3 coverage gaps closed |
+| I-57 (walk cap counts presses sent, not moves; refuses one hop short) | `fda9436`(refuted)→`41dc5f7`→`c865555` | `c705e52` | `430012b` | Sonnet CONFIRMED (round 2); **regression found post-merge, fixed `49d18db` (test_hand_memory_forgets)** |
+| I-58 (pause-menu close after balance read is one blind toggle) | `f5e7572`, `0e6fa49` | `cb5d72e` | `b027a9f` | Opus CONFIRMED WITH NOTES, N1–N4 closed; follow-up test-stub fix `42cecdc` merged `ef2da17` |
+| I-59 (questionable-card contact-sheet tool, new file) | `d5f9ed0` | (direct to main, no live import) | — | test-only, 15/15 green, 2 mutants caught |
+| user truth (5 refused-select frames scored by the user) | `94343b7` | — | — | ground truth, not a fix |
+| Snoopy tesseract install + fixtures | `9783aad` (`Snoopy_testing.md`) | — | — | 213/284→249/285; see §5 |
+| I-44 N-2 (carried from session 1, baseline-readable gate) | `e55a02e`,`ce8d665` | `69e77a4` | `758f2ed` | Sonnet CONFIRMED WITH NOTES — narrow, hard case stays open (§6) |
+| line-window fix (I-57 regression) | — | `49d18db` (direct) | — | test-only, `test_hand_memory_forgets` green |
 
-```
-BASEBALL_API_BUDGET=300 nohup .venv/bin/python -B -u -c "import run_cycles; print(run_cycles.cycle(8))" > overnight/run_live_20260921t.log 2>&1 &
-```
+## 5. LATER (do not start without the user; new items from tonight go here too)
 
-(next log letter after `s` is `t`; if the date has rolled past midnight before
-you launch, start over at `overnight/run_live_20260922a.log`.)
-
-Monitor for milestones with:
-
-```
-grep -E "logged|WIN #|LOSS #|Draw logged|REFUSED|playing the batter alone|DROPPED|may still be physically lifted|Traceback|stop_reason" overnight/run_live_20260921t.log
-```
-
-(the two new terms are I-48's fallback lines — watch them alongside the old
-ones.)
-
-Between cycles, or at handoff: `.venv/bin/python -B tools/questions_sheet.py --since <last handoff's ns or ISO time>` (I-59) writes a contact sheet + `questions.md`/`questions.json` of every refused-select/dropped-slot frame since then to `diagnostics/questions/<stamp>/` for the user to answer whenever they get to it.
-
-## 5. LATER (do not start without the user)
-
-Carried from before, plus what today's cycle 7 and QA8 round surfaced.
-~~Struck~~ items closed this session, with what closed them:
-
-- ~~I-48 candidate (match-3 stall on cycle 6)~~ **DONE** — fixed and merged,
-  see §3. Live-confirmed in cycle 7 (2 refusals, ~25 s each, vs the old 6/hand).
-- ~~Reveal watcher: wait for the 2+2 cards to separate before keeping the
-  frame~~ **REFUTED** by the `reveal_timing` census (facts file): class-A
-  (readable) captures land at 2.6–2.8 s, well inside the window — the misses
-  are **late** captures (class B/D at 4.0–4.4 s, past `REVEAL_SETTLE_MAX_SEC`
-  2.5 s) and dropped rows, not early ones. Don't build a "wait for
-  separation" gate; see the `REVEAL_SETTLE_MAX_SEC` item below instead.
-- **I-48b (new):** the fallback fires *before* the batter is confirmed
-  lifted, so `_clear_strays` refuses on top of it ("engine's cards [2] are
-  not all lifted"). The premise "batter already succeeded" isn't enforced by
-  ordering. Fix direction: order the batter select first, or when the
-  tactics target fails and the batter isn't yet lifted, go on to lift/confirm
-  it instead of refusing outright. Frame:
-  `diagnostics/deal_frames/refused_select_1790025302210541000`.
-- **Cycle 7 match 4: blind cursor on a fully readable hand** — target slot 3
-  went straight to probe-select (the I-02 blind-target path) with no
-  apparent reason (hand was `[fielding+1, 5/1, 5/1, 9/2, 6/0]`, all rows
-  read). Open question: glow gate, or cursor parked on the just-played slot?
-  Frame kept: `diagnostics/deal_frames/refused_select_1790026023456048000`.
-- **I-48 tactics slot not excluded after a fallback** — after the boost is
-  dropped, the loop keeps re-attempting the same tactics slot on later turns,
-  costing ~11 s/turn (a tax, not a deadlock, but worth excluding once dropped
-  for the rest of the hand).
-- **I-44's hard case is still OPEN** (see §3) — needs per-row digit
-  corroboration from orchestrator, or a post-commit detector; can't be closed
-  inside `input_controller`.
-- **`REVEAL_SETTLE_MAX_SEC` lengthening** — class B/D reveal frames (29% of
-  the orphan population) are captured at 4.0–4.4 s, past the current 2.5 s
-  ceiling. Raising it should recover them; score against the next cycles'
-  orphan rate.
-- **15/36 never-staged reveal misses** — the remaining reader question after
-  I-49: 10 "no OPPONENT card identified" (`:10238`), 5 local misfire flag
-  (`:10214`). Unlike the 21/36 staged-then-dropped (now fixed by I-49), these
-  never got far enough to stage a row at all.
-- **Ban shortfall** — cycle 7 match 2 registered only 1 of 3 bans (`ban_nav`).
-  Not investigated; watch for a repeat.
-- **The transition-timeout drop site (`orchestrator.py` ~`:9091`) still
-  discards** — 0/42 orphans traced through it this session, but it's an
-  unfixed drop path structurally identical to what I-49 just fixed elsewhere.
-- I-46 wide window: decide narrow (17/23) vs wide (22/23) from the skeptic's
-  false-read table; widen only at zero false reads.
-- I-35 live verification: `new_inning` / `reveal_recap` branches have still
-  never fired live; confirm on the next matches' logs.
-- I-42 labels: `FLICKER_WINDOW=10` is from the ticket text, not measured;
-  9/53 good labels wrongly rejected. Measure if the label corpus is ever
+- **I-56's 2 remaining guard cases** (MY-M3 `_mark_candidates`, M3d `_new_blind`
+  cannot-read-fan) before it can merge — see §1.
+- **I-62**: accept a disc at the lifted position (`RAISED_SEARCH_DY`) in slot
+  assignment. Census first with a FALSE column (wrong-slot assignments) —
+  see §3's `dropped_*` breakdown.
+- **The I-21-vs-probe contradiction** (§3, §6) — what really blinds a disc
+  after a select press, if not the lift itself.
+- **Tactics slot not excluded after an I-48 fallback** — the loop re-attempts
+  the same failed tactics slot on later turns, ~11s tax per turn (not a
+  deadlock).
+- **I-44's hard case is still OPEN** (QA6 Q2: a dropped press + a
+  coincidentally-blind post-press read still commits a false inference) —
+  needs per-row digit corroboration from orchestrator or a post-commit
+  detector; can't be closed inside `input_controller`.
+- **Cycle 4's "match never started" abandonment** (table-approach failure,
+  found by the guard census, never separately tracked) — needs its own look.
+- **15/36 never-staged reveal misses** (10 no-OPPONENT-card-identified, 5
+  local-misfire-flag) — I-49 only fixed the staged-then-dropped half.
+- **The transition-timeout drop site** (`orchestrator.py` ~`:9091`) still
+  discards — 0/42 orphans traced through it this session, but it's
+  structurally the same gap I-49 fixed elsewhere.
+- **I-35 live verification** — `new_inning`/`reveal_recap` branches have
+  still never fired live; keep checking cycle logs.
+- **I-42 labels**: `FLICKER_WINDOW=10` is from the ticket text, not measured;
+  9/53 good labels wrongly rejected. Measure only if the label corpus is
   needed at scale.
-- Full hand corpus re-check after I-46 merges (the 540-hand corpus, not just
-  the 2,409 turn frames).
-- Raised-card disc: 6/23 census frames still unread (5 jitter, 1 obscured) —
-  covered by the wide-window decision above.
-- The narrow I-46 window makes every slot it reads SELECTED by construction
-  (dy above `SELECTED_MIN_RISE` 25); fine today (32/34 were `y_from`
-  fallback), worth a line if `selected_cards` ever misfires.
-- Log the evidence (template scores + OCR words + scoreboard) on every
-  result commit and keep the result frame — the reveal/money keepers exist,
-  the result screen has none. This is what would settle draw #8.
-- Exclude LOCKED cards from the simulator pool and from `choose_bans`
-  (RULES.md, user 2026-09-21). Ownership is readable per cell from the ban
-  scan the run already does (`ban_grid.is_locked`, 3.5x contrast gap);
-  persist it beside the roster and thread it into `simulate`'s `player_pool`
-  and `decision_engine.choose_bans`. Then re-run the I-13 ban A/B on the
-  31-card pool.
-- **Worktree cleanup** — `.claude/worktrees/` is ~67 GB across 54 worktrees;
-  every branch there is merged into `main` as of this session. User's call
-  to run `git worktree remove` / `git branch -d` on the merged ones — check
-  `git status` in each first, don't touch anything with uncommitted work.
-
-### Snoopy jobs (one at a time; VLM text reading and grunt work only)
-- Label the kept reveal frames (test_fixtures/reveal_kind_truth/auto/): opponent card name + power per frame -> ground truth for the reveal-miss rate and for reveal_cards.TACTICS_KIND_MIN (OPEN-24).
-- ~~Second-opinion the 34 I-46 raised-card digits~~ DROPPED after job 1: the VLM misreads small digits the local reader gets right.
-- Mutation sweeps for I-48 once built, if the console is live (Snoopy_testing.md) — I-48 is now built and merged; this can run.
-- I-30 coverage gap (from an earlier skeptic, resurfaced 2026-09-21): deleting the fresh-read check in `orchestrator._close_result_safely` passes all 12 named tests. Verify whether a later commit closed it; if not, add a test that scripts `_result_screen_up` to go False right before the press and assert no press.
-Not Snoopy: reveal-miss baseline count, FLICKER_WINDOW sweep, raised-disc jitter -- local scripts, seconds.
-
-### Snoopy job 1 DONE (reveal frames, agent_progress/census/reveal_vlm/)
-- 153 kept reveal frames; only 82 have a match_log row. VLM vs match_log (n=82): our_power 83%, opp_power 91%, tactics kind 77% — worse than the local reader on digits, confirming the VLM-for-digits idea is dead.
-- WHAT THE MISSES ARE (13 tiles by eye): 3/13 kept "peak" frame is the next turn's hand fan; 10/13 a 4-card cluster still bunched at the mound, home plate empty. Superseded by the fuller `reveal_orphans_trace` census this session (see §3 I-49 and the LATER items above) — the mechanism is now traced to staged-then-dropped rows and late captures, not just capture timing.
-
-### Snoopy job 2 DONE (roster typing, agent_progress/census/roster_type_vlm/)
-- Brian Coker (8/1) and Zachary Lee (6/2) are BOTH BATTERS, both LOCKED (not owned) in this save. Applied `5afe7e0` after user confirmation; `test_card_roles` re-derived `dc6ac98`.
+- **Full hand corpus re-check after I-46** (the 540-hand corpus, not just the
+  2,409 turn frames) — never done.
+- **Exclude LOCKED cards from the simulator pool and `choose_bans`** (RULES.md,
+  user 2026-09-21) — `ban_grid.is_locked` reads ownership per cell; needs
+  threading into `simulate.player_pool` / `decision_engine.choose_bans`, then
+  re-run the I-13 ban A/B on the 31-card pool.
+- **`result_source` semantics** — I-55's evidence line reported `path='ocr'`
+  on a frame where the template alone had already cleared 0.80; check the
+  path-selection logic.
+- **`test_fixtures/reveal_kind_truth/auto/` hit its 200-frame cap** this
+  cycle ("NOT keeping this pitch_boost one") — rotate or raise the cap
+  (evidence loss, not a stall).
+- **`REVEAL_SETTLE_MAX_SEC` lengthening** — carried from session 1: class
+  B/D reveal frames (29% of the orphan population) are captured at 4.0–4.4s,
+  past the current 2.5s ceiling.
+- **`game_capture` desktop-fallback removal** — cycle 16's rig death showed
+  `grab()` "FALLING BACK to a full-screen grab ... reading the DESKTOP", a
+  fallback CLAUDE.md forbids. The I-05a liveness gate caught it this time
+  (15/15 "wrong size"), but the fallback itself should return `None`, never
+  the desktop.
+- **`questions_sheet.py`'s slot box is asymmetric** — neither the box
+  (margins 49–71px right) nor `SLOT_TOL` (cost 13–27.7 vs 34) clips a
+  legitimately-off-anchor card (the "7" in the user-truth sheet); tighten or
+  document the asymmetry.
+- **`test_result_commit_evidence.py` flakes on Snoopy** (FAIL/PASS/FAIL,
+  timing) — check whether it's timing-sensitive on the Mac too.
+- **10 Windows-only footguns with one-line fixes** (file-handle locks, `mss`
+  BitBlt failing headless over SSH, `open()` defaulting to cp1252, `/tmp`
+  literals, path separators) — enumerated in `Snoopy_testing.md` (`9783aad`);
+  not actionable on the Mac, keep for whoever maintains the Snoopy runner.
+  Separately, 6 OCR-content diffs under Windows tesseract are real but Mac-
+  irrelevant (same file).
+- **Housekeeping — DONE this session, noting for the record**: `.claude/worktrees/`
+  cleanup removed 46 of ~51 worktrees (69G→7.6G); 1 unmerged skipped
+  (`claude/eloquent-spence-03fe41`), 2 locked by old agents, 3 live at the
+  time. Re-run `git worktree list` if it's grown large again.
+- **QA round over `204bb5b..49d18db`** (2 finders, silent-paths/guards + test
+  quality) is running as of this handoff — read its output when it lands and
+  fold findings in here, don't act without reading.
 
 ## 6. OPEN QUESTIONS
 
+- **What actually blinds a disc after a select press, live, given the lift
+  itself does not?** (§3) The dominant open question tonight. 32 real
+  production events; candidates: cursor-glow interference on the
+  just-selected card, or a ~0.6s settle-timing gap. Next step: instrument the
+  actual production select path (not an offline probe) the way
+  `lift-live-probe2` instrumented a manual one.
 - Does a speed boost PERSIST on base? Two live runners read +1 over their
-  card (CLAUDE.md §4); worth one at-bat with a boosted batter then a later
-  hit. Low stakes (+0.046 runs/half).
-- Does the raised-card position search ever read a NEIGHBOUR's disc live?
-  Skeptic measures offline; the live check is one hand with the target in
-  slot 4 and a 9 in slot 3.
-- Is the 8% raised-disc miss the dominant cause of I-21 inference commits?
-  Count, over the next 10 matches, plays where the target read blind at
-  commit before vs after I-46.
-- Why do 5 of 23 raised digits land outside the narrow window (jitter): is
-  the disc position on a raised card a function of the lift height
-  (selection lift ~44 px) or of the fan phase? Measure dy vs SELECTED lift
-  per frame from the census json.
-- Do new_inning / reveal_recap ever appear on the live path, and how long do
-  they hold? No live sighting yet through cycle 7; the next matches' logs
-  answer it.
-- Are the 9/53 good lift-labels rejected by I-42 a flicker-window size
-  effect? Sweep `FLICKER_WINDOW` 4..20 on `joined.jsonl` and report
-  kept/rejected by class.
-- **Was draw #8 (cycle 6, match 2) real?** Still unanswered — no result-commit
-  evidence logging exists yet (see the LATER item), and nothing since has
-  produced a comparable frame to check offline.
-- **Why 11–15 reveal misses per cycle ("no OPPONENT card identified")?**
-  **PARTLY ANSWERED** this session by the `reveal_orphans_trace` census: of
-  36 traced class-A (readable) orphans, 21/36 were staged and then dropped by
-  a later poll's failure (now fixed — I-49 appends them as `unscored` instead
-  of discarding), and 15/36 were never staged at all (10 no-opponent-card,
-  5 local-misfire-flag — still open, see LATER). Separately, `reveal_timing`
-  found 29% of the orphan population is captured LATE, past
-  `REVEAL_SETTLE_MAX_SEC` — also a LATER item. So the miss count itself isn't
-  one cause; it's three, and two of the three now have a fix in flight or
-  merged.
-- ~~Locked cards in the pool?~~ ANSWERED (RULES.md, user 2026-09-21): locked
-  cards are never dealt and can't be selected as a ban, so the draw pool is
-  31, not 33; wiring that into simulate/choose_bans is the §5 LATER item.
+  card (CLAUDE.md §4); low stakes (+0.046 runs/half). Still needs one live
+  at-bat.
+- Was draw #8 (session 1, cycle 6) or the evidence-less draw #9 (cycle 9, this
+  session, before I-55 merged) real? Both unverifiable — no frame, no score.
+  Going forward every draw carries evidence (I-55); these two stay unknown.
+- **Leave cycles chaining unattended overnight, or stop the console too?**
+  Asked by the assistant at 00:30, never answered by the user before the
+  deadline. Current behaviour (stated default, not contradicted): unattended
+  chaining continues. If you're reading this cold and the chain is still
+  running or has stopped, that's why.
 
-## 7. RULES IN FORCE
+## 7. RULES IN FORCE (user's words where quoted)
 
-- **User rule, 2026-09-21 ~13:30: any NEW task or question found from here
-  goes on the LATER list — do not dispatch it to an agent.**
-- Manager delegates routine work (merges, tests, doc edits, log reading) to
-  Sonnet agents; the main model decides and dispatches.
-- Snoopy: one job at a time, grunt-work/labelling only, never wired into the
-  live ladder. **The VLM reads text only — never scene state** (facts file,
-  `reveal_timing`: 70% wrong on known-good controls when asked "is there a
-  reveal here").
+- *"Any stalls, any issues count. Things need to be run perfectly like a
+  nuclear power plant."* (18:4x) — the strict streak rule, §2.
+- *"Never halt for input"* (02:1x) — questions about unreadable/ambiguous
+  cards get queued (`tools/questions_sheet.py`, I-59), never block a run.
+- Push a notification only for: run-stopping events, wrong-card commits, or
+  the 50th clean match (user's approved scope, 02:0x–02:1x).
 - **Never save the game** — resets and `Load Last Save` only.
 - **Play the engine's pick, fix the engine** — never hand-override a card
-  choice; when a read looks wrong, check the reader first.
-- **Ask before pushing, opening a PR, or posting anywhere shared** — draft,
-  show, wait for a yes.
+  choice; check the reader first when a read looks wrong.
+- **Never `git stash` / `git checkout <sha> -- file` in the main checkout
+  while it holds uncommitted live data** — bisect in a scratch copy or a
+  detached worktree (rule earned the hard way tonight: a bisect one-liner
+  stashed live `match_log.jsonl`/`deal_timing.jsonl`/the cycle journal for a
+  few minutes before being caught and recovered).
+- Navigation/routing code is left alone this session — no changes to
+  `graph_walk.py` or the closed-loop chain logic; per CLAUDE.md §9, any such
+  change needs a live A/B and a read of `GRAVEYARD.md` first.
+- **Snoopy: one job at a time, grunt-work/labelling only, text-only reads**
+  (never wired into the live ladder — the VLM scored 70% wrong on known-good
+  scene-state controls). Snoopy is OFF as of 00:5x tonight.
+- **User rule (2026-09-21 ~13:30, still in force): any NEW task or question
+  found from here goes on the LATER list — do not dispatch it.** Reaffirmed
+  00:5x: *"finish the cycles left ... all current todos; anything new is
+  added to future sessions todo list."*
+- Manager delegates routine work (merges, tests, doc edits, log reading) to
+  Sonnet agents; the main model decides and dispatches. Opus skeptics for
+  anything on the money path.
 
-## 8. LIVE WATCH ITEMS for the next cycle
+## 8. LIVE WATCH ITEMS for whoever picks this up
 
-- **"playing the batter alone" count, and whether the batter was lifted when
-  it fired.** I-48's fallback line. Cycle 7 saw it once, with the batter NOT
-  yet lifted (I-48b, above) — watch whether that's the common case or a
-  fluke.
-- **Unscored rows appearing in `match_log.jsonl`.** I-49's new `row_status:
-  "unscored"` path — never fired in cycle 7 (0 rows). Watch for the first
-  live instance and check the drop reason it records.
-- **The I-43 "may still be physically lifted" count — still 0** through
-  cycle 7 (archive bound: 14 exemption events vs 51 refusals). More than a
-  handful on the next cycle means the single-frame `ys0` gate is admitting
-  transient blinds.
+- **The cycle 19–26 chain's own tally** — `overnight/run_live_20260922e.log`
+  is the ground truth; this document's record (100W15L11D) predates it.
+- **I-56-family firings** (tactics/wreath read fails beside a lifted
+  neighbour, or a false "genuine stray" mark) — the single most common
+  streak-breaker across cycles 12/13/18. Watch for it recurring on the
+  un-merged-I-56 build; it will, since I-56 hasn't landed yet.
+- **I-57-shape walk stalls** ("still at N after 8/13 presses") — fixed at
+  `49d18db`, but this is its first live cycle since the regression fix; watch
+  for a clean recovery on a press-drop cluster near the cap.
+- **Ban shortfalls** — should stay at 0 (4/4 cycles clean since I-50); a
+  recurrence is a regression, not expected noise.
+- **Evidence-less result commits** — should stay at 0 (I-55 merged, evidence
+  line present on every WIN/LOSS/DRAW since cycle 13); a bare
+  "X logged" with no `[state]`/OCR line is a regression.
+- **Pause-menu stalls** (I-58) — watch specifically at the first balance read
+  of a fresh cycle; that's where both prior occurrences fired.
