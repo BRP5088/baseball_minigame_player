@@ -3595,6 +3595,378 @@ dead-reckon behind it. Also green, unchanged: `test_verified_selection.py`,
 **Status.** merged 39f160a; Sonnet skeptic CONFIRMED (moves only, bounded at
 PRESS_VERIFY_TRIES, I-33/nudge cannot double-fire, worst observed 7 presses).
 
+### I-52  confirm_discard is verified once, immediately, and a late-landing discard leaves its slot in _MAYBE_LIFTED (three false I-43 refusals)   P1  input/loop
+
+**Evidence.** `overnight/run_live_20260921t.log` ~386-420 (main checkout). Decision
+"discarding the weakest (power 4)" at slot 0; `[discard] confirm_discard did not
+register — discards_left is still 2. REFUSING to press confirm_play...`; `discard
+NOT CONFIRMED — it may or may not have been thrown. Re-reading the hand next poll`.
+A SECOND, separate discard Decision was logged at line 392, still reading the
+stale count, whose own press landed SILENTLY (`_walk_cursor_to`'s print is gated
+`if steps:`, and the cursor needed no move, so nothing logged it); discards_left
+fell one poll later. Slot 0 then stayed in `_MAYBE_LIFTED` (its replacement's
+position unreadable/animating), and THREE plays were refused by the I-43 guard
+("slot(s) [0] may still be physically lifted...") before hand_index 1 was
+excluded and a worse card (batter 3) committed. Cost ~75s and a worse card.
+Frames: `diagnostics/deal_frames/dropped_1790029230537281000/`,
+`refused_select_1790029233140573000/`, `_1790029235068215000/`,
+`_1790029236869044000/`.
+
+**REFUTED ONCE, REVISED.** An independent skeptic reviewed the first version of
+this fix (`agent_progress/issues/I-52/skeptic.md`) and refuted two of its three
+claims: the evidence table's own numbers disagreed with the prose quoting them
+(19/7 vs a claimed 21/5), and no row's "landed late" classification is actually
+attributable to the REFUSED press proving anything about timing -- every such row
+has a second, separate discard attempt that landed silently in between. Separately,
+a second false-I-43 fix (an adjacency exemption in `_reconcile_maybe_lifted`) was
+refuted outright: it cleared the STRONGEST mark this system ever makes, on no
+discriminating measurement, and widened a different open ticket (I-48d). Both are
+corrected below; the skeptic's own "cheapest route to CONFIRMED" is followed for
+the numbers and `press_verified`/`_prove_maybe_lifted_clean` is kept unchanged
+(CONFIRMED outright, probes 1a-1d), and the adjacency rule is replaced with a
+bounded, evidence-producing disambiguation rather than simply dropped.
+
+**The 26-row table, corrected.** Full detail, method and the two independent
+classifications in `agent_progress/issues/I-52/discard_table.txt`.
+
+```
+ #  file                            line before  after     status  play@  I-43@
+ 1  run_live_20260920i.log           95      1      0       LATE    100   -
+ 2  run_live_20260921b.log           42      1      0       LATE     50   -
+ 3  run_live_20260921e.log          134      2      1       LATE    139   -
+ 4  run_live_20260921j.log          450      2      2    DROPPED    455   -
+ 5  run_live_20260921j.log          608      1      1    DROPPED    619   -
+ 6  run_live_20260921j.log          612      1      1    DROPPED    619   -
+ 7  run_live_20260921j.log          616      1      1    DROPPED    619   -
+ 8  run_live_20260921j.log          802      2      0       LATE    810   -
+ 9  run_live_20260921n.log           84      1      0       LATE     89   -
+10  run_live_20260921n.log          485      1      1    DROPPED    506   -
+11  run_live_20260921n.log          493      1      1    DROPPED    506   -
+12  run_live_20260921n.log          501      1      1    DROPPED    506   -
+13  run_live_20260921o.log          721      2      0       LATE    733   -
+14  run_live_20260921o.log          728      1      0       LATE    733   -
+15  run_live_20260921p.log          237      1      0       LATE    242   -
+16  run_live_20260921p.log          406      1      0       LATE    411   -
+17  run_live_20260921p.log          540      2      0       LATE    548   -
+18  run_live_20260921p.log          612      1      0       LATE    617   -
+19  run_live_20260921q.log          565      2      0       LATE    577   -
+20  run_live_20260921q.log          838      2      1       LATE    845   -
+21  run_live_20260921r.log          294      2      1       LATE    299   -
+22  run_live_20260921r.log          434      2      0       LATE    441   -
+23  run_live_20260921s.log          236      2      1       LATE    241   -
+24  run_live_20260921s.log          283      1      0       LATE    288   -
+25  run_live_20260921s.log          499      1      0       LATE    504   -
+26  run_live_20260921t.log          390      2      1       LATE    397   399
+```
+
+**19 LATE / 7 DROPPED / 26** (rows 4-7, 10-12 are the DROPPED ones). "LATE" means
+this discard EVENTUALLY landed, via a later attempt, before play committed -- NOT
+that the original refused press was merely slow to register; the skeptic traced
+two rows by hand (t.log 390-396, o.log 721-732) and found a second, silent, SEPARATE
+discard attempt in both. 1 of 19 LATE rows was followed by an `(I-43)` refusal
+(#26); the other 18 never hit I-43 because the redealt slot happened to read cleanly
+on the next commit attempt.
+
+A second, orthogonal classification: did confirm_discard get PRESSED at all for
+this occurrence? **21 of 26 rows pressed confirm_discard** (and the counter simply
+did not move on THAT poll) -- exactly what `press_verified`'s retry now recovers
+WITHIN one call. **5 of 26 rows never reached confirm_discard** -- the cursor/select
+step refused first (#2, #3, #10, #11, #12) -- and `press_verified` on the
+confirm_discard press cannot help these; of the 5, two (#2, #3) still resolved LATE
+via a later attempt and three (#10-#12) are DROPPED.
+
+**A second, independent false-refusal shape**, found while counting I-43 true
+positives (see below): a card legitimately lifted for a PLAY commit (not a
+discard) occludes its UNSELECTED neighbour's own disc/badge read, so the
+neighbour reads unreadable and the commit guard's `_new_blind` path (in
+`_verified_select_and_play_inner`, out of this ticket's scope) marks it as a
+stray. `run_live_20260921t.log` ~906-996: hand [swing+1, speed+1, 4/3, 4/3, 8/1],
+slot 0 (tactics) and slot 4 (the 8, the play target) legitimately selected, slot 1
+(speed, untouched) reads unreadable purely from sitting beside slot 0 -- marked,
+refused for 8 STRAIGHT POLLS, excluding hand_index 4 -- the best card in the hand
+-- from every attempt (`diagnostics/deal_frames/refused_select_1790029942849538000/`,
+`why.json`: `{"target": 4, "already_selected": [0, 4]}`).
+
+**I-43 true-positive count, today's logs (`run_live_20260921[rst].log`, the three
+files after the I-43 merge `2f18a734`, 2026-09-21 13:31:34 — verified by the epoch
+in each file's own frame-directory names, 13:53/17:10/18:20).** All 11 `(I-43)`
+refusals in these three files are in `t.log`: 3 at lines 399/406/413 (the discard
+shape, row 26 above) and 8 at lines 922-996 (the neighbour-occlusion shape).
+**0 of 11 are true positives.**
+
+**Root cause, two parts.**
+
+1. `select_and_discard`'s confirm_discard was pressed exactly ONCE and then only
+   POLLED the counter for reads (`input_controller.py`, pre-fix) — unlike every
+   other commit press (I-11's `press_verified`), a press the console dropped
+   (CLAUDE.md section 5: ~1 in 6, and they cluster) could only ever be REPORTED,
+   never retried within the same call. Recovery instead depended on the caller
+   (`orchestrator.play_one_turn`) looping back on the NEXT poll and re-running the
+   whole select-and-discard sequence from scratch — ~15-20s per cycle.
+2. `_reconcile_maybe_lifted(ys, sel)` only ever cleared a tracked slot on a real,
+   readable `y` that was not currently selected ("seen down"). A slot whose true
+   state was proven a DIFFERENT way — discards_left measurably falling, or a
+   neighbour's lift explaining its own unreadability — had no path to clearing, so
+   it stayed marked until its OWN position happened to read cleanly, however many
+   polls that took.
+
+**Fix**, confined to `input_controller.py`'s `select_and_discard` and the
+`_MAYBE_LIFTED`/`_reconcile_maybe_lifted` helpers (no other function touched):
+
+1. `select_and_discard` verifies confirm_discard with `press_verified`, the SAME
+   helper I-11 uses for `confirm_play`/`close_result`/`start_match` — no new
+   constants, `tries`/`settle` are its own defaults (`PRESS_VERIFY_TRIES`,
+   `PRESS_VERIFY_SETTLE`). Its `observe()` (`_discard_landed`) answers with the NEW
+   count the moment discards_left measurably falls (decisive proof, however the
+   replacement currently reads) and otherwise with the unchanged baseline —
+   UNLESS a fresh read shows card_index is no longer lifted while the count is
+   still unchanged, which is answered with None, press_verified's own signal to
+   STOP rather than press again (the guard against a second confirm_discard with
+   nothing selected -- RULES.md and the code were checked, and confirm_discard,
+   like confirm_play, commits whatever is CURRENTLY selected; nothing in this
+   codebase exercises a bare confirm_discard with nothing selected, so its effect
+   is untested and the fix simply never sends one). The first `observe()` call
+   answers `before` directly rather than re-deriving it, so a caller whose counter
+   never answers on any later poll still gets its one owed press
+   (`tests/minigame/test_commit_refuses_unseen_strays.py`'s M3). A raising
+   `_look_settled` inside the verification is now caught and converted to the
+   SAME safe UNVERIFIED outcome, matching `select_bans_verified`'s identical
+   lesson about an exception leaving the screen mid-change.
+2. `_reconcile_maybe_lifted` is back to EXACTLY its original "seen down" rule (see
+   below) — CONFIRMED unchanged by the skeptic. A landed discard clears its OWN
+   slot directly the moment discards_left proves it (`_prove_maybe_lifted_clean`),
+   a THIRD, independent signal `_reconcile_maybe_lifted` cannot express at all
+   (it only ever sees `(ys, sel)`).
+3. `resolve_neighbour_occlusion(m_slot, t_slot, look)`, NEW: the replacement for
+   the refuted adjacency rule. Bounded (one lower, one look, at most one
+   re-raise, no loop) and presses nothing blind -- it only presses `select_card`
+   on `t_slot`, a card whose CURRENT state is already known, through the same
+   verified toggle (`_deselect_verified`/`_select_verified`) every other
+   put-down/pick-up in this file uses:
+
+       lower t_slot, then look
+       m_slot now READS               -> t_slot's lift explains it, PROVEN not
+                                         guessed. Clear the mark, re-raise
+                                         t_slot, hand back to the ordinary
+                                         commit path.
+       m_slot STILL blind, t_slot down -> genuine stray. t_slot stays down,
+                                         m_slot's mark SURVIVES, the existing
+                                         refusal/unwind path handles it with
+                                         a positive finding instead of a guess.
+       the re-raise of t_slot fails    -> refuse. t_slot left down, nothing
+                                         partially lifted.
+
+   **NOW WIRED IN (third pass).** The first wiring pass left this function
+   built and tested but uncalled — CLAUDE.md 10.1's own shape, "the code did
+   nothing, and doing nothing looked exactly like working" — so the live
+   deadlock it was built to fix (`run 21t` match 3: `may still be physically
+   lifted` x8, every batter excluded) was exactly as reachable as before.
+   `_clear_strays`'s own `_unproven` branch (`input_controller.py:1970`, the
+   I-43 refusal site every commit — play and discard alike — passes through)
+   now calls it: on `_m` in `_unproven` beside a `_t` in `sel`, call
+   `resolve_neighbour_occlusion(_m, _t, look)`; on ANY attempt, re-observe
+   the fan before re-checking `_unproven`/`want <= lifted` (a failed re-raise
+   leaves `_t` down, and only a FRESH look, not the stale one this block
+   started with, lets the downstream `want <= lifted` floor catch it — see
+   the second mutant below). See cases H/I.
+
+**What the adjacency rule got wrong, in the skeptic's own words.** It cleared the
+mark at `run_live_20260921t.log:912` ("slot(s) [1] read unreadable... something we
+pressed lifted them") -- the `_new_blind` branch, which fires ONLY when a slot was
+READABLE at the operation's baseline and went blind AFTER our own press: I-21's own
+stated lift signature, the STRONGEST evidence this system makes, not a coincidence.
+The rule had no measurement separating "explained by a neighbour" from "we lifted
+it" -- both explanations fit the one frame available
+(`refused_select_1790029942849538000`, where slot 1's `y` comes from `fallback`,
+so `selected_cards` has no rise to measure either way) -- and it widened
+`ISSUES.md` I-48d (OPEN), whose own proposed remedy is `_MAYBE_LIFTED` tracking a
+probed slot so it can be EXCLUDED from exactly this kind of exemption; the
+adjacency rule did the opposite for every marked slot beside any current
+selection.
+
+**FOURTH PASS (skeptic round 2, `agent_progress/issues/I-52/skeptic.md`):
+CONFIRMED WITH NOTES, three defects, all fixed on this branch.**
+
+1. **N1 — `resolve_neighbour_occlusion` never walked the cursor to `t_slot`.**
+   Every other toggle pair in this file walks first
+   (`_walk_cursor_to`/`_select_verified`/`_deselect_verified` at
+   2071/2073, 2218/2220, 2315/2317); this one pressed `select_card` on
+   whatever the cursor already held. The play path selects the BATTER
+   first, leaving the cursor on the TACTICS slot, so a marked slot
+   adjacent to the batter hit the wrong card — measured live: 5 select
+   presses landed on slot 4 while `t_slot` was 1, the tactics target went
+   down, and the deadlock stayed intact. Fixed: `_walk_cursor_to(t_slot,
+   look)` before the lower AND again before the re-raise; a walk failure
+   returns "unresolved" with zero further presses.
+2. **N2 — the occlusion-proven check tested `_ys[m_slot] is None` but never
+   `m_slot not in sel`.** A genuinely LIFTED m_slot that happens to read
+   once t_slot comes down was being cleared as "occlusion" and committed —
+   a card the engine never chose. Fixed: `if _ys[m_slot] is None or
+   m_slot in sel:` — occlusion is proven only when m_slot reads AT REST.
+3. **N3 — the mark was cleared BEFORE the re-raise was attempted.** A
+   failed re-raise still discarded a proof that was genuinely obtained,
+   throwing the finding away on a press that never landed. Moved
+   `_MAYBE_LIFTED.discard(m_slot)` to after a confirmed re-raise.
+
+Also fixed: the skeptic's **M6** — a mutant deleting the resolver's
+`t_slot not in sel` precondition (line 1627) survived every prior case,
+because a later "still blind" refusal reaches the same verdict with or
+without it whenever M_SLOT is genuinely blind. It bites only when T is
+resting AND M is misread blind on ONE look and readable on the next (I-26's
+own flicker) — a shape the earlier cases never built. New case (F6) does.
+
+**Verify.** `tests/minigame/test_discard_confirm_verified.py`: (A) a dropped press
+a retry lands — 2 presses, ok=True, the (pre-marked) slot cleared; (B) the press
+lands but the count reads one poll late — exactly 1 press, no second
+confirm_discard, ok=False (UNVERIFIED), and the mark clears on the NEXT poll's
+ordinary "seen down" read with no new machinery; (C) every retry dropped — retries
+up to `PRESS_VERIFY_TRIES`, ok=False, the mark SURVIVES a next-poll check that is
+still unresolved; (D) `_prove_maybe_lifted_clean` clears a mark directly, and a
+landed discard's own success path uses it on a PRE-MARKED slot; (E) I-26/I-28
+control: reconciliation never MARKS an untracked slot, only ever clears one;
+(F2) `resolve_neighbour_occlusion`, occlusion-by-lift: M reads once T is lowered —
+ok=True, mark cleared, T re-raised, exactly 2 presses; (F3) real stray: M still
+blind with T down — ok=False, mark SURVIVES, T left down, exactly 1 press (bounded,
+no loop chasing a stray); (F4) the re-raise of T itself fails — ok=False, T left
+down, exactly 6 presses (1 lower + `SELECT_ATTEMPTS` failed re-raises), **and
+(fourth pass) M's mark SURVIVES the failed re-raise (N3)**; (G) I-43
+true-positive control: an isolated marked slot survives, including with an
+unrelated NON-adjacent selection elsewhere in the hand. (H)/(I) — end to end
+through the REAL `_verified_select_and_play_inner`, not a stub of it,
+replaying the exact match-3 shape `resolve_neighbour_occlusion`'s own
+docstring names (hand [swing+1, speed+1, 4/3, 4/3, 8/1], card_index=4,
+tactics_index=0, slot 1 unreadable from the operation's own baseline —
+routing the mark through `_untouched_blind`/`_unproven`, the branch this pass
+wires up, rather than the separate `_new_blind` re-look branch): (H) COMMIT —
+slot 0 already lifted at baseline (occlusion tied to its own lift), the play
+lowers it, sees slot 1 read, clears the mark, re-raises slot 0, and presses
+confirm_play exactly once, 3 `select_card` presses total (raise 4, lower 0,
+re-raise 0 — tactics 0 was already up, so no press to raise it); (I) the
+REFUSE mirror — slot 1 stays blind no matter what (a genuine stray) — the play
+REFUSES, confirm_play is never sent, slot 1's mark SURVIVES, and slot 0 is
+left DOWN by the failed disambiguation. **New (fourth pass): (F1) — the cursor
+starts on a THIRD slot (`CURSOR_START`, standing in for a tactics slot the
+batter-first play path leaves it on), t_slot IS the batter — ok=True, the
+cursor ends on t_slot not CURSOR_START, CURSOR_START is never toggled, exactly
+3 `move_left` presses (one walk; the second, before the re-raise, is already
+there) and 2 `select_card` presses. (F5) — M reads once T is down but M is
+ITSELF lifted (`m_lifted=True`) — ok=False, "genuine stray", M's mark
+SURVIVES, T left down, M stays lifted throughout (this function never
+touches it), exactly 1 `select_card` press. (F6) — T is NOT lifted and M is
+misread blind on the FIRST look only, readable after (`flicker_m_blind_once`)
+— ok=False, ZERO presses of any kind, mark survives; a T-resting case with M
+genuinely (not transiently) blind was tried first and could NOT distinguish
+the M6 mutant, because the later "still blind" refusal reaches the same
+verdict either way — only the flicker shape reaches the top guard's own
+`t_slot not in sel` clause.** `def check(name, cond)`, name-first.
+
+**Mutants (16 total, `__pycache__` cleared and sha256-verified restored
+between each, `4227122eb701e35cdb165707058e69dbe668075c669a97a364b499b6d234666f`):**
+
+    force press_verified tries=1 (drop the retry)
+        -> case A FAILS: only 1 press, never lands, ok=False
+    drop the fresh-count/fan re-check inside _discard_landed (retry blind)
+        -> case B FAILS: 2 presses sent, not 1 -- the guarded double-press happens
+    drop _prove_maybe_lifted_clean from the landed branch
+        -> cases A and D FAIL: a pre-marked slot stays marked despite a proven drop
+    resolve_neighbour_occlusion: skip the lower (never press to check)
+        -> case F2 FAILS: reports "genuine stray" without ever looking, mark
+           survives, 0 presses sent
+    resolve_neighbour_occlusion: treat "still blind" as clear
+        -> case F3 FAILS: ok=True, mark wrongly cleared, T wrongly re-raised
+    resolve_neighbour_occlusion: commit without re-verifying T (skip the re-raise
+    check)
+        -> case F4 FAILS: ok=True with T still down, only 1 press sent
+    the skeptic's M1: press again when the slot un-lifted but the count is stale
+    (drop the same ambiguity check as above, verified independently)
+        -> case B FAILS: 5 presses sent, not 1
+    the skeptic's M3: prove-clean on a count that did NOT fall (`<` -> `<=`)
+        -> case B FAILS: 5 presses sent, not 1 (the ambiguous read is wrongly
+           treated as a fall, so the retry never triggers)
+    (third pass, the wiring) `_clear_strays`: `if _t in sel:` -> `if False:`,
+    i.e. the call to resolve_neighbour_occlusion is never reached
+        -> case H FAILS 4 ways (ok=False not True, 0 confirm_play presses not
+           1, the mark survives instead of clearing, 2 select_card presses
+           not 3); case I also catches it (slot 0 is never touched at all, so
+           "T left down" reads {0, 4} instead of {4})
+    (third pass) resolve_neighbour_occlusion: skip the re-raise, fake ok=True
+    without calling _select_verified(t_slot, look)
+        -> case H FAILS 4 ways: ok=False (refused downstream by the `want <=
+           lifted` floor — "the engine's cards [0, 4] are not all lifted
+           ([4])"), 2 confirm_play... 0 presses not 1, 8 select_card presses
+           not 3, {4} not {0, 4} lifted. Case F4 also catches it (a
+           pre-existing case that exercises the same call).
+    the skeptic's M4: drop the fresh re-observe entirely after the resolver
+    in _clear_strays (fall through with whatever _unproven was BEFORE the call)
+        -> case H FAILS 2 ways: ok=False (the stale _unproven, computed
+           before the mark was cleared, still names slot 1 and refuses),
+           9 presses sent including a spurious extra select_card
+    the skeptic's M5: call it occlusion even when M is STILL blind (drop the
+    `_ys[m_slot] is None` half of the guard, keep only `m_slot in sel`)
+        -> case F3 FAILS 4 ways (ok=True, mark wrongly cleared, T wrongly
+           re-raised, 2 presses not 1) AND case I FAILS 4 ways end to end:
+           the play COMMITS a card that should have refused, confirm_play
+           IS sent, the mark is wrongly cleared, T ends up lifted
+    (fourth pass) N1: skip the FIRST _walk_cursor_to call (fake ok=True, sel
+    unchanged, cursor never moves off CURSOR_START)
+        -> case F1 FAILS 6 ways: ok=False ("t_slot would not go down"), the
+           cursor never reaches T_SLOT, CURSOR_START itself gets toggled
+           (5 select_card presses sent AT THE WRONG SLOT), the mark survives
+    (fourth pass) N2: same mutation as M5 above (same line) -- see M5
+    (fourth pass) N3: move `_MAYBE_LIFTED.discard(m_slot)` back to BEFORE
+    the re-raise attempt (the pre-fourth-pass ordering)
+        -> case F4 FAILS: the mark is gone even though the re-raise then
+           fails and T stays down -- exactly the discarded-proof hazard N3 fixes
+    the skeptic's M6: drop the resolver's `t_slot not in sel` precondition
+    (line 1627), leaving only `n != MAX_HAND_SIZE or _ys[m_slot] is not None`
+        -> case F6 FAILS 3 ways: ok=True (should refuse, T is resting), a
+           `select_card` press lands on T (raising a card that was never
+           meant to be touched), the mark is wrongly cleared -- reproduces
+           the skeptic's own predicted mechanism exactly ("the re-look would
+           find M readable, and `_select_verified` would then RAISE a card
+           that was resting")
+
+**Run.** `test_discard_confirm_verified.py`, `test_discard_is_proven.py`,
+`test_verified_selection.py`, `test_commit_refuses_unseen_strays.py`,
+`test_verified_presses_on_match_path.py`, `test_hand_memory_persists.py`,
+`test_run_debit_and_scoring.py`, `test_i22_pitch_boost_slot3.py`,
+`test_tactics_select_fallback.py`, `test_refusal_unwinds.py`,
+`test_readable_hand_gate.py`, `test_run_resume_and_persist.py`,
+`test_scoreboard_populations.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`test_claude_md_constants.py`,
+`tests/rig/test_no_real_input_under_test_run.py` — all 16 exit 0 (the
+skeptic's own round-2 regression list). **Also run
+(third pass) `test_lifted_discard_row_rescued.py`: FAILS on this branch, but
+identically on `main` (0b15578) — the traceback is inside
+`_verified_select_and_play_inner`'s I-48b/I-48c re-verify loop calling
+`_walk_cursor_to`, an `IndexError` from the test's own scripted
+`_fake_cursor_glow5`/`_queue5` running out of frames, and `git diff main --
+input_controller.py` touches no line between there and `_clear_strays`. A
+separate, pre-existing issue (I-48e); this branch does not change its
+outcome.** The skeptic independently verified this same finding on the
+scratch copy, byte-identical traceback.
+
+**Also this pass:** the dead `DISCARD_CONFIRM_TRIES` constant (superseded by
+`PRESS_VERIFY_TRIES` once confirm_discard went through `press_verified`) and its
+two now-stale prose references (`orchestrator.py`, `test_verified_selection.py`)
+are removed; a raising `_look_settled` inside the confirm_discard verification is
+now caught and converted to the safe UNVERIFIED outcome instead of propagating
+with no `_mark_maybe_lifted`/`invalidate_cursor` (`select_bans_verified` carries
+the identical lesson).
+
+**Status.** Fixed on branch (fourth pass, skeptic round 2 CONFIRMED WITH
+NOTES, all three notes addressed plus the M6 mutant closed). `resolve_
+neighbour_occlusion` is WIRED IN at `_clear_strays`'s I-43 refusal site
+(`input_controller.py:1970`), walks the cursor to `t_slot` before every
+toggle, requires M to read AT REST (not merely readable) before crediting
+occlusion, and clears the mark only after a landed re-raise — verified
+standalone (F1-F6) and end to end through the real
+`_verified_select_and_play_inner` (H/I), 16 mutants total. Rebased onto main
+(0b15578, I-48b merged) first, per the coordinator's lift of the `_clear_
+strays` prohibition; `_probe_select_blind_target` (owned by a different
+pending branch) is untouched. Awaiting skeptic.
+
 ### I-54  A truncated card name ('JOHNNY DRAW') passes the result-word OCR fallback: phantom draw #9 mid-match   P0  reader
 
 **Evidence.** Main checkout, `overnight/run_live_20260921t.log` ~634-640 (read-only):

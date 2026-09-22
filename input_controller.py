@@ -114,10 +114,6 @@ CHIAKI_WINDOW_PROCESS_NAME = "chiaki"  # matches macOS process name, confirmed v
 # the value that ran clean for weeks, rather than crawling up in 0.05 steps.
 ACTION_DELAY = 0.25
 # The fast default, kept so an abandoned backoff can restore it.
-# How many polls the discards counter gets to fall after confirm_discard. Mirrors
-# MONEY_READ_TRIES' reasoning: every attempt is the same conservative reader, so more
-# tries can only turn a refusal into an answer and invent no confidence.
-DISCARD_CONFIRM_TRIES = 5
 DEFAULT_ACTION_DELAY = 0.25
 
 
@@ -1590,13 +1586,144 @@ def _mark_maybe_lifted(slots):
     _MAYBE_LIFTED.update(s for s in slots if s is not None)
 
 
+def _prove_maybe_lifted_clean(slots):
+    """Clear slot(s) on proof STRONGER than a position read (I-52).
+
+    `_reconcile_maybe_lifted` below only trusts the fan's own y/sel columns; a
+    discard that measurably decremented discards_left is proof of a different
+    kind -- the game processed it and dealt a replacement into that exact slot,
+    whatever the replacement currently reads as (often UNKNOWN while it is
+    still settling, CLAUDE.md's own "a reader that looks stable on a still may
+    not be"). See select_and_discard's confirm_discard proof.
+    """
+    for s in slots:
+        _MAYBE_LIFTED.discard(s)
+
+
 def _reconcile_maybe_lifted(ys, sel):
     """Clear a tracked slot the moment a read PROVES it down: a real (readable)
     y and not among the risen/selected rows. Until that proof arrives the slot
-    stays protected, however many operations pass."""
+    stays protected, however many operations pass.
+
+    I-52 FOLLOW-UP, REFUTED AND REMOVED. A second clearing rule lived here
+    briefly -- "an unreadable slot beside one that IS currently selected is
+    explained by the neighbour's lift, not proof of its own" -- built off the
+    live episode at `diagnostics/deal_frames/refused_select_1790029942849538000/`
+    (hand [swing+1, speed+1, 4/3, 4/3, 8/1], slot 1 marked and refused for 8
+    polls beside slots 0 and 4, both legitimately selected). An independent
+    skeptic reproduced it against the SAME numbers on both trees
+    (`agent_progress/issues/I-52/skeptic.md`) and refuted it on two grounds:
+    it cleared the mark on the STRONGEST evidence this system ever makes (a
+    slot readable at baseline, then blind after our own press -- I-21's own
+    lift signature, not a coincidence), with no discriminating measurement
+    behind it (a competing explanation -- neighbour occlusion -- fits the same
+    frame and nothing separated them); and it WIDENED `ISSUES.md` I-48d
+    (OPEN), whose own proposed remedy is exactly `_MAYBE_LIFTED` tracking a
+    probed slot so it can be EXCLUDED from this kind of exemption -- this rule
+    did the opposite for every marked slot beside any current selection. See
+    `resolve_neighbour_occlusion` below for the replacement: it presses
+    nothing blind and proves the disambiguation instead of inferring it.
+    """
     for slot in list(_MAYBE_LIFTED):
         if slot < len(ys) and ys[slot] is not None and slot not in sel:
             _MAYBE_LIFTED.discard(slot)
+
+
+def resolve_neighbour_occlusion(m_slot, t_slot, look):
+    """Disambiguate a marked slot `m_slot` reading blind beside a target
+    `t_slot` we KNOW is currently lifted (I-52 follow-up, replacing the
+    refuted adjacency rule above).
+
+    PRESSES NOTHING BLIND. It only ever presses `select_card` on `t_slot`, a
+    card whose current state (lifted) is already known, through the SAME
+    verified toggle every other put-down/pick-up in this file uses
+    (`_deselect_verified` / `_select_verified`). It is BOUNDED -- one lower,
+    one look, and at most one re-raise, no loop -- and it RESOLVES the
+    ambiguity with a press-and-look rather than guessing at it from one frame:
+
+        walk to t_slot, lower it, then look
+        m_slot now READS AT REST (its own disc/badge is no longer covered,
+        and it is not itself among the currently selected slots)
+            -> t_slot's own lift explains m_slot's blindness, proven rather
+               than inferred. Walk back to t_slot, put it BACK UP, and only
+               once THAT is confirmed clear the mark and hand back to the
+               caller's ordinary commit path.
+        m_slot is STILL blind, OR reads but is ITSELF lifted, with t_slot down
+            -> t_slot's lift cannot be the (sole) explanation: a blind m_slot
+               really is up on its own, and a m_slot that reads but is LIFTED
+               is a real, independent stray, not an occlusion -- committing
+               it because it happened to become readable once a neighbour
+               came down would play a card the engine never chose. t_slot is
+               left DOWN (nothing here re-raises it) and the mark SURVIVES --
+               the existing refusal/unwind path handles it, now with a
+               positive finding instead of a guess.
+        the re-raise of t_slot itself fails
+            -> refuse. t_slot is left DOWN (nothing partially lifted), the
+               mark SURVIVES (cleared only on a re-raise that actually
+               landed -- a proof this function obtained must not be thrown
+               away on a press that did not), and the caller must not
+               commit -- there is nothing to commit.
+
+    Returns (ok, detail). `ok` is True only when t_slot is confirmed back up
+    AND m_slot's mark has been cleared -- i.e. the caller's ordinary commit
+    may proceed. `detail` is a short string naming which branch fired.
+
+    WALKS THE CURSOR TO t_slot BEFORE EVERY TOGGLE (I-52 skeptic round 2,
+    N1). `_deselect_verified`/`_select_verified` toggle whatever the cursor
+    ALREADY holds -- they do not navigate, matching every other pair of
+    calls in this file (`_walk_cursor_to` then `_select_verified`/
+    `_deselect_verified`, e.g. the extra-clearing loop and the main target
+    loop above). The play path selects the batter FIRST, so the cursor sits
+    on the TACTICS slot when this function runs -- a marked slot adjacent to
+    the BATTER would otherwise toggle the wrong card. A walk failure refuses
+    with zero presses sent past that point, same as any other unreachable
+    target in this file.
+
+    WIRED IN, at the one place this disambiguation is needed: `_clear_strays`'s
+    `_unproven` branch (I-43's refusal site), which every commit -- play and
+    discard alike -- passes through. Built and tested standalone first (see
+    `tests/minigame/test_discard_confirm_verified.py`, cases F2-F4), then
+    end-to-end through the real `_verified_select_and_play_inner` (cases H/I,
+    same file) replaying the match-3 shape this function's own docstring
+    above names.
+    """
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE or t_slot not in sel or _ys[m_slot] is not None:
+        return False, "not applicable -- t_slot not confirmed lifted, or m_slot already reads"
+    ok, _sel = _walk_cursor_to(t_slot, look)
+    if not ok:
+        return False, f"could not walk to slot {t_slot} -- refusing, unresolved"
+    ok, sel = _deselect_verified(t_slot, look)
+    if not ok:
+        return False, "t_slot would not go down -- refusing, its state is unproven"
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE:
+        return False, "cannot read the fan with t_slot down -- refusing"
+    if _ys[m_slot] is None or m_slot in sel:
+        # STILL blind, OR reading but ITSELF lifted (I-52 skeptic round 2,
+        # N2): a lifted m_slot that merely became readable once its
+        # neighbour came down is a real stray with its own selection, not
+        # an occlusion -- `_ys[m_slot] is not None` alone cannot tell that
+        # apart from a resting card, and waving it through here would
+        # commit a card the engine never chose. t_slot is left DOWN;
+        # nothing here re-raises it, and the mark SURVIVES either way.
+        return False, (f"slot {m_slot} still blind or itself lifted with slot "
+                        f"{t_slot} down -- genuine stray, marked")
+    # m_slot reads AT REST once t_slot is down: t_slot's own lift explains it.
+    ok, _sel = _walk_cursor_to(t_slot, look)
+    if not ok:
+        return False, (f"slot {m_slot} explained but the cursor would not walk "
+                        f"back to slot {t_slot} -- refusing, nothing lifted")
+    ok, sel = _select_verified(t_slot, look)
+    if not ok:
+        return False, f"slot {m_slot} explained but slot {t_slot} would not re-raise -- refusing, nothing lifted"
+    # CLEAR THE MARK ONLY NOW (I-52 skeptic round 2, N3): the re-raise just
+    # landed, so the mark is discarded on a proof that is fully obtained --
+    # a failed re-raise above returns before this line, leaving m_slot's
+    # mark in place rather than throwing away a real finding on a press
+    # that never took.
+    _MAYBE_LIFTED.discard(m_slot)
+    return True, f"slot {m_slot} explained by slot {t_slot}'s lift -- cleared, {t_slot} restored"
 
 
 # I-48 SKEPTIC S-3: whether the LAST _verified_select_and_play_inner call committed a
@@ -1928,15 +2055,52 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         # See _MAYBE_LIFTED and this function's own docstring.
         _unproven = _untouched_blind & _MAYBE_LIFTED
         if _unproven:
-            print(f"  [cursor] slot(s) {sorted(_unproven)} may still be physically "
-                  "lifted by an earlier attempt that could not prove the board "
-                  "clean (I-43) — refusing to commit rather than waving them "
-                  "through as a chronic occlusion")
-            invalidate_cursor()
-            return False
-        print(f"  [cursor] slot(s) {sorted(_untouched_blind)} were ALREADY unreadable "
-              "before this operation began — proceeding. We cannot have raised them, "
-              "and refusing forever is how a hand with one occluded card deadlocks.")
+            # I-52 FOLLOW-UP, BEFORE REFUSING: a marked slot beside a target we
+            # KNOW is currently lifted (in `sel`) may be explained by that
+            # neighbour's own lift rather than a stray of its own -- see
+            # resolve_neighbour_occlusion's docstring for the mechanism and why
+            # the adjacency exemption that used to live here was refuted and
+            # removed. Bounded to the slots actually adjacent to a selection;
+            # a lone stray with nothing selected beside it never reaches this.
+            _tried = False
+            for _m in sorted(_unproven):
+                for _t in (_m - 1, _m + 1):
+                    if _t in sel:
+                        _tried = True
+                        _ok, _detail = resolve_neighbour_occlusion(_m, _t, look)
+                        print(f"  [cursor] slot {_m} beside selected slot {_t} "
+                              f"(I-52): {_detail}")
+                        break
+            if _tried:
+                # THE MANOEUVRE PRESSED KEYS (lowered and, on proof, re-raised
+                # a target). Re-observe rather than trust the look this block
+                # started with -- a failed re-raise leaves the target DOWN,
+                # and it is the FRESH `sel` below, not a stale one, that lets
+                # `want <= lifted` further down catch a target that never
+                # made it back up.
+                _g, _ys, n, sel = _look_settled(look)
+                if n != MAX_HAND_SIZE:
+                    print("  [cursor] cannot read the fan after the neighbour "
+                          "disambiguation — refusing. A commit whose lifted "
+                          "set was never seen is a blind commit.")
+                    _mark_maybe_lifted(_unproven)
+                    invalidate_cursor()
+                    return False
+                _reconcile_maybe_lifted(_ys, sel)
+                _blind_now = {i for i, y in enumerate(_ys) if y is None}
+                _untouched_blind = _blind_now - set(want)
+                _unproven = _untouched_blind & _MAYBE_LIFTED
+            if _unproven:
+                print(f"  [cursor] slot(s) {sorted(_unproven)} may still be physically "
+                      "lifted by an earlier attempt that could not prove the board "
+                      "clean (I-43) — refusing to commit rather than waving them "
+                      "through as a chronic occlusion")
+                invalidate_cursor()
+                return False
+        if _untouched_blind:
+            print(f"  [cursor] slot(s) {sorted(_untouched_blind)} were ALREADY unreadable "
+                  "before this operation began — proceeding. We cannot have raised them, "
+                  "and refusing forever is how a hand with one occluded card deadlocks.")
     _want_blind = set(want) & _blind_now
     if _want_blind:
         print(f"  [cursor] slot(s) {sorted(_want_blind)} are the engine's own "
@@ -2511,59 +2675,111 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
             before = discards_look()
         except Exception:
             before = None
-    press("confirm_discard")
     if discards_look is not None and before is not None:
-        # MORE TRIES CAN ONLY TURN A REFUSAL INTO AN ANSWER -- the same reasoning
-        # MONEY_READ_TRIES carries: every attempt is the same conservative reader, so
-        # retrying invents no confidence, it only waits out a counter that is still
-        # animating.
-        dropped = False
-        answered = False          # did ANY poll come back with a number at all?
-        for _ in range(DISCARD_CONFIRM_TRIES):
-            time.sleep(ACTION_DELAY)
-            try:
-                now = discards_look()
-            except Exception:
-                now = None
-            if now is not None:
-                answered = True
-            if now is not None and now < before:
-                dropped = True
-                break
-        if not dropped and answered:
-            # WE KNOW THE DISCARD DID NOT REGISTER, because the counter ANSWERED and
-            # did not move. Pressing confirm_play here is the bug: it plays the card.
-            # Refusing leaves the card lifted and nothing committed, which the caller
-            # can re-read and recover from.
-            print(f"  [discard] confirm_discard did not register — discards_left is "
-                  f"still {before}. REFUSING to press confirm_play, because that would "
-                  f"PLAY slot {card_index} instead of discarding it.")
-            # I-43: the card is confirmed still selected -- the next caller
-            # must see it down before waving it through as a chronic occlusion.
+        # VERIFIED THE WAY I-11 VERIFIES EVERY OTHER COMMIT PRESS (I-52). This used
+        # to press confirm_discard EXACTLY ONCE and then only poll the counter -- so
+        # a press the console dropped (CLAUDE.md section 5: ~1 in 6, and they
+        # CLUSTER) could only ever be reported, never retried. press_verified retries
+        # the PRESS itself, and only while it is still safe to.
+        #
+        # `_discard_landed` is the observe(): it answers with the NEW count the
+        # moment discards_left measurably falls (decisive -- the game only does that
+        # by processing the discard, however the replacement currently reads) and
+        # otherwise with `before` unchanged -- UNLESS a fresh read shows card_index
+        # is no longer lifted while the count is still the same. That combination is
+        # AMBIGUOUS -- it is what THIS press's own retry produces once it lands (I-11's
+        # ordinary "landed, un-lifted, counter not yet caught up" window) and it is
+        # what a genuinely dropped press followed by a SEPARATE, later, successful
+        # attempt also produces on the poll in between. `run_live_20260921t.log`
+        # ~390-396 turned out to be the second shape, not the first: an independent
+        # re-check (`agent_progress/issues/I-52/skeptic.md`, `rescan.py`) found a
+        # SECOND `Decision: ... discarding the weakest` logged at line 392, still
+        # reading the stale count, whose own press landed silently --
+        # `_walk_cursor_to`'s own print is gated `if steps:` and the cursor was
+        # already on the target, so that second attempt left no line in the log at
+        # all. This function cannot tell the two shapes apart from one look, and does
+        # not try to: a second confirm_discard press with nothing selected is
+        # untested and not worth risking either way, so this answers None on the
+        # ambiguous combination -- the same signal press_verified already uses to
+        # mean "blind after a press, stop rather than risk a double-toggle" -- instead
+        # of pressing again blind. What IS established is the shape this retry
+        # closes: 19 of the 26 archived `discard NOT CONFIRMED` lines are a press
+        # that never registered at all, recovered by a LATER, separate attempt
+        # (`agent_progress/issues/I-52/discard_table.txt`) -- exactly what retrying
+        # the press WITHIN one call, instead of waiting for the next poll's fresh
+        # decision cycle, is for.
+        #
+        # The first call returns `before` directly, with NO fresh read: it is
+        # press_verified's own pre-press baseline call, and `before` is already
+        # known from the read two lines up. Answering it from a second discards_look()
+        # call would cost an extra read for nothing AND could itself abstain (a
+        # transient None) and make press_verified refuse to press AT ALL --
+        # regressing case 3 below, where a press is still owed even though every
+        # poll after it abstains.
+        _base = [before]
+        _asked = [False]
+
+        def _discard_landed():
+            if not _asked[0]:
+                _asked[0] = True
+                return _base[0]
+            now = discards_look()
+            if now is None:
+                return None
+            if now < _base[0]:
+                return now
+            _g, _ys, _n, _sel = _look_settled(look)
+            if _n != MAX_HAND_SIZE or card_index not in _sel:
+                return None
+            return _base[0]
+
+        # A RAISING LOOK MUST NOT LEAVE THE CARD'S STATE UNRECORDED (I-52 skeptic).
+        # `_discard_landed` calls `_look_settled(look)`, an IRREVERSIBLE press (the
+        # confirm_discard just sent) already sits between here and the caller, and
+        # neither of select_and_discard's two live callers wraps this call
+        # (`orchestrator.spend_and_discard`, `play_one_turn`) -- so an exception here
+        # used to propagate straight out with no `_mark_maybe_lifted`, no
+        # `invalidate_cursor`, a window the pre-verified code never had (it only
+        # called `discards_look`, which never raises). `select_bans_verified` carries
+        # the identical lesson ("an exception here used to leave the screen mid-change
+        # for the next poll to un-toggle") and the fix is the same shape: catch
+        # broadly, log loudly, and land on the SAME safe outcome as any other
+        # unverified case rather than an unrecorded one.
+        try:
+            landed, _sent = press_verified("confirm_discard", _discard_landed, log=print)
+        except Exception as e:
+            print(f"  [discard] reading the screen raised while verifying "
+                  f"confirm_discard ({type(e).__name__}: {e}) — treating as "
+                  "UNVERIFIED rather than leaving the card's true state unrecorded.")
             _mark_maybe_lifted({card_index})
             invalidate_cursor()
             return False
-        if not dropped:
-            # NOT THE SAME THING, AND IT USED TO BE. `dropped` was only ever set on
-            # `now is not None and now < before`, so FIVE ABSTENTIONS were
-            # indistinguishable from five readings that said the counter had not
-            # moved. A discard that really landed then exited reporting "did not
-            # register" about a press that was no longer there -- and the caller says
-            # "nothing thrown", after which an operator or a retry spends the SECOND
-            # of only two discards in the half.
-            print(f"  [discard] the counter never answered after the press "
-                  f"({DISCARD_CONFIRM_TRIES} tries) — the discard is UNVERIFIED, not "
-                  f"refused. Slot {card_index} may or may not have been thrown; the "
-                  "caller must re-read rather than retry blind.")
-            # I-43: confirm_discard was pressed and its result is genuinely
-            # unknown -- the card may still be selected.
+        if not landed:
+            # UNVERIFIED, not "did not register" -- `_discard_landed` answering None
+            # covers both "the counter never answers" and "it may have landed late",
+            # and neither licenses a retry: pressing confirm_play would PLAY slot
+            # card_index if the discard actually landed, and pressing confirm_discard
+            # again is the unguarded double-press this whole rewrite exists to avoid.
+            print(f"  [discard] confirm_discard is UNVERIFIED after {_sent} press(es) "
+                  f"— discards_left never proved it fell below {before}. Slot "
+                  f"{card_index} may or may not have been thrown; the caller must "
+                  "re-read rather than retry blind.")
+            # I-43: the card's true state is unproven.
             _mark_maybe_lifted({card_index})
             invalidate_cursor()
             return False
+        # CONFIRMED: discards_left measurably fell, which the game only does by
+        # processing the discard and dealing a replacement into card_index -- proof
+        # of a different (stronger) kind than a position read, so the slot is
+        # cleared even while its replacement still reads UNKNOWN (I-52).
+        _prove_maybe_lifted_clean({card_index})
     elif discards_look is not None:
         # THE COUNTER COULD NOT BE READ BEFORE THE PRESS. This used to print exactly
         # this and then RETURN TRUE, so one abstention on the pre-read disabled the
-        # whole proof and the verdict still read like a checked discard (10.1).
+        # whole proof and the verdict still read like a checked discard (10.1). Still
+        # presses once -- a discard worth attempting is worth attempting even when it
+        # cannot be proven -- it just cannot be VERIFIED, so nothing here retries it.
+        press("confirm_discard")
         print("  [discard] discards_left could not be read before the press, so the "
               "discard is UNVERIFIED — the card may or may not have been thrown. "
               "Returning False so the caller re-reads rather than assumes.")
@@ -2575,6 +2791,7 @@ def select_and_discard(card_index: int, look=None, discards_look=None):
         # NO SEAM AT ALL. A caller that passes no discards_look cannot be given a
         # verified answer, and saying True here is what let the production redraw
         # path believe a proof that never ran.
+        press("confirm_discard")
         # I-43: same reasoning -- confirm_discard was pressed, unverified.
         _mark_maybe_lifted({card_index})
         print("  [discard] no discards_look seam was passed, so nothing verified this "

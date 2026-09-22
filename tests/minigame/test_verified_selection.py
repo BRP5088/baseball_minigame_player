@@ -415,9 +415,9 @@ for _name, _line, _kw in _calls:
           f"instead of counting presses (keywords: {sorted(_kw) or 'none'})")
     # AND A DISCARD MUST CARRY ITS OWN SEAM, for the reason this scan already
     # exists. play_one_turn's redraw path passed look= and NOT discards_look=, so
-    # select_and_discard's entire post-press proof -- DISCARD_CONFIRM_TRIES, the
-    # retry loop, the refusing branch -- never executed on the live $50 ladder and
-    # the call returned True unconditionally. That proof was built in response to
+    # select_and_discard's entire post-press proof -- the retry loop (now
+    # press_verified, I-52), the refusing branch -- never executed on the live $50
+    # ladder and the call returned True unconditionally. That proof was built in response to
     # the 2026-09-16 incident (a swallowed Square press PLAYED the card instead of
     # discarding it) and it was dead on the one path the incident happened on.
     # Only spend_and_discard, the crawl helper, ever passed it.
