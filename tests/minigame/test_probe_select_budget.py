@@ -366,11 +366,33 @@ _real_look_h = orch.hand_cursor_look
 _real_attempts = ic._LAST_PROBE_ATTEMPTS
 _env_key = orch.REFUSED_SELECT_DIR_ENV
 _had_env, _old_env = _env_key in _os.environ, _os.environ.get(_env_key)
-orch.select_and_play = lambda *a, **k: False       # every play is refused
+
+_STALE_ATTEMPTS = [
+    {"attempt": 99, "glow": [9.9] * N, "ys": [100] * N, "selected": []}]
+_FRESH_ATTEMPTS = [
+    {"attempt": 1, "glow": [0.2] * N, "ys": [100] * N, "selected": []}]
+
+
+def _refuse_with_probe(*a, **k):
+    # I-51b: `_LAST_PROBE_ATTEMPTS` is only ever REBOUND (never mutated) inside
+    # _probe_select_blind_target -- mimic that rebind so the freshness check
+    # orchestrator.py's call site now does (identity moved since the play
+    # started) sees a probe that genuinely ran THIS call.
+    ic._LAST_PROBE_ATTEMPTS = list(_FRESH_ATTEMPTS)
+    return False
+
+
+def _refuse_without_probe(*a, **k):
+    # No rebind at all -- models a refusal whose WALK failed before any probe
+    # ran (or I-57's top-up ran instead of a probe): _LAST_PROBE_ATTEMPTS is
+    # whatever the LAST probe (from a different play) left behind.
+    return False
+
+
+orch.select_and_play = _refuse_with_probe          # every play is refused
 orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
 orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
-ic._LAST_PROBE_ATTEMPTS = [
-    {"attempt": 1, "glow": [0.2] * N, "ys": [100] * N, "selected": []}]
+ic._LAST_PROBE_ATTEMPTS = list(_STALE_ATTEMPTS)    # a record from a PRIOR play
 try:
     with tempfile.TemporaryDirectory() as tmp:
         _os.environ[_env_key] = tmp
@@ -379,8 +401,28 @@ try:
         dirs = [d for d in _os.listdir(tmp) if d.startswith("refused_select_")]
         check("(H) exactly one refused_select_* dir was written", len(dirs) == 1)
         why = json.load(open(_os.path.join(tmp, dirs[0], "why.json"))) if dirs else {}
-        check("(H) why.json carries probe_attempts from _LAST_PROBE_ATTEMPTS",
-              why.get("probe_attempts") == ic._LAST_PROBE_ATTEMPTS)
+        check("(H) why.json carries the FRESH probe_attempts this call rebound, "
+              "not the stale one seeded before it",
+              why.get("probe_attempts") == _FRESH_ATTEMPTS)
+
+        # --- (J) I-51b: a SECOND play, on the SAME process, that refuses
+        #         WITHOUT a probe ever running this call -- its why.json must
+        #         carry no probe_attempts (or an empty list), never the FRESH
+        #         list the FIRST play just left behind
+        # (agent_progress/census evidence: a 62-second-old record attached to
+        # an unrelated refusal) -------------------------------------------
+        orch.select_and_play = _refuse_without_probe
+        played2, info2 = orch.play_one_turn(_state_json, 0)
+        check("(J) play_one_turn reports the second refusal too",
+              played2 is False)
+        dirs2 = sorted(d for d in _os.listdir(tmp)
+                        if d.startswith("refused_select_"))
+        check("(J) two refusals were recorded", len(dirs2) == 2)
+        why2 = (json.load(open(_os.path.join(tmp, dirs2[1], "why.json")))
+                if len(dirs2) == 2 else {})
+        check("(J) the second refusal (no probe this call) carries no "
+              "probe_attempts -- a stale list must never be attached",
+              not why2.get("probe_attempts"))
 finally:
     orch.select_and_play = _real_sap
     orch._grab_settle_regions = _real_grab_h
@@ -664,10 +706,14 @@ print("mutant 7 (B2): orchestrator.play_one_turn's record_refused_select call "
 try:
     _mutate(
         ORCH_PATH,
+        '        _probe_ran_this_call = (\n'
+        '            id(input_controller._LAST_PROBE_ATTEMPTS) != _probe_attempts_before)\n'
         '        record_refused_select(\n'
         '            player_idx, "player+tactics" if tactics_idx is not None else "player",\n'
         '            _PLAY_STALL["n"],\n'
-        '            extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS})',
+        '            extra={"probe_attempts": (\n'
+        '                input_controller._LAST_PROBE_ATTEMPTS if _probe_ran_this_call\n'
+        '                else [])})',
         '        record_refused_select(\n'
         '            player_idx, "player+tactics" if tactics_idx is not None else "player",\n'
         '            _PLAY_STALL["n"])')
@@ -675,11 +721,13 @@ try:
     _real_sap_m7 = orch.select_and_play
     _real_grab_m7 = orch._grab_settle_regions
     _real_look_m7 = orch.hand_cursor_look
-    orch.select_and_play = lambda *a, **k: False
+    # a probe genuinely runs this call (the FRESH-rebind stub from case H) --
+    # if `extra=` were still wired up, probe_attempts WOULD be present, so
+    # this mutant is caught by its absence, not by the freshness check.
+    orch.select_and_play = _refuse_with_probe
     orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
     orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
-    ic._LAST_PROBE_ATTEMPTS = [
-        {"attempt": 1, "glow": [0.2] * N, "ys": [100] * N, "selected": []}]
+    ic._LAST_PROBE_ATTEMPTS = list(_STALE_ATTEMPTS)
     try:
         with tempfile.TemporaryDirectory() as tmp:
             _os.environ[orch.REFUSED_SELECT_DIR_ENV] = tmp
@@ -693,6 +741,47 @@ try:
         orch.select_and_play = _real_sap_m7
         orch._grab_settle_regions = _real_grab_m7
         orch.hand_cursor_look = _real_look_m7
+        _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
+finally:
+    _restore_orch()
+
+# --- mutant 9 (I-57 B2 / I-51b): the freshness check is bypassed --
+# `_probe_ran_this_call` always True, so a SECOND play that never probed still
+# gets the FIRST play's list attached -- case J must fail --------------------
+print("mutant 9 (I-51b): the freshness check is bypassed -- a stale "
+      "probe_attempts list is attached even when no probe ran this call -- "
+      "case J must fail")
+try:
+    _mutate(
+        ORCH_PATH,
+        '        _probe_ran_this_call = (\n'
+        '            id(input_controller._LAST_PROBE_ATTEMPTS) != _probe_attempts_before)\n',
+        '        _probe_ran_this_call = True  # MUTANT (I-51b test): never False\n')
+    _reload_orch()
+    _real_sap_m9 = orch.select_and_play
+    _real_grab_m9 = orch._grab_settle_regions
+    _real_look_m9 = orch.hand_cursor_look
+    orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
+    orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
+    ic._LAST_PROBE_ATTEMPTS = list(_STALE_ATTEMPTS)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            _os.environ[orch.REFUSED_SELECT_DIR_ENV] = tmp
+            orch.select_and_play = _refuse_with_probe
+            orch.play_one_turn(_state_json, 0)             # play 1: DID probe
+            orch.select_and_play = _refuse_without_probe
+            orch.play_one_turn(_state_json, 0)             # play 2: did NOT
+            dirs = sorted(d for d in _os.listdir(tmp)
+                          if d.startswith("refused_select_"))
+            why2 = (json.load(open(_os.path.join(tmp, dirs[1], "why.json")))
+                    if len(dirs) == 2 else {})
+            check("mutant 9 caught: the second (no-probe) refusal wrongly "
+                  "carries the first play's stale probe_attempts",
+                  bool(why2.get("probe_attempts")))
+    finally:
+        orch.select_and_play = _real_sap_m9
+        orch._grab_settle_regions = _real_grab_m9
+        orch.hand_cursor_look = _real_look_m9
         _os.environ.pop(orch.REFUSED_SELECT_DIR_ENV, None)
 finally:
     _restore_orch()
@@ -781,9 +870,8 @@ check("post-restore sanity: case E passes again", ok is True and cur == 2 and 2 
 with tempfile.TemporaryDirectory() as tmp:
     orch._grab_settle_regions = lambda regions: {"hand": Image.new("L", (10, 10))}
     orch.hand_cursor_look = lambda: ([0.0] * N, list(REST), N, [])
-    orch.select_and_play = lambda *a, **k: False
-    ic._LAST_PROBE_ATTEMPTS = [{"attempt": 1, "glow": [0.0] * N, "ys": [100] * N,
-                                 "selected": []}]
+    orch.select_and_play = _refuse_with_probe
+    ic._LAST_PROBE_ATTEMPTS = list(_STALE_ATTEMPTS)
     try:
         _os.environ[orch.REFUSED_SELECT_DIR_ENV] = tmp
         orch.play_one_turn(_state_json, 0)
@@ -795,7 +883,7 @@ with tempfile.TemporaryDirectory() as tmp:
     dirs = [d for d in _os.listdir(tmp) if d.startswith("refused_select_")]
     why = json.load(open(_os.path.join(tmp, dirs[0], "why.json"))) if dirs else {}
     check("post-restore sanity: case H's probe_attempts is back",
-          "probe_attempts" in why)
+          why.get("probe_attempts") == _FRESH_ATTEMPTS)
 
 s = GarbledScreen()
 ic.press = s.press
@@ -814,5 +902,5 @@ if fails:
     for f in fails:
         print("  FAIL:", f)
     _sys.exit(1)
-print("  all eight mutants caught, input_controller.py and orchestrator.py "
+print("  all nine mutants caught, input_controller.py and orchestrator.py "
       "restored byte-for-byte")

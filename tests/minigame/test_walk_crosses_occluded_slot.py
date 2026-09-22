@@ -80,6 +80,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
 _sys.path.insert(0, _ROOT)
 
 import input_controller as ic                                        # noqa: E402
+import local_hand as _local_hand                                     # noqa: E402
 
 fails = []
 
@@ -146,6 +147,38 @@ class Screen:
             self.cur = max(0, self.cur - 1)
         elif key == "move_right":
             self.cur = min(N - 1, self.cur + 1)
+
+
+class ScriptedScreen:
+    """Cursor reads driven by an explicit SCRIPT of `local_hand.cursor_slot`
+    return values, one entry consumed per press -- for I-57 skeptic cases
+    `Screen`'s press-tracked movement model cannot represent: a read that goes
+    BLIND for a reason other than the target's own occlusion (a routine
+    dropped/garbled press, same shape as `miss_after_press` elsewhere in this
+    file, but at an arbitrary point inside the top-up rather than tied to a
+    press call number), or a cursor whose READ appears to move backward
+    without any `move_left` ever being sent (a transient misread, not a real
+    move -- CLAUDE.md 10.35's "any box placed ON a card reads bright whether
+    or not the cursor is there" is exactly this shape one level up).
+
+    `ys` is always fully readable and `look()` always returns a valid
+    MAX_HAND_SIZE-row frame; only what `cursor_slot` reports on top of that
+    frame is scripted. Used with `local_hand.cursor_slot` monkeypatched (see
+    the callers below), never against the real reader.
+    """
+
+    def __init__(self, script):
+        self._it = iter(script)
+        self.sent = []
+
+    def look(self):
+        return [5.0] * N, [100] * N, N, []
+
+    def press(self, key):
+        self.sent.append(key)
+
+    def next_cur(self, glow, sel, exclude=None):
+        return next(self._it)
 
 
 import io as _io
@@ -299,6 +332,288 @@ try:
     # this file's own fix never touches either, so the two must still agree.
     check("PROBE_SELECT_MAX untouched by this file's fix",
           ic.PROBE_SELECT_MAX == ic.PRESS_VERIFY_TRIES)
+
+    # ---------------------------------------------------------------- I-57 --
+    # agent_progress/census/stuck_after_half/progress.md:
+    # overnight/run_live_20260921x.log:465 -- "still at 3 after 8 presses --
+    # refusing", target 4, the kept frame reading CLEANLY (fan fully dealt, glow
+    # 21.2 on slot 3, unambiguous) -- the reads were confident and the presses
+    # were dropped in a cluster, not lost. The next poll reached 4 in ONE press.
+    # `CURSOR_MAX_STEPS` counts presses SENT, not moves REFLECTED, so a walk that
+    # is confirmed moving (or already one hop from target) gets up to
+    # PRESS_VERIFY_TRIES more look-gated presses before refusing -- a walk that
+    # never moved at all (the OTHER 11 archived "still at N after 8" lines, a
+    # chronic-occlusion shape) must still refuse exactly as before, with zero
+    # top-up.
+
+    # --- (W) 8 presses, 6 dropped in a cluster at the end -- the cursor is
+    #         CONFIRMED moving (1 -> 3, first_cur=1) when the cap is hit, so the
+    #         walk gets a real look-gated press toward the target rather than
+    #         refusing one hop short; total presses <= CURSOR_MAX_STEPS +
+    #         PRESS_VERIFY_TRIES --------------------------------------------
+    s = Screen(cur=1, drop_press={3, 4, 5, 6, 7, 8})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(W) arrives after the top-up reaches the target", ok is True)
+    check("(W) the top-up is logged, naming the move since the walk began",
+          "moved since the walk began (1 -> 3)" in out)
+    check("(W) no more than CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses sent",
+          len(s.sent) <= ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES)
+    check("(W) every press sent was toward the target",
+          all(k == "move_right" for k in s.sent))
+
+    # --- (X) CONTROL -- the cursor never moved in 8 presses (every one dropped
+    #         from the first): the chronic-occlusion shape must still refuse
+    #         with ZERO top-up, exactly as it did before this fix. The
+    #         false-cursor-exclude branch above ALSO fires on `cur == first_cur`
+    #         and takes priority, so it would mask this file's own guard on the
+    #         very first round -- FALSE_CURSOR_EXCLUDE_MAX is dropped to 0 here
+    #         (same monkeypatch shape as test_false_cursor_on_occluded_slot.py's
+    #         part (d)) so the cap-hit falls straight through to THIS branch
+    #         with `cur == first_cur` still true, which is the only way to
+    #         exercise the guard this test exists to pin -----------------------
+    _real_exclude_max = ic.FALSE_CURSOR_EXCLUDE_MAX
+    try:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = 0
+        s = Screen(cur=0, drop_press={1, 2, 3, 4, 5, 6, 7, 8})
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(X) a cursor that never moved at all is refused", ok is False)
+        check("(X) the top-up never fires when the cursor never moved",
+              "allowing up to" not in out)
+        check("(X) no presses beyond the original budget were sent",
+              len(s.sent) == ic.CURSOR_MAX_STEPS)
+    finally:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = _real_exclude_max
+
+    # --- (Y) the cursor moves during the first 8 (1 -> 3, granting the top-up),
+    #         but every one of the top-up's own presses is ALSO dropped -- it
+    #         must still refuse, having spent EXACTLY the extended budget -----
+    s = Screen(cur=1, drop_press={3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(Y) refuses once the top-up budget is also spent", ok is False)
+    check("(Y) exactly CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses sent",
+          len(s.sent) == ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES)
+    check("(Y) the top-up was granted exactly once",
+          out.count("allowing up to") == 1)
+
+    # --- (Z) CONTROL -- a normal walk with no drops and no occlusion never
+    #         reaches the cap at all, so the top-up never fires and the press
+    #         count is exactly what it always was ---------------------------
+    s = Screen(cur=0)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(Z) CONTROL: a normal walk still arrives", ok is True)
+    check("(Z) CONTROL: exactly 4 presses, no top-up logic touched",
+          s.sent == ["move_right"] * 4)
+    check("(Z) CONTROL: the top-up never fires on an unremarkable walk",
+          "allowing up to" not in out)
+
+    # ---------------------------------------------------------- I-57 skeptic --
+    # agent_progress/issues/I-57/skeptic.md, REFUTED fda9436: finding 1
+    # (fatal, a None read during the top-up crashed with TypeError), finding 2
+    # (the true worst-case bound was 18 presses, not the claimed 13, because
+    # I-53's own retry spends its budget BEFORE the top-up is even granted),
+    # note 3 (an oscillating cursor that lands back on first_cur at cap time
+    # got no top-up even though it clearly did move). These three cases pin
+    # the redo. `local_hand.cursor_slot` is monkeypatched to a SCRIPT via
+    # ScriptedScreen -- the only way to put a blind read or an apparent
+    # backward move at an exact point in the top-up without also faking a
+    # real movement model for it.
+    _real_cursor_slot = _local_hand.cursor_slot
+
+    # --- (V) finding 1: a None read on top-up press 2 must not crash. Base
+    #         walk climbs 0 -> 3 over 8 presses (steps: 1,2,3,3,3,3,3,3), then
+    #         the top-up's own first extra press ALSO goes blind (this is the
+    #         exact point the unfixed code crashed at, one iteration earlier
+    #         than the skeptic's own repro even needed), and the THIRD press
+    #         (the recovery) reaches the target -- no exception, bounded,
+    #         arrives ------------------------------------------------------
+    try:
+        _script = iter([0,                          # first_cur
+                         1, 2, 3, 3, 3, 3, 3, 3,     # 8 base presses
+                         None, None,                 # 2 blind top-up reads
+                         4])                         # 3rd top-up press: target
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(V) no exception, and the walk ARRIVES once the blind reads clear",
+              ok is True)
+        check("(V) exactly 11 presses (8 base + 3 top-up)", len(s.sent) == 11)
+        check("(V) no more than CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses",
+              len(s.sent) <= ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES)
+        check("(V) still logs the top-up grant", "allowing up to" in out)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (U) finding 2: I-53's own retry spends its budget BEFORE the top-up
+    #         is granted -- 6 ordinary presses, then an occluded-slot dead-
+    #         reckon, then I-53's retry running its full 5 tries (steps hits
+    #         13 there, before the top-up branch is ever reached). The ENFORCED
+    #         bound must be 13, not 18: the top-up's own budget check (BEFORE
+    #         every top-up press) must see the budget already spent and send
+    #         ZERO top-up presses, refusing at exactly 13 -------------------
+    try:
+        _script = iter([0,                               # first_cur
+                         0, 0, 0, 0, 0, 0,                # 6 ordinary presses
+                         None,                             # press 7: occluded
+                                                            # slot 1 -> dead-
+                                                            # reckon (cur is SET
+                                                            # by the branch
+                                                            # itself, not read)
+                         None,                             # press 8: the very
+                                                            # next read, also
+                                                            # blind -- this is
+                                                            # what triggers
+                                                            # was_dead_reckoned's
+                                                            # OWN retry loop
+                         None, None, None, None,           # I-53 retry 1-4: miss
+                         2,                                 # I-53 retry 5: off-
+                                                            # target, resolves --
+                                                            # steps=13 here
+                         ])                                 # top-up: 0 presses
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+
+        def _u_look():
+            ys = [100] * N
+            ys[1] = None  # slot 1 permanently occluded -- dead-reckon eligible
+            return [5.0] * N, ys, N, []
+
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, _u_look)
+        out = buf.getvalue()
+        check("(U) refuses once the STACKED budget (I-53 + top-up) is spent",
+              ok is False)
+        check("(U) exactly CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses -- "
+              "18 (the skeptic's unfixed number) must NOT appear",
+              len(s.sent) == ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES == 13)
+        check("(U) the top-up was granted but sent zero presses of its own",
+              "allowing up to" in out and "already spent by earlier retries" in out)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (M) note 3: the cursor moves away on press 1, then OSCILLATES back
+    #         to first_cur and stays there for the rest of the base walk. At
+    #         cap time cur == first_cur, but it clearly DID move -- the
+    #         false-cursor-exclude branch must NOT treat this as a chronic
+    #         false reading, and the top-up must fire instead -------------
+    try:
+        _script = iter([0,                          # first_cur
+                         1, 0, 0, 0, 0, 0, 0, 0,     # 8 base presses: away then
+                                                      # back, stays at first_cur
+                         1, 2, 3, 4])                # top-up reaches the target
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(M) moved-and-back is treated as MOVED -- arrives via top-up",
+              ok is True)
+        check("(M) the top-up fired rather than the false-cursor exclusion",
+              "allowing up to" in out and "false cursor" not in out)
+        check("(M) names the oscillation explicitly",
+              "moved since the walk began and returned to its start" in out)
+        check("(M) exactly 12 presses (8 base + 4 top-up)", len(s.sent) == 12)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (G) I-57 skeptic ROUND 2: `_ever_moved` must NOT latch on a dead-
+    #         reckon's own GUESS. Occluded slot 1 triggers exactly one guess
+    #         (cur := 1, no read behind it at all); the very next REAL read
+    #         confirms the cursor is still on first_cur, and every remaining
+    #         real read for the rest of the base budget agrees -- the walk
+    #         never actually moved. At cap time `_ever_moved` must be False,
+    #         so the I-25 false-cursor-exclude branch fires (not the I-57
+    #         top-up), and once that exclusion also finds nothing lit, the
+    #         walk refuses -- agent_progress/issues/I-57/
+    #         repro_ever_moved_from_guess.py -----------------------------
+    try:
+        _script = iter([0,                    # first_cur (call 0)
+                         None,                 # call 1: occluded slot 1 ->
+                                                # dead-reckon guesses cur=1,
+                                                # ZERO reads confirm it
+                         0, 0, 0, 0, 0, 0, 0,  # calls 2-8: seven REAL reads,
+                                                # every one names first_cur --
+                                                # the guess was never right
+                         None])                # call 9: I-25's own exclusion
+                                                # confirmation -- nothing else
+                                                # lit either
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+
+        def _g_look():
+            ys = [100] * N
+            ys[1] = None  # slot 1 permanently occluded -- the ONE guess
+            return [5.0] * N, ys, N, []
+
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, _g_look)
+        out = buf.getvalue()
+        check("(G) a guess-only walk that never actually moved refuses",
+              ok is False)
+        check("(G) the I-25 false-cursor-exclude branch fired, naming slot 0",
+              "treating slot 0 as a false cursor" in out)
+        check("(G) the I-57 top-up never fired -- the guess did not latch "
+              "_ever_moved",
+              "allowing up to" not in out)
+        check("(G) exactly 8 presses -- no top-up extension", len(s.sent) == 8)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (H) CONTROL for (G) -- the identical away-then-back shape, but the
+    #         move is a CONFIRMED read (no occlusion anywhere), never a
+    #         guess. This time `_ever_moved` MUST latch, so the I-57 top-up
+    #         fires instead of the I-25 exclusion -- proving (G)'s refusal
+    #         comes from the guess never counting toward a move, not from
+    #         the false-cursor-exclude branch being unreachable for some
+    #         unrelated reason ------------------------------------------
+    try:
+        _script = iter([0,                    # first_cur (call 0)
+                         1,                    # call 1: a REAL read -- the
+                                                # cursor genuinely moved to 1
+                         0, 0, 0, 0, 0, 0, 0,  # calls 2-8: seven real reads,
+                                                # back at first_cur
+                         1, 2, 3, 4])          # top-up reaches the target
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(H) CONTROL: a confirmed away-then-back move arrives via the "
+              "top-up", ok is True)
+        check("(H) CONTROL: _ever_moved latched -- the top-up fired, not "
+              "the I-25 exclusion",
+              "allowing up to" in out and "false cursor" not in out)
+        check("(H) CONTROL: exactly 12 presses (8 base + 4 top-up)",
+              len(s.sent) == 12)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
 finally:
     ic.press = _real_press
 

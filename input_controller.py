@@ -1138,7 +1138,29 @@ def _walk_cursor_to(target, look):
     # (or an occluded slot right next to a genuinely dropped press) still refuse: see
     # the `dead_reckoned_last` check below, and I-32's task note.
     dead_reckoned_last = False
+    # I-57: granted at most once per walk -- see the branch below that uses it.
+    _topup_used = False
+    # I-57 skeptic note 3: True once a CONFIRMED read has ever named a slot other
+    # than `first_cur` -- so a cursor that moved away and OSCILLATED back to
+    # `first_cur` exactly when the cap fires is still "moved", not "never moved".
+    # Only ever set True, never cleared, so a later return to `first_cur` cannot
+    # un-set it. Read at the top of every iteration, before anything else looks
+    # at `cur` this round.
+    #
+    # I-57 skeptic ROUND 2: the check below must gate on `not dead_reckoned_last`
+    # -- without it, a dead-reckon's OWN `cur = expected` guess (I-32, no read
+    # behind it at all) lands here on the very next iteration with `cur !=
+    # first_cur` from the guess alone, latching `_ever_moved` before a single
+    # real look ever confirmed a move. `dead_reckoned_last` is exactly the flag
+    # this function already carries for "the last `cur` is a GUESS, not a read"
+    # (reused, not invented) -- it is True only immediately after a dead-reckon's
+    # own `continue`, and the ordinary per-step path resets it to False on every
+    # real look, so a genuinely confirmed difference from `first_cur` still
+    # latches normally.
+    _ever_moved = False
     while cur != target:
+        if cur is not None and cur != first_cur and not dead_reckoned_last:
+            _ever_moved = True
         if steps >= CURSOR_MAX_STEPS:
             # EIGHT LANDED PRESSES CANNOT LEAVE THE CURSOR IN PLACE (I-25). Section 5
             # measures the console dropping at most 15.20% of presses, clustered but
@@ -1152,7 +1174,13 @@ def _walk_cursor_to(target, look):
             # never once moved the argmax winner. Exclude the false slot and see
             # whether the real cursor is hiding under the gate elsewhere; bounded so
             # this cannot loop forever writing off slots that were never the problem.
-            if cur == first_cur and cur not in excluded and len(excluded) < FALSE_CURSOR_EXCLUDE_MAX:
+            # I-57 skeptic note 3: a cursor that MOVED AWAY and then oscillated
+            # back to `first_cur` is not this branch's "same slot before the
+            # first press and after every single one of the eight" premise --
+            # `_ever_moved` excludes it here so it falls through to the top-up
+            # branch below instead of being written off as a false reading.
+            if (cur == first_cur and not _ever_moved and cur not in excluded
+                    and len(excluded) < FALSE_CURSOR_EXCLUDE_MAX):
                 excluded.add(cur)
                 print(f"  [cursor] still at {cur} after {steps} presses with no change "
                       f"— treating slot {cur} as a false cursor and excluding it")
@@ -1173,6 +1201,75 @@ def _walk_cursor_to(target, look):
                 cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
                 steps = 0
                 continue
+            # I-57: THE CAP COUNTS PRESSES SENT, NOT MOVES REFLECTED
+            # (agent_progress/census/stuck_after_half/progress.md;
+            # overnight/run_live_20260921x.log:465 -- "still at 3 after 8 presses --
+            # refusing", target 4, the kept frame reading cleanly; the very next poll
+            # reached 4 in ONE press). A drop cluster on the last hop refuses a walk
+            # that was one step away and CONFIRMED moving -- a different shape from the
+            # 11 archived "still at N after 8" refusals, which never moved at all and
+            # stay refused (that is the branch above, `cur == first_cur and not
+            # _ever_moved`). Extend the budget by PRESS_VERIFY_TRIES (reused, not
+            # invented) only when the latest confident read proves the walk is live:
+            # the cursor has moved since it began (cur != first_cur), it moved and
+            # OSCILLATED back to first_cur (`_ever_moved`, skeptic note 3 --
+            # moved-and-back counts as moved), or it already sits one hop from target.
+            if not _topup_used and (cur != first_cur or _ever_moved
+                                     or abs(cur - target) == 1):
+                _topup_used = True
+                if cur != first_cur:
+                    why = f"it moved since the walk began ({first_cur} -> {cur})"
+                elif _ever_moved:
+                    why = "it moved since the walk began and returned to its start"
+                else:
+                    why = f"it is one hop from target {target}"
+                print(f"  [cursor] still at {cur} after {steps} presses, but {why} — "
+                      f"allowing up to {PRESS_VERIFY_TRIES} more look-gated presses "
+                      "toward the target rather than refusing")
+                # I-57 skeptic finding 1: `cur` can go None DURING this loop (a
+                # blind read is routine here, same as everywhere else in this
+                # function) -- comparing `cur < target` on the NEXT iteration would
+                # then raise TypeError. Track the last CONFIRMED direction instead
+                # of re-deriving it from `cur` every press, and never touch it on a
+                # blind read; a dropped/blind press still counts against the
+                # budget and the walk simply tries again.
+                _topup_dir = "move_right" if cur < target else "move_left"
+                # I-57 skeptic finding 2: the ENFORCED bound for the whole walk is
+                # CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES, counting every press this
+                # call has sent (`steps` already does) -- not "PRESS_VERIFY_TRIES
+                # more, on top of however much I-53's own retry already spent
+                # before the top-up was granted". Checked BEFORE every top-up
+                # press, so the two budgets can never stack past this number.
+                _topup_budget = CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES
+                for _extra in range(1, PRESS_VERIFY_TRIES + 1):
+                    if steps >= _topup_budget:
+                        print(f"  [cursor] the top-up's own budget is already spent "
+                              f"by earlier retries this walk ({steps} presses) — "
+                              "refusing rather than exceeding CURSOR_MAX_STEPS + "
+                              f"PRESS_VERIFY_TRIES ({_topup_budget})")
+                        break
+                    press(_topup_dir)
+                    steps += 1
+                    time.sleep(MOVE_SETTLE_SEC)
+                    glow, ys, n, sel = _look_settled(look)
+                    if n != MAX_HAND_SIZE:
+                        print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) "
+                              "— refusing")
+                        return False, sel
+                    cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                    if cur is not None:
+                        cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
+                        if cur == target:
+                            break
+                        _topup_dir = "move_right" if cur < target else "move_left"
+                    # else: this one press's read stayed blind -- `_topup_dir`
+                    # is left untouched (never compare a None `cur`) and the loop
+                    # tries again toward the last confirmed direction.
+                if cur is not None:
+                    continue
+                print(f"  [cursor] still lost after the extra presses (glow={glow}) "
+                      "— refusing")
+                return False, sel
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
         prev = cur

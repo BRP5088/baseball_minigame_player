@@ -4661,3 +4661,166 @@ checks pass), `test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
 
 **Status.** merged cb5d72e (fix f5e7572 + notes 0e6fa49; Opus skeptic CONFIRMED
 WITH NOTES, all four notes closed).
+
+### I-57  The cursor-walk cap counts presses sent, not moves made; a drop cluster on the last hop refuses a walk that was one step away   P1  input
+
+**Evidence.** `agent_progress/census/stuck_after_half/progress.md` (main checkout).
+`overnight/run_live_20260921x.log:465`: `still at 3 after 8 presses — refusing`,
+target 4, first play after a half boundary. The kept post-refusal frame reads
+cleanly -- the fan is fully dealt, glow 21.2 on slot 3, unambiguous -- so the
+reads were CONFIDENT and the presses were dropped in a cluster, not lost. The
+very next poll reached slot 4 in ONE press. 1 of 68 half boundaries in the
+corpus; the other 11 archived `still at N after 8` lines are a DIFFERENT shape
+(`overnight/run_live_20260920g.log`): the cursor read the SAME slot for all 8
+presses with no movement ever, which is chronic occlusion, out of scope here.
+
+**Root cause.** `input_controller._walk_cursor_to`'s `CURSOR_MAX_STEPS` (8)
+counts every press SENT (`steps += 1` on the plain per-step path, ~:1181), never
+a move REFLECTED. Section 5 measures the console dropping 15.20% of presses,
+CLUSTERED (P(ignore | previous ignored) = 0.250), so a cluster landing on the
+LAST hop of a walk is routine, not rare. The existing recovery branches
+(I-02's blind-target probe, I-53's dead-reckon retry) only fire on an
+AMBIGUOUS read (`cur is None`) -- a confident read that simply never changes
+gets none of them, and the cap's own false-cursor-exclude branch (I-25) only
+fires when `cur == first_cur` (the cursor never moved at all since the walk
+began), so a cursor that moved PART of the way and then got stuck by a drop
+cluster falls straight through to the plain refusal.
+
+**Fix, ROUND 1** (commit fda9436), `input_controller._walk_cursor_to` only, inside
+the `if steps >= CURSOR_MAX_STEPS:` branch, after the existing
+false-cursor-exclude check: granted AT MOST ONCE per walk (`_topup_used`), when
+the cap is hit while the latest confident read shows the walk is LIVE -- the
+cursor moved since it began (`cur != first_cur`) or it already sits one hop
+from the target (`abs(cur - target) == 1`) -- press up to `PRESS_VERIFY_TRIES`
+(5, reused, nothing invented) further look-gated presses toward the target
+before refusing.
+
+**REFUTED, `agent_progress/issues/I-57/skeptic.md`, fda9436.** Two findings,
+both reproduced against the unmodified commit before anything was touched:
+
+    finding 1 (fatal)   a blind read (`cur is None`, routine everywhere else in
+                       this function) DURING the top-up left `cur` None, and
+                       the NEXT iteration's `press("move_right" if cur < target
+                       else "move_left")` raised `TypeError: '<' not supported
+                       between instances of 'NoneType' and 'int'` --
+                       repro_none_crash.py. Escapes into run()'s broad except
+                       AFTER forget_hand_slot already marked the card spent
+                       (hand-memory desync), not merely "caught and retried".
+    finding 2           the true worst case was 18 presses, not the claimed 13:
+                       I-53's own `was_dead_reckoned` retry increments the SAME
+                       `steps` the cap reads, and the cap is only checked at
+                       the TOP of the outer `while` -- so `steps` can already
+                       be at 13 (from 6 ordinary presses + a dead-reckon + a
+                       full 5-try I-53 retry) BEFORE the top-up is even
+                       granted, which then adds its own 5 on top --
+                       repro_overrun2.py, "VIOLATION (18 vs 13)".
+    note 3              an oscillating cursor landing back on `first_cur`
+                       exactly when the cap fires got NO top-up, because the
+                       pre-existing (I-25) false-cursor-exclude branch has
+                       priority on `cur == first_cur` regardless of whether the
+                       cursor was ever seen anywhere else.
+
+**Fix, ROUND 2 (this redo), same function, all three:**
+
+1. **None-safety (finding 1).** The top-up loop now tracks the last CONFIRMED
+   direction in `_topup_dir`, set once before the loop and updated ONLY on a
+   non-None read -- never compared against `cur` directly. A blind top-up
+   press still counts against the budget and re-looks on the next iteration
+   toward the same retained direction; if every extra press stays blind, it
+   falls through to the existing refusal exactly as before. No `cur < target`
+   comparison exists anywhere `cur` can be `None`.
+2. **Enforced bound, 13, not 18 (finding 2).** `_topup_budget = CURSOR_MAX_STEPS
+   + PRESS_VERIFY_TRIES`, checked BEFORE every top-up press against `steps`
+   (which already counts every press this call has sent, including whatever
+   I-53's own retry spent before the top-up was granted). If the budget is
+   already gone, the top-up sends ZERO of its own presses and the walk refuses
+   at exactly the number `steps` already holds. **Total presses per walk are
+   hard-capped at `CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES` == 13, always** --
+   not "13 more on top of whatever else ran first".
+3. **`_ever_moved`, moved-and-back counts as moved (note 3).** A flag set
+   (never cleared) the instant a confirmed read differs from `first_cur`,
+   checked at the top of every iteration. The false-cursor-exclude branch's
+   guard gained `and not _ever_moved` (so it no longer claims a cursor that
+   demonstrably moved at some point); the top-up branch's guard gained
+   `or _ever_moved` (so that cursor gets the top-up instead).
+
+Both repro scripts re-run clean against the fixed code: `repro_none_crash.py`
+now returns `False []` (refuses at 13, no exception); `repro_overrun.py` and
+`repro_overrun2.py` both report `TOTAL PRESSES SENT: 13`, `within bound`.
+
+**Verify.** `tests/minigame/test_walk_crosses_occluded_slot.py`: round-1 cases
+(W) 8 presses, 6 dropped at the end, cursor moved 1 -> 3 -> top-up reaches 4,
+total <= 13; (X) CONTROL, never moved (chronic-occlusion shape,
+`FALSE_CURSOR_EXCLUDE_MAX` dropped to 0 so the priority branch doesn't mask
+this one) -> refused with ZERO top-up; (Y) top-up granted but every one of its
+own presses also dropped -> refuses at EXACTLY 13; (Z) CONTROL, a normal walk
+never reaches the cap. Round-2 cases, via a `ScriptedScreen` fixture
+(`local_hand.cursor_slot` monkeypatched to an explicit read sequence -- neither
+finding is representable through `Screen`'s press-tracked movement model): (V)
+two consecutive None reads inside the top-up (the skeptic's own crash shape)
+-> no exception, arrives at 11 presses; (U) I-53's retry stacks with the
+top-up (6 ordinary presses, an occluded-slot dead-reckon, I-53's own 5-try
+retry resolving off-target at steps=13) -> refuses at EXACTLY 13, top-up
+granted but sends zero of its own, 18 never appears; (M) cursor moves away on
+press 1, oscillates back to `first_cur`, stays there -> top-up fires (not
+false-cursor exclusion), arrives at 12 presses. Also green, unchanged:
+`tests/minigame/test_false_cursor_on_occluded_slot.py`.
+
+**Mutants (7 this round, `__pycache__` cleared before/after each, sha256-verified
+restore to `5f6c5a34f6952698d9118c6fe585e68dc52394862ce4822b7f53c9d3ec0016d2`;
+2 from round 1 re-verified against the new code):**
+
+    direction inverted (skeptic's #1: `cur < target` -> `cur > target` on the
+    ONE line that sets `_topup_dir` before the loop)
+        -> (W) FAILS ("every press sent was toward the target")
+    unbounded top-up, `_topup_used` latch dropped (skeptic's #2)
+        -> HANGS (infinite loop: the cap re-fires every outer iteration, grants
+           "another" top-up each time, and the budget check sends zero presses
+           forever with no forward progress -- confirms BOTH guards are load-
+           bearing, not just the budget check alone)
+    finding 1 reintroduced: `press(_topup_dir)` -> raw `cur < target` compare
+        -> (V) CRASHES with the exact TypeError the skeptic reported
+    finding 2 reintroduced: the `steps >= _topup_budget` check dropped
+        -> (U) FAILS (StopIteration -- the walk tries to press past what a
+           13-press-bounded scenario provisions, i.e. it exceeds 13)
+    note 3 reintroduced: `_ever_moved` dropped from both guards
+        -> (M) FAILS all four checks (routed into false-cursor-exclude instead)
+    [round 1] drop the top-up entirely
+        -> (W)(Y)(V)(U)(M) FAIL
+    [round 1] top up even when never moved
+        -> (X) FAILS
+
+**Status.** REDONE here after REFUTED on fda9436; tests green, all 7 mutants
+this round caught (plus 2 round-1 mutants re-verified), both skeptic repros
+clean; not yet merged. The enforced bound is **13**, always, regardless of what
+consumed the budget first.
+
+### I-51b  A refusal that never probed this call can still carry a STALE probe_attempts list from a previous play   P2  evidence
+
+`input_controller._LAST_PROBE_ATTEMPTS` is reset only INSIDE
+`_probe_select_blind_target` (rebound, not mutated -- `global
+_LAST_PROBE_ATTEMPTS; _LAST_PROBE_ATTEMPTS = []`). `orchestrator.play_one_turn`'s
+`record_refused_select` call (~:8485) always attached it on a refusal, whether
+or not a probe ran THIS call -- a walk failure or I-57's own top-up (above) never
+touch it, so a refusal that never probed still points at whatever list the LAST
+play that DID probe left behind. `agent_progress/census` evidence: a
+62-second-old record attached to an unrelated refusal.
+
+**Fix**, `orchestrator.py` only, at the `record_refused_select` call site.
+Since `_probe_select_blind_target` REBINDS the name rather than mutating it in
+place, its identity changes exactly when a probe ran -- snapshot
+`id(input_controller._LAST_PROBE_ATTEMPTS)` before the play and attach the real
+list only if that identity moved since; otherwise attach an empty list. A
+stale list is never attached.
+
+**Verify.** `tests/minigame/test_probe_select_budget.py`, case (H) reworked to
+prove the fix positively (the stub REBINDS `_LAST_PROBE_ATTEMPTS` inside the
+call, mimicking a real probe, and why.json carries that fresh list rather than
+a stale one seeded beforehand) and a new case (J): two plays on the same
+process, the second refusing WITHOUT a probe running that call -- its why.json
+carries no `probe_attempts` (an empty list), never the first play's list.
+Mutant 7 (B2, pre-existing) updated to the new call-site anchor; a new mutant 9
+bypasses the freshness check (`_probe_ran_this_call = True` unconditionally) --
+caught by case (J) attaching the stale list.
+
+**Status.** built here, tests green, mutants caught; not yet merged.

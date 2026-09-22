@@ -8751,6 +8751,16 @@ def play_one_turn(state_json: dict, batters_used: int):
     #
     # Both slots are SPENT (the tactics one too, when one was attached).
     forget_hand_slot(player_idx, tactics_idx)
+    # I-51b: `_LAST_PROBE_ATTEMPTS` is reset only INSIDE _probe_select_blind_target,
+    # so a play that refuses without a probe ever running this call (the walk itself
+    # failed, or I-57's top-up ran instead) still points at whatever list the LAST
+    # play that DID probe left behind -- a 62-second-old record attached to an
+    # unrelated refusal (agent_progress/census evidence). `_probe_select_blind_target`
+    # REBINDS the name (`global _LAST_PROBE_ATTEMPTS; _LAST_PROBE_ATTEMPTS = []`)
+    # rather than mutating the list in place, so its identity changes exactly when a
+    # probe ran; snapshot it before the play and attach the real list only if that
+    # identity moved -- a stale list must never be attached.
+    _probe_attempts_before = id(input_controller._LAST_PROBE_ATTEMPTS)
     if select_and_play(player_idx, tactics_idx, look=hand_cursor_look) is False:
         note_play_refused()
         # I-51 SKEPTIC B2: without `extra`, input_controller._LAST_PROBE_ATTEMPTS
@@ -8759,10 +8769,14 @@ def play_one_turn(state_json: dict, batters_used: int):
         # call, so a bound-at-import copy would go stale the first time it ran.
         # select_and_play can probe TWICE in one call (once per target when a
         # tactics card is also attached), so this records the LAST probe only.
+        _probe_ran_this_call = (
+            id(input_controller._LAST_PROBE_ATTEMPTS) != _probe_attempts_before)
         record_refused_select(
             player_idx, "player+tactics" if tactics_idx is not None else "player",
             _PLAY_STALL["n"],
-            extra={"probe_attempts": input_controller._LAST_PROBE_ATTEMPTS})
+            extra={"probe_attempts": (
+                input_controller._LAST_PROBE_ATTEMPTS if _probe_ran_this_call
+                else [])})
         if play_stalled(state_json.get("hand")):
             print(f"  play REFUSED {PLAY_STALL_MAX}x running on hand_index "
                   f"{player_idx} on this exact hand — excluding it so the next "
