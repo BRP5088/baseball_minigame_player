@@ -4823,3 +4823,595 @@ bypasses the freshness check (`_probe_ran_this_call = True` unconditionally) --
 caught by case (J) attaching the stale list.
 
 **Status.** built here, tests green, mutants caught; not yet merged.
+
+### I-56  A target beside a lifted neighbour, or one whose own disc chronically misreads, refuses instead of pressing -- three shapes, one refusal message   P1  play
+
+**Evidence.** `_select_verified`'s "position is unreadable ... refusing rather than
+pressing a TOGGLE blind" (`input_controller.py`) fires whenever a target's disc/wreath
+cannot be read, and until this ticket it always refused -- the same message covers at
+least three DIFFERENT mechanisms, confirmed by a full census of every firing across
+`overnight/run_live_2026092*.log` (main checkout): **15 occurrences in 8 files**, not
+14 as first scoped (`grep -c` re-run against the full glob: d/h/n/l/o/q/x/y). For each,
+the hand, the target, whether an ADJACENT slot was already lifted, and the outcome:
+
+```
+ file        line  hand (target marked *)                              adjacent lift?  outcome
+ 20260920d    182  [fielding+1, *9/0, 5/1, pitch+1, 6/0]  target=1       none            refused, retried
+ 20260920d    189  (same hand, same target, 2nd firing)                 none            excluded 3x running
+ 20260920h    128  [fielding+1, *9/0, 5/1, 6/0, 6/0]      target=1       none            refused
+ 20260920h    162  (same hand, fresh decision)                          none            refused, retried
+ 20260920h    168  (same hand, 2nd firing)                              none            refused
+ 20260921n    535  [5/1, *9/2, fielding+1, 5/0, 6/0]      target=1       none            refused, retried
+ 20260921n    541  (same hand, 2nd firing)                              none            refused
+ 20260921l    316  [fielding+1, 8/0, 6/0, *9/0, 6/0]      target=3       none            refused, retried
+ 20260921l    322  (same hand, 2nd firing)                              none            refused, retried
+ 20260921l    327  (same hand, 3rd firing)                              none            excluded 3x running
+ 20260921o    652  [pitch+1, 7/0, 9/0, *9/2, 6/0]         target=3       none            refused, retried
+ 20260921o    658  (same hand, 2nd firing)                              none            refused
+ 20260921q    808  [fielding+1, *9/2, 4/0, 7/0, 6/0]      target=1       none            refused
+ 20260921x    424  [4/3, 4/3, 4/3, speed+1, *8/1]         target=3(tac)  YES (slot 4)    I-48 fallback, boost dropped
+ 20260921y    221  [7/1, 5/2, 5/3, *speed+1, 4/3]         target=3(tac)  no (slot 0 far) I-48 fallback, boost dropped
+```
+
+**Three distinct shapes, only two of which this ticket closes:**
+
+1. **ADJACENCY/OCCLUSION (1 of 15, `20260921x.log:424`).** The engine's own choice is
+   batter=4 + tactics=3, `"probe-select: 4 lifted — the cursor was there"` confirms the
+   batter is ALREADY selected when the walk reaches slot 3, and slot 3's own wreath
+   reads unreadable ONLY because the adjacent lifted card occludes it -- the exact shape
+   `resolve_neighbour_occlusion` (I-52) was already built for at commit time, never at
+   SELECTION time. **This is the shape the ticket was originally scoped around; the
+   census shows it is the RAREST of the three, 1/15.**
+2. **CHRONIC, NO LIFTED NEIGHBOUR (1 of 15, `20260921y.log:221`).** Batter=0 and tactics=3
+   are FOUR SLOTS APART -- no adjacency mechanism can explain slot 3's blindness. The
+   kept frame (`diagnostics/deal_frames/refused_select_1790042607981357000/hand.png`)
+   shows all five cards AT REST; slot 3's wreath sits partly under slot 4's card edge, the
+   ordinary fan overlap, unrelated to any lift. This is the shape that forced a THIRD
+   mechanism: only the OPERATION's own baseline (read before anything was pressed) can
+   settle "already selected?" when a fresh, blind read cannot.
+3. **PERSISTENT ACROSS RETRIES OF THE SAME HAND (13 of 15, every other row).** The
+   dominant shape by far, and NOT established to be fixed here. In every one of these
+   rows the SAME target keeps failing across MULTIPLE fresh `Decision:` blocks on the
+   IDENTICAL hand -- no neighbour is ever lifted, and (unlike case 2) the failure
+   recurs turn after turn on the SAME card, which means the OPERATION's own baseline
+   (`_ys0`, read fresh at the top of each retry) is *also* blind every time: the
+   baseline-trust fix below cannot help a read that was never good at any point this
+   ticket can see. 11 of these 13 are the BATTER's own disc, not a tactics card at
+   all -- `_select_verified`'s refusal is not a tactics-specific problem. Each is
+   accompanied by `[local] slot N: power unread, recovered as 9 from a recent hand
+   (hail mary)` -- a SEPARATE, pre-existing digit-recovery path that answers "what is
+   this card's power" but not "is this card currently selected", which is the question
+   this refusal exists to protect. **Left open, named rather than silently absorbed
+   into this ticket's own count: root cause is a circle-finder/reader-quality question
+   (why does THIS card's disc not produce a valid circle across many consecutive
+   reads), not a selection-logic one, and is out of `input_controller.py`'s cursor
+   layer.**
+
+**Root cause**, three parts (`input_controller.py`, `_select_verified` and
+`_verified_select_and_play_inner`'s per-target loop):
+
+1. `_select_verified`'s "position is unreadable" branch refused UNCONDITIONALLY the
+   moment `_ys[target] is None`, with no way to consult anything but the CURRENT,
+   already-failing read -- correct as a floor (a toggle press on an unknown state is
+   as likely to deselect as to select), but the only floor: it could not fall back to
+   either kind of evidence that might already settle the question.
+2. `_verified_select_and_play_inner`'s per-target loop, on a TACTICS refusal beside an
+   already-verified BATTER, jumped straight to I-48's batter-alone fallback (dropping
+   the boost) without ever trying the one thing that could explain the blindness: the
+   batter's own lift, occluding the adjacent tactics wreath -- `resolve_neighbour_
+   occlusion` existed for this EXACT mechanism already, but only at commit time
+   (`_clear_strays`), never at the point of selecting a target in the first place.
+3. Separately, `resolve_neighbour_occlusion`'s OWN "still blind with the neighbour
+   down" verdict conflated two different kinds of evidence: `m_slot in sel` (a real,
+   MEASURED rise -- proof of an independent stray) and `_ys[m_slot] is None`
+   (merely blind -- no proof of anything, since occlusion and a chronic wreath misread
+   read identically). The old code scored BOTH as "genuine stray, marked", and a
+   NON-target slot going merely blind during `_clear_strays`'s own `_new_blind`
+   handling was marked `_MAYBE_LIFTED` on the same blind-means-lifted assumption.
+   Live, `overnight/run_live_20260921x.log` ~655-680 (cycle 12 match 3): a RESTING
+   FIELDING PLAY card beside a selected pitcher card would not read, was marked a
+   "genuine stray", and refused THREE STRAIGHT COMMITS (I-43 firings that session: 14,
+   true positives: 0) before excluding the engine's own chosen card.
+
+**Fix, three parts, all in `input_controller.py`:**
+
+1. **`resolve_target_behind_lifted_neighbour(m_slot, t_slot, look)`** (new, sibling of
+   `resolve_neighbour_occlusion`, reusing its exact primitives --
+   `_walk_cursor_to`/`_deselect_verified`/`_select_verified`/`_look_settled` -- not
+   that function itself, because the two diverge on what "give up" means: I-52's
+   caller is about to refuse the whole commit regardless, so it is safe to leave
+   `t_slot` down; I-48's fallback here COMMITS `t_slot` alone, so it must come back up
+   first). Bounded -- one lower, one look, one select, at most one re-raise, no loop:
+   lower the lifted neighbour, look; if the target now reads at rest, select it and
+   re-raise the neighbour, then hand back to the ordinary commit path (`"resolved"`);
+   if the target is still blind with the neighbour down, restore the neighbour and
+   report `"unresolved"` (the caller's existing I-48 fallback fires exactly as before);
+   if the re-raise itself fails, unwind the freshly-selected target and report
+   `"refused"` (the whole play refuses, nothing half-committed). Wired into the
+   per-target loop's existing tactics-failure branch, tried only when the two slots
+   are actually adjacent (occlusion is a fan-neighbour effect, the same precondition
+   `resolve_neighbour_occlusion`'s own caller already uses).
+2. **`_select_verified(target, look, ys0=None, sel0=None)`** (new optional
+   parameters, threaded ONLY from the per-target loop's own first attempt at a target
+   -- never from the later I-48b/e shared re-check, whose own presses can have moved
+   things since). When the current read is blind: `target` already in the
+   OPERATION's baseline `sel0` -> treat as already selected, no press (a currently-
+   blind read is exactly I-21's "selecting blinds the disc" signature, not evidence
+   it went down); `target` readable in the baseline `ys0` and NOT in `sel0` -> the
+   baseline PROVES it was down and untouched, so pressing once is not a blind toggle
+   -- falls through into the EXISTING retry loop unmodified, which verifies the
+   result exactly as every other target already does (a real rise, or the same
+   I-21/I-36-gated inference); neither holds -> refuse exactly as before. This is
+   the PRIMARY mechanism now (fixes the chronic-no-neighbour shape, case 2 above);
+   the adjacency manoeuvre in part 1 is the FALLBACK, reached only when the
+   baseline itself was also blind.
+3. **`resolve_neighbour_occlusion`'s "still blind" branch now returns a DIFFERENT
+   verdict than "itself lifted".** `m_slot in sel` (measured rise) stays "genuine
+   stray, marked", unchanged. `_ys[m_slot] is None` (merely blind) is no longer
+   scored as proof of anything: the neighbour is restored, any EXISTING mark on
+   `m_slot` is CLEARED, and the result is reported unresolved rather than a stray.
+   Symmetrically, `_clear_strays`'s two places that used to mark a NON-target slot
+   purely for going unreadable (`_new_blind`'s own handling, and the post-clear
+   recheck's `_blind_now - want` component) no longer do -- only `lifted - want`
+   (a MEASURED rise) earns a mark. The one case that must still mark on blindness
+   alone -- a PRESSED TARGET whose own verify stayed blind (I-43's original,
+   legitimate case) -- is untouched (`_mark_maybe_lifted(set(want) - lifted)` at
+   the final commit check, and the top-of-function `_mark_maybe_lifted(want)` when
+   the fan cannot be read at all).
+
+**Verify.** `tests/minigame/test_tactics_select_fallback.py`, cases P-S (part 1) +
+P2/Q2/R2 (part 2, the baseline-trust primary path): (P) the live x.log shape --
+batter=4 pre-lifted (so the OPERATION's own baseline is also occluded and the
+baseline-trust primary path cannot help; this exercises the FALLBACK deliberately),
+tactics=3 blind while 4 is up, readable once 4 comes down -> both committed, one
+confirm, presses in order lower-4/select-3/re-raise-4; (Q) tactics stays blind no
+matter what -> `t_slot` restored, ordinary I-48 fallback fires, batter alone
+committed, zero presses on the target itself; (R) the occlusion resolves and the
+tactics select lands, but the neighbour's re-raise is dropped every time -> the
+WHOLE PLAY refuses, nothing left lifted; (S) control -- tactics readable on its own
+-> the manoeuvre never even tries, unchanged press sequence. (P2) THE LIVE y.log
+SHAPE, driven directly against `_select_verified` (decoupled from any particular
+`look()`-call-count trace, the same pattern `test_discard_confirm_verified.py`'s
+`NeighbourRig` already uses for `resolve_neighbour_occlusion`): baseline readable and
+unselected -> exactly one press, the row recovers once lifted and commits through
+the unmodified retry loop; (Q2) baseline was ALSO blind -> refuse exactly as before,
+zero presses; (R2) `target` already in the baseline's selected set -> treated as
+already up, zero presses (a mutant that lets this fall through to a press would
+toggle an already-selected card back DOWN). `tests/minigame/test_discard_confirm_
+verified.py`: (F3, renamed to carry this ticket) `resolve_neighbour_occlusion`'s
+"still blind" branch -> unresolved, mark CLEARED (was: survives), `t_slot` RESTORED
+(was: left down); (V, new) the ORIGINAL I-43 case -- a pressed target's own verify
+stays blind -> still marked, proving the fix above did not touch it; (H)/(I)/(I2)
+end to end through the real `_verified_select_and_play_inner`: (H) unchanged, the
+proven-occlusion commit; (I, renamed) the same "stays blind no matter what" shape at
+the wiring level now COMMITS (mark cleared, `t_slot` restored) instead of refusing;
+(I2, new) a GENUINELY, independently lifted stray (measured rise, not mere
+blindness) still refuses with its mark intact -- resolved by the ORIGINAL, unrelated
+`extra`-stray-clearing mechanism once it reads clean, which is why the mark clears
+on slot 1 specifically while the chosen target (slot 0, never restored) is what
+stays marked and refuses the play. `def check(name, cond)` name-first in both files
+(neither takes a `detail` positional in `test_tactics_select_fallback.py` --
+confirmed by running it once with one, which raised `TypeError` immediately).
+
+**Mutants (18 in `test_tactics_select_fallback.py`, `__pycache__` cleared and sha256-
+verified restored between each, `input_controller.py` ->
+`3f2669f7283fae0df66dcd1b6e5d3165ec188d98a2145013486a318a13ba8f4b`; mutants 1-9
+predate this ticket, I-48/I-48b/I-48c's own):**
+
+    10  skip the lower press in resolve_target_behind_lifted_neighbour
+            -> case P no longer recovers the boost
+    11  select the target while its position guard is bypassed (still blind)
+            -> case Q's press sequence no longer matches the bounded manoeuvre
+               (one extra, unverified move+refused-select pair)
+    12  report "resolved" without checking whether the re-raise landed
+            -> case R no longer refuses-and-unwinds via the manoeuvre's own
+               detected failure (the tell-tale print line is absent)
+    13  resolve_neighbour_occlusion's still-blind branch no longer clears the mark
+            -> case T (direct resolver test) finds the mark surviving
+    14  the branch split collapses -- ignore the measured-rise distinction
+            -> case U (a genuine, independently lifted stray) is wrongly
+               resolved instead of refused with its mark intact
+    15  _clear_strays drops the legitimate want-slot mark
+            -> case V finds the pressed target's own blind verify unmarked
+    16  _select_verified presses even when ys0 was also blind
+            -> case Q2 sends a press it has no right to
+    17  _select_verified treats every blind target as baseline-selected,
+        without ever checking sel0
+            -> case Q2 is waved through with zero evidence
+    18  the already-selected-at-baseline branch falls through to a press
+        instead of returning
+            -> case R2 sends a press on an already-selected card (would
+               toggle it back down)
+
+All 18 caught; `input_controller.py` restored byte-for-byte after every one (verified
+sha256, not merely "the mutation script said so"). `test_refusal_unwinds.py`'s own
+mutation anchor (`_unwind_selection(before_all, look, targets, ys0=_ys0)`, 8-space
+indent) started matching TWICE once part 1 added a second call to the same helper at
+a deeper indent -- a bare substring match spans any run of >=8 leading spaces, so a
+20-space-indented copy silently satisfied an 8-space anchor. Fixed by giving the NEW
+call site (only) a trailing `# I-56` comment, which breaks the substring match without
+touching either call's behaviour; re-run clean, both restore checks pass.
+
+Also green (full re-run after every mutation section): `test_discard_confirm_
+verified.py`, `test_refusal_unwinds.py`, `test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_inference_needs_baseline_read.py`,
+`test_probe_select_budget.py`, `test_walk_crosses_occluded_slot.py`, `test_lifted_
+discard_row_rescued.py`, `tests/harness/test_no_undefined_names.py`, `tests/harness/
+test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`.
+
+**Status (superseded by the redo below).** fixed on branch, awaiting skeptic. The
+13/15-row remaining shape (a target's own disc persistently unreadable across every
+retry of the same hand, mostly the BATTER, not tactics-specific) is named above and
+left OPEN -- neither part of this fix's mechanism (adjacency, or a since-changed
+baseline) applies to a read that was never good at any point this ticket can see; it
+wants a reader-quality investigation, not a cursor-logic one. **That paragraph still
+stands** -- the redo below does not touch it.
+
+---
+
+**REDO (2026-09-22): the commit above (c159ce6) was REFUTED on parts 2 and 3 by an
+independent Opus skeptic (`agent_progress/issues/I-56/skeptic.md`). Part 1
+(`resolve_target_behind_lifted_neighbour`) stands, unrefuted.**
+
+**R1 (money path, the most severe finding).** Part 2's "mark only on a POSITIVELY
+RISEN stray, never on mere blindness" is correct about what `sel` can prove, and
+wrong about what it can be READ AS: a slot `sel` never shows is not the same as a
+slot that stayed down. I-21 (already documented in this file) blinds a card's own
+disc the INSTANT it lifts, so a blind select_card press that lands on a non-target
+slot is by construction invisible to `sel` forever -- deleting the mark removed the
+ONLY cross-operation memory of exactly that stray. Reproduced against the real
+`_clear_strays`/`_verified_select_and_play_inner`: OP1 sends a select press that
+lands on slot 2 (not the engine's target, slot 0); OP2, a later, separate operation,
+re-plays slot 0 and, with the mark gone, **commits `[0, 2]`** -- a card the engine
+never chose, silently.
+
+**R2 (the baseline-trust press can fire on a slot THIS operation already toggled).**
+Part 3's "untouched since the baseline" check consulted only `ys0`/`sel0`, never
+anything pressed AFTER the baseline was taken. The I-02 probe's own select_card can
+raise the target one press earlier (`_probe_select_blind_target`'s documented
+success path, `ok=True, cur=target`) -- readable at `ys0`, genuinely lifted by the
+probe, blind now (I-21, again) -- and Part 3 read that as "untouched", pressed once
+more, and DESELECTED the card the probe had just raised.
+
+**R3 (blind-toggle storm).** Part 3's "still blind after the one press" branch fell
+through into the ordinary retry loop, whose own comment forbids exactly this: "NEVER
+PRESS select_card AGAIN while the target is in this state". On a TACTICS-baseline
+row (I-36 refuses the inference there) that loop just `continue`s back to another
+blind press -- up to 5 toggles on a card nobody can read, reproducing CLAUDE.md
+§5's own live incident verbatim (a selected card toggled 5 times while the user
+watched the stream).
+
+**R4 (named but not separately mutated -- folded into the fix below).** `_ys0` was
+not gated on `n0 == MAX_HAND_SIZE`; `_look_settled`'s own failure return "can be
+full of real-looking numbers" (`_clear_strays`'s S-3 comment already says so), and
+Part 3 let that authorise a PRESS rather than merely an inference.
+
+**Fix: a per-operation PRESS LEDGER, not a re-argued threshold.** All three findings
+are the same shape from different angles -- "was this slot touched by something THIS
+operation sent, whether or not we saw where it landed" -- so one mechanism answers
+all three. New module-level state in `input_controller.py`, reset at the top of
+every `_verified_select_and_play_inner`/`select_and_discard` call (unlike the
+CROSS-operation `_MAYBE_LIFTED`):
+
+    _UNACCOUNTED_SELECT_PRESS   bool -- True once ANY select_card press this
+                                operation sent had a landing no look could
+                                positively place on one named slot (a probe
+                                "raised nothing" retry, an inference-only
+                                success, a cannot-read-the-fan abstention)
+    _ACCOUNTED_PRESS_SLOTS      set  -- slots a press THIS operation sent
+                                positively confirmed touching (a real read
+                                landed there, or it visibly disappeared)
+    _reset_press_ledger()       call at the top of every operation
+    _note_unaccounted_press() / _note_accounted_press(slot)   record a press
+    _baseline_untouched(slot)   True only when NOTHING this operation has
+                                sent -- confirmed or not -- could have
+                                changed `slot` since the operation's baseline
+
+Every select_card press site in `_select_verified`, `_deselect_verified`, and
+`_probe_select_blind_target` now calls one of the two `_note_*` functions,
+reasoned through per branch (a real read landing on a NAMED slot is accounted; a
+probe/retry that "raised nothing", or an inference the disc's own blindness never
+lets a look confirm, is unaccounted).
+
+1. **R1 fix.** `_clear_strays`' blindness marks are NOT restored wholesale (Part 2's
+   original false-positive problem -- 14 firings, 0 true positives -- is real and
+   stays fixed). Instead the mark is NARROWED to the mechanism: a non-target slot's
+   mere blindness is marked `_MAYBE_LIFTED` only when `_UNACCOUNTED_SELECT_PRESS` is
+   True for this operation (both of `_clear_strays`' own marking sites -- the
+   `_new_blind` re-look failure, and the post-clear-extras recheck's
+   `_blind_now - want` term -- are gated the same way). A clean ledger still refuses
+   THIS attempt (unchanged, still cautious) but marks nothing.
+2. **R2 fix.** The baseline-trust branch in `_select_verified` now ALSO requires
+   `_baseline_untouched(target)` -- gated on the SAME ledger, so a slot the I-02
+   probe (or anything else) already touched this operation, confirmed landing there
+   or not, never re-enters the baseline-trust bypass.
+3. **R3 fix.** The baseline-trust branch is now its OWN bounded sequence: exactly
+   ONE press, then verify. If still blind afterward, it applies the SAME I-36 gate
+   the ordinary retry loop already uses (infer selected on a non-tactics baseline,
+   refuse on a tactics baseline) and returns -- it never falls through into, or
+   loops within, the shared retry loop again.
+4. **R4 fix.** `_ys0` in `_verified_select_and_play_inner` is now `None` whenever
+   `n0 != MAX_HAND_SIZE`, the same gate `before_all` already had.
+
+**I-48f (coordinator, live 2026-09-22, `overnight/run_live_20260922c.log` ~777-785,
+cycle 17 match 4, folded into this same redo).** The shared I-48b/e re-check
+(`_verified_select_and_play_inner`, right before the commit gate) computed its own
+"missing" set as `want - set(sel1)` -- and a target this operation selected by
+INFERENCE (I-21, same mechanism as R1: its own disc goes unreadable the instant it
+lifts) can NEVER appear in `sel1` either, which is the inference's whole premise,
+not a defect in this fresh look. Reading "not in sel1" as "no longer lifted" sent
+the re-check back to `_walk_cursor_to` + `_select_verified` on a card that never
+came down, which (with no baseline to trust on THIS call) correctly refused --
+"slot 3's position is unreadable... refusing rather than pressing a TOGGLE blind",
+then "could not be re-verified — refusing", losing the whole play on a false
+alarm. **Fix:** `_missing` now excludes any `want` slot that is in `_inferred_
+targets` (the SAME real report `_select_verified` already returns, I-44 -- not a
+re-derivation) AND still blind on the fresh look; only a slot whose disc is
+READABLE now and still absent from `sel1` counts as genuinely toggled back down.
+The downstream `want <= lifted` commit gate in `_clear_strays` already accepts an
+inferred, still-blind target via its existing `_want_inferred`/I-28 exemption, so
+no change was needed there -- checked, not assumed.
+
+**Verify.** New/changed cases in `tests/minigame/test_tactics_select_fallback.py`:
+(P2/Q2/R2, ledger-reset added before each so earlier cases' presses cannot leak in)
+unchanged in shape, re-verified under the new single-press-then-infer-or-refuse
+logic. (W1)/(W2)/(W3): OP1 sends an unaccounted press, a non-target slot goes blind
+-> refuses AND marks; OP2 (fresh operation, the mark from OP1 persisting
+cross-operation by design) -> refuses rather than committing the stray (parent
+commit a99bc6e's behaviour, restored); (W3) mirror -- a CLEAN ledger still refuses
+this attempt but marks nothing (the false-positive shape 14 live firings were).
+(X1): the I-02 probe's own accounted press on slot 4, then a fresh blind read ->
+the baseline-trust branch never fires, zero presses, the ORIGINAL refusal message
+(R2). (Y1-None/player/tactics): the diagonal fixture -- readable baseline, a row
+that does NOT recover after the single press, for all three baseline kinds -> EXACTLY
+ONE press each time (never 5), then infer (None/player) or refuse (tactics) per the
+same I-36 gate the ordinary loop already uses (R3). (Z1) (I-48f): both targets
+selected purely by inference (a screen where every lifted slot's disc reads `None`
+and is absent from `sel`, modelling I-21 uniformly rather than on one hand-picked
+slot) -> the shared re-check does not walk back to either one; exact press sequence
+select-0/move_right/select-1/confirm_play, no unwind, clean commit.
+
+**Mutants added this redo (`test_tactics_select_fallback.py`, mutants 16-18 reworked
+to match the restructured baseline-trust guard; 19-20 new; all `__pycache__`-cleared,
+sha256-restore-verified):**
+
+    16  the baseline-trust guard is forced unconditionally True
+            -> case Q2 (baseline ALSO blind) sends a press it has no right to
+    17  the guard drops its `_baseline_untouched(target)` clause (R2, "the
+        ledger ignored")
+            -> the probe-raised-then-blind shape (X1) presses when the
+               ledger says it must not
+    18  the already-selected-at-baseline branch falls through to a press
+        instead of returning
+            -> case R2 sends a press on an already-selected card
+    19  `_clear_strays`' ledger-gated mark is deleted (R1)
+            -> the skeptic's OP1/OP2 stray shape goes from a refusal to a
+               WRONG COMMIT of a card the engine never chose
+    20  the shared re-check's `_missing` computation reverts to
+        `want - set(sel1)`, no inference exemption (I-48f)
+            -> case (Z1) sends extra presses (or refuses outright) on
+               targets that were never actually missing
+
+All 20 caught in `test_tactics_select_fallback.py`; `input_controller.py` restored
+byte-for-byte after every one (sha256-verified). `test_probe_select_budget.py`'s
+own pre-existing mutants 5 and 8 needed their anchors extended to include the new
+`_note_accounted_press(back)`/`_note_unaccounted_press()` lines the ledger
+instrumentation added to `_probe_select_blind_target` -- a mechanical anchor fix
+(the mutation logic itself is unchanged), required because those anchors match the
+exact bytes of the function this redo also instruments; both mutants still caught
+after the fix.
+
+Final sha256 of `input_controller.py`:
+`97d7121f618c618cdb59f61069742bb776bbf5c14ba4fddf7a30abe602166212`.
+
+Full battery re-run, all exit 0: `test_tactics_select_fallback.py`,
+`test_discard_confirm_verified.py`, `test_refusal_unwinds.py`,
+`test_verified_selection.py`, `test_commit_refuses_unseen_strays.py`,
+`test_inference_needs_baseline_read.py`, `test_probe_select_budget.py`,
+`test_walk_crosses_occluded_slot.py`, `test_lifted_discard_row_rescued.py`,
+`tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`,
+`tests/harness/test_claude_md_constants.py`.
+
+**Status (superseded by round 2 below).** Fixed on branch after the skeptic's
+refutation and the coordinator's I-48f addition; redo complete, all three R1-R4
+findings addressed with a single per-operation press-ledger mechanism, I-48f
+fixed alongside it, 20/20 mutants caught, 13/13 battery files green. The
+13/15-row "persistent across retries of the same hand" shape from the original
+write-up is still OPEN and still out of scope (a reader-quality question, not a
+cursor-logic one) -- unaffected by round 2, below.
+
+---
+
+**ROUND 2 (2026-09-22): an independent Opus skeptic re-reviewed d525913.
+VERDICT: CONFIRMED WITH NOTES.** R1/R2/R3 all reproduce as fixed against the
+skeptic's own round-1 probes, re-run unmodified; both live cases the
+coordinator supplied (`run_live_20260922c.log` cycle 18, and the Q17 user-truth
+frame) come out right; the common press-for-press path is unchanged. Two
+findings required a fix before merge; a third and fourth were noted but did not
+block (NOTE 1, I-48f's blind-toggle cost on a wrong inference; NOTE 4, the
+probe-budget file's anchor updates carry no new coverage of their own -- both
+are follow-up, not required here).
+
+**The `gone` hole (skeptic's finding (d)).** `_probe_select_blind_target`'s B1
+disappearance branch computed `gone = [i for i in before if i not in sel]` and
+credited the vacated slot as ACCOUNTED unconditionally -- but `selected_cards`
+skips a row whose disc is unreadable (I-21), so a slot leaves `sel` for TWO
+different reasons: it went DOWN, or it went BLIND while still UP. A real stray
+this same press raised elsewhere on an already-blind row reads exactly like
+`back` going down, and the ledger's own stated invariant ("accounted only when
+a look positively named the slot it changed") was cleared by a negative that
+never checked which. Reproduced end to end (skeptic's `probe_d2_wrongcommit.py`
+shape, NOT a regression -- main a99bc6e commits the same wrong card on this
+exact scenario): OP1 refuses without marking anything ("nothing this operation
+pressed can explain it"), OP2 then COMMITS a card the engine never chose.
+
+**Fix (2 lines, `_probe_select_blind_target`).** The `gone` branch now checks
+`_ys[back]` before crediting: `if _ys[back] is None: _note_unaccounted_press()`
+(absence is not proof of down) `else: _note_accounted_press(back)` (a readable,
+vacated slot genuinely was observed to go down).
+
+**Verify.** New/changed tests, both driven through the REAL production entry
+points, not synthetic direct calls alone:
+
+- `tests/minigame/test_tactics_select_fallback.py`:
+  - **(AA1)** MY-M1: a ledger poisoned exactly as a prior, unrelated operation
+    would leave it (skeptic's `probe_acd.py` shape), sent through
+    `_verified_select_and_play_inner` via `_play()` with NO manual reset --
+    production's own `_reset_press_ledger()` must be what isolates this
+    operation, so a slot that goes blind for reasons THIS operation cannot
+    explain (`NewBlindNonWantPlayScreen`) must NOT be marked.
+  - **(BB1)** MY-M3: the live Q17 frame (`run_live_20260921x.log` 651-672,
+    user ground truth slot 0; `Q17FrameScreen` reproduces the exact
+    `_ys`/`glow`/`sel`/kinds) must COMMIT slot 0 with exactly one select and
+    one confirm, zero presses near slot 1.
+  - Mutants 21 (MY-M1: delete `_verified_select_and_play_inner`'s own
+    `_reset_press_ledger()` call) and 22 (MY-M3: restore BOTH
+    `_clear_strays`' `_untouched_blind & _MAYBE_LIFTED` intersection AND
+    `resolve_neighbour_occlusion`'s "still blind" branch to unconditional
+    marking -- verified by direct reproduction that mutating either one
+    ALONE measures nothing, because `_clear_strays`' own gate is what decides
+    whether the disambiguation is ever TRIED on a slot this operation never
+    marked) -- both caught, each with a post-restore sanity re-check.
+- `tests/minigame/test_probe_select_budget.py`:
+  - **(CC1)** MY-M5: the probe's own "raised nothing" retry marks the ledger
+    UNACCOUNTED, and a LATER target in the SAME operation depends on that
+    mark to know its own baseline cannot be trusted -- not a check on the
+    flag itself, but the actual press-or-refuse DECISION it drives.
+  - **Mutant 9** (MY-M5: the probe's "raised nothing" branch no longer marks
+    UNACCOUNTED) -- caught, with a post-restore sanity re-check.
+  - Mutants 5 and 8's own anchors needed a second round of extension (the
+    `gone`-branch fix above added the `_ys[back]` check inside the exact text
+    they mutate); fixed, both still caught.
+
+**Mutants, this round (25 total across the two files, all caught, sha256-
+restore-verified against `97d7121f618c618cdb59f61069742bb776bbf5c14ba4fddf7a30abe602166212`,
+`__pycache__` cleared before every mutant):**
+
+    test_tactics_select_fallback.py   1-20 (unchanged from the first redo)
+                                       21 MY-M1  reset deleted -> (AA1) marks a
+                                                  slot the operation never touched
+                                       22 MY-M3  unconditional marking restored
+                                                  (both sites) -> Q17 refuses
+    test_probe_select_budget.py       1-8 (unchanged; 5 and 8 re-anchored for
+                                            the `gone` fix)
+                                       9  MY-M5  unaccounted mark on "raised
+                                                  nothing" dropped -> a later
+                                                  target's baseline-trust
+                                                  bypass wrongly fires
+
+Final sha256 of `input_controller.py`:
+`5cd6549ad6a8eea73746c0e2fb53bad840f5e3d56bd2c3a0021da4cb6f4afa46`.
+
+`check()` audit: both changed test files are name-first `def check(name,
+cond)`; 176 + 53 calls; zero `^ *(PASS|ok|FAIL) +(True|False)$` lines in either
+run.
+
+**Status (superseded by round 3 below).** Fixed on branch after the round-2
+skeptic's confirmation-with-notes; the `gone` hole is closed, MY-M1/MY-M3/MY-M5
+all have guards that bite, and the 13-file battery is green. The 13/15-row
+"persistent across retries of the same hand" shape remains OPEN and out of
+scope, unchanged by either round.
+
+---
+
+**ROUND 3 (2026-09-22): an independent Opus skeptic re-reviewed 5be4556.
+VERDICT: CONFIRMED WITH NOTES.** The `(d)` gone fix, (AA1), (CC1), Q17
+(commits `[0]`) and the cycle-18 discard (refuses, ledger clean) all
+re-verified correctly. One note required a fix: round 2's `_new_blind`
+narrowing has **THREE** marking sites, not two, and `_clear_strays`' own
+after-clearing refusal is a fourth, distinct site again -- BB1/mutant 22 (round
+2) is VALID and CAUGHT, but it mutates the adjacency resolver
+(`resolve_neighbour_occlusion`'s "still blind" branch) plus `_clear_strays`'
+`_untouched_blind & _MAYBE_LIFTED` intersection, and never touches either of
+the two sites the skeptic's own MY-M3/M3d name:
+
+    site                                          mutant   guarded by
+    `_new_blind`, RE-LOOK path (succeeds, still
+      blind)                                       M3c      (AA1), mutant 21
+    `_new_blind`, CANNOT-READ-FAN path (the
+      re-look itself can't read the fan)            M3d      was UNGUARDED
+    `_clear_strays`' `_mark_candidates`, after-
+      clearing refusal ("after clearing, the
+      lifted set is still ... refusing")           MY-M3    was UNGUARDED
+
+**Two new cases, two new mutants, both in
+`tests/minigame/test_tactics_select_fallback.py` (the coordinator's
+constraint -- no other site was genuinely unreachable, so nothing needed the
+"say so instead of forcing it" escape hatch).**
+
+- **(DD1)/(DD2), mutant 23 -- the CANNOT-READ-FAN path.** `_look_deadfan`: the
+  operation's own top-of-function look reads the fan fine with one slot
+  unexpectedly blind (`_new_blind` non-empty); every look after that (the
+  re-look's own `LOOK_RETRIES` attempts) finds the fan completely unreadable,
+  so `_look_settled` gives up at `n=0` -- "cannot read the fan on the
+  re-look — refusing." (DD1) an unaccounted press this operation sent marks
+  the slot; (DD2), the mirror, a clean ledger refuses but does NOT mark.
+  Mutant 23 drops the `if _UNACCOUNTED_SELECT_PRESS:` gate on this branch's
+  own `_mark_maybe_lifted(_new_blind)` -- (DD2) goes from unmarked to marked,
+  caught.
+- **(EE1)/(EE2), mutant 24 -- the after-clearing `_mark_candidates` path.**
+  `_stray_vanish_rig`: a genuine stray (not the engine's target) is lifted
+  before the operation starts, so `extra` is non-empty and the walk-and-put-
+  down loop runs; `_walk_cursor_to` reaches it, but by the time
+  `_deselect_verified` takes its own look the stray's disc has ALREADY gone
+  unreadable on its own (I-36's chronic-misread shape, arriving the instant
+  the walk turns to look) -- `target not in sel` is already true, so
+  `_deselect_verified` returns `True` WITHOUT EVER PRESSING `select_card`
+  (its own `if target not in sel: return True, sel` short-circuit fires
+  first). That is what makes the ledger genuinely free to set here: unlike a
+  REAL deselect (`_deselect_verified`'s own docstring: "every press here
+  counts as UNACCOUNTED... even on the paths that return success" --
+  confirmed separately, a scenario where the deselect press actually fires
+  marks the slot REGARDLESS of what the ledger held beforehand, so that shape
+  cannot supply the clean/unmarked half at all), this rig sends zero presses
+  either way -- (EE2) pins that directly (`"select_card" not in
+  _state_ee2["sent"]`). (EE1) an unaccounted press from elsewhere in the
+  operation marks the slot; (EE2), clean ledger, refuses but does not mark.
+  Mutant 24 drops the same gate on `_mark_candidates`' `_blind_now - want`
+  term -- (EE2) goes from unmarked to marked, caught.
+
+Both mutants verified independently before being written into the test file
+(scratchpad debug scripts, not kept): a naive single-line mutation was
+confirmed to actually flip the observable outcome for its exact scenario
+before being committed, the same discipline round 2's mutant 22 needed after
+a first guess measured nothing.
+
+**Mutants, this round (2 new, 27 total across the two files, all caught,
+sha256-restore-verified against
+`5cd6549ad6a8eea73746c0e2fb53bad840f5e3d56bd2c3a0021da4cb6f4afa46`, `__pycache__`
+cleared before every mutant):**
+
+    test_tactics_select_fallback.py   1-22 (unchanged from round 2)
+                                       23  M3d    cannot-read-fan mark
+                                                    unconditional -> (DD2) marks
+                                       24  MY-M3   after-clearing mark
+                                                    unconditional -> (EE2) marks
+    test_probe_select_budget.py       1-9 (unchanged)
+
+`input_controller.py` was NOT touched this round -- sha256 before, during (each
+mutant restored in a `finally`) and after the full battery is identical to the
+round-2 final sha above.
+
+`check()` audit: `test_tactics_select_fallback.py` is still name-first
+`def check(name, cond)`; 189 `check(` occurrences (incl. the `def`), zero
+`^ *(PASS|ok|FAIL) +(True|False)$` lines.
+
+Full 13-file battery re-run, serialised (no concurrent process touching
+`input_controller.py`, per the round-3 skeptic's own note about a race
+between a background battery run and an in-flight mutation driver), all
+exit 0: `test_tactics_select_fallback.py`, `test_discard_confirm_verified.py`,
+`test_refusal_unwinds.py`, `test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_inference_needs_baseline_read.py`,
+`test_probe_select_budget.py`, `test_walk_crosses_occluded_slot.py`,
+`test_lifted_discard_row_rescued.py`, `tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`,
+`tests/harness/test_claude_md_constants.py`.
+
+**Status.** Fixed on branch after the round-3 skeptic's confirmation-with-
+notes; all three `_new_blind`/`_mark_candidates` marking sites now have a
+mutant-caught guard, the 13-file battery is green, and `input_controller.py`
+is unchanged from round 2's sha. The 13/15-row "persistent across retries of
+the same hand" shape remains OPEN and out of scope, unaffected by any round.
