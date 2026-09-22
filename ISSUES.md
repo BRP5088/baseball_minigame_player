@@ -3729,3 +3729,111 @@ before and after this ticket's changes), `test_result_card_is_read.py`,
 disagreements on true results, 0 FP on 285 non-result frames); N1 pinned, N3 fixture
 added; LATER: VOCAB lacks DEFEAT (a live run retried 15/15 and ended unscored) and
 PaddleOCR fails on the mid-animation flat banner 10/231.
+
+### I-55  Result commits leave no evidence: three draws today with no numbers and no frame   P1  evidence
+
+**Evidence.** Main checkout, three result commits with nothing behind them, same day:
+
+    overnight/run_live_20260921r.log ~555-556   "Draw logged (8 total)" right after a
+        poll that printed the templates were distrusted -- draw #8 is unverifiable
+        after the fact
+    overnight/run_live_20260921t.log ~634-636   a PHANTOM draw from a truncated card
+        name (I-54's own incident) -- the ONLY reason this one is explained is that
+        a frame happened to survive in test_fixtures/reveal_kind_truth/auto/ from an
+        unrelated keeper (record_reveal_kind) and someone went and found it by hand
+    overnight/run_live_20260921u.log ~724-725   "Draw logged (9 total)" with no
+        `[state]` line at all -- the next match's ban scan followed, so it was
+        PROBABLY real, but nothing on disk says so either way
+
+`HANDOFF_NOW.md`'s LATER list already named the gap: "log the evidence (template
+scores + OCR words + scoreboard) on every result commit and keep the result frame --
+the reveal/money keepers exist, the result screen has none."
+
+**Root cause.** `local_game_state`'s "result" branch (orchestrator.py ~4388, ~4463)
+computes the template scores dict, which reader answered (`why`, which names the
+CARD path when the arched-banner templates missed) and the OCR outcome/detail --
+and returns NONE of it. Its return dict for a "result" screen carries only
+`result_outcome`/`result_won`/`your_score`/`opp_score` (the last two always None on
+the local path, per that function's own comment on why it supplies no scores). So
+by the time run() reaches the commit block and prints "WIN #N logged" / "Draw
+logged" / "Loss logged", the numbers behind the word are already gone -- there was
+never anywhere for them to survive the round trip, unlike the reveal path
+(`record_reveal_kind`, OPEN-24) and the refused-select path (`record_refused_select`,
+I-48), which both already keep a frame + why.json at their own decision point.
+
+**Fix.** `record_result_frame(outcome, evidence, row=None, out_dir=None)`, beside
+`record_reveal_kind` / `record_refused_select`, same contract as both: never raises
+into the turn loop, writes nothing under `BASEBALL_TEST_RUN` unless a test hands it
+`out_dir` (or sets `BASEBALL_RESULT_FRAME_DIR`), REFUSES past
+`RESULT_FRAME_MAX_FILES` (200) rather than pruning. One call site, run()'s shared
+commit block, right after the WIN/Draw/Loss print and before `match_in_progress`
+is cleared.
+
+`evidence` is exactly what run() still has at that point -- `your_score`,
+`opp_score`, `result_outcome`, `result_won` off `state_json` -- threaded straight
+through, no re-read. The template scores per word and the OCR fallback's answer are
+genuinely gone (see Root cause), so the keeper re-derives them from a FRESH capture
+taken there, before the screen is dismissed, by calling `local_state.read_result`
+and `result_ocr.read_banner` again on it -- and says so explicitly, in both the
+printed line and `why.json`'s `note` field, so a re-derivation taken a poll or two
+after the real decision is never mistaken for the decision frame itself. Neither
+reader's own code was touched, and nothing about how the outcome is DECIDED changed
+-- this call sits after `outcome` is already settled.
+
+Frame + why.json land at `diagnostics/result_frames/<outcome>_<ns>.png` /
+`<outcome>_<ns>.why.json` (`diagnostics/` is gitignored, `.gitignore:75`). `row`,
+when given (run() passes `state_json`), is stamped with the frame's relative path
+the way `record_reveal_kind` stamps `matchup_info` -- there is no per-match result
+row persisted anywhere today, so this is a forward-looking no-op until one exists.
+
+**The evidence line**, printed once per commit -- captured verbatim from
+`tests/minigame/test_result_commit_evidence.py` case (A), run against this
+worktree's blank harness frame (real numbers, not an invented example; the
+`paddle venv missing at ...` detail is genuine too -- `paddle_venv/` does not
+exist in this worktree, CLAUDE.md section 2):
+
+    [result] win decided from state_json (your_score=7, opp_score=3,
+    result_outcome=None, result_won=True); re-derived template scores
+    {'winner': 0.0, 'loser': 0.0, 'draw': 0.0} (no result word found (best
+    0.000 < 0.8; card band read '')); re-derived OCR None (paddle venv missing
+    at .../paddle_venv/bin/python); frame -> win_1790037824847166000.png
+
+**Verify.** `tests/minigame/test_result_commit_evidence.py`, driven end to end
+through `_run_harness.Harness` (the same harness `test_run_debit_and_scoring.py`
+uses) plus two direct calls for the cases that would otherwise fight the harness's
+own `_fast_grab` patch, its own `check(name, cond)` NAME-FIRST (deliberately not
+`_run_harness`'s COND-FIRST `check`, to keep the two orders out of one file --
+CLAUDE.md's nine-signatures trap): (A) a WIN commit prints the evidence line
+(state_json's numbers plus the re-derived template scores and OCR) and writes
+frame + why.json into a temp root (`BASEBALL_RESULT_FRAME_DIR`, never the live
+dir); (B) a DRAW commit, with `local_state.read_result` monkeypatched to a
+card-reader answer, names the CARD path in both the print and why.json; (C) under
+`BASEBALL_TEST_RUN` with no seam, `_fast_grab` stubbed to SUCCEED, nothing is
+written and capture is never even called -- proves the guard fires before
+capture, not that capture happened to fail; (D) `PIL.Image.Image.convert`
+monkeypatched to raise, driven through a real WIN commit -- the match still
+scores (`wins == 1`) and nothing is left half-written; (E) the 200-file cap
+refuses out loud and does not prune the oldest frame.
+
+**Mutants (3, `__pycache__` cleared between each -- `-B` throughout; sha256-verified
+restore to `8cc8afe21e79c3136eacc59212ea8d3a3190f0b22eb4d8143f1df1c736556896`
+between each):**
+
+    drop the print call (lines 7598-7604)
+        -> FAILS 5: all four (A) evidence-line checks, and (B)'s CARD-path check
+    `why = {...}` -> `why = {"outcome": outcome}` (the numbers dropped)
+        -> FAILS 5: all four (A) why.json-content checks, and (B)'s why.json
+           CARD-path check
+    remove `if d is None and _running_under_test(): return None`
+        -> FAILS 3: all three (C) checks -- returns a filename instead of None,
+           writes into the watched temp root, and (moot at that point) the
+           guard-before-capture ordering check
+
+Run clean (`BASEBALL_TEST_RUN=1`, offline, single process): the new file, plus
+`test_run_debit_and_scoring.py`, `test_stale_flag_never_presses_unpaid.py`,
+`test_run_resume_and_persist.py`, `test_transition_screens_recognised.py`,
+`test_reveal_frame_kept.py`, `test_unscored_reveal_rows_kept.py`,
+`tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`.
+
+**Status.** fixed on branch, awaiting skeptic.

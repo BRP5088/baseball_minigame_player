@@ -7506,6 +7506,110 @@ def record_refused_select(target, kind, attempt, out_dir=None, extra=None):
         return None
 
 
+# I-55: three result commits landed 2026-09-21 with no evidence at all --
+# `overnight/run_live_20260921r.log` ~555 ("Draw logged (8 total)" after a poll
+# that distrusted the template), `run_live_20260921t.log` ~634 (a PHANTOM draw
+# from a truncated card name, I-54) and `run_live_20260921u.log` ~724 ("Draw
+# logged (9 total)" with no `[state]` line at all). HANDOFF_NOW.md's LATER list
+# already asked for this: "log the evidence (template scores + OCR words +
+# scoreboard) on every result commit and keep the result frame -- the reveal/
+# money keepers exist, the result screen has none."
+#
+# Same shape as record_reveal_kind / record_refused_select: never raises into
+# the turn loop, writes nothing under BASEBALL_TEST_RUN unless a test hands it
+# out_dir (or sets RESULT_FRAME_DIR_ENV), and REFUSES past the cap rather than
+# pruning.
+#
+# WHAT IS THREADED AND WHAT IS RE-DERIVED. `evidence` is exactly what run()
+# still has at the commit site -- your_score, opp_score, result_outcome,
+# result_won, straight off state_json, no re-read needed. The template scores
+# PER WORD and the OCR fallback's answer are NOT in that trip:
+# local_game_state computes them (local_state.read_result's `scores`/`why`,
+# result_ocr.read_banner's outcome/detail) and never returns them -- its
+# "result" branch (orchestrator.py ~4388, ~4463) hands back only
+# result_outcome/result_won/your_score/opp_score. So those two fields ARE gone
+# by the time run() prints "WIN #N logged", and this keeper re-derives them
+# from a FRESH capture taken here, before the screen is dismissed -- NOT the
+# original decision frame. Said explicitly in both the printed line and
+# why.json, so a re-derivation is never mistaken for the actual decision path.
+RESULT_FRAME_DIR_ENV = "BASEBALL_RESULT_FRAME_DIR"
+RESULT_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "diagnostics", "result_frames")
+RESULT_FRAME_MAX_FILES = 200
+
+
+def record_result_frame(outcome, evidence, row=None, out_dir=None):
+    """Print the evidence line for a result commit and keep the frame it names.
+
+    `outcome` is "win"/"loss"/"draw", the word run() just printed. `evidence`
+    is whatever run() already has from state_json (your_score, opp_score,
+    result_outcome, result_won) -- threaded straight through, never re-read.
+    `row`, if given, is stamped with the frame's path the way record_reveal_kind
+    stamps matchup_info -- there is no per-match result row on disk today, so
+    this is a forward-looking no-op until one exists.
+
+    Never raises into the turn loop. Returns the filename written, or None.
+    """
+    try:
+        evidence = dict(evidence or {})
+        d = out_dir or os.environ.get(RESULT_FRAME_DIR_ENV)
+        if d is None and _running_under_test():
+            return None
+        d = d or RESULT_FRAME_DIR
+        os.makedirs(d, exist_ok=True)
+        if len([f for f in os.listdir(d) if f.endswith(".png")]) >= RESULT_FRAME_MAX_FILES:
+            print(f"  [result] {d} already holds {RESULT_FRAME_MAX_FILES} frames -- "
+                  f"NOT keeping this {outcome} one. Nothing is pruned here on purpose.")
+            return None
+        full = _fast_grab()
+        if full is None:
+            return None
+        # RE-DERIVED, NOT THE DECISION FRAME -- see the module comment above.
+        # Both readers already degrade to (None, "why") on any failure (a
+        # missing paddle_venv, an unreadable frame), so the try/except here is
+        # only to keep a re-derivation failure from costing the frame itself.
+        try:
+            import local_state
+            fresh = local_state.read_result(full)
+        except Exception as exc:
+            fresh = {"scores": None, "why": f"re-derive failed: {exc}"}
+        try:
+            import result_ocr
+            ocr_outcome, ocr_detail = result_ocr.read_banner(full)
+        except Exception as exc:
+            ocr_outcome, ocr_detail = None, f"re-derive failed: {exc}"
+        stamp = time.time_ns()
+        fname = f"{outcome}_{stamp}.png"
+        full.convert("RGB").save(os.path.join(d, fname))
+        why = {
+            "outcome": outcome,
+            "from_state_json": evidence,
+            "re_derived_template_scores": fresh.get("scores"),
+            "re_derived_template_why": fresh.get("why"),
+            "re_derived_ocr_outcome": ocr_outcome,
+            "re_derived_ocr_detail": ocr_detail,
+            "note": "the template/OCR fields are a FRESH read taken at commit "
+                    "time, not the frame the original decision was made on -- "
+                    "state_json does not carry local_game_state's scores/why/"
+                    "ocr fields through to run()",
+        }
+        with open(os.path.join(d, f"{outcome}_{stamp}.why.json"), "w") as fh:
+            json.dump(why, fh, indent=1, default=str)
+        print(f"  [result] {outcome} decided from state_json "
+              f"(your_score={evidence.get('your_score')}, "
+              f"opp_score={evidence.get('opp_score')}, "
+              f"result_outcome={evidence.get('result_outcome')!r}, "
+              f"result_won={evidence.get('result_won')!r}); re-derived template "
+              f"scores {fresh.get('scores')} ({fresh.get('why')}); re-derived "
+              f"OCR {ocr_outcome!r} ({ocr_detail}); frame -> {fname}")
+        if row is not None:
+            row["result_frame"] = os.path.relpath(
+                os.path.join(d, fname), os.path.dirname(os.path.abspath(__file__)))
+        return fname
+    except Exception:
+        return None
+
+
 def read_balance_from_pause_menu() -> int:
     """
     Open the pause menu, read the money total off it via vision, then
@@ -9425,6 +9529,16 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     else:
                         losses += 1
                         print(f"Loss logged ({losses} total).")
+                    # I-55: nothing survived a result commit -- three draws logged
+                    # 2026-09-21 with no numbers behind them. record_result_frame
+                    # prints the evidence line and keeps the decision-adjacent
+                    # frame; see its docstring for what is threaded from
+                    # state_json versus re-derived.
+                    record_result_frame(outcome, {
+                        "your_score": your_score, "opp_score": opp_score,
+                        "result_outcome": local_outcome,
+                        "result_won": state_json.get("result_won"),
+                    }, row=state_json)
                     match_in_progress = False   # C5: the paid match is over
                     polls_without_progress = 0  # a scored result is progress
                     save_progress(wins, losses, draws, balance, progress_file,
