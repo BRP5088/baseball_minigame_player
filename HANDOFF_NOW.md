@@ -21,7 +21,7 @@
   `dropped_1790052651118893000`) — **strict streak reset 3→0**, unmerged
   I-56 would have covered exactly this. Record climbing from the pre-cycle-19
   100W 15L 11D.
-- <<CLOSE: I-56 merge outcome + cycle 19 close + relaunch sha>>
+- CLOSE 2026-09-22 01:06: cycle 19 finished WIN #101-#104 (m4 with the I-56-shape refusal; record 104W 15L 11D). Gap made 00:51:56; I-56 MERGED 29c0420 (ISSUES 58517cf), 13-file battery green, spot mutant caught; un-niced full suite 294 files / 412 s, 1 FAILED = a stale test double, fixed 325de46 (test only). CYCLES 20-26 RELAUNCHED chained on main 325de46 -> overnight/run_live_20260922f.log (no monitor armed; the log is the record). Console in live use by the chain; it auto-sleeps when the chain ends. I-62 unmerged on worktree-I62 (needs its Opus skeptic first); I-60/I-61 parked. Nothing else in flight.
 - **I-56** round 3 fix is READY at `c0953b8` (M3d/`_mark_candidates` and
   MY-M3/`_new_blind`'s cannot-read-fan path both guarded, 13 files green;
   note: `_deselect_verified` always dirties the ledger on a real press —
