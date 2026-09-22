@@ -3250,7 +3250,9 @@ committed), both caught, `input_controller.py` restored byte-for-byte
           it) but case (N) fails -- a pure flicker now costs real presses,
           which is the discriminating case this fix exists for
 
-**Status.** fixed on branch, awaiting skeptic.
+**Status.** merged 99000b4; Sonnet skeptic CONFIRMED WITH NOTES (sibling shape
+still covered: the dropped slot is always the batter; all-tactics want loses
+one retry-before-refuse, deliberate).
 ### I-50  A dropped select_card press on the ban grid is never retried; 15 of 37 matches start a ban short  P1  money
 
 **Evidence.** Census (`agent_progress/census/ban_shortfall/progress.md`, main
