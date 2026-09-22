@@ -4412,3 +4412,202 @@ on the same pre-existing, unrelated fixture gap documented above and under I-54.
 
 **Status.** merged c55d2cc; Sonnet skeptic CONFIRMED WITH NOTES, three surviving
 mutants closed by cases G/H/I (f5c14be).
+
+### I-58  The pause-menu close after the balance read is a single blind toggle press; a drop leaves the menu open and run() stops on 'unreadable screens' (cycle 14, no match played)   P1  money
+
+**Evidence (census).** Main checkout, every `overnight/run_live_2026092*.log` with a
+`pause menu confirmed open` line, which branch of `read_balance_from_pause_menu`
+answered, and whether the SAME cycle's OCR then reads the pause book's own words
+("OCR: ['AUSE', 'MAIN', 'JOBS', ...]", i.e. AUSE/OPTIONS/MAIN/JOBS -- the pause
+menu's own on-screen text) within the next 40 lines and stops on
+`unreadable_screens`. (A first pass also counted each file's OWN generic
+`Stuck too long on unreadable screens` line with no positional check -- `c1`/`c2`
+each have ONE, from an unrelated stall later in that same cycle's live MATCH play,
+nothing to do with the pause menu. Re-scored positionally, keyed to the specific
+AUSE/MAIN/JOBS OCR signature that only the pause book produces, both read `no`
+below, correctly.)
+
+    file                          cycle  local_ok  paid_disabled  pause-stall (this ticket)
+    run_live_20260921j.log          1      yes          no                no
+    run_live_20260921l.log          2      yes          no                no
+    run_live_20260921o.log          3      no           yes               no
+    run_live_20260921p.log          4      yes          no                no
+    run_live_20260921q.log          5      yes          no                no
+    run_live_20260921r.log          6      no           yes               no
+    run_live_20260921s.log          7      yes          no                no
+    run_live_20260921t.log          8      yes          no                no
+    run_live_20260921u.log          9      no           yes               no
+    run_live_20260921v.log         10      yes          no                no
+    run_live_20260921w.log         11      yes          no                no
+    run_live_20260921x.log         12      yes          no                no
+    run_live_20260921y.log         13      yes          no                no
+    run_live_20260921z.log         14      yes          no                YES (15 polls)
+    run_live_20260922a.log         15      no           yes               YES (15 polls)
+    run_live_20260922b.log         16      yes          no                no
+
+Two of sixteen opens pause-stall (12.5%), matching CLAUDE.md sec5's measured 15.20%
+single-press ignore rate closely enough at this n to be the same phenomenon, and it
+does NOT correlate with which branch answered the balance (cycle 14 read it LOCALLY;
+cycle 15's local read failed and fell through to `PaidModelDisabled`, the ordinary
+state with the paid model off) -- both branches funnel into the same bare close
+press. `overnight/run_live_20260921z.log` (cycle 14): walk arrived;
+`[balance] pause menu confirmed open on attempt 1 of 3`, `read LOCALLY from the
+pause menu: $246`, `Resuming with 91 wins ...`, then 15 x `Couldn't read the
+screen (LOCAL STATE GAP: UNRECOGNISED SCREEN ... OCR: ['AUSE', 'MAIN', 'JOBS',
+...])` -> `Stuck too long on unreadable screens — stopping`, diagnostics at
+`diagnostics/20260921_222136_0809`. The current screen (captured after the stop)
+had `pause_menu.is_pause_screen == True`. No money was spent (balance 246,
+match_in_progress false). `overnight/run_live_20260922a.log` (cycle 15, the very
+next cycle, resuming with the SAME 91W/15L/9D since cycle 14 played nothing)
+stalled identically, this time via the `PaidModelDisabled` branch.
+
+**What the census rules out.** (1) A skipped close: both branches of
+`read_balance_from_pause_menu` reach `_close_pause_menu()` unconditionally -- the
+local-success branch calls it directly before returning, and the paid branch's
+`try/finally` calls it even when the try raises, which it does with the paid model
+off (`client.messages` raises `PaidModelDisabled` the moment it is evaluated,
+still inside the `try`). Reading the code confirms the close was ALWAYS attempted
+on every one of the 16 opens; there is no branch that skips it. (2) Close pressed
+mid open-animation: `wait_for_screen_to_settle(max_wait=8.0)` already runs right
+after the OPEN press, before "pause menu confirmed open" is even printed, and the
+close fires several seconds later (after up to `MONEY_READ_TRIES` local retries,
+each 0.6s apart) -- by then the menu has been static for seconds, not animating.
+(3) A double press: only one call site of `_close_pause_menu()` runs per
+invocation (the local-success branch returns immediately after calling it; the
+paid branch's `finally` is the only other caller, and they are mutually
+exclusive). (4) I-55 (merged 21:59:03, cycle 14 started 22:21:38 -- the first
+cycle launched right after it, as guessed): reading I-55's three commits shows
+they touch only the RESULT-commit evidence path (`local_game_state`'s "result"
+branch, `record_result_frame`), never `read_balance_from_pause_menu`,
+`_close_pause_menu`, or anything in `run_cycles.py` -- coincidental timing, not a
+cause. What is NOT ruled out, because it cannot be from logs alone: whether the
+15.2% single-press ignore rate genuinely clusters across cycles this far apart (a
+whole failed-cycle-and-restart, not the sub-second gaps sec5's clustering figure
+was measured over) or whether two drops in a row here is ordinary bad luck at
+p~2-4%; the fix does not depend on resolving that, since it removes the
+single-press dependency either way.
+
+**Root cause.** `_close_pause_menu()` (nested inside `read_balance_from_pause_menu`)
+was one bare `press("toggle_pause")` with no log line and no verification on the
+path that matters. The only post-close check that existed lived in code AFTER the
+paid-call `try/finally` -- so it ran only when that call SUCCEEDED, and never when
+it raised, which is exactly what `PaidModelDisabled` does on every process with the
+paid model off (CLAUDE.md sec3, "the paid vision model is off"). `toggle_pause` is
+a TOGGLE that drops ~15.20% of presses (CLAUDE.md sec5) and, once it HAS landed, a
+second press REOPENS the menu -- so a bare unverified press can fail silently in
+either direction, and here there was not even a log line to say a close was
+attempted. run()'s own turn-poll loop has no branch that recognises the pause book
+at all (`read_state_for_turn` has readers for turn/ban/result/reveal screens, none
+for the pause menu, since it is never supposed to be open when the loop starts
+polling), so a dropped close is indistinguishable from any other unreadable screen
+and burns the whole `MAX_STUCK_ATTEMPTS` (15) budget before stopping.
+
+**Fix, two parts.**
+
+1. `_close_pause_menu_verified(log=print)` (orchestrator.py, beside
+   `_close_result_safely`/`_result_screen_up`, the same `press_verified` pattern
+   sec3's ban/result screens already use): `input_controller.press_verified(
+   "toggle_pause", _pause_menu_open, log=log)`. `_pause_menu_open()` is the
+   observe -- `wait_for_screen_to_settle(max_wait=6.0)` then a FRESH
+   `pause_menu.is_pause_screen(_fast_grab())` on EVERY call, never a frame stashed
+   by the caller. That freshness is load-bearing: `press_verified` takes its
+   baseline from this same callable and re-calls it after every press; a baseline
+   read from a stale/cached frame is exactly what would turn a press that already
+   closed the menu into an extra one that REOPENS it. `_close_pause_menu()` (the
+   nested function inside `read_balance_from_pause_menu`) now calls this and prints
+   a WARNING naming how many verified attempts it took when it fails, on EVERY exit
+   path including the raising one -- the old post-close check, which lived AFTER
+   the try/finally and so never ran on that path, is deleted rather than kept as a
+   second, redundant verification.
+2. `run()`'s unreadable-screen branch (the `except Exception as e:` around
+   `read_state_for_turn`), reusing the existing `if match_in_progress:` /
+   `elif not match_in_progress:` shape the "Give up?" dialog handling already has:
+   on a fresh capture, if `pause_menu.is_pause_screen(img)` is True AND
+   `read_ban_counter(img) is None` (the ban book clears the SAME page-brightness
+   gate `is_pause_screen` uses -- CLAUDE.md sec3, "THE BAN SCREEN IS A NOTEBOOK
+   PAGE TOO", 1,122 of 1,140 archived ban frames clear `PAGE_MIN_FRAC` too, so
+   `is_pause_screen` alone cannot tell the two notebooks apart; `read_ban_counter`
+   is the one instrument already measured to reject ban screens at 0 false
+   positives over 3,000 frames), close it with `_close_pause_menu_verified()`
+   instead of counting the poll as unreadable. A successful close `continue`s
+   without touching `stuck_count`, exactly like the give-up dialog. A failed close
+   falls through to the ordinary `stuck_count += 1` path unchanged, so a menu that
+   genuinely will not close still stops the run at the existing
+   `MAX_STUCK_ATTEMPTS` bound and the existing `stop_reason = "unreadable_screens"`
+   -- no new constant, no new stop reason, no unbounded retry.
+
+`run_cycles.py`'s `_read_balance()`/`_reset_progress()` needed no change: they call
+`orchestrator.read_balance_from_pause_menu()` and nothing else -- the close has
+always lived entirely inside that function, so both fixes are contained to
+`orchestrator.py`.
+
+**Verify.** `tests/minigame/test_pause_menu_close_verified.py`, 12 checks:
+
+    Part 1, `_close_pause_menu_verified()` directly (press()/
+    `pause_menu.is_pause_screen()` stubbed, no game, no screen):
+      (A) a press dropped once, the second lands and closes it: ok=True,
+          sent=2, exactly `["toggle_pause", "toggle_pause"]`
+      (B) a press that lands on the FIRST attempt: ok=True, sent=1 -- a stale
+          observe would answer "still open" from what it read BEFORE the press
+          and send an unnecessary second one, which (toggle) would REOPEN it
+      bonus: a menu that never closes: ok=False, sent==PRESS_VERIFY_TRIES (5),
+          bounded rather than looping or giving up early
+
+    Part 2, run() through `tests/minigame/_run_harness.Harness` (the project's
+    own run() state-machine rig) plus `pause_menu.is_pause_screen` patched
+    directly around each call (the one seam that harness does not already own):
+      (C) N=MAX_STUCK_ATTEMPTS+3 (18) closable-pause-menu polls, no match in
+          progress: all 18 consumed, run never stops, "Stuck too long..." never
+          printed -- stuck_count is never touched for a poll that recognised
+          and closed the menu
+      (D) CONTROL: is_pause_screen reads True (a ban screen that also clears
+          the page-brightness gate) but read_ban_counter answers -- toggle_pause
+          is NEVER pressed, and the run stops at the ORDINARY bound
+          (h.idx == MAX_STUCK_ATTEMPTS) with the existing stop message, exactly
+          as it would have before this feature existed
+      (E) a pause menu that never closes: toggle_pause is tried every poll
+          (>= MAX_STUCK_ATTEMPTS presses, not given up on after the first
+          failure), and the run still stops at the EXISTING bound
+          (h.idx == MAX_STUCK_ATTEMPTS) with the EXISTING message ("Stuck too
+          long on unreadable screens — stopping.") -- no new stop reason
+
+`input_controller.PRESS_VERIFY_SETTLE` is dropped to 0 for Part 2 only (restored in
+a `finally`) -- `press_verified` sleeps on `input_controller`'s own `time` module,
+not the harness's virtual clock, and at the real 0.45s default these three
+scenarios (up to `MAX_STUCK_ATTEMPTS` x `PRESS_VERIFY_TRIES` presses) would cost
+real minutes for no evidentiary gain (`tests/rig/test_press_verified.py` makes the
+same trade with an explicit `settle=0`).
+
+**Mutants (3, `__pycache__` cleared before every run, sha256-verified restore to
+`03254afc36ef684ac67bf558d8fd0810926dcd599b157308d468de7e2c8e9c4e` after each):**
+
+    `_close_pause_menu_verified` -> a bare `input_controller.press("toggle_pause")`
+      then `return True, 1`
+        -> FAILS 4: (A) (sent=1, not 2), the never-closes bonus check (reports
+           ok=True instead of bounded False), and both of (E)'s checks (the run
+           stops at 18, not 15, and never prints the unreadable-screen message,
+           since the fake always reports success)
+    `_pause_menu_open` reads `pause_menu.is_pause_screen` ONCE into a module-level
+      cache and returns the cached value forever instead of a fresh read each call
+        -> FAILS 4: (A) and (B) (both retry to PRESS_VERIFY_TRIES and report
+           ok=False, since the cached "open" answer never changes), and both of
+           (C)'s checks (the menu is never seen as closed, so it consumes only 15
+           of the 18 scripted polls before hitting the ordinary bound instead of
+           all 18 without stopping)
+    run()'s pause-menu branch drops the `and read_ban_counter(_pz_img) is None`
+      condition, treating any `is_pause_screen`-True frame as the pause menu
+        -> FAILS 1: (D), the control -- toggle_pause is pressed 75 times against a
+           ban screen it must never touch
+
+Run clean (`BASEBALL_TEST_RUN=1`, offline, single process): the new file,
+`test_run_debit_and_scoring.py`, `test_stale_flag_never_presses_unpaid.py`,
+`test_run_resume_and_persist.py`, `test_transition_screens_recognised.py`,
+`test_verified_presses_on_match_path.py`, `tests/harness/test_reload_wallet_guard.py`
+(exercises `_close_pause_menu()` for real under `BASEBALL_TEST_RUN`, where the
+verified close correctly exhausts its 5 attempts and prints the WARNING -- the
+exact "menu would not close" shape this ticket adds, confirmed harmless: 22/22
+checks pass), `test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py` -- all exit 0.
+
+**Status.** fixed on branch, awaiting skeptic (money-adjacent: the pause menu
+holds Load Last Save).
