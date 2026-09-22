@@ -173,7 +173,7 @@ class Fan:
             return ([], [10.0] * 4, 4, [])
         return ([], [10.0] * 5, 5, [0] if self.selected else [])
 
-    def select_verified(self, target, look):
+    def select_verified(self, target, look, ys0=None, sel0=None):
         self.selected = True
         return True, [target]
 
