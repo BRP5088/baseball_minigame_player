@@ -4410,4 +4410,5 @@ offline, single process, 11 files): the new test, `test_run_debit_and_scoring.py
 `test_validate_game_state.py` -- all exit 0. `test_result_reader.py` still exits 1
 on the same pre-existing, unrelated fixture gap documented above and under I-54.
 
-**Status.** fixed on branch (follow-up + skeptic gaps closed), awaiting re-review.
+**Status.** merged c55d2cc; Sonnet skeptic CONFIRMED WITH NOTES, three surviving
+mutants closed by cases G/H/I (f5c14be).
