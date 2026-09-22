@@ -4659,5 +4659,5 @@ exact "menu would not close" shape this ticket adds, confirmed harmless: 22/22
 checks pass), `test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
 `tests/rig/test_no_real_input_under_test_run.py` -- all exit 0.
 
-**Status.** fixed on branch, awaiting skeptic (money-adjacent: the pause menu
-holds Load Last Save).
+**Status.** merged cb5d72e (fix f5e7572 + notes 0e6fa49; Opus skeptic CONFIRMED
+WITH NOTES, all four notes closed).
