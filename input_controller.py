@@ -1138,6 +1138,8 @@ def _walk_cursor_to(target, look):
     # (or an occluded slot right next to a genuinely dropped press) still refuse: see
     # the `dead_reckoned_last` check below, and I-32's task note.
     dead_reckoned_last = False
+    # I-57: granted at most once per walk -- see the branch below that uses it.
+    _topup_used = False
     while cur != target:
         if steps >= CURSOR_MAX_STEPS:
             # EIGHT LANDED PRESSES CANNOT LEAVE THE CURSOR IN PLACE (I-25). Section 5
@@ -1173,6 +1175,46 @@ def _walk_cursor_to(target, look):
                 cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
                 steps = 0
                 continue
+            # I-57: THE CAP COUNTS PRESSES SENT, NOT MOVES REFLECTED
+            # (agent_progress/census/stuck_after_half/progress.md;
+            # overnight/run_live_20260921x.log:465 -- "still at 3 after 8 presses --
+            # refusing", target 4, the kept frame reading cleanly; the very next poll
+            # reached 4 in ONE press). A drop cluster on the last hop refuses a walk
+            # that was one step away and CONFIRMED moving -- a different shape from the
+            # 11 archived "still at N after 8" refusals, which never moved at all and
+            # stay refused (that is the branch above, `cur == first_cur`). Extend the
+            # budget by PRESS_VERIFY_TRIES (reused, not invented) only when the latest
+            # confident read proves the walk is live: the cursor has moved since it
+            # began (cur != first_cur), or it already sits one hop from target. Bound:
+            # total presses per walk <= CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES.
+            if not _topup_used and (cur != first_cur or abs(cur - target) == 1):
+                _topup_used = True
+                if cur != first_cur:
+                    why = f"it moved since the walk began ({first_cur} -> {cur})"
+                else:
+                    why = f"it is one hop from target {target}"
+                print(f"  [cursor] still at {cur} after {steps} presses, but {why} — "
+                      f"allowing up to {PRESS_VERIFY_TRIES} more look-gated presses "
+                      "toward the target rather than refusing")
+                for _extra in range(1, PRESS_VERIFY_TRIES + 1):
+                    press("move_right" if cur < target else "move_left")
+                    steps += 1
+                    time.sleep(MOVE_SETTLE_SEC)
+                    glow, ys, n, sel = _look_settled(look)
+                    if n != MAX_HAND_SIZE:
+                        print(f"  [cursor] the fan stopped reading mid-walk (rows={n}) "
+                              "— refusing")
+                        return False, sel
+                    cur = local_hand.cursor_slot(glow, sel, exclude=excluded)
+                    if cur is not None:
+                        cur_confirmed_blind = glow[cur] < CUR_TRUSTED_GLOW_MIN
+                        if cur == target:
+                            break
+                if cur is not None:
+                    continue
+                print(f"  [cursor] still lost after the extra presses (glow={glow}) "
+                      "— refusing")
+                return False, sel
             print(f"  [cursor] still at {cur} after {steps} presses — refusing")
             return False, sel
         prev = cur

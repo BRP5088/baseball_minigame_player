@@ -299,6 +299,95 @@ try:
     # this file's own fix never touches either, so the two must still agree.
     check("PROBE_SELECT_MAX untouched by this file's fix",
           ic.PROBE_SELECT_MAX == ic.PRESS_VERIFY_TRIES)
+
+    # ---------------------------------------------------------------- I-57 --
+    # agent_progress/census/stuck_after_half/progress.md:
+    # overnight/run_live_20260921x.log:465 -- "still at 3 after 8 presses --
+    # refusing", target 4, the kept frame reading CLEANLY (fan fully dealt, glow
+    # 21.2 on slot 3, unambiguous) -- the reads were confident and the presses
+    # were dropped in a cluster, not lost. The next poll reached 4 in ONE press.
+    # `CURSOR_MAX_STEPS` counts presses SENT, not moves REFLECTED, so a walk that
+    # is confirmed moving (or already one hop from target) gets up to
+    # PRESS_VERIFY_TRIES more look-gated presses before refusing -- a walk that
+    # never moved at all (the OTHER 11 archived "still at N after 8" lines, a
+    # chronic-occlusion shape) must still refuse exactly as before, with zero
+    # top-up.
+
+    # --- (W) 8 presses, 6 dropped in a cluster at the end -- the cursor is
+    #         CONFIRMED moving (1 -> 3, first_cur=1) when the cap is hit, so the
+    #         walk gets a real look-gated press toward the target rather than
+    #         refusing one hop short; total presses <= CURSOR_MAX_STEPS +
+    #         PRESS_VERIFY_TRIES --------------------------------------------
+    s = Screen(cur=1, drop_press={3, 4, 5, 6, 7, 8})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(W) arrives after the top-up reaches the target", ok is True)
+    check("(W) the top-up is logged, naming the move since the walk began",
+          "moved since the walk began (1 -> 3)" in out)
+    check("(W) no more than CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses sent",
+          len(s.sent) <= ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES)
+    check("(W) every press sent was toward the target",
+          all(k == "move_right" for k in s.sent))
+
+    # --- (X) CONTROL -- the cursor never moved in 8 presses (every one dropped
+    #         from the first): the chronic-occlusion shape must still refuse
+    #         with ZERO top-up, exactly as it did before this fix. The
+    #         false-cursor-exclude branch above ALSO fires on `cur == first_cur`
+    #         and takes priority, so it would mask this file's own guard on the
+    #         very first round -- FALSE_CURSOR_EXCLUDE_MAX is dropped to 0 here
+    #         (same monkeypatch shape as test_false_cursor_on_occluded_slot.py's
+    #         part (d)) so the cap-hit falls straight through to THIS branch
+    #         with `cur == first_cur` still true, which is the only way to
+    #         exercise the guard this test exists to pin -----------------------
+    _real_exclude_max = ic.FALSE_CURSOR_EXCLUDE_MAX
+    try:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = 0
+        s = Screen(cur=0, drop_press={1, 2, 3, 4, 5, 6, 7, 8})
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(X) a cursor that never moved at all is refused", ok is False)
+        check("(X) the top-up never fires when the cursor never moved",
+              "allowing up to" not in out)
+        check("(X) no presses beyond the original budget were sent",
+              len(s.sent) == ic.CURSOR_MAX_STEPS)
+    finally:
+        ic.FALSE_CURSOR_EXCLUDE_MAX = _real_exclude_max
+
+    # --- (Y) the cursor moves during the first 8 (1 -> 3, granting the top-up),
+    #         but every one of the top-up's own presses is ALSO dropped -- it
+    #         must still refuse, having spent EXACTLY the extended budget -----
+    s = Screen(cur=1, drop_press={3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(Y) refuses once the top-up budget is also spent", ok is False)
+    check("(Y) exactly CURSOR_MAX_STEPS + PRESS_VERIFY_TRIES presses sent",
+          len(s.sent) == ic.CURSOR_MAX_STEPS + ic.PRESS_VERIFY_TRIES)
+    check("(Y) the top-up was granted exactly once",
+          out.count("allowing up to") == 1)
+
+    # --- (Z) CONTROL -- a normal walk with no drops and no occlusion never
+    #         reaches the cap at all, so the top-up never fires and the press
+    #         count is exactly what it always was ---------------------------
+    s = Screen(cur=0)
+    ic.press = s.press
+    buf = _io.StringIO()
+    with _contextlib.redirect_stdout(buf):
+        ok, sel = ic._walk_cursor_to(4, s.look)
+    out = buf.getvalue()
+    check("(Z) CONTROL: a normal walk still arrives", ok is True)
+    check("(Z) CONTROL: exactly 4 presses, no top-up logic touched",
+          s.sent == ["move_right"] * 4)
+    check("(Z) CONTROL: the top-up never fires on an unremarkable walk",
+          "allowing up to" not in out)
 finally:
     ic.press = _real_press
 
