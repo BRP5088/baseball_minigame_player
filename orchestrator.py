@@ -6705,6 +6705,82 @@ def _close_result_safely(log=print):
     return input_controller.press_verified("close_result", _result_screen_up, log=log)
 
 
+def _pause_menu_open():
+    """observe for closing the pause menu (I-58): is the pause book still up?
+
+    True/False from a FRESH, SETTLED capture on every call -- never a frame
+    stashed earlier by the caller. press_verified takes its baseline from this
+    same callable and re-calls it after every press; a baseline read from a
+    stale frame is exactly what turns a press that already closed the menu
+    into an extra one that REOPENS it, because toggle_pause is a TOGGLE
+    (CLAUDE.md sec3 pause book, sec5 OPTIONS-is-a-toggle).
+
+    Never returns None: `pause_menu.is_pause_screen` already answers on every
+    frame it is handed (a bool, not a three-valued read), so there is no blind
+    baseline to refuse here the way `_result_screen_up` refuses on a genuinely
+    unreadable frame. The failure mode this guards against is a spurious
+    RETRY, not a press into the dark.
+
+    Root cause this exists for (I-58, 2026-09-21): the close used to be ONE
+    bare `press("toggle_pause")` with no verification anywhere on the path
+    that matters -- the only post-check lived in code AFTER the paid-call
+    try/finally, so it never ran when that call raised PaidModelDisabled
+    (the normal case with the paid model off), which is exactly the branch
+    two consecutive live cycles (14, 15 -- overnight/run_live_20260921z.log,
+    run_live_20260922a.log) hit. Census over 16 opens across cycles 1-16 of
+    that run (overnight/run_live_20260921{j,l,o,p,q,r,s,t,u,v,w,x,y,z}.log,
+    run_live_2026092{2a,2b}.log): the close was followed by run()'s own
+    poll stalling on the unreadable pause book for exactly 2 of 16 opens
+    (12.5%) -- in line with CLAUDE.md sec5's measured 15.20% single-press
+    ignore rate, and independent of which branch of
+    read_balance_from_pause_menu ran (cycle 14 read the balance LOCALLY,
+    cycle 15's local read failed and fell through to the disabled paid
+    path; both funnel through the same bare close press). No evidence of a
+    skipped-close code path, a close pressed mid open-animation
+    (wait_for_screen_to_settle already runs before the local read starts,
+    and the close fires several seconds later, after up to
+    MONEY_READ_TRIES local retries), or a double press. Ordinary drop rate
+    on an unverified press, exactly the shape a bare `press()` call always
+    has (CLAUDE.md sec5).
+    """
+    import pause_menu as _pm
+    wait_for_screen_to_settle(max_wait=6.0)
+    return _pm.is_pause_screen(_fast_grab())
+
+
+def _close_pause_menu_verified(log=print):
+    """Close the pause menu, retrying ONLY while a fresh read still shows it
+    open (I-58). Returns (ok, presses) like press_verified.
+
+    Replaces a single blind toggle_pause press. That press drops ~15% of the
+    time (CLAUDE.md sec5) and, once it HAS landed, a second press REOPENS the
+    menu -- so neither "press once and hope" nor "press again unconditionally"
+    is safe. press_verified is exactly this shape: baseline from
+    `_pause_menu_open()` (True, the menu we just confirmed open), press, and
+    stop the moment a fresh read disagrees with that baseline -- never
+    re-pressing once it reads closed.
+
+    ok=False after PRESS_VERIFY_TRIES means the menu would not close; callers
+    should treat that as a real, bounded failure and fall through to their own
+    recovery rather than retrying with a bare press.
+
+    I-58 skeptic N1: press_verified's ok=True proves a CHANGE happened between
+    the baseline read and the last one, not that the menu is now CLOSED --
+    toggle_pause is a toggle, so entered ALREADY CLOSED, one press OPENS it,
+    the observe reads False -> True, and press_verified reports that as
+    success. Both production call sites confirm the menu is open immediately
+    before calling this, so that state is not reachable today -- but the
+    return value should carry what its name promises regardless. One more
+    FRESH read after press_verified returns proves the STATE rather than
+    trusting the CHANGE: ok only if a fresh look now shows the menu closed.
+    """
+    ok, presses = input_controller.press_verified(
+        "toggle_pause", _pause_menu_open, log=log)
+    if ok:
+        ok = not _pause_menu_open()
+    return ok, presses
+
+
 def _match_start_screen():
     """observe for start_match: "ban" / "prompt" / "other", or None if blind.
 
@@ -7740,7 +7816,7 @@ def read_balance_from_pause_menu() -> int:
             "only counter is the HEALTH coin and any answer would be wrong")
 
     def _close_pause_menu():
-        """Shut the menu, and SAY SO if it did not shut.
+        """Shut the menu via a VERIFIED press, and SAY SO if it did not shut.
 
         In a helper because it now has to run on EVERY exit, including the raising
         one. It used to sit only after the paid call, so any exception from that
@@ -7748,9 +7824,29 @@ def read_balance_from_pause_menu() -> int:
         the game PAUSED. run_cycles hits this once per cycle and swallows the
         exception, so every cycle walked 76 s to the table and then parked the
         console in a paused menu. The symptom looks like dead input; it is neither.
+
+        I-58, 2026-09-21: this used to be a SINGLE BLIND press with no log line at
+        all, and the one place that verified it (below, in this function's own
+        body) only ran on the SUCCESS path -- code sitting AFTER the paid-call
+        try/finally, so an exception from that call (PaidModelDisabled, the normal
+        state with the paid model off) skipped straight over it. Two consecutive
+        live cycles (14, 15) hit exactly that: the close dropped, and run()'s own
+        poll then spent its whole unreadable-screen budget staring at a pause menu
+        it did not recognise before stopping with no match played. See
+        `_close_pause_menu_verified`'s docstring for the census. Now goes through
+        the same press_verified loop the ban and result screens use, which
+        verifies on EVERY call site by construction rather than as an afterthought
+        bolted onto one of them.
         """
-        press("toggle_pause")
-        wait_for_screen_to_settle(max_wait=6.0)  # let the menu animate closed
+        ok, presses = _close_pause_menu_verified(log=print)
+        if not ok:
+            print(f"  WARNING: [balance] toggle_pause did NOT close the pause menu "
+                  f"after {presses} verified attempt(s) -- THE PAUSE MENU IS STILL "
+                  f"OPEN. The balance above is good, but everything after this is "
+                  f"pressing buttons into a menu. Expect the symptom to look like "
+                  f"dead input or a frozen stream; it is neither.")
+        else:
+            print(f"  [balance] pause menu closed after {presses} press(es).")
 
     # LOCAL FIRST. pause_menu.read_money is measured on BOTH capture geometries,
     # refuses unless is_pause_screen agrees, and requires two OCR scales to agree
@@ -7841,25 +7937,14 @@ def read_balance_from_pause_menu() -> int:
                        if block.type == "text").strip()
         result = extract_json(text)
     finally:
+        # I-58: _close_pause_menu() now verifies and warns internally (a
+        # press_verified loop, not a bare press), on every call site including
+        # this one -- so there is no separate post-check needed here any more.
+        # The old one lived AFTER this try/finally and so never ran when this
+        # try raised (PaidModelDisabled, the normal state with the paid model
+        # off), which is exactly the branch that stalled two consecutive live
+        # cycles. See _close_pause_menu_verified's docstring for the census.
         _close_pause_menu()
-    # THE CLOSE IS A TOGGLE TOO, and nothing checked it. The open is verified
-    # three times over; the close was fire-and-forget. If it drops, the game
-    # stays PAUSED and every press after this lands in a menu instead of the
-    # world — which surfaces minutes later as "no input is reaching the game",
-    # a diagnosis that has already been raised twice at a healthy stream with
-    # working input. This only warns: re-pressing a toggle that DID land would
-    # reopen the menu, which is the trap that costs more than it fixes.
-    try:
-        if _pm.is_pause_screen(_fast_grab()):
-            print("  WARNING: [balance] the closing toggle_pause did NOT land "
-                  "— THE PAUSE MENU IS STILL OPEN. The balance above is good, "
-                  "but everything after this is pressing buttons into a menu. "
-                  "Expect the symptom to look like dead input or a frozen "
-                  "stream; it is neither.")
-    except Exception as _e:
-        print(f"  [balance] could not verify the pause menu closed ({_e!r}) — "
-              f"so 'the menu is closed' is an ASSUMPTION from here on, not an "
-              f"observation.")
 
     # The stack is the proof it read the right thing. A lone number could have
     # come from anywhere on screen — which is exactly how the health coin got
@@ -9132,6 +9217,79 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                                   f"(read: {_gu_after!r}) — will look again next poll, "
                                   "not pressing again blind.")
                         continue
+                # I-58: a pause menu left open -- e.g. a dropped toggle_pause
+                # close after read_balance_from_pause_menu, CLAUDE.md sec3/sec5
+                # -- reads as an unrecognised screen forever and burns the
+                # whole unreadable-screen budget before a human notices. Live
+                # 2026-09-21: two consecutive cycles (14, 15 --
+                # overnight/run_live_20260921z.log, run_live_20260922a.log)
+                # did exactly this, no match in progress, balance already read
+                # correctly, only the close having dropped. Recognise it and
+                # close it with the SAME verified press
+                # read_balance_from_pause_menu uses, rather than counting each
+                # poll as unreadable. Bounded by falling through to the
+                # ordinary stuck_count path below when the close itself fails,
+                # so a menu that will not close still stops the run at the
+                # existing MAX_STUCK_ATTEMPTS.
+                elif not match_in_progress:
+                    try:
+                        _pz_img = _fast_grab()
+                    except Exception:
+                        _pz_img = None
+                    _pz_up = False
+                    if _pz_img is not None:
+                        try:
+                            import pause_menu as _pz_pm
+                            # MUST NOT be the ban book: is_pause_screen's own
+                            # PAGE_MIN_FRAC gate does not separate the two
+                            # notebooks (CLAUDE.md sec3, "THE BAN SCREEN IS A
+                            # NOTEBOOK PAGE TOO" -- 1,122 of 1,140 archived ban
+                            # frames clear PAGE_MIN_FRAC too). read_ban_counter
+                            # is the one instrument already measured to reject
+                            # ban screens (0 false positives over 3,000
+                            # frames), so require it to answer None before
+                            # treating this as the pause menu.
+                            _pz_up = (_pz_pm.is_pause_screen(_pz_img)
+                                      and read_ban_counter(_pz_img) is None)
+                        except Exception:
+                            _pz_up = False
+                    if _pz_up:
+                        print("  [pause] the pause menu is open with no match "
+                              "in progress -- closing it rather than counting "
+                              "this poll as unreadable.")
+                        try:
+                            _pz_ok, _pz_presses = _close_pause_menu_verified(log=print)
+                        except Exception as _pz_e:
+                            # I-58 skeptic N4: every OTHER capture in this branch
+                            # (_fast_grab above, is_pause_screen, read_ban_counter)
+                            # is guarded the same way -- _close_pause_menu_verified
+                            # was the one bare call, and it does 1 + up to
+                            # PRESS_VERIFY_TRIES more _fast_grab() calls. Unguarded,
+                            # an mss failure there raises OUT of this except block
+                            # (an exception inside an except body is not caught by
+                            # its own try), past the "Couldn't read the screen"
+                            # print below and into the outer unhandled-exception
+                            # handler -- silently masking the ORIGINAL
+                            # PaidModelDisabled/unreadable-screen exception this
+                            # whole branch exists to recover from. Same shape as
+                            # QA1-F9: "a motion check that cannot answer should
+                            # fall through to the normal read, not end the
+                            # session." Treated as a failed close, not a stop.
+                            _pz_ok, _pz_presses = False, 0
+                            print(f"  [pause] closing it raised ({_pz_e!r}) -- "
+                                  f"treating as a failed close rather than "
+                                  f"letting it mask the read failure this poll "
+                                  f"is already recovering from.")
+                        if _pz_ok:
+                            print(f"  [pause] closed after {_pz_presses} "
+                                  f"press(es) -- not counting this poll as "
+                                  f"unreadable.")
+                            continue
+                        print(f"  [pause] did NOT close after {_pz_presses} "
+                              "verified attempt(s) -- falling through to the "
+                              "unreadable-screen path so a menu that will not "
+                              "close still stops the run rather than spinning "
+                              "forever.")
                 stuck_count += 1
                 record_observation(screen="<read failed>", error=str(e)[:200],
                                    stuck=stuck_count, motion_skips=motion_skips)
