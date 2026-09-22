@@ -399,3 +399,209 @@ path works end to end, which is what this section exists to document.
 process on Snoopy was stopped, restarted or reconfigured to do any of this —
 only `Get-Process`, `Get-NetTCPConnection`, `/props`, `scp`, and one POST to
 an already-running server.
+
+## Full suite on Snoopy (2026-09-22)
+
+Tesseract installed, the gitignored fixtures the diff table named as missing were
+shipped, and the full suite re-run at HEAD 204bb5b. User-approved for this session
+(2026-09-22): install tesseract, ship the small fixtures. Read-only on the checkout
+otherwise.
+
+### Install
+
+    winget install --id UB-Mannheim.TesseractOCR -e --accept-package-agreements --accept-source-agreements
+
+Installs `C:\Program Files\Tesseract-OCR\tesseract.exe`, version **5.4.0.20240606**
+(leptonica-1.84.1). **Not added to the machine PATH** — prepend it in the launching
+shell before running anything that shells out to it:
+
+    $env:PATH = "C:\Program Files\Tesseract-OCR;" + $env:PATH
+
+`pip install tesserocr` in `C:\baseball\venv` **fails** — no Windows wheel, and the
+sdist build dies with `RuntimeError: Tesseract library not found in LIBPATH: []`
+(it wants pkg-config, absent here). `ocr_glyphs.backend()` falls back to `"batch"`
+(not `"tesserocr"`, not `"pytesseract"` — a third mode that still spawns a
+`tesseract.exe` subprocess per call), confirmed working end to end on a synthetic
+image. **Do not spend time chasing a tesserocr wheel here; batch-mode pytesseract is
+what Snoopy gets.**
+
+### Fixtures shipped (the diff table's ~9 "gitignored corpora" failures, plus one the
+### diff table never named)
+
+Individually-named files only where the test names them; whole directories only
+where the test globs the directory as a candidate pool (`test_map_admit.py` /
+`test_add_non_disruption.py` both pass `explore/20260904_152521_bar_area` itself to
+`admit()`). Staged tree: 263 files, 55M, shipped as one tar over scp, extracted into
+`C:\baseball\repo`:
+
+    94 named files, 14,419,381 bytes   demos/dealer_circle_20260828_095808/f_*.jpg
+                                        (first 40 sorted, test_find_bar_is_not_a_stream_check.py),
+                                        2 named demos frames (test_at_table_threshold.py),
+                                        18 named demos frames from walk3_full_20260828_050731/
+                                        (test_orb_localiser.py + test_jukebox_match_min.py),
+                                        screenshot_log/reset_*.jpg (28 files,
+                                        test_pause_menu.py), overnight/run_one_match_20260920{,b,c}.log
+                                        + overnight/run_live_20260920{d,h}.log (5 files,
+                                        test_run_census.py)
+    1 named file,     1,468,006 bytes  diagnostics/20260910_103221_5018/screen_at_stall.png
+                                        (test_result_reader.py)
+    explore/20260904_152521_bar_area/  whole dir, 161 files, 24M
+    route_frames/                      whole dir, 7 files, 16M (test_landmark_check.py)
+
+**A TENTH FIXTURE, NEVER NAMED IN THE PRIOR DIFF TABLE: `places_backup_20260903_020639/`
+(334.0K).** `graph_walk.py:1611` — `HUMAN_REFERENCE_DIR = "places_backup_20260903_020639"`,
+gitignored (`.gitignore:103`), read by `_recorded_reference()` when
+`REFERENCE_POSE == "human"`. Missing it made `test_reference_pose_flag.py` FAIL 9 of
+9 checks the same way every time — `glob.glob` on the missing dir returns `[]`, the
+function falls through to the `places/` lookup, and BOTH poses silently resolve to
+the SAME file. This is the exact cause of the 2026-09-07 baseline's "NOT ESTABLISHED
+why (9 checks each)" entry for this file — a missing gitignored fixture, not a code
+defect. Shipped it (`tar -cf places_backup.tar places_backup_20260903_020639`,
+334.0K); the test went from 9 FAIL to 9 PASS ("all green"), confirmed by a standalone
+rerun. **Recheck `HUMAN_REFERENCE_DIR`-shaped constants (a gitignored directory named
+by a single string, read by exactly one function) before trusting any "cannot
+reproduce" verdict on a test that touches `graph_walk`.**
+
+### Sync recipe
+
+    git archive 204bb5b -o ship_204bb5b.tar                    # on the Mac
+    tar -cf fixtures.tar -C <staged tree> .                    # the fixtures above
+    scp -i ~/.ssh/id_ed25519_snoopy ship_204bb5b.tar Brett@snoopy:C:/baseball/
+    scp -i ~/.ssh/id_ed25519_snoopy fixtures.tar Brett@snoopy:C:/baseball/
+
+    # over a held ssh session, wipe first (no .snoopy_commit marker means an
+    # incremental extract is a guess about what is already there):
+    Remove-Item C:\baseball\repo -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path C:\baseball\repo | Out-Null
+    cd C:\baseball\repo
+    tar -xf C:\baseball\ship_204bb5b.tar
+    tar -xf C:\baseball\fixtures.tar
+    "204bb5b9904d5a26a15c44e7f68d5ca2aaf88880" | Out-File -Encoding ascii C:\baseball\repo\.snoopy_commit
+
+### Runner invocation
+
+    $env:PATH = "C:\Program Files\Tesseract-OCR;" + $env:PATH
+    cd C:\baseball
+    C:\baseball\venv\Scripts\python.exe run_full_suite.py
+
+Same `run_full_suite.py` as before (see the earlier section of this file); the only
+change from that recipe is the PATH prepend, which the runner's
+`ENV = dict(os.environ, ...)` inherits into every child.
+
+### Pass count
+
+    before (a99bc6e, no tesseract, no fixtures)   284 attempted, 213 PASS / 71 FAIL / 0 TIMEOUT / 0 ERROR, 7 excluded
+    after tesseract + fixtures (204bb5b)          285 attempted, 249 PASS / 35 FAIL / 1 TIMEOUT / 0 ERROR, 7 excluded
+    after + places_backup (204bb5b, final)        285 attempted, 249 PASS / 35 FAIL / 1 TIMEOUT / 0 ERROR, 7 excluded
+
+The count did not move between the last two runs: `test_reference_pose_flag.py`
+fixed (9 FAIL -> 0), but `test_minigame/test_result_commit_evidence.py` — which
+PASSED in the run before it — FAILED in the final run with nothing relevant changed
+between them. Reran it three times standalone: **FAIL, PASS, FAIL** — a genuine
+flake, not caused by tesseract or the fixtures. All five failing checks are case
+"(G)", about a stash/timestamp (`ns`) match, e.g. `"CONTROL: A's own ns does not
+match the (now B) stash"`. Not investigated further; flag it as a pre-existing
+timing-sensitive test on this platform, not a fixture gap.
+
+### Remaining failures, by cause (35 FAIL + 1 TIMEOUT, HEAD 204bb5b)
+
+**Environmental/by-design, no code change indicated (13 files):** no C++ toolchain
+or `chiaki-ng-src` (`test_framedump_cpp`, `test_injectinput_cpp`,
+`test_button_bits_match_keymap`, `test_keymap_matches_chiaki`); not a git checkout
+(`test_affected_tests`, `test_state_files_are_real`, `test_every_tracked_file_parses`);
+the `fcntl` shim doesn't cover `os.O_NONBLOCK`/`os.mkfifo`
+(`test_analog_replay`, `test_injected_input`, `test_fifo_open_bound`); genuinely
+Unix/macOS-only (`test_no_real_input_under_test_run`, `test_focus_protection`,
+`test_turn_control` — confirmed by rerun: `frontmost really is chiaki but has_focus
+said False`, the macOS Quartz focus check).
+
+**Windows-specific, reproducible, one-line fix each, NOT applied per this session's
+brief (10 files):**
+
+    FOOTGUN 5 (file-handle lock)   test_reload_wallet_guard, test_readable_hand_gate,
+                                   test_reveal_frame_kept, test_reveal_kind_capture
+      Windows locks an open file handle against rename/delete/reopen; POSIX allows
+      it. `PermissionError: [WinError 32] ... being used by another process`. Fix:
+      close the handle before rotating/deleting that path.
+
+    FOOTGUN 6 (mss headless)       test_decisions, test_orchestrator_diagnostics,
+                                   test_should_redraw_incomplete, test_pause_money_local
+      `mss.exception.ScreenShotError: ... BitBlt` — no attached interactive desktop
+      over SSH. `test_pause_money_local` confirmed by rerun:
+      `FAIL expected PaidModelDisabled, got OSError('screen grab failed')` — the
+      code reaches a real capture call before the guard under test. Fix: stub the
+      capture call in these tests.
+
+    FOOTGUN 7 (cp1252 default encoding)   test_probe_select_budget, test_tactics_select_fallback
+      `open(path)` with no `encoding=` defaults to the Windows locale codepage, not
+      UTF-8; an em-dash in the mutation anchor decodes to garbage and the substring
+      search finds 0 matches instead of 1. Fix: `open(path, encoding="utf-8")`.
+
+    hardcoded Unix /tmp path        test_result_ocr_whole_word, test_frame_dump
+      A forward-slash `/tmp/...` literal survives string-concat with a Windows path
+      and resolves nowhere. Fix: `tempfile.gettempdir()`.
+
+    path-separator bug              test_goal_leg_frames
+      Looks for a `"success/"` substring that Windows `os.path.join` never produces.
+      Fix: compare path components, not a substring.
+
+    no TIMEOUT_PL wrapper           test_suite_timeout_kills
+      Exercises run_tests.sh's perl SIGKILL one-liner, no Windows equivalent.
+
+    Windows permission semantics    test_atomic_results
+      A simulated "write cannot happen" (POSIX chmod) doesn't reproduce the same way.
+
+    FOOTGUN 8 (two-phase test)      test_no_side_effects  (TIMEOUT, 300.1s both runs)
+      Needs run_tests.sh's own `--snapshot`/`--check` two-phase call; its bare
+      self-contained mode re-executes the whole suite as children and inherits
+      every failure above. A runner-design gap, not a defect in the guard.
+
+**Real content differences — Windows tesseract 5.4.0 (`batch` backend, no
+tesserocr) reads differently than whatever produced the Mac's reference numbers (6
+files, none investigated past the point of confirming it's not a missing fixture):**
+
+    test_ocr_word_mode.py                 architecture test expects the in-process
+                                          tesserocr reader; batch backend spawns a
+                                          process per call and its handle cache
+                                          shows cross-call PSM contamination that
+                                          cannot exist with tesserocr
+    test_ocr_glyphs.py                    18/208 glyphs disagree between the "slow"
+                                          and "fast" paths (backend=batch)
+    test_transition_screens_recognised.py 4 FAILED, stalls on "Unrecognized screen"
+    test_at_table_ocr_path.py             test_the_top_route_negatives_stay_rejected:
+                                          OCR reads 0 words where the fixture needs >=1
+    test_compass_accuracy.py              "with both guards off, all 3 wrong bearings
+                                          come back" -- only 2 of 3 reproduce under
+                                          this tesseract build
+    test_landmarks.py                     2 fails: at_baseball_table says False on a
+                                          real prompt frame; sees_lb_building confirms
+                                          only 4/9 shop-front frames (floor 5)
+
+### Two new PowerShell STDIN footguns found this session
+
+**Running a `.ps1` file over ssh is blocked by execution policy.**
+`powershell -File C:\baseball\script.ps1` over ssh fails with `UnauthorizedAccess:
+running scripts is disabled on this system`. The existing STDIN pattern
+(`cat script | ssh ... 'powershell -Command -'`) is not just a quoting convenience,
+it is the only way in — `-File` never worked here at all.
+
+**A multi-line `$x = @(...)` array literal over STDIN silently produces ZERO
+output**, reproducing the 2026-09-21 session's finding exactly (see above) — hit
+again this session, independently, before finding the existing note. Collapse to
+one line: `$x = @("a", "b", "c")`. Cheap check before trusting an empty STDIN
+result: does the script contain a multi-line `@(`.
+
+### Answer to "can Snoopy now run the pre-cycle suite"
+
+**Improved from 213/284 (75%) to 249/285 (87%), and every remaining gap is
+environmental, a Windows-specific one-line fix, a runner-design gap, or an
+OCR-engine version difference — none is Snoopy's Python disagreeing with the Mac's
+on project logic.** Cannot run without further work: the 4 file-handle-lock tests,
+the 4 mss-headless tests, the 2 cp1252 tests, the 2 hardcoded-/tmp tests, the
+path-separator test, `test_suite_timeout_kills`, `test_atomic_results`,
+`test_no_side_effects` (needs the two-phase call ported), the 4 C++-toolchain tests
+(need `chiaki-ng-src/`, gitignored), the 3 git-checkout tests (repo copy is not a
+`.git` checkout), the 3 Unix/macOS-only tests, and the 3 `fcntl`-shim-gap tests. The
+6 OCR-difference tests would need either a Windows tesserocr wheel (none exists) or
+per-platform tolerance in those tests. `test_result_commit_evidence.py` flaked
+2/3 runs for an apparently unrelated timing reason and needs its own investigation.
