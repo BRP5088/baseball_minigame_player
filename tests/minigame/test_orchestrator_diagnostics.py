@@ -242,24 +242,46 @@ class _Client:
 
 
 import pause_menu as _pm
+import input_controller as _ic
 
-_b = (orch.press, orch.wait_for_screen_to_settle, orch._fast_grab,
+_b = (orch.press, _ic.press, orch.wait_for_screen_to_settle, orch._fast_grab,
       orch.capture_screenshot_b64, orch.client, _pm.is_pause_screen)
 
 
 def _run_balance(open_on_attempt, closes):
-    """Drive the reader with a scripted pause menu. Returns (money, output)."""
-    calls = {"n": 0}
+    """Drive the reader with a scripted pause menu. Returns (money, output).
+
+    I-58 (2026-09-21): the close is now VERIFIED -- `_close_pause_menu_verified`
+    calls input_controller.press_verified, which presses through
+    input_controller.press, not orchestrator's own `press` name, and it reads
+    the menu state through a fresh `is_pause_screen` call before AND after
+    each press (baseline, then one read per attempt). A stub keyed on a raw
+    call-count threshold cannot tell those calls apart from the OPEN loop's
+    own calls or from `read_money`'s internal guard call, so it must track
+    the actual toggle instead: every real toggle_pause press flips it. The
+    OPEN sequence lands on attempt `open_on_attempt`; the CLOSE -- a separate
+    toggle sequence -- lands on its first press when `closes` is True, and
+    never lands when `closes` is False, exactly as a real dropped toggle
+    would look to a fresh, settled read.
+    """
+    state = {"toggle_presses": 0, "open": False}
+
+    def _do_press(action, *a, **kw):
+        if action != "toggle_pause":
+            return
+        state["toggle_presses"] += 1
+        n = state["toggle_presses"]
+        if n <= open_on_attempt:
+            state["open"] = (n == open_on_attempt)
+        elif closes:
+            state["open"] = False
+        # else: a close press that never lands -- state unchanged
 
     def _is_pause(img):
-        calls["n"] += 1
-        if calls["n"] <= open_on_attempt - 1:
-            return False                    # the toggle did not land yet
-        if calls["n"] == open_on_attempt:
-            return True                     # menu is open, read it
-        return not closes                   # the post-close verification
+        return state["open"]
 
-    orch.press = lambda *a, **k: None
+    orch.press = _do_press
+    _ic.press = _do_press
     orch.wait_for_screen_to_settle = lambda *a, **k: None
     orch._fast_grab = lambda *a, **k: Image.new("RGB", (8, 8))
     orch.capture_screenshot_b64 = lambda *a, **k: ""
@@ -316,7 +338,7 @@ try:
           "like, so it will be misdiagnosed as dead input",
           "menu" in low and ("input" in low or "world" in low))
 finally:
-    (orch.press, orch.wait_for_screen_to_settle, orch._fast_grab,
+    (orch.press, _ic.press, orch.wait_for_screen_to_settle, orch._fast_grab,
      orch.capture_screenshot_b64, orch.client, _pm.is_pause_screen) = _b
 
 
