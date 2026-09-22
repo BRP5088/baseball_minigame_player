@@ -538,6 +538,82 @@ try:
         check("(M) exactly 12 presses (8 base + 4 top-up)", len(s.sent) == 12)
     finally:
         _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (G) I-57 skeptic ROUND 2: `_ever_moved` must NOT latch on a dead-
+    #         reckon's own GUESS. Occluded slot 1 triggers exactly one guess
+    #         (cur := 1, no read behind it at all); the very next REAL read
+    #         confirms the cursor is still on first_cur, and every remaining
+    #         real read for the rest of the base budget agrees -- the walk
+    #         never actually moved. At cap time `_ever_moved` must be False,
+    #         so the I-25 false-cursor-exclude branch fires (not the I-57
+    #         top-up), and once that exclusion also finds nothing lit, the
+    #         walk refuses -- agent_progress/issues/I-57/
+    #         repro_ever_moved_from_guess.py -----------------------------
+    try:
+        _script = iter([0,                    # first_cur (call 0)
+                         None,                 # call 1: occluded slot 1 ->
+                                                # dead-reckon guesses cur=1,
+                                                # ZERO reads confirm it
+                         0, 0, 0, 0, 0, 0, 0,  # calls 2-8: seven REAL reads,
+                                                # every one names first_cur --
+                                                # the guess was never right
+                         None])                # call 9: I-25's own exclusion
+                                                # confirmation -- nothing else
+                                                # lit either
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+
+        def _g_look():
+            ys = [100] * N
+            ys[1] = None  # slot 1 permanently occluded -- the ONE guess
+            return [5.0] * N, ys, N, []
+
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, _g_look)
+        out = buf.getvalue()
+        check("(G) a guess-only walk that never actually moved refuses",
+              ok is False)
+        check("(G) the I-25 false-cursor-exclude branch fired, naming slot 0",
+              "treating slot 0 as a false cursor" in out)
+        check("(G) the I-57 top-up never fired -- the guess did not latch "
+              "_ever_moved",
+              "allowing up to" not in out)
+        check("(G) exactly 8 presses -- no top-up extension", len(s.sent) == 8)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
+
+    # --- (H) CONTROL for (G) -- the identical away-then-back shape, but the
+    #         move is a CONFIRMED read (no occlusion anywhere), never a
+    #         guess. This time `_ever_moved` MUST latch, so the I-57 top-up
+    #         fires instead of the I-25 exclusion -- proving (G)'s refusal
+    #         comes from the guess never counting toward a move, not from
+    #         the false-cursor-exclude branch being unreachable for some
+    #         unrelated reason ------------------------------------------
+    try:
+        _script = iter([0,                    # first_cur (call 0)
+                         1,                    # call 1: a REAL read -- the
+                                                # cursor genuinely moved to 1
+                         0, 0, 0, 0, 0, 0, 0,  # calls 2-8: seven real reads,
+                                                # back at first_cur
+                         1, 2, 3, 4])          # top-up reaches the target
+        _local_hand.cursor_slot = lambda glow, sel, exclude=None: next(_script)
+        s = ScriptedScreen([])
+        ic.press = s.press
+        buf = _io.StringIO()
+        with _contextlib.redirect_stdout(buf):
+            ok, sel = ic._walk_cursor_to(4, s.look)
+        out = buf.getvalue()
+        check("(H) CONTROL: a confirmed away-then-back move arrives via the "
+              "top-up", ok is True)
+        check("(H) CONTROL: _ever_moved latched -- the top-up fired, not "
+              "the I-25 exclusion",
+              "allowing up to" in out and "false cursor" not in out)
+        check("(H) CONTROL: exactly 12 presses (8 base + 4 top-up)",
+              len(s.sent) == 12)
+    finally:
+        _local_hand.cursor_slot = _real_cursor_slot
 finally:
     ic.press = _real_press
 

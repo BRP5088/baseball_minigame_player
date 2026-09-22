@@ -1146,9 +1146,20 @@ def _walk_cursor_to(target, look):
     # Only ever set True, never cleared, so a later return to `first_cur` cannot
     # un-set it. Read at the top of every iteration, before anything else looks
     # at `cur` this round.
+    #
+    # I-57 skeptic ROUND 2: the check below must gate on `not dead_reckoned_last`
+    # -- without it, a dead-reckon's OWN `cur = expected` guess (I-32, no read
+    # behind it at all) lands here on the very next iteration with `cur !=
+    # first_cur` from the guess alone, latching `_ever_moved` before a single
+    # real look ever confirmed a move. `dead_reckoned_last` is exactly the flag
+    # this function already carries for "the last `cur` is a GUESS, not a read"
+    # (reused, not invented) -- it is True only immediately after a dead-reckon's
+    # own `continue`, and the ordinary per-step path resets it to False on every
+    # real look, so a genuinely confirmed difference from `first_cur` still
+    # latches normally.
     _ever_moved = False
     while cur != target:
-        if cur is not None and cur != first_cur:
+        if cur is not None and cur != first_cur and not dead_reckoned_last:
             _ever_moved = True
         if steps >= CURSOR_MAX_STEPS:
             # EIGHT LANDED PRESSES CANNOT LEAVE THE CURSOR IN PLACE (I-25). Section 5
