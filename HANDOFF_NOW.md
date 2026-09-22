@@ -1,35 +1,55 @@
-# HANDOFF — 2026-09-22, session 2 close-out (~00:30–01:00)
+# HANDOFF — 2026-09-22, session 2 close-out (updated ~01:00)
 
 ## 1. STATE RIGHT NOW
 
-- `main` HEAD **`49d18db`** (line-window fix for I-57's regression; test_hand_memory_forgets green).
+- `main` HEAD **`49d18db`** was the build cycles 19–26 launched on. Neither
+  **I-56** (`c0953b8`, READY) nor **I-62** (`worktree-I62`, unmerged) is on
+  `main` as of this writing — both are queued to merge in the gap after
+  cycle 19.
 - **Cycles 19–26 are CHAINED AND RUNNING as this is written** (one Python loop
   calling `run_cycles.cycle(n)` for n=19..26, stops on `reset_failed` or an
   exception): `overnight/run_live_20260922e.log`, monitor id `b3p1mc61u`
   (expires 30 min after being armed — re-arm if you land after it lapses).
   **The log is the record** — read its tail for the live tally before trusting
   any number below.
-- **Last fully-verified count (facts2.md, before cycle 19 launched): 100W 15L
-  11D**, `progress_testing.json` balance 196 at that point (the probe's parked
-  match, since abandoned by cycle 19's reset — see §3 "measurements").
-- A read-only QA round (2 finders: silent-paths/guards, test quality) is
-  running over the diff `204bb5b..49d18db`, report-only. Its findings go
-  straight to §5 LATER — do not act on them without reading first.
-- **I-56** (round 3, `5be4556`, branch `worktree-agent-a80c04eaab6c82f8d`):
-  skeptic round 3 CONFIRMED WITH NOTES, but the fixer still owes **two guard
-  cases** before merge (MY-M3 at `_mark_candidates`, M3d at `_new_blind`'s
-  cannot-read-fan path — both currently unguarded on that branch). Merge only
-  after those land + a short skeptic re-check, and only in a gap between
-  cycles (not while a cycle is running).
-- **I-62** (accept a disc at the lifted position in slot assignment) is a
-  **candidate only** — no branch yet. Census first (see §3).
+- **Cycle 19 so far, on `49d18db`**: WIN #101, WIN #102, WIN #103 — 0 issue
+  lines across all three (strict streak reached 3). Match 4 then had a play
+  **REFUSED in the I-56 shape** (target slot 1 selected on attempt 2 after a
+  dropped press; tactics neighbour slot 2 read unreadable
+  `[201,114,None,166,211]` twice → refused; frames
+  `diagnostics/deal_frames/refused_select_1790052649835023000` and
+  `dropped_1790052651118893000`) — **strict streak reset 3→0**, unmerged
+  I-56 would have covered exactly this. Record climbing from the pre-cycle-19
+  100W 15L 11D.
+- <<CLOSE: I-56 merge outcome + cycle 19 close + relaunch sha>>
+- **I-56** round 3 fix is READY at `c0953b8` (M3d/`_mark_candidates` and
+  MY-M3/`_new_blind`'s cannot-read-fan path both guarded, 13 files green;
+  note: `_deselect_verified` always dirties the ledger on a real press —
+  recorded in ISSUES.md, not a blocker — see §5). Merge agent is waiting for
+  the cycle-19 gap (`gap19.txt` GAP_MADE) to merge --no-ff, run the battery
+  (the probe-select budget test from a scratch copy, not the live checkout —
+  see §5), a spot mutant, update ISSUES.md, then an un-niced full suite.
+  Cycles 20–26 relaunch on the merged build once that's green.
+- **I-62** (accept a disc at the lifted position in slot assignment): branch
+  `worktree-I62` at `c1fcebc` + `ccdecb8`, **UNMERGED, no skeptic yet** — first
+  item for the morning, see §5.
+- Two read-only QA finders (over `204bb5b..49d18db`, silent-paths/guards +
+  test quality) both reported back — findings folded into §5, nothing
+  merge-blocking.
+- **INCIDENT**: `tools/questions_sheet.py` (committed `d5f9ed0`) was found
+  deleted from the main working tree mid-session (a bare ` D` in
+  `git status`); restored with `git checkout -- tools/questions_sheet.py`
+  (only that path touched, live data files untouched). Culprit **not
+  established** — see §6.
 - Console: mid the cycle 19–26 chain. Confirm the three tells (CLAUDE.md §1)
   before any manual press if you take over mid-chain.
-- User, 00:30: work one more hour then stop with this close-out; deadline
-  01:30. User, 00:5x: Snoopy OFF; *"finish the cycles left ... all current
-  todos; anything new is added to future sessions todo list"* — no new
-  dispatches after this point; overnight unattended chaining is the stated
-  default, not contradicted.
+- User, 00:5x: Snoopy OFF; *"finish the cycles left ... all current todos;
+  anything new is added to future sessions todo list"* — no new dispatches
+  after that point; overnight unattended chaining is the stated default. User,
+  01:0x: sleep the console when not in live use — tonight the cycle chain IS
+  live use, and when it ends the console auto-sleeps on its own (nothing
+  reaches it); see `console_rest_mode_procedure.md` if it ever needs putting
+  down by hand instead.
 - Paid vision model OFF (`orchestrator.PAID_MODEL_ENABLED = False`). Never
   save the game — resets / `Load Last Save` only.
 
@@ -83,7 +103,8 @@ bans from cycle 9 on, per the guard census).
 | What actually caused the probe's drops then? | **Press delivery**, not the reader: of 6 presses across 3 slots, **3 dropped** — slot 1 both presses no-ops, slot 4 first press dropped and the retry (meant as deselect) instead *selected* it (a toggle trap), slot 2 clean. | Same live probe, `agent_progress/issues/lift-live-probe2/`. |
 | Is I-21 (select-time inference) safe to keep? | **YES — do not remove it.** 32 firings over 34 run logs: **28 committed and correct** (26 confirmed by the next hand read, 2 by reveal+WIN), 0 wrong, 4 refusals (3 pre-I-28 bug, 1 the I-48f case). Removing it would turn ~28 clean commits into refusals. | `agent_progress/issues/i21-census/` |
 | So why do 32 real "went blind after a select press" events happen in production if lifting itself doesn't blind the disc? | **OPEN — unresolved contradiction, recorded not guessed at.** The I-21 census agent's own claim ("a lifted card's disc stays blind while lifted") is *unmeasured*, sourced from code comments; the live probe and the archive both refute it directly (disc reads fine lifted). Both facts can coexist: production reads *do* go blind after some select presses, but the lift itself is not the cause. Candidate mechanisms, neither measured: cursor glow interference on the just-selected card, or a ~0.6s settle-timing gap in the read. **This is the standing open question for next session — see §6.** | `agent_progress/issues/i21-census/` vs `agent_progress/issues/lift-live-probe2/` |
-| What's actually in the `dropped_*` population (400 dirs)? | 299/412 slot reads are genuinely blind on disk: 160 nothing in the slot (occlusion), 69 player + 59 tactics "position found but no disc within SLOT_TOL", 11 banner-only, 50 deal-in-flight. → feeds the I-62 candidate (accept a disc at the lifted position, `RAISED_SEARCH_DY`, in slot assignment — census first, with a FALSE column for wrong-slot assignments). | `agent_progress/issues/i21-census/` |
+| What's actually in the `dropped_*` population (400 dirs)? | 299/412 slot reads are genuinely blind on disk: 160 nothing in the slot (occlusion), 69 player + 59 tactics "position found but no disc within SLOT_TOL", 11 banner-only, 50 deal-in-flight. → fed the I-62 fix (accept a disc at the lifted position, `RAISED_SEARCH_DY`, in slot assignment — see §1/§5/§6). | `agent_progress/issues/i21-census/` |
+| Were the 5 full-suite failures under `BASEBALL_NICE=1` (niced, ~30min wall) real regressions? | **4 of 5 were niced timing artefacts** — `test_movement`, `test_reveal_watch`, `test_framedump_cpp` (1/39), `test_settled_reveal_frame` all passed clean when re-run un-niced, twice. **1 of 5 was a real regression**: `test_hand_memory_forgets`, from the I-57 merge (`c705e52`) pushing I-51b's prose between `forget_hand_slot` and `select_and_play` — fixed `49d18db` (§4). | Merge agent's un-niced re-run + diff against `204bb5b`, 00:4x |
 
 ## 4. WHAT MERGED THIS SESSION (all on `main`, one at a time, each skeptic-confirmed before merge)
 
@@ -98,20 +119,63 @@ bans from cycle 9 on, per the guard census).
 | I-54 (truncated card name 'JOHNNY DRAW' passes result OCR) | `064bb3a` | `ca202d1` | `a97a1da` | Opus CONFIRMED WITH NOTES (N1/N3 closed at merge) |
 | I-55 (result commits keep no evidence) | `3c477fa`, `9ce856e`, `f5c14be` | `c55d2cc` | `204bb5b` | Sonnet CONFIRMED WITH NOTES, 3 coverage gaps closed |
 | I-57 (walk cap counts presses sent, not moves; refuses one hop short) | `fda9436`(refuted)→`41dc5f7`→`c865555` | `c705e52` | `430012b` | Sonnet CONFIRMED (round 2); **regression found post-merge, fixed `49d18db` (test_hand_memory_forgets)** |
-| I-58 (pause-menu close after balance read is one blind toggle) | `f5e7572`, `0e6fa49` | `cb5d72e` | `b027a9f` | Opus CONFIRMED WITH NOTES, N1–N4 closed; follow-up test-stub fix `42cecdc` merged `ef2da17` |
+| I-58 (pause-menu close after balance read is one blind toggle) | `f5e7572`, `0e6fa49` | `cb5d72e` | `b027a9f` | Opus CONFIRMED WITH NOTES, N1–N4 closed |
+| I-58 follow-up (2 stale pause-menu test stubs vs the verified close) | `42cecdc` | `ef2da17` | — | test-only — both stubs patch `orchestrator.press`/`input_controller.press` and track the real toggle state; mutant caught |
 | I-59 (questionable-card contact-sheet tool, new file) | `d5f9ed0` | (direct to main, no live import) | — | test-only, 15/15 green, 2 mutants caught |
 | user truth (5 refused-select frames scored by the user) | `94343b7` | — | — | ground truth, not a fix |
 | Snoopy tesseract install + fixtures | `9783aad` (`Snoopy_testing.md`) | — | — | 213/284→249/285; see §5 |
 | I-44 N-2 (carried from session 1, baseline-readable gate) | `e55a02e`,`ce8d665` | `69e77a4` | `758f2ed` | Sonnet CONFIRMED WITH NOTES — narrow, hard case stays open (§6) |
-| line-window fix (I-57 regression) | — | `49d18db` (direct) | — | test-only, `test_hand_memory_forgets` green |
+| I-57 regression fix (`forget_hand_slot` adjacency) | — | `49d18db` (direct) | — | test-only — the I-57 merge (`c705e52`) had pushed I-51b's comment+snapshot line between `forget_hand_slot` and `select_and_play` (~orchestrator.py:8752-8764), outside `test_hand_memory_forgets`'s 6-line window; no behaviour change, block moved back, test green |
 
 ## 5. LATER (do not start without the user; new items from tonight go here too)
 
-- **I-56's 2 remaining guard cases** (MY-M3 `_mark_candidates`, M3d `_new_blind`
-  cannot-read-fan) before it can merge — see §1.
-- **I-62**: accept a disc at the lifted position (`RAISED_SEARCH_DY`) in slot
-  assignment. Census first with a FALSE column (wrong-slot assignments) —
-  see §3's `dropped_*` breakdown.
+- **I-56's `_deselect_verified` note** (from `c0953b8`'s round-3 skeptic
+  notes): it always dirties the ledger on a real press, even a clean one —
+  recorded in ISSUES.md, not currently causing a wrong commit; worth a look
+  if a future I-56 refusal looks ledger-related. (I-56 itself is READY at
+  `c0953b8` and merging in the current gap — see §1, not a LATER item.)
+- **Replay `refused_select_1790052649835023000` offline through the merged
+  I-56 code** (cycle 19 match 4's I-56-shape refusal, see §1) — it must
+  commit slot 1 and never press slot 2. First item for the morning, same
+  batch as the I-62 skeptic below.
+- **I-62 skeptic + merge** — first item for the morning. Branch `worktree-I62`
+  (`c1fcebc` + `ccdecb8`), UNMERGED, no skeptic yet. Needs an Opus skeptic on
+  the gated raised search's FALSE column: an **unconditional** raised search
+  gave 28/650 wrong reads (4.3%), which is why the shipped fix is gated
+  (only fires when no candidate lands in `SLOT_TOL` at all) rather than
+  blanket — the skeptic should re-check the FALSE column on the gated path
+  specifically over the full 650-slot census. Also surfaced but **out of
+  scope**: the **BANNER_SEARCH type-window finding** — 52/59 blind tactics
+  rows are blocked on the TYPE banner read, not the digit, and need their own
+  search-window ticket.
+- **I-60** (cursor eligibility keyed on the digit, not the disc) — **PARKED,
+  tool-facing only.** Branch `worktree-I60` (`2122c8f`): fixes 3 offline
+  tools' reads but never touches the live refusal path — `hand_cursor_look`
+  hands the raw glow list straight to `cursor_slot`, which already ignores
+  the digit mask, so the live Q17 refusal traced to something else entirely
+  (the I-56 family, not I-60 — see §3). Also breaks one sub-check in
+  `test_false_cursor_on_occluded_slot.py`. Not merged.
+- **I-61** (raised-card detector independent of the power disc) — **PARKED,
+  spike only.** Branch `worktree-I61` (`eeb593a`), `card_lift.py` unwired: the
+  lift step itself is real (38–43px on all 14 disc-corroborated events) but
+  per-slot rest-vs-lifted populations overlap by 2–8px on slots 0 and 3, so no
+  threshold ships (CLAUDE.md §10.4). Revisit only if a future live probe shows
+  the disc genuinely unreadable after settling — the lift-transition census
+  says today's live lever is a re-look, not a new detector.
+- **QA finder A** (`agent_progress/qa5-silent/`), 2 low findings: (1) I-57's
+  `_topup_budget` check at `input_controller.py:1243-1250` cannot fire under
+  current constants (entry is always at `steps==8`, 5 top-ups fit under the
+  13-press budget) — delete it or cover it with a mutant that varies the
+  constants; (2) `_close_pause_menu()`'s observer chain inside
+  `read_balance_from_pause_menu`'s `finally` has no try/except
+  (`_pause_menu_open` → `_fast_grab` → `_MSS.grab` fallback can raise), so a
+  raising grab would replace the `PaidModelDisabled` the `finally` exists to
+  pass through, and the "STILL OPEN" warning would not print — narrow
+  trigger, diagnostic-only impact today.
+- **QA finder B** (`agent_progress/qa5-tests/`): `test_probe_select_budget.py`
+  mutates `input_controller.py`/`orchestrator.py` **in place** by design (it
+  has to run off-checkout during a live cycle) — make it run from a scratch
+  copy instead of the live checkout.
 - **The I-21-vs-probe contradiction** (§3, §6) — what really blinds a disc
   after a select press, if not the lift itself.
 - **Tactics slot not excluded after an I-48 fallback** — the loop re-attempts
@@ -176,11 +240,26 @@ bans from cycle 9 on, per the guard census).
 ## 6. OPEN QUESTIONS
 
 - **What actually blinds a disc after a select press, live, given the lift
-  itself does not?** (§3) The dominant open question tonight. 32 real
-  production events; candidates: cursor-glow interference on the
-  just-selected card, or a ~0.6s settle-timing gap. Next step: instrument the
-  actual production select path (not an offline probe) the way
-  `lift-live-probe2` instrumented a manual one.
+  itself does not?** (§3) The dominant open question tonight. I-21
+  (select-time inference) fired 32x over 34 run logs — 28 committed and
+  correct, 0 wrong, 4 refused — so the mechanism is real and mostly safe, but
+  the live probe read the disc on **0/187 unreadable frames**, including
+  lifted at dy −41, and the archive read 14/14 lifts clean. The census
+  agent's own claim that "a lifted card's disc stays blind while lifted" is
+  **unmeasured** (sourced from code comments) and directly contradicted by
+  both the probe and the archive. Candidates, neither measured: cursor-glow
+  interference on the just-selected card, or a ~0.6s settle-timing gap. Next
+  step: instrument the actual production select path (not an offline probe)
+  the way `lift-live-probe2` instrumented a manual one.
+- **WHO DELETED `tools/questions_sheet.py` from the main working tree
+  mid-session?** Not established. It was committed clean at `d5f9ed0`, then
+  found as a bare ` D` in `git status` with no other file touched — ruling
+  out `test_questions_sheet`'s own cleanup (only removes its tempdir) and
+  making the merge agent's `git archive 204bb5b | tar -x` unlikely (that
+  would have shown many `M` lines, and it didn't). Restored with
+  `git checkout -- tools/questions_sheet.py`. Before dispatching anything else
+  that writes under `tools/`, check every `agent_progress/*/progress.md`
+  written this session for an `rm` or `rmtree` on that path.
 - Does a speed boost PERSIST on base? Two live runners read +1 over their
   card (CLAUDE.md §4); low stakes (+0.046 runs/half). Still needs one live
   at-bat.
@@ -218,7 +297,14 @@ bans from cycle 9 on, per the guard census).
 - **User rule (2026-09-21 ~13:30, still in force): any NEW task or question
   found from here goes on the LATER list — do not dispatch it.** Reaffirmed
   00:5x: *"finish the cycles left ... all current todos; anything new is
-  added to future sessions todo list."*
+  added to future sessions todo list."* **No new dispatches after this
+  handoff's close** — finish only what was already in flight (the I-56 merge,
+  the I-62 skeptic+merge, the cycle relaunch); anything newly found goes on
+  §5 LATER, full stop.
+- **Sleep the console when not in live use** (user, 01:0x) — let it auto-sleep
+  on its own (CLAUDE.md §1: nothing reaching it puts it to standby) or, if it
+  needs putting down by hand, follow `console_rest_mode_procedure.md` step by
+  step. Never press `ps_button` just to find out whether it's already asleep.
 - Manager delegates routine work (merges, tests, doc edits, log reading) to
   Sonnet agents; the main model decides and dispatches. Opus skeptics for
   anything on the money path.
