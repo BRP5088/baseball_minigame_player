@@ -131,21 +131,41 @@ check(pm.MONEY_MIN == 0 and pm.MONEY_MAX == 9999,
 # constant, while "Load Last Save" keeps putting $246 back in the wallet and the tracked
 # figure only ever marches down. A measurement built and never wired (10.1).
 import orchestrator as _o
+import input_controller as _ic
 
-_saved = (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+# I-58 (2026-09-21): the pause-menu close is now VERIFIED -- it calls
+# input_controller.press_verified, which sends its own presses through
+# input_controller.press, not through orchestrator's `press` name. A stub
+# that only patches _o.press, and hardcodes is_pause_screen to a fixed
+# answer, cannot see the close at all: press_verified's baseline reads the
+# fixed answer, its own presses go to the REAL (test-refused) keyboard path,
+# and the observed state never changes -- so the close always exhausts its
+# retries and is reported here as one bare toggle. The honest model below
+# tracks the toggle as a TOGGLE (every real toggle_pause press flips it) and
+# routes both press entry points through the same counter, so a press that
+# lands on the first try -- both for the open and for the close -- is seen
+# as landing, exactly as the real console would report it.
+_saved = (_o.press, _ic.press, _o.wait_for_screen_to_settle, _o._fast_grab,
           pm.is_pause_screen, pm.read_money, _o.read_ban_counter)
 _presses = []
+_toggle = {"open": False}
 try:
-    _o.press = lambda k, *a, **kw: _presses.append(k)
+    def _do_press(k, *a, **kw):
+        _presses.append(k)
+        if k == "toggle_pause":
+            _toggle["open"] = not _toggle["open"]
+    _o.press = _do_press
+    _ic.press = _do_press
     _o.wait_for_screen_to_settle = lambda *a, **k: True
     _o._fast_grab = lambda: "FRAME"
-    pm.is_pause_screen = lambda img: True
+    pm.is_pause_screen = lambda img: _toggle["open"]
     # The money path now refuses a BAN screen, so this block has to say which book
     # it is looking at. None = "not a ban screen", i.e. the pause book.
     _o.read_ban_counter = lambda img: None
 
     pm.read_money = lambda img, ocr=None: 196
     _presses.clear()
+    _toggle["open"] = False
     _got = _o.read_balance_from_pause_menu()
     check(_got == 196,
           f"read_balance_from_pause_menu ignored the LOCAL reader and returned {_got}")
@@ -168,7 +188,7 @@ try:
           f"the pause menu was left OPEN when the read raised ({_presses}) — every "
           "press after this lands in a menu instead of the world")
 finally:
-    (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+    (_o.press, _ic.press, _o.wait_for_screen_to_settle, _o._fast_grab,
      pm.is_pause_screen, pm.read_money, _o.read_ban_counter) = _saved
 
 # --- THE BAN SCREEN IS A NOTEBOOK PAGE TOO -----------------------------------
@@ -183,18 +203,25 @@ finally:
 # $1 x1) with both OCR scales agreeing. That is the "$246 -> $100" failure its own
 # docstring exists to prevent, reached THROUGH the guard. Harmless while read_money
 # had no callers; wiring it into the money path is what made it live.
-_saved2 = (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+_saved2 = (_o.press, _ic.press, _o.wait_for_screen_to_settle, _o._fast_grab,
            pm.is_pause_screen, pm.read_money, _o.read_ban_counter)
 _p2 = []
+_toggle2 = {"open": False}
 try:
-    _o.press = lambda k, *a, **kw: _p2.append(k)
+    def _do_press2(k, *a, **kw):
+        _p2.append(k)
+        if k == "toggle_pause":
+            _toggle2["open"] = not _toggle2["open"]
+    _o.press = _do_press2
+    _ic.press = _do_press2
     _o.wait_for_screen_to_settle = lambda *a, **k: True
     _o._fast_grab = lambda: "FRAME"
-    pm.is_pause_screen = lambda img: True        # the guard that admits a ban screen
+    pm.is_pause_screen = lambda img: _toggle2["open"]  # the guard that admits a ban screen
     pm.read_money = lambda img, ocr=None: 7      # the confident wrong value it gives there
 
     _o.read_ban_counter = lambda img: 2          # ...but the ban counter answers
     _p2.clear()
+    _toggle2["open"] = False
     try:
         _got2 = _o.read_balance_from_pause_menu()
         check(False, f"read the wallet off a BAN screen and returned ${_got2} — a "
@@ -213,7 +240,7 @@ try:
           "CONTROL: a genuine pause screen must still be read — otherwise this rule "
           "disables the money path entirely and reads like a working guard (10.1)")
 finally:
-    (_o.press, _o.wait_for_screen_to_settle, _o._fast_grab,
+    (_o.press, _ic.press, _o.wait_for_screen_to_settle, _o._fast_grab,
      pm.is_pause_screen, pm.read_money, _o.read_ban_counter) = _saved2
 
 # ...and the underlying fact, on real frames, so the census above is not just prose.
