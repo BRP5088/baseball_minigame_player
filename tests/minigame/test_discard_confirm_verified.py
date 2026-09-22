@@ -243,13 +243,19 @@ class HandRig:
     slot that goes blind DURING an operation and is a different guard.
 
     `t0_lift_frees_m1`: True models OCCLUSION -- slot 1 reads the instant
-    slot 0 comes back down (the COMMIT case, H). False models a GENUINE
-    STRAY -- slot 1 stays blind no matter what (the REFUSE mirror, I).
+    slot 0 comes back down (the COMMIT case, H). False models a slot that
+    NEVER reads, however slot 0 moves -- I-56 case T at the wiring level:
+    blindness ALONE is not proof of a lift, so this now COMMITS BOTH too
+    (case I, updated -- it used to be "the REFUSE mirror" before I-56).
+    `m1_independently_lifted=True` overrides the story: slot 1 starts
+    ALREADY selected (independent of slot 0 entirely) and stays lifted for
+    the whole run -- I-56 case U at the wiring level, a real, positively
+    evidenced stray that must still refuse (case I2).
     """
 
-    def __init__(self, t0_lift_frees_m1):
+    def __init__(self, t0_lift_frees_m1, m1_independently_lifted=False):
         self.cursor = 2
-        self.lifted = {0}
+        self.lifted = {0, 1} if m1_independently_lifted else {0}
         self.t0_lift_frees_m1 = t0_lift_frees_m1
         self.confirmed = 0
         self.sent = []
@@ -284,9 +290,13 @@ class HandRig:
 
 
 def _run_end_to_end():
-    """Case (H): COMMIT. Case (I): the REFUSE mirror. Real function, real
-    resolve_neighbour_occlusion, real _clear_strays -- only `press`/`look`
-    are stubbed, through a rig that models the fan, not the guards."""
+    """Case (H): COMMIT via a proven occlusion. Case (I, I-56 case T at the
+    wiring level): slot 1 never reads either way -- NOT proof of a lift, so
+    this now COMMITS too. Case (I2, I-56 case U at the wiring level): slot 1
+    is a genuine, independently lifted stray -- still REFUSES. Real
+    function, real resolve_neighbour_occlusion, real _clear_strays -- only
+    `press`/`look` are stubbed, through a rig that models the fan, not the
+    guards."""
     old_press = ic.press
     try:
         ic.clear_maybe_lifted()
@@ -302,10 +312,18 @@ def _run_end_to_end():
         ic.press = rig_i.press
         ok_i = ic._verified_select_and_play_inner(4, 0, rig_i.look)
         maybe_lifted_after_i = set(ic._MAYBE_LIFTED)
+
+        ic.clear_maybe_lifted()
+        ic._mark_maybe_lifted({1})
+        rig_i2 = HandRig(t0_lift_frees_m1=True, m1_independently_lifted=True)
+        ic.press = rig_i2.press
+        ok_i2 = ic._verified_select_and_play_inner(4, 0, rig_i2.look)
+        maybe_lifted_after_i2 = set(ic._MAYBE_LIFTED)
     finally:
         ic.press = old_press
         ic.clear_maybe_lifted()
-    return ok_h, ok_i, rig_h, rig_i, maybe_lifted_after_h, maybe_lifted_after_i
+    return (ok_h, ok_i, ok_i2, rig_h, rig_i, rig_i2,
+            maybe_lifted_after_h, maybe_lifted_after_i, maybe_lifted_after_i2)
 
 
 def run_discard(rig):
@@ -445,9 +463,17 @@ try:
           rig.sent.count("select_card") == 2, str(rig.sent))
 
     # =====================================================================
-    print("(F3) resolve_neighbour_occlusion: M is STILL blind with T down -- "
-          "a genuine stray, refused, T left down, nothing re-raised")
+    print("(F3 / I-56 case T) resolve_neighbour_occlusion: M is STILL blind "
+          "with T down -- NOT proof of a lift (blindness alone is occlusion "
+          "or a chronic wreath misread, I-36, never evidence of a rise) -- "
+          "UNRESOLVED, mark CLEARED, T RESTORED")
     # =====================================================================
+    # `run_live_20260921x.log` ~655-680 (main checkout): hand [7/0, UNKNOWN,
+    # 6/0, 5/0, 6/0], pitching, target slot 0. Slot 1 is a resting FIELDING
+    # PLAY tactics card whose wreath simply would not read -- the OLD verdict
+    # here scored that "genuine stray, marked", refused 3 straight commits
+    # (I-43 that day: 14 firings, 0 true positives), and excluded the
+    # engine's own chosen 7. Nothing here ever positively saw slot 1 RISEN.
     ic.clear_maybe_lifted()
     ic._mark_maybe_lifted({M_SLOT})
     rig = NeighbourRig(m_readable_when_t_down=False)
@@ -457,14 +483,36 @@ try:
         ok, detail = ic.resolve_neighbour_occlusion(M_SLOT, T_SLOT, rig.look)
     finally:
         ic.press = _old_press
-    check("(F3) ok=False: T's lift was not the explanation", ok is False, detail)
-    check("(F3) M's mark SURVIVES -- a genuine stray, now with evidence",
-          M_SLOT in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
-    check("(F3) T is left DOWN -- nothing here re-raises a genuine stray's "
-          "neighbour", rig.t_lifted is False, str(rig.t_lifted))
-    check("(F3) exactly 1 select_card press -- the lower only, no re-raise "
-          "attempt (bounded: no loop chasing a stray)",
-          rig.sent.count("select_card") == 1, str(rig.sent))
+    check("(F3) ok=False: not a proven occlusion, but not a proven stray "
+          "either", ok is False, detail)
+    check("(F3) M's mark is CLEARED -- I-56, mere blindness is not proof",
+          M_SLOT not in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    check("(F3) T is RESTORED -- the caller (I-48's fallback, or a lone "
+          "target's own commit) may still need it up",
+          rig.t_lifted is True, str(rig.t_lifted))
+    check("(F3) exactly 2 select_card presses -- the lower, and the restore",
+          rig.sent.count("select_card") == 2, str(rig.sent))
+
+    # =====================================================================
+    print("(V) I-43 TRUE POSITIVE, UNCHANGED BY I-56: the PRESSED TARGET's "
+          "own verify is blind -- still marked. This is the legitimate case "
+          "the fix above must not touch: a slot the ENGINE chose, never "
+          "proven lifted, stays suspect.")
+    # =====================================================================
+    ic.clear_maybe_lifted()
+
+    def _look_v():
+        ys = list(REST)
+        ys[0] = None
+        return [0.0] * ic.MAX_HAND_SIZE, ys, ic.MAX_HAND_SIZE, []
+
+    ok_v = ic._clear_strays({0}, _look_v, blind_before=set())
+    check("(V) refuses when the target itself never proves lifted",
+          ok_v is False, str(ok_v))
+    check("(V) the TARGET slot is marked -- I-43's own legitimate case, "
+          "untouched by the I-56 non-target fix",
+          0 in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
+    ic.clear_maybe_lifted()
 
     # =====================================================================
     print("(F4) resolve_neighbour_occlusion: the re-raise of T itself fails "
@@ -587,10 +635,12 @@ try:
           1 in ic._MAYBE_LIFTED, str(ic._MAYBE_LIFTED))
 
     # =====================================================================
-    print("(H)/(I) END TO END through the REAL _verified_select_and_play_inner "
-          "-- resolve_neighbour_occlusion is now WIRED IN, not standalone")
+    print("(H)/(I)/(I2) END TO END through the REAL _verified_select_and_play_"
+          "inner -- resolve_neighbour_occlusion is wired in (I-52), and its "
+          "still-blind verdict no longer conflates blindness with proof (I-56)")
     # =====================================================================
-    ok_h, ok_i, rig_h, rig_i, marked_after_h, marked_after_i = _run_end_to_end()
+    (ok_h, ok_i, ok_i2, rig_h, rig_i, rig_i2,
+     marked_after_h, marked_after_i, marked_after_i2) = _run_end_to_end()
     check("(H) the match-3 shape COMMITS: T lowered, slot 1 read, mark "
           "cleared, T re-raised, confirm once", ok_h is True, str(ok_h))
     check("(H) confirm_play pressed exactly once", rig_h.confirmed == 1,
@@ -602,13 +652,37 @@ try:
           rig_h.sent.count("select_card") == 3, str(rig_h.sent))
     check("(H) both targets end up lifted", {0, 4} <= rig_h.lifted, str(rig_h.lifted))
 
-    check("(I) the mirror -- slot 1 stays blind with T down -- REFUSES",
-          ok_i is False, str(ok_i))
-    check("(I) confirm_play is never sent", rig_i.confirmed == 0, str(rig_i.sent))
-    check("(I) slot 1's mark SURVIVES -- a genuine stray, now with evidence",
-          1 in marked_after_i, str(marked_after_i))
-    check("(I) T (slot 0) is left DOWN by the failed disambiguation",
-          0 not in rig_i.lifted, str(rig_i.lifted))
+    print("(I, I-56 case T at the wiring level) slot 1 stays blind no matter "
+          "what -- NOT proof of a lift -- COMMITS, mark cleared, T restored")
+    check("(I) the play now COMMITS -- blindness alone never refused a "
+          "genuine target's own commit, only a stray's exemption",
+          ok_i is True, str(ok_i))
+    check("(I) confirm_play pressed exactly once", rig_i.confirmed == 1,
+          str(rig_i.sent))
+    check("(I) slot 1's mark is CLEARED, not left to deadlock the next "
+          "attempt (I-56)", 1 not in marked_after_i, str(marked_after_i))
+    check("(I) T (slot 0) ends up RESTORED", 0 in rig_i.lifted, str(rig_i.lifted))
+    check("(I) both targets end up lifted", {0, 4} <= rig_i.lifted, str(rig_i.lifted))
+
+    print("(I2, I-56 case U at the wiring level) slot 1 is a genuine, "
+          "independently lifted stray -- resolve_neighbour_occlusion still "
+          "refuses to explain it away (I-56 leaves the POSITIVE-rise branch "
+          "untouched), and the ORDINARY extra-stray path then puts it back "
+          "down once it reads clean with T down -- but T (a chosen target) "
+          "was never restored, so the play still correctly REFUSES overall")
+    check("(I2) the play REFUSES -- T never comes back up", ok_i2 is False,
+          str(ok_i2))
+    check("(I2) confirm_play is never sent", rig_i2.confirmed == 0, str(rig_i2.sent))
+    check("(I2) slot 1 ends up DOWN and its mark CLEARS -- the ordinary "
+          "extra-stray deselect (unrelated to I-56) put it back down once it "
+          "read clean, and a slot SEEN down is no longer suspect",
+          1 not in rig_i2.lifted and 1 not in marked_after_i2,
+          f"lifted={rig_i2.lifted} marked={marked_after_i2}")
+    check("(I2) T (slot 0), a chosen target, is what stays marked instead -- "
+          "I-43's own legitimate case, untouched by I-56",
+          0 in marked_after_i2, str(marked_after_i2))
+    check("(I2) T (slot 0) is left DOWN by the failed disambiguation",
+          0 not in rig_i2.lifted, str(rig_i2.lifted))
 finally:
     _time.sleep = _real_sleep
     ic.clear_maybe_lifted()

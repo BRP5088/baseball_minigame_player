@@ -271,6 +271,88 @@ class TacticsKindPlayScreen(PlayScreen):
         return glow, list(REST), N, orch._CursorSel(sel, list(self.kinds))
 
 
+class NeighbourOcclusionPlayScreen(PlayScreen):
+    """I-56: `m_slot`'s own position reads UNREADABLE for exactly as long as
+    `t_slot` is lifted AND `m_slot` itself is not -- the live mechanic
+    `resolve_neighbour_occlusion` (I-52) and `resolve_target_behind_lifted_
+    neighbour` (I-56) both exist for: a raised card visually covers an
+    ADJACENT, RESTING card's disc/wreath. Once BOTH slots are lifted the
+    occlusion clears -- I-52's own case H already establishes this (the
+    resolver re-raises its `t_slot` and the subsequent commit still reads
+    the disambiguated `m_slot` fine). Distinct from `OccludedPlayScreen`'s
+    `occluded` set, which is a STATIC, position-baked unreadable slot.
+
+    `m_slot_chronic=True` instead makes `m_slot` unreadable NO MATTER WHAT
+    `t_slot` does -- models a wreath-read failure unrelated to any lift
+    (case Q: the manoeuvre correctly gives up and restores `t_slot`).
+    `t_slot_never_reraises=True` blocks `select_card` on `t_slot` FOREVER
+    once it has been lowered once by this class (case R: the manoeuvre's own
+    re-raise fails).
+
+    `t_slot` STARTS ALREADY LIFTED (I-56 part 3): with the fix that lets
+    `_select_verified` trust the OPERATION's own baseline, a batter selected
+    FRESH during this same operation is readable at `_ys0` before anything
+    is pressed, and that baseline alone resolves `m_slot` directly -- this
+    class's whole lower/look/re-raise manoeuvre would never even run. To
+    keep exercising it as the FALLBACK it now is (baseline-trust applies
+    only when the operation's OWN start was ALSO blind), `t_slot` is
+    residually lifted from construction, matching `HandRig`'s own pattern in
+    test_discard_confirm_verified.py.
+    """
+
+    def __init__(self, cur=0, m_slot=None, t_slot=None, m_slot_chronic=False,
+                 t_slot_never_reraises=False, **kw):
+        super().__init__(cur=cur, **kw)
+        self.m_slot = m_slot
+        self.t_slot = t_slot
+        if t_slot is not None:
+            self.lifted.add(t_slot)
+        self.m_slot_chronic = m_slot_chronic
+        self.t_slot_never_reraises = t_slot_never_reraises
+        self._t_slot_lowered_once = False
+        self.select_log = []          # cursor position at every select_card
+
+    def press(self, key):
+        self.sent.append(key)
+        if self.fan_gone:
+            return
+        if key == "move_left":
+            self.cur = max(0, self.cur - 1)
+        elif key == "move_right":
+            self.cur = min(N - 1, self.cur + 1)
+        elif key == "select_card":
+            self.select_log.append(self.cur)
+            if (self.t_slot_never_reraises and self.cur == self.t_slot
+                    and self._t_slot_lowered_once
+                    and self.t_slot not in self.lifted):
+                return                 # the re-raise is dropped, forever
+            if self.cur in self.lifted:
+                self.lifted.discard(self.cur)
+                if self.cur == self.t_slot:
+                    self._t_slot_lowered_once = True
+            else:
+                self.lifted.add(self.cur)
+        elif key == "confirm_play":
+            self.confirmed_sel = sorted(self.lifted)
+            self.fan_gone = True
+
+    def look(self):
+        if self.fan_gone:
+            return [0.0] * N, [None] * N, 0, []
+        glow = [0.0] * N
+        glow[self.cur] = 27.0
+        ys = list(REST)
+        occluded_now = set()
+        if self.m_slot is not None:
+            occluded = self.m_slot_chronic or (
+                self.t_slot in self.lifted and self.m_slot not in self.lifted)
+            if occluded:
+                ys[self.m_slot] = None
+                occluded_now.add(self.m_slot)
+        sel = sorted(s for s in self.lifted if s not in occluded_now)
+        return glow, ys, N, sel
+
+
 def _play(card_index, tactics_index):
     """Run one play through the REAL function, capturing stdout and every
     `_unwind_selection` call (target set only) without altering its behaviour."""
@@ -708,6 +790,176 @@ try:
     check("(O) no unwind was needed -- the retry succeeded", unwind_calls == [])
 
     # =====================================================================
+    print("(P) I-56 THE LIVE SHAPE: the batter's own lift occludes the "
+          "adjacent tactics target's wreath -- lower the batter, select the "
+          "tactics card, re-raise the batter; both commit")
+    # =====================================================================
+    # overnight/run_live_20260921x.log ~419-430 (cycle 12 match 2): hand
+    # [4/3, 4/3, 4/3, speed_boost +1, 8/1], decision batter=4 + tactics=3.
+    # "probe-select: 4 lifted -- the cursor was there", "verified on 3 after
+    # 1 press(es)", then slot 3's own _select_verified refuses outright
+    # ("slot 3's position is unreadable ... refusing rather than pressing a
+    # TOGGLE blind") -> the I-48 fallback used to fire here, dropping the
+    # boost. card_index=4, tactics_index=3, adjacent.
+    s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4)
+    ok, out, unwind_calls = _play(4, 3)
+    check("(P) play succeeds, both committed", ok is True)
+    check("(P) both slots committed", s.confirmed_sel == [3, 4])
+    check("(P) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(P) the I-48 fallback did NOT fire -- the boost was recovered",
+          "dropping the boost" not in out)
+    check("(P) the manoeuvre's own presses, IN ORDER: lower 4, select 3, "
+          "re-raise 4 -- card_index=4 was already selected at baseline, so "
+          "the per-target loop's own first attempt costs no press at all",
+          s.select_log == [4, 3, 4])
+    check("(P) every press in the manoeuvre was look-gated (each landed and "
+          "was independently verified, not a single blind burst)",
+          "slot 3 selected behind slot 4's lift" in out)
+    check("(P) no unwind was needed at all", unwind_calls == [])
+
+    # =====================================================================
+    print("(Q) I-56: the tactics target is STILL blind once the batter "
+          "comes down -- not this occlusion -- the batter is restored and "
+          "the ordinary I-48 fallback fires exactly as before this ticket")
+    # =====================================================================
+    s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4,
+                                      m_slot_chronic=True)
+    ok, out, unwind_calls = _play(4, 3)
+    check("(Q) play succeeds by falling back to the batter alone", ok is True)
+    check("(Q) only the batter (slot 4) was committed", s.confirmed_sel == [4])
+    check("(Q) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(Q) slot 4 was restored by the manoeuvre before the fallback ran",
+          "restoring 4 (I-56)" in out)
+    check("(Q) the I-48 fallback fired", "dropping the boost" in out)
+    check("(Q) the tactics attempt was unwound, and it was a no-op -- "
+          "nothing was ever raised at slot 3",
+          unwind_calls == [{3}])
+    check("(Q) the manoeuvre pressed EXACTLY lower-4/re-raise-4 and never "
+          "touched slot 3 -- a still-blind read must never reach a "
+          "select_card attempt on the target itself",
+          s.sent == ["move_right", "move_right", "move_right", "move_right",
+                     "move_left", "move_right", "select_card", "select_card",
+                     "confirm_play"])
+
+    # =====================================================================
+    print("(R) I-56: the occlusion IS resolved and the tactics card selects "
+          "cleanly, but the re-raise of the batter is dropped every time -- "
+          "REFUSE THE WHOLE PLAY, nothing left half-committed")
+    # =====================================================================
+    s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4,
+                                      t_slot_never_reraises=True)
+    ok, out, unwind_calls = _play(4, 3)
+    check("(R) play refuses", ok is False)
+    check("(R) nothing was ever committed", s.confirmed_sel is None)
+    check("(R) confirm_play was never sent", "confirm_play" not in s.sent)
+    check("(R) nothing is left lifted", s.lifted == set())
+    check("(R) the manoeuvre unwound the tactics select it had just made",
+          "refusing and unwinding, nothing half-committed (I-56)" in out)
+
+    # =====================================================================
+    print("(S) CONTROL: the tactics target reads fine on its own -- the "
+          "I-56 manoeuvre is never even tried, zero extra presses")
+    # =====================================================================
+    s = PlayScreen(cur=0)
+    ok, out, unwind_calls = _play(4, 3)
+    check("(S) play succeeds", ok is True)
+    check("(S) both slots committed", s.confirmed_sel == [3, 4])
+    check("(S) exactly one confirm_play press", s.sent.count("confirm_play") == 1)
+    check("(S) no fallback and no I-56 manoeuvre fired",
+          "dropping the boost" not in out and "I-56" not in out)
+    check("(S) the walk-and-select path is unchanged: walk to 4, select, "
+          "walk to 3, select, confirm -- one select_card each",
+          s.sent == ["move_right", "move_right", "move_right", "move_right",
+                     "select_card", "move_left", "select_card", "confirm_play"])
+    check("(S) no unwind was needed at all", unwind_calls == [])
+
+    # =====================================================================
+    print("(P2/Q2/R2) I-56 PART 3: the operation's own BASELINE settles "
+          "'already selected?' when a fresh, blind read cannot -- drives "
+          "_select_verified directly, decoupled from any particular look()-"
+          "call sequence, the same way test_discard_confirm_verified.py's "
+          "NeighbourRig drives resolve_neighbour_occlusion directly")
+    # =====================================================================
+
+    class BaselineSelectScreen:
+        """`overnight/run_live_20260921y.log` ~216-225: a tactics wreath
+        fails to read AT REST with no lifted neighbour anywhere in sight
+        ("slot 3's wreath is partly under slot 4's card edge, the normal fan
+        overlap"). `chronic_blind=False` clears the moment the target is
+        actually lifted (selecting moves the card clear of the overlap);
+        `chronic_blind=True` never clears (the row never reads, whatever is
+        pressed -- the worst case, where the existing retry loop's own rules
+        decide the outcome exactly as they already do for any blind target).
+        """
+
+        def __init__(self, target, chronic_blind=False):
+            self.target = target
+            self.chronic_blind = chronic_blind
+            self.lifted = set()
+            self.sent = []
+
+        def press(self, key, **kw):
+            self.sent.append(key)
+            if key == "select_card":
+                if self.target in self.lifted:
+                    self.lifted.discard(self.target)
+                else:
+                    self.lifted.add(self.target)
+
+        def look(self):
+            ys = list(REST)
+            blind = self.chronic_blind or self.target not in self.lifted
+            if blind:
+                ys[self.target] = None
+            glow = [0.0] * N
+            sel = sorted(s for s in self.lifted if not (s == self.target and blind))
+            return glow, ys, N, sel
+
+    def _select_direct(target, screen, ys0, sel0):
+        real_press = ic.press
+        ic.press = screen.press
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                ok, sel = ic._select_verified(target, screen.look, ys0=ys0, sel0=sel0)
+        finally:
+            ic.press = real_press
+        return ok, sel, buf.getvalue()
+
+    print("(P2) THE LIVE SHAPE: baseline readable and unselected -- one "
+          "press, the row recovers once lifted (a real rise, or the same "
+          "already-tested I-21/I-36 inference either way -- this ticket "
+          "only widens WHEN a press is allowed, not what counts as proof)")
+    s = BaselineSelectScreen(target=3, chronic_blind=False)
+    ok, sel, out = _select_direct(3, s, ys0=list(REST), sel0=set())
+    check("(P2) the target is verified selected", ok is True)
+    check("(P2) exactly one select_card press", s.sent == ["select_card"])
+    check("(P2) the baseline-trust line fired, not the ordinary refusal",
+          "read it DOWN and readable" in out and "I-56" in out)
+
+    print("(Q2) the BASELINE read of slot 3 was ALSO blind -- refuse "
+          "exactly as before, no blind toggle")
+    s = BaselineSelectScreen(target=3, chronic_blind=True)
+    ys0_blind = list(REST)
+    ys0_blind[3] = None
+    ok, sel, out = _select_direct(3, s, ys0=ys0_blind, sel0=set())
+    check("(Q2) refuses", ok is False)
+    check("(Q2) NO press was ever sent -- the baseline could not vouch for "
+          "it either", s.sent == [])
+    check("(Q2) the ORIGINAL refusal fired, not the I-56 baseline bypass",
+          "refusing rather than pressing a TOGGLE blind" in out
+          and "I-56" not in out)
+
+    print("(R2) slot 3 WAS already selected at baseline -- not pressed "
+          "again, treated as already up")
+    s = BaselineSelectScreen(target=3, chronic_blind=True)
+    ok, sel, out = _select_direct(3, s, ys0=list(REST), sel0={3})
+    check("(R2) treated as already selected", ok is True)
+    check("(R2) NO press was sent -- it is already up", s.sent == [])
+    check("(R2) the baseline-already-selected line fired",
+          "already selected -- treating as already up, no press" in out)
+
+    # =====================================================================
     print()
     print("MUTATION TESTING")
     # =====================================================================
@@ -1040,6 +1292,287 @@ try:
     check("post-restore sanity: case J passes again",
           ok is False and s.confirmed_sel is None
           and s.sent.count("select_card") < 20)
+
+    # --- mutant 10 (I-56 P/Q/R): skip the lower ------------------------------
+    print("mutant 10: resolve_target_behind_lifted_neighbour never actually "
+          "presses t_slot down -- case P must no longer recover the boost")
+    try:
+        _mutate(
+            IC_PATH,
+            "    ok, _sel = _deselect_verified(t_slot, look)\n"
+            "    if not ok:\n"
+            "        return \"unresolved\", None\n"
+            "\n"
+            "    def _restore_t_slot():\n",
+            "    ok, _sel = True, []  # I-56 mutant: skip the lower press\n"
+            "\n"
+            "    def _restore_t_slot():\n")
+        _reload_ic()
+        s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4)
+        ok, out, unwind_calls = _play(4, 3)
+        check("mutant 10 caught: case P no longer recovers the boost",
+              not (ok is True and s.confirmed_sel == [3, 4]))
+    finally:
+        _restore_ic()
+
+    # --- mutant 11 (I-56 P/Q/R): select while still blind --------------------
+    print("mutant 11: the manoeuvre presses select_card on the target even "
+          "when its position is still unreadable -- case Q must send an "
+          "extra, unverified press")
+    try:
+        _mutate(
+            IC_PATH,
+            "    if n != MAX_HAND_SIZE or _ys[m_slot] is None or m_slot in sel:\n"
+            "        print(f\"  [cursor] slot {m_slot} still blind (or itself lifted) with \"\n",
+            "    if False:  # I-56 mutant: never treat m_slot as still blind\n"
+            "        print(f\"  [cursor] slot {m_slot} still blind (or itself lifted) with \"\n")
+        _reload_ic()
+        s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4,
+                                          m_slot_chronic=True)
+        ok, out, unwind_calls = _play(4, 3)
+        check("mutant 11 caught: case Q's press sequence no longer matches "
+              "the bounded, look-gated manoeuvre",
+              s.sent != ["move_right", "move_right", "move_right", "move_right",
+                         "select_card", "move_left", "move_right", "select_card",
+                         "select_card", "confirm_play"])
+    finally:
+        _restore_ic()
+
+    # --- mutant 12 (I-56 P/Q/R): skip the re-raise verify ---------------------
+    print("mutant 12: the manoeuvre reports 'resolved' without checking "
+          "whether t_slot's re-raise actually landed -- case R must no "
+          "longer refuse and unwind cleanly")
+    try:
+        _mutate(
+            IC_PATH,
+            "    if not _restore_t_slot():\n"
+            "        print(f\"  [cursor] slot {m_slot} selected but slot {t_slot} would not \"\n"
+            "              \"re-raise -- refusing and unwinding, nothing half-committed (I-56)\")\n"
+            "        _walk_cursor_to(m_slot, look)\n"
+            "        _deselect_verified(m_slot, look)\n"
+            "        return \"refused\", None\n",
+            "    _restore_t_slot()  # I-56 mutant: never checks the outcome\n")
+        _reload_ic()
+        s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4,
+                                          t_slot_never_reraises=True)
+        ok, out, unwind_calls = _play(4, 3)
+        check("mutant 12 caught: case R no longer refuses and unwinds via the "
+              "manoeuvre's own detected failure",
+              "refusing and unwinding, nothing half-committed (I-56)" not in out)
+    finally:
+        _restore_ic()
+
+    # --- sanity: the I-56 fix is still intact after mutants 10-12 -----------
+    s = NeighbourOcclusionPlayScreen(cur=0, m_slot=3, t_slot=4)
+    ok, out, unwind_calls = _play(4, 3)
+    check("post-restore sanity: case P passes again",
+          ok is True and s.confirmed_sel == [3, 4])
+
+    def _stray_probe(chronic_blind, m_independently_lifted=False):
+        """Minimal rig for resolve_neighbour_occlusion, driving `ic.press`/
+        a `look` callable directly -- the coordinator's I-56 part 2 (mark on
+        blind / ignore the rise / drop the target mark), mutants 13-15.
+        Mirrors test_discard_confirm_verified.py's own NeighbourRig, kept
+        local here rather than imported so this file's mutation harness
+        stays self-contained."""
+        state = {"lifted": {0, 1} if m_independently_lifted else {0}, "cur": 0}
+
+        def _press(key, **kw):
+            if key == "move_left":
+                state["cur"] = max(0, state["cur"] - 1)
+            elif key == "move_right":
+                state["cur"] = min(N - 1, state["cur"] + 1)
+            elif key == "select_card":
+                slot = state["cur"]
+                if slot in state["lifted"]:
+                    state["lifted"].discard(slot)
+                else:
+                    state["lifted"].add(slot)
+
+        def _look():
+            # Occlusion of slot 1 is governed PURELY by slot 0's own lifted
+            # state (matching NeighbourRig's own model in
+            # test_discard_confirm_verified.py: `if T_SLOT in self.lifted or
+            # not self.m_readable_when_t_down: ys[M_SLOT] = None`) -- NOT by
+            # whether slot 1 is itself lifted. `sel` is `sorted(lifted)`,
+            # unfiltered, the same convention NeighbourRig uses.
+            occluded = chronic_blind or (0 in state["lifted"])
+            ys = [200] * N
+            if occluded:
+                ys[1] = None
+            glow = [0.0] * N
+            glow[state["cur"]] = 30.0
+            sel = sorted(state["lifted"])
+            return glow, ys, N, sel
+
+        return _press, _look
+
+    # --- mutant 13 (coordinator I-56 part 2, case T): mark on blind ---------
+    print("mutant 13: resolve_neighbour_occlusion no longer clears the mark "
+          "on a merely-blind (unproven) verdict -- case T's mark must not "
+          "survive, and this mutant makes it survive again")
+    try:
+        _mutate(IC_PATH, "        _MAYBE_LIFTED.discard(m_slot)\n",
+                "        pass  # I-56 mutant: mark on blind (never cleared)\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._mark_maybe_lifted({1})
+        press, look = _stray_probe(chronic_blind=True)
+        real_press = ic.press
+        ic.press = press
+        try:
+            ic.resolve_neighbour_occlusion(1, 0, look)
+        finally:
+            ic.press = real_press
+        check("mutant 13 caught: the mark survives when I-56 says it must not",
+              1 in ic._MAYBE_LIFTED)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- mutant 14 (coordinator I-56 part 2, case U): ignore the rise -------
+    print("mutant 14: resolve_neighbour_occlusion no longer distinguishes a "
+          "POSITIVELY RISEN stray from mere blindness -- a genuine, "
+          "independently lifted stray must still refuse with its mark intact")
+    try:
+        _mutate(IC_PATH, "    if m_slot in sel:\n",
+                "    if False:  # I-56 mutant: ignore the rise\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._mark_maybe_lifted({1})
+        press, look = _stray_probe(chronic_blind=False, m_independently_lifted=True)
+        real_press = ic.press
+        ic.press = press
+        try:
+            ok_u, detail_u = ic.resolve_neighbour_occlusion(1, 0, look)
+        finally:
+            ic.press = real_press
+        check("mutant 14 caught: a genuine, independently lifted stray is no "
+              "longer refused with its mark kept",
+              not (ok_u is False and 1 in ic._MAYBE_LIFTED))
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- mutant 15 (coordinator I-56 part 2, case V): drop the target mark --
+    print("mutant 15: _clear_strays no longer marks a PRESSED TARGET whose "
+          "own verify stayed blind -- I-43's legitimate case must survive "
+          "the I-56 fix untouched")
+    try:
+        _mutate(IC_PATH, "        _mark_maybe_lifted(set(want) - lifted)\n",
+                "        pass  # I-56 mutant: target mark dropped\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+
+        def _look_v_mut():
+            return [0.0] * N, [None] + [200] * (N - 1), N, []
+
+        ic._clear_strays({0}, _look_v_mut, blind_before=set())
+        check("mutant 15 caught: the pressed target's own blind verify is no "
+              "longer marked (I-43's legitimate case)",
+              0 not in ic._MAYBE_LIFTED)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- sanity: T/U/V all still hold after mutants 13-15 --------------------
+    ic.clear_maybe_lifted()
+    ic._mark_maybe_lifted({1})
+    press, look = _stray_probe(chronic_blind=True)
+    real_press = ic.press
+    ic.press = press
+    try:
+        ok_t, _ = ic.resolve_neighbour_occlusion(1, 0, look)
+    finally:
+        ic.press = real_press
+    check("post-restore sanity: case T passes again",
+          ok_t is False and 1 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    # --- mutant 16 (I-56 part 3, case Q2): press when the baseline was blind
+    print("mutant 16: _select_verified presses even when the OPERATION's own "
+          "baseline was also blind -- case Q2 must send a press it has no "
+          "right to")
+    try:
+        _mutate(IC_PATH,
+                "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n",
+                "        if False:  # I-56 mutant: baseline blindness ignored\n")
+        _reload_ic()
+        _ys0_q2 = list(REST)
+        _ys0_q2[3] = None
+        _s16 = BaselineSelectScreen(target=3, chronic_blind=True)
+        real_press = ic.press
+        ic.press = _s16.press
+        try:
+            ok16, _sel16 = ic._select_verified(3, _s16.look, ys0=_ys0_q2, sel0=set())
+        finally:
+            ic.press = real_press
+        check("mutant 16 caught: case Q2 sent a press it has no right to",
+              _s16.sent != [])
+    finally:
+        _restore_ic()
+
+    # --- mutant 17 (I-56 part 3, case Q2): skip the baseline check, infer anyway
+    print("mutant 17: _select_verified treats EVERY blind target as already "
+          "selected, without ever checking sel0 -- case Q2 must be waved "
+          "through with no evidence at all")
+    try:
+        _mutate(IC_PATH,
+                "        if sel0 is not None and target in sel0:\n",
+                "        if True:  # I-56 mutant: skip the baseline check\n")
+        _reload_ic()
+        _ys0_q2b = list(REST)
+        _ys0_q2b[3] = None
+        _s17 = BaselineSelectScreen(target=3, chronic_blind=True)
+        real_press = ic.press
+        ic.press = _s17.press
+        try:
+            ok17, _sel17 = ic._select_verified(3, _s17.look, ys0=_ys0_q2b, sel0=set())
+        finally:
+            ic.press = real_press
+        check("mutant 17 caught: case Q2 is waved through with no evidence",
+              ok17 is not False or _s17.sent != [])
+    finally:
+        _restore_ic()
+
+    # --- mutant 18 (I-56 part 3, case R2): press a second time when already up
+    print("mutant 18: the already-selected-at-baseline branch falls through "
+          "to a press instead of returning -- case R2 must toggle an "
+          "already-up card back DOWN")
+    try:
+        _mutate(
+            IC_PATH,
+            "            _sel = _InferredSel(before)\n"
+            "            _sel.inferred = frozenset({target})\n"
+            "            return True, _sel\n"
+            "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n",
+            "            _sel = _InferredSel(before)\n"
+            "            _sel.inferred = frozenset({target})\n"
+            "            # I-56 mutant: no return -- falls through to a press\n"
+            "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n")
+        _reload_ic()
+        _s18 = BaselineSelectScreen(target=3, chronic_blind=True)
+        real_press = ic.press
+        ic.press = _s18.press
+        try:
+            ok18, _sel18 = ic._select_verified(3, _s18.look, ys0=list(REST), sel0={3})
+        finally:
+            ic.press = real_press
+        check("mutant 18 caught: case R2 sent a press on an already-selected "
+              "card", _s18.sent != [])
+    finally:
+        _restore_ic()
+
+    # --- sanity: P2/Q2/R2 all still hold after mutants 16-18 ----------------
+    _s_p2 = BaselineSelectScreen(target=3, chronic_blind=False)
+    real_press = ic.press
+    ic.press = _s_p2.press
+    try:
+        ok_p2, _ = ic._select_verified(3, _s_p2.look, ys0=list(REST), sel0=set())
+    finally:
+        ic.press = real_press
+    check("post-restore sanity: case P2 passes again",
+          ok_p2 is True and _s_p2.sent == ["select_card"])
 
 finally:
     pass

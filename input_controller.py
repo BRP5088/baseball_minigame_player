@@ -1378,7 +1378,7 @@ class _InferredSel(list):
     inferred = frozenset()
 
 
-def _select_verified(target, look):
+def _select_verified(target, look, ys0=None, sel0=None):
     """Make sure `target` is SELECTED, and prove it before anything is committed.
 
     ALREADY SELECTED IS A SUCCESS, NOT A PRESS. Pressing select_card on a card that is
@@ -1390,6 +1390,45 @@ def _select_verified(target, look):
     Measured 2026-09-10 over a five-slot sweep: 1 of 5 select presses did not show up.
     Pressing again blind would risk DESELECTING one that did land, so each attempt is
     confirmed first, and a press that is merely LATE is waited out rather than repeated.
+
+    `ys0`/`sel0` (I-56, part 3): the OPERATION's own baseline y-array and
+    selected-set, taken BEFORE this operation pressed anything -- threaded
+    ONLY by `_verified_select_and_play_inner`'s own per-target loop, on a
+    target's FIRST attempt (never by the shared I-48b/e re-check, which runs
+    after this operation has already pressed things, so its own baseline can
+    no longer be trusted for a slot that may since have changed). Evidence:
+    `overnight/run_live_20260921y.log` ~216-225 -- a tactics card's wreath
+    failed to read AT REST, with no lifted neighbour anywhere in sight ("slot
+    3's wreath is partly under slot 4's card edge, the normal fan overlap"),
+    so `resolve_target_behind_lifted_neighbour` above is not the fix for this
+    shape -- the neighbour was never lifted. Only the operation's OWN
+    baseline can settle "already selected?" when the CURRENT read cannot:
+
+        target WAS in sel0 (baseline)           -> already selected. A
+                                                    currently-blind read is
+                                                    exactly I-21's own
+                                                    "selecting blinds the
+                                                    disc" signature, not
+                                                    evidence it went down.
+                                                    No press; success.
+        target readable in ys0 AND NOT in sel0  -> provably DOWN and
+                                                    untouched by anything
+                                                    this operation has done
+                                                    -- pressing ONCE is not a
+                                                    blind toggle, it is the
+                                                    only way to change a
+                                                    state already known.
+                                                    Falls through into the
+                                                    ordinary retry loop
+                                                    below, which verifies the
+                                                    result exactly as every
+                                                    other target does (a real
+                                                    rise, or the same
+                                                    I-21/I-36-gated
+                                                    inference -- unchanged).
+        neither holds (no baseline supplied, or
+        the baseline was itself unreadable)     -> refuse exactly as before
+                                                    this ticket.
     """
     import local_hand
     _g, _ys, n, before = _look_settled(look)
@@ -1431,10 +1470,30 @@ def _select_verified(target, look):
     # already selected. Refusing hands the decision back to the caller, which
     # re-reads a fresh frame -- and a refusal is recoverable where a toggle is not.
     if 0 <= target < len(_ys) and _ys[target] is None:
-        print(f"  [cursor] slot {target}'s position is unreadable, so whether it is "
-              "already selected cannot be told — refusing rather than pressing a "
-              "TOGGLE blind")
-        return False, before
+        if sel0 is not None and target in sel0:
+            # I-56 (part 3): the OPERATION's own baseline already proves this
+            # target selected -- a currently-blind read is exactly I-21's own
+            # "selecting blinds the disc" signature, not evidence it is down.
+            print(f"  [cursor] slot {target}'s position is unreadable now, "
+                  "but the operation's own baseline shows it already "
+                  "selected -- treating as already up, no press (I-56)")
+            _sel = _InferredSel(before)
+            _sel.inferred = frozenset({target})
+            return True, _sel
+        if ys0 is None or target >= len(ys0) or ys0[target] is None:
+            print(f"  [cursor] slot {target}'s position is unreadable, so whether it is "
+                  "already selected cannot be told — refusing rather than pressing a "
+                  "TOGGLE blind")
+            return False, before
+        # I-56 (part 3): the baseline PROVES this target was DOWN and
+        # readable before this operation touched anything -- pressing once is
+        # not a blind toggle, it is the only way to change a state already
+        # known. Falls through into the ordinary retry loop below, which
+        # verifies the result exactly as every other target does.
+        print(f"  [cursor] slot {target}'s position is unreadable now, but "
+              "the operation's own baseline read it DOWN and readable, "
+              "untouched since -- pressing once rather than refusing blind "
+              "(I-56)")
 
     # WHAT COUNTS AS "THE WRONG CARD WENT UP" IS A CHANGE, NOT A STATE. The first version
     # refused whenever ANY other card was raised -- which defeats the whole point of
@@ -1648,15 +1707,27 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
                than inferred. Walk back to t_slot, put it BACK UP, and only
                once THAT is confirmed clear the mark and hand back to the
                caller's ordinary commit path.
-        m_slot is STILL blind, OR reads but is ITSELF lifted, with t_slot down
-            -> t_slot's lift cannot be the (sole) explanation: a blind m_slot
-               really is up on its own, and a m_slot that reads but is LIFTED
-               is a real, independent stray, not an occlusion -- committing
-               it because it happened to become readable once a neighbour
-               came down would play a card the engine never chose. t_slot is
-               left DOWN (nothing here re-raises it) and the mark SURVIVES --
-               the existing refusal/unwind path handles it, now with a
-               positive finding instead of a guess.
+        m_slot reads but is ITSELF LIFTED, with t_slot down
+            -> a real, POSITIVELY EVIDENCED stray, not an occlusion --
+               `sel` only ever names a slot actually measured RISEN, never a
+               guess, so committing it because it happened to become
+               readable once a neighbour came down would play a card the
+               engine never chose. t_slot is left DOWN (nothing here
+               re-raises it) and the mark SURVIVES -- the existing
+               refusal/unwind path handles it, with a positive finding.
+        m_slot is STILL BLIND with t_slot down (I-56)
+            -> NOT the same evidence as the branch above, and used to be
+               treated as though it were: a blind read carries no proof of
+               anything -- occlusion by a DIFFERENT card, or a chronic
+               wreath misread on a resting tactics card (I-36), reads
+               identically to a real lift, and the old verdict here
+               ("genuine stray") deadlocked a match on exactly that
+               ambiguity (`run_live_20260921x.log` ~655-680: I-43 firings
+               that day 14, true positives 0). t_slot is put back UP (the
+               caller may still need it committed) and any EXISTING mark on
+               m_slot is CLEARED -- the one thing that could have put it
+               there is this same false assumption. Reported unresolved,
+               not refused-as-a-stray.
         the re-raise of t_slot itself fails
             -> refuse. t_slot is left DOWN (nothing partially lifted), the
                mark SURVIVES (cleared only on a re-raise that actually
@@ -1666,7 +1737,10 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
 
     Returns (ok, detail). `ok` is True only when t_slot is confirmed back up
     AND m_slot's mark has been cleared -- i.e. the caller's ordinary commit
-    may proceed. `detail` is a short string naming which branch fired.
+    may proceed. `ok=False` covers both a genuine, positively-evidenced
+    stray (mark survives) and an unresolved/merely-blind read (mark
+    cleared, t_slot restored where possible) -- `detail` is a short string
+    naming which branch fired and is the way to tell them apart in a log.
 
     WALKS THE CURSOR TO t_slot BEFORE EVERY TOGGLE (I-52 skeptic round 2,
     N1). `_deselect_verified`/`_select_verified` toggle whatever the cursor
@@ -1699,16 +1773,41 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
     _g, _ys, n, sel = _look_settled(look)
     if n != MAX_HAND_SIZE:
         return False, "cannot read the fan with t_slot down -- refusing"
-    if _ys[m_slot] is None or m_slot in sel:
-        # STILL blind, OR reading but ITSELF lifted (I-52 skeptic round 2,
-        # N2): a lifted m_slot that merely became readable once its
-        # neighbour came down is a real stray with its own selection, not
-        # an occlusion -- `_ys[m_slot] is not None` alone cannot tell that
-        # apart from a resting card, and waving it through here would
-        # commit a card the engine never chose. t_slot is left DOWN;
-        # nothing here re-raises it, and the mark SURVIVES either way.
-        return False, (f"slot {m_slot} still blind or itself lifted with slot "
+    if m_slot in sel:
+        # READING BUT ITSELF LIFTED (I-52 skeptic round 2, N2): a lifted
+        # m_slot that merely became readable once its neighbour came down is
+        # a real, POSITIVELY EVIDENCED stray -- `sel` only ever names a slot
+        # `selected_cards` actually measured RISEN (SELECTED_MIN_RISE), never
+        # a guess -- and waving it through here would commit a card the
+        # engine never chose. t_slot is left DOWN; nothing here re-raises it,
+        # and the mark SURVIVES.
+        return False, (f"slot {m_slot} still selected with slot "
                         f"{t_slot} down -- genuine stray, marked")
+    if _ys[m_slot] is None:
+        # STILL BLIND IS *NOT* THE SAME EVIDENCE (I-56). The branch above
+        # requires a POSITIVE rise; this one used to treat mere blindness as
+        # proof of the same thing, and blindness carries no such proof --
+        # occlusion by a DIFFERENT card, or a chronic wreath misread on a
+        # resting tactics card (I-36), read identically to a real lift. Live:
+        # `run_live_20260921x.log` ~655-680 -- a resting FIELDING PLAY card
+        # next to a selected pitcher card would not read no matter what, was
+        # scored "genuine stray, marked" by the old rule, refused 3 straight
+        # commits (I-43 firings that day: 14, true positives: 0), and
+        # excluded the engine's own chosen card. Restore t_slot -- the
+        # caller may still need it committed -- and report UNRESOLVED, not a
+        # stray. And CLEAR any existing mark on m_slot: the one thing that
+        # could have put it there is this exact blind-means-lifted
+        # assumption, which this branch has just shown false.
+        ok, _sel = _walk_cursor_to(t_slot, look)
+        if ok:
+            ok, _sel = _select_verified(t_slot, look)
+        _MAYBE_LIFTED.discard(m_slot)
+        if not ok:
+            return False, (f"slot {m_slot} still blind with slot {t_slot} down -- "
+                            f"not proof of a lift, AND {t_slot} would not "
+                            "re-raise -- refusing")
+        return False, (f"slot {m_slot} still blind with slot {t_slot} down -- "
+                        "not proof of a lift (I-56); restored, unresolved")
     # m_slot reads AT REST once t_slot is down: t_slot's own lift explains it.
     ok, _sel = _walk_cursor_to(t_slot, look)
     if not ok:
@@ -1724,6 +1823,97 @@ def resolve_neighbour_occlusion(m_slot, t_slot, look):
     # that never took.
     _MAYBE_LIFTED.discard(m_slot)
     return True, f"slot {m_slot} explained by slot {t_slot}'s lift -- cleared, {t_slot} restored"
+
+
+def resolve_target_behind_lifted_neighbour(m_slot, t_slot, look):
+    """SELECT a fresh target `m_slot` that reads blind only because an
+    already-lifted neighbour `t_slot` occludes it (I-56), reached from
+    `_verified_select_and_play_inner`'s per-target loop right before I-48's
+    batter-alone fallback would otherwise fire on the exact shape:
+    `overnight/run_live_20260921x.log` ~419-430 (cycle 12 match 2), hand
+    [4/3, 4/3, 4/3, speed_boost +1, 8/1], decision batter=4 + tactics=3 --
+    "probe-select: 4 lifted -- the cursor was there", "verified on 3 after 1
+    press(es)", then slot 3's own `_select_verified` refuses outright
+    ("slot 3's position is unreadable, so whether it is already selected
+    cannot be told -- refusing rather than pressing a TOGGLE blind"). The
+    lifted batter at slot 4 occludes slot 3's wreath (tactics rows have no
+    disc; their position comes from the wreath -- I-36), and that refusal is
+    CORRECT on its own terms -- this function is what tries something
+    smarter before the boost is simply dropped.
+
+    SAME lower/look/re-raise SHAPE AS `resolve_neighbour_occlusion` (I-52),
+    reusing its exact primitives (`_walk_cursor_to`, `_deselect_verified`,
+    `_select_verified`, `_look_settled`) -- not that function itself,
+    because the two diverge on what "give up" means. I-52's own caller
+    (`_clear_strays`) is disambiguating an EXISTING `_MAYBE_LIFTED` mark and
+    is about to refuse the whole commit regardless once it cannot, so it is
+    safe to leave `t_slot` down. I-48's fallback here COMMITS `t_slot` (the
+    batter) ALONE when the boost cannot be verified, so `t_slot` must come
+    back up before that fallback can run -- and `m_slot` here has never
+    been selected at all, where `resolve_neighbour_occlusion`'s `m_slot` is
+    an existing mark being disambiguated, not a fresh target to raise.
+
+        walk to t_slot, lower it, then look
+        m_slot still blind, or itself lifted -> not our occlusion. Restore
+            t_slot (the caller's I-48 fallback needs it back up regardless)
+            and report UNRESOLVED.
+        m_slot reads at rest -> walk to it and select it. A failed select
+            restores t_slot and also reports UNRESOLVED -- nothing was
+            raised here that needs unwinding.
+        m_slot selected -> walk back and re-raise t_slot.
+            succeeds -> RESOLVED: both are up, hand back to the caller's
+                ordinary commit path.
+            fails -> UNWIND m_slot (nothing half-committed) and report
+                REFUSED -- distinct from UNRESOLVED, because a batter that
+                will not come back up cannot be committed alone either.
+
+    Bounded: one lower, one look, one select, at most one re-raise -- no
+    loop chasing any of the three presses beyond what `_select_verified`/
+    `_deselect_verified` already retry internally on their own.
+
+    Returns `(outcome, sel)`. `outcome` is `"resolved"`, `"unresolved"` or
+    `"refused"`. `sel` is `_select_verified`'s own result for `m_slot`
+    (carries `.inferred`, I-44) on the `"resolved"` path, else `None`.
+    """
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE or t_slot not in sel or _ys[m_slot] is not None:
+        return "unresolved", None
+    ok, _sel = _walk_cursor_to(t_slot, look)
+    if not ok:
+        return "unresolved", None
+    ok, _sel = _deselect_verified(t_slot, look)
+    if not ok:
+        return "unresolved", None
+
+    def _restore_t_slot():
+        _ok, _s = _walk_cursor_to(t_slot, look)
+        if _ok:
+            _ok, _s = _select_verified(t_slot, look)
+        return _ok
+
+    _g, _ys, n, sel = _look_settled(look)
+    if n != MAX_HAND_SIZE or _ys[m_slot] is None or m_slot in sel:
+        print(f"  [cursor] slot {m_slot} still blind (or itself lifted) with "
+              f"slot {t_slot} down -- not this occlusion, restoring {t_slot} (I-56)")
+        _restore_t_slot()
+        return "unresolved", None
+    ok, msel = _walk_cursor_to(m_slot, look)
+    if ok:
+        ok, msel = _select_verified(m_slot, look)
+    if not ok:
+        print(f"  [cursor] slot {m_slot} read clear once {t_slot} came down "
+              f"but would not select -- restoring {t_slot} (I-56)")
+        _restore_t_slot()
+        return "unresolved", None
+    if not _restore_t_slot():
+        print(f"  [cursor] slot {m_slot} selected but slot {t_slot} would not "
+              "re-raise -- refusing and unwinding, nothing half-committed (I-56)")
+        _walk_cursor_to(m_slot, look)
+        _deselect_verified(m_slot, look)
+        return "refused", None
+    print(f"  [cursor] slot {m_slot} selected behind slot {t_slot}'s lift; "
+          f"{t_slot} restored (I-56)")
+    return "resolved", msel
 
 
 # I-48 SKEPTIC S-3: whether the LAST _verified_select_and_play_inner call committed a
@@ -2015,9 +2205,14 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         if n != MAX_HAND_SIZE:
             print("  [cursor] cannot read the fan on the re-look — refusing. A "
                   "commit whose lifted set was never seen is a blind commit.")
-            # I-43: `_new_blind` was already under suspicion; an unreadable
-            # re-look proves nothing clean either way.
-            _mark_maybe_lifted(_new_blind)
+            # I-56: NOT marked. `_new_blind` names slots that went
+            # UNREADABLE, never slots actually SEEN RISEN -- occlusion by a
+            # different card and a chronic wreath misread (I-36) read
+            # identically to a real lift, and marking on that ambiguity
+            # deadlocked a match on a stray that was never lifted at all
+            # (`run_live_20260921x.log` ~655-680, I-43 that day: 14 firings,
+            # 0 true positives). Refusing THIS attempt is still the safe
+            # answer; persisting the suspicion into `_MAYBE_LIFTED` is not.
             invalidate_cursor()
             return False
         _reconcile_maybe_lifted(_ys, sel)
@@ -2038,11 +2233,13 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         # operation.
         if _new_blind:
             print(f"  [cursor] slot(s) {sorted(_new_blind)} still unreadable after "
-                  f"the re-look ({_ys}) — refusing. They were measurable when this "
-                  "operation started, so something we pressed lifted them, and a "
-                  "raised card would go in with the commit.")
-            # I-43: still unreadable after the one allowed re-look.
-            _mark_maybe_lifted(_new_blind)
+                  f"the re-look ({_ys}) — refusing THIS attempt. They were "
+                  "measurable when this operation started, so a raised card "
+                  "would go in with the commit if we proceeded -- but blindness "
+                  "alone is not proof any of them are something WE lifted "
+                  "(I-56): occlusion from an adjacent selection and a chronic "
+                  "wreath misread (I-36) produce the identical read. Not "
+                  "marked, so the next attempt is not deadlocked by a guess.")
             invalidate_cursor()
             return False
     _untouched_blind = _blind_now - set(want)
@@ -2200,7 +2397,13 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         if n != MAX_HAND_SIZE or (_blind_now - set(want)) or lifted - want:
             print(f"  [cursor] after clearing, the lifted set is still {sel} against "
                   f"{sorted(want)} — refusing to commit")
-            _mark_maybe_lifted((_blind_now - set(want)) | (lifted - want))
+            # I-56: mark only the POSITIVELY EVIDENCED strays (`lifted - want`,
+            # derived from `sel`, a real measured rise) -- `_blind_now - want`
+            # alone is a slot that merely would not read, which is occlusion
+            # or a chronic wreath misread (I-36) as often as a real lift, and
+            # marking on that guess is what deadlocked a match on a resting
+            # tactics card (`run_live_20260921x.log` ~655-680).
+            _mark_maybe_lifted(lifted - want)
             invalidate_cursor()
             return False
         _reconcile_maybe_lifted(_ys, sel)
@@ -2317,7 +2520,15 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
             continue
         ok, _sel = _walk_cursor_to(target, look)
         if ok:
-            ok, _sel = _select_verified(target, look)
+            # I-56 (part 3): this is TARGET's first touch this operation, so
+            # the true operation baseline (_ys0/before_all, read before
+            # anything was pressed) is still trustworthy -- threaded so
+            # _select_verified can settle "already selected?" itself when
+            # the CURRENT read cannot. Never threaded again later (the
+            # shared re-check below calls _select_verified with no baseline
+            # at all -- by then this operation may have pressed things, and
+            # a stale baseline is not evidence).
+            ok, _sel = _select_verified(target, look, ys0=_ys0, sel0=before_all)
         if ok:
             _inferred_targets |= getattr(_sel, "inferred", frozenset())
             if target == card_index:
@@ -2325,6 +2536,31 @@ def _verified_select_and_play_inner(card_index, tactics_index, look):
             continue
         if (target == tactics_index and target != card_index
                 and card_index is not None and _batter_verified):
+            # I-56: BEFORE giving up on the boost, check whether the lifted
+            # BATTER (card_index) is what makes THIS target unreadable --
+            # `_select_verified`'s own "position is unreadable" refusal is
+            # correct that it cannot tell whether an unreadable card is
+            # selected, but that unreadability can itself be explained (and
+            # cleared) by lowering the neighbour that is occluding it. Only
+            # tried when the two slots are actually ADJACENT -- occlusion is
+            # a fan-neighbour effect, the same precondition
+            # `resolve_neighbour_occlusion`'s own caller in `_clear_strays`
+            # uses. See `resolve_target_behind_lifted_neighbour`'s docstring
+            # for the live evidence and the full mechanism.
+            if abs(target - card_index) == 1:
+                _outcome, _rsel = resolve_target_behind_lifted_neighbour(
+                    target, card_index, look)
+                if _outcome == "resolved":
+                    _inferred_targets |= getattr(_rsel, "inferred", frozenset())
+                    continue
+                if _outcome == "refused":
+                    _unwind_selection(before_all, look, targets, ys0=_ys0)  # I-56
+                    invalidate_cursor()
+                    return False
+                # "unresolved": card_index has been restored by the resolver
+                # (or the restore itself failed, best-effort either way) --
+                # fall through to the existing I-48 fallback exactly as
+                # before this ticket.
             # I-48: THE TACTIC FAILED TO VERIFY, NOT THE BATTER -- card_index's own
             # walk+select already succeeded above, or this loop would never have
             # reached the tactics target at all. ISSUES.md I-48's census shows the
