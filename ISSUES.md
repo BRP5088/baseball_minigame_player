@@ -3953,4 +3953,97 @@ consumers are `validate_game_state` (paid-path only, never sees `local_game_stat
 output -- checked its one call site) and `tools/match_crawl.py` (reads a different,
 unrelated dict shape via plain `.get()`), neither affected by adding five new keys.
 
-**Status.** fixed on branch (follow-up), awaiting skeptic.
+**SKEPTIC VERDICT: CONFIRMED WITH NOTES (`agent_progress/issues/I-55/skeptic.md`).**
+Every claim in the follow-up checked out -- decision untouched, consumer safety,
+`record_result_frame`'s never-raises/capped/gated contract, timing at the commit
+site (12.4ms measured PNG save against a >=4.0s banner hold, no hazard) -- but
+THREE independently-constructed mutants, each targeting the exact failure class
+this whole ticket exists to prevent, survived the shipped 5-mutant campaign AND
+the regression battery:
+
+    loosen the ns equality check (`stashed is not None` alone, dropping
+      `stashed[1] == wanted_ns`)                    NOT CAUGHT
+    drop the threading at the SECOND return site
+      (the OCR-only fallback when the templates
+      never score `is_result` at all)               NOT CAUGHT
+    make the fallback's provenance text claim
+      "the DECISION frame" instead of "RE-DERIVED"   NOT CAUGHT
+
+None of these are refutations of the code -- the skeptic verified all three
+scenarios by hand against the UNMUTATED worktree and confirmed the code handles
+each one correctly (a genuine stale stash correctly falls back and says so; the
+second return site's diff already threads all five keys; the fallback's real
+provenance text already says "RE-DERIVED"). The gap was entirely in test
+COVERAGE: `_seed_and_read`'s stub always answers `is_result: True`, so every
+existing case takes the FIRST return site with a single, internally-consistent
+`local_game_state()` call -- nothing in the shipped suite ever (a) reads two
+DIFFERENT results in sequence and commits on the stale one, (b) drives the
+second return site at all, or (c) inspects the fallback path's own provenance
+text rather than only checking the decision path avoids it.
+
+**Three cases added, no orchestrator.py change:**
+
+    (G) genuine ns MISMATCH. Reads result A (frame A, scores A), then reads a
+        SECOND, different result B -- overwriting `_LAST_RESULT_FRAME` with B's
+        frame and timestamp, the way the next poll in run()'s own loop would --
+        then commits on A's now-stale state_json. Asserts the kept frame is a
+        FRESH capture (a third, distinct known image, standing in for "the
+        screen at commit time"), NOT B's stashed picture stamped with A's
+        numbers, and that the print/why.json say `path='re-derived'` and "did
+        not match the stashed frame".
+    (H) the SECOND return site. `local_state.read_result` seeded to MISS
+        (`is_result: False`) with partial scores; `result_ocr.read_banner`
+        seeded to answer; ban/prompt/hand stubbed to fall through
+        deterministically (`crop_gameplay_regions`, `read_ban_counter`,
+        `homeplate_runner_present`, `local_hand_cards`, `table_prompt.at_table`)
+        so the test does not depend on how the real readers happen to score a
+        synthetic frame. Asserts `result_source`/`result_card_word`/
+        `result_ocr_words`/`result_scores`/`result_frame_ns` all thread from
+        THIS site, `_LAST_RESULT_FRAME` is stashed here too, and the evidence
+        line names the ocr path.
+    (I) the fallback's provenance text. Calls `record_result_frame` with NO
+        threaded fields at all (`_LAST_RESULT_FRAME` is None) and asserts the
+        print AND why.json's `frame_provenance` say "RE-DERIVED" and do NOT say
+        "DECISION frame" -- the converse of what case A already checked (that
+        the decision path's own print avoids "re-derived").
+
+Verified independently by direct call to `local_game_state()` outside the test
+file (`local_game_state()` with the same five stubs as case H) before trusting
+the assertion -- reproduces state_json exactly as the test expects, `_LAST_
+RESULT_FRAME` set, before any mutant was applied.
+
+**Mutants (3, matching the skeptic's own three exactly; `__pycache__` cleared,
+sha256-verified restore to `ec7dbf24d7972041df39fac3ae3a922c510f58c58b6c77d311970461d5de8acf`
+between each):**
+
+    loosen `stashed[1] == wanted_ns` to `stashed is not None` alone
+        -> FAILS 4: all of (G) -- the kept frame becomes B's stashed picture
+           and the print falsely claims the decision frame
+    revert the SECOND return site's dict to the pre-I-55 four-key shape
+        -> FAILS 8: all of (H) -- result_source/ocr_words/scores/frame_ns all
+           come back None, and record_result_frame silently falls through to
+           its own honestly-labelled fallback (which is not what (H) is
+           testing: it is testing that the SITE threads, not that the
+           fallback still works when it doesn't)
+    replace the fallback's provenance string with the literal "the DECISION
+    frame" text
+        -> FAILS 5: all of (I), AND 2 of (G) -- (G) also takes the fallback
+           branch (a genuine ns mismatch IS a fallback), so the same lie
+           reaches it too; this is a feature of the mutant, not a leak between
+           tests, since both cases legitimately exercise the same provenance
+           code
+
+Every mutant's FAIL list is scoped to exactly the case(s) whose branch it
+touches; no mutant produced a failure outside G/H/I, and no pre-existing case
+(A-F, the trailing control) was disturbed by writing them.
+
+Regression battery re-run clean against this addition (`BASEBALL_TEST_RUN=1`,
+offline, single process, 11 files): the new test, `test_run_debit_and_scoring.py`,
+`test_stale_flag_never_presses_unpaid.py`, `test_run_resume_and_persist.py`,
+`test_transition_screens_recognised.py`, `test_reveal_frame_kept.py`,
+`test_unscored_reveal_rows_kept.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`,
+`test_validate_game_state.py` -- all exit 0. `test_result_reader.py` still exits 1
+on the same pre-existing, unrelated fixture gap documented above and under I-54.
+
+**Status.** fixed on branch (follow-up + skeptic gaps closed), awaiting re-review.
