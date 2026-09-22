@@ -2,31 +2,37 @@
 
 Three draws landed 2026-09-21 with nothing behind them: `overnight/
 run_live_20260921r.log` ~555-556 ("Draw logged (8 total)" after a poll that
-distrusted the template), `run_live_20260921t.log` ~634-636 (a PHANTOM draw
-from a truncated card name, I-54) and `run_live_20260921u.log` ~724-725 ("Draw
-logged (9 total)" with no `[state]` line at all). HANDOFF_NOW.md's LATER list
-already asked for this fix; `record_result_frame` (orchestrator.py, beside
-`record_reveal_kind` / `record_refused_select`) is it.
+distrusted the template), `run_live_20260921t.log` ~634-636 (I-54's phantom
+draw) and `run_live_20260921u.log` ~724-725 ("Draw logged (9 total)" with no
+`[state]` line at all). HANDOFF_NOW.md's LATER list already asked for this fix.
 
-`state_json` -- what run() actually has at the commit site -- carries only
-your_score/opp_score/result_outcome/result_won for a "result" screen; the
-template scores per word and the OCR fallback's answer are computed inside
-`local_game_state` and never survive the return trip. So `record_result_frame`
-threads the four fields it CAN thread and re-derives the two it cannot from a
-fresh capture, saying so in both the print line and why.json.
+FOLLOW-UP, SAME DAY. The first version of `record_result_frame` re-derived its
+evidence from a FRESH capture taken at the commit site -- one or more polls
+after `local_game_state` actually decided the outcome. A skeptic caught it
+from its own sample print: a WIN's kept frame showed template scores of
+{'winner': 0.0, 'loser': 0.0, 'draw': 0.0}, because by commit time the result
+screen had already moved on. The fix threads what `local_game_state`'s
+"result" branch already computed -- `result_scores`/`result_source`/
+`result_card_word`/`result_ocr_words`/`result_frame_ns` -- through
+`state_json`, and stashes the exact frame that branch read in the
+module-level `_LAST_RESULT_FRAME`, paired with the same timestamp so a
+mismatched global can never be mistaken for this decision's own picture.
 
-This file drives run() END TO END through `_run_harness.Harness`, the same
-harness test_run_debit_and_scoring.py uses -- Harness bypasses
-`local_game_state` by scripting `read_state_for_turn` directly, so the only
-consumer of `_fast_grab` during a Harness-driven run is this keeper. Cases C
-and E call `record_result_frame` directly, the same way test_tactics_select_
-fallback.py's cases D/E call `record_refused_select` directly, so as not to
-fight the harness's own `_fast_grab` patch.
+This file tests BOTH layers directly:
+
+  A, B, F   call `orchestrator.local_game_state()` itself, with
+            `local_state.read_result` and `_fast_grab` SEEDED to known
+            values, so the threaded fields and the stashed frame can be
+            checked against exactly what was seeded -- not against whatever
+            a live screen happens to show.
+  C, D, E   drive `record_result_frame`'s own contract (the BASEBALL_TEST_RUN
+            gate, resilience to a raising save, the 200-file cap), the same
+            way the first version of this file did.
 
 `check(name, cond)` is deliberately NAME-FIRST here, unlike `_run_harness`'s
 own COND-FIRST `check` (CLAUDE.md's nine-signatures trap) -- so this file does
-not import that helper, to avoid two different orders of the same-looking call
-in one test run.
+not import that helper, to avoid two different orders of the same-looking
+call in one test run.
 """
 
 import os as _os, sys as _sys
@@ -56,9 +62,10 @@ os.environ["BASEBALL_TEST_RUN"] = "1"
 # _run_harness FIRST among the project imports: it redirects the diagnostics
 # dir, the match log and the deal log at a temp dir and only THEN imports
 # orchestrator.
-from _run_harness import Harness, RESULT_DRAW, RESULT_WIN, _PLAYED
+from _run_harness import Harness, RESULT_WIN, _PLAYED
 import orchestrator as o
 import local_state
+import result_ocr
 from PIL import Image
 
 failures = []
@@ -69,84 +76,96 @@ def check(name, cond):
         failures.append(name)
 
 
-class _RaisingFrame:
-    """A frame object whose every attribute access raises -- record_reveal_kind's
-    own `_Explodes` shape, reused here for the same reason: proving a save
-    failure costs nothing but the frame."""
-    def __getattr__(self, k):
-        raise RuntimeError("boom: simulated frame failure")
+# Two DISTINCT, reproducible frames. "decision" stands in for the picture
+# local_game_state's result branch actually read; "fallback" stands in for
+# whatever a LATER, unrelated capture would show, so a test that finds
+# "fallback"'s bytes in the kept PNG has caught a re-derivation masquerading
+# as the decision frame.
+_DECISION_FRAME = Image.new("RGB", (1920, 1080), (17, 234, 91))
+_FALLBACK_FRAME = Image.new("RGB", (1920, 1080), (200, 100, 50))
 
 
-# --- A: a WIN commit prints the evidence line and writes frame + why.json ---
-with tempfile.TemporaryDirectory() as d:
-    os.environ[o.RESULT_FRAME_DIR_ENV] = d
-    buf = io.StringIO()
+def _seed_and_read(scores, why, outcome, ocr=(None, "paddle venv missing at /nope"),
+                   frame=_DECISION_FRAME):
+    """Stub local_state.read_result + result_ocr.read_banner + _fast_grab, call
+    local_game_state() once, and restore everything. Returns (state_json, gap)."""
+    _real_read_result = local_state.read_result
+    _real_read_banner = result_ocr.read_banner
+    _real_fast_grab = o._fast_grab
+    local_state.read_result = lambda full: {
+        "is_result": True, "outcome": outcome, "scores": dict(scores), "why": why}
+    result_ocr.read_banner = lambda full, *a, **k: ocr
+    o._fast_grab = lambda: frame
     try:
-        with contextlib.redirect_stdout(buf):
-            final = Harness(["match_start_prompt"] + _PLAYED + [RESULT_WIN]
-                            ).run(target_wins=99)
+        return o.local_game_state()
     finally:
-        os.environ.pop(o.RESULT_FRAME_DIR_ENV, None)
-    out = buf.getvalue()
-    check("(A) the win was still scored", final["wins"] == 1)
-    check("(A) the evidence line names the decision path",
-          "[result] win decided from state_json" in out)
-    check("(A) the evidence line threads your_score/opp_score from state_json",
-          "your_score=7" in out and "opp_score=3" in out)
-    check("(A) the evidence line carries the re-derived template scores",
-          "re-derived template scores" in out)
-    check("(A) the evidence line says OCR was consulted",
-          "re-derived OCR" in out)
-    pngs = sorted(f for f in os.listdir(d) if f.endswith(".png"))
-    whys = sorted(f for f in os.listdir(d) if f.endswith(".why.json"))
-    check(f"(A) exactly one frame was written, got {pngs}",
-          len(pngs) == 1 and pngs[0].startswith("win_"))
-    check(f"(A) exactly one why.json was written, got {whys}",
-          len(whys) == 1 and whys[0].startswith("win_"))
-    if whys:
-        with open(os.path.join(d, whys[0])) as fh:
-            why = json.load(fh)
-        check("(A) why.json carries the state_json numbers",
-              why.get("from_state_json", {}).get("your_score") == 7
-              and why.get("from_state_json", {}).get("opp_score") == 3)
-        check("(A) why.json carries the re-derived template scores",
-              "re_derived_template_scores" in why)
-        check("(A) why.json carries the re-derived OCR fields",
-              "re_derived_ocr_outcome" in why and "re_derived_ocr_detail" in why)
-        check("(A) why.json says the re-derivation is not the decision frame",
-              "not the frame the original decision was made on" in why.get("note", ""))
+        local_state.read_result = _real_read_result
+        result_ocr.read_banner = _real_read_banner
+        o._fast_grab = _real_fast_grab
 
 
-# --- B: a DRAW commit decided by the card reader names that path -----------
-_real_read_result = local_state.read_result
-local_state.read_result = lambda full: {
-    "is_result": True, "outcome": "draw",
-    "scores": {"WINNER": 0.10, "LOSER": 0.15, "DRAW": 0.50},
-    "why": "result CARD read 'DRAW' -> draw (no arched banner; best template 0.500)",
-}
-try:
+# --- A: local_game_state THREADS what read_result produced, verbatim, and --
+# --- record_result_frame prints those exact numbers, not a re-derivation ---
+o._LAST_RESULT_FRAME = None
+_KNOWN_SCORES = {"WINNER": 0.987, "LOSER": 0.012, "DRAW": 0.034}
+_KNOWN_WHY = "WINNER -> win (0.987 against the next word at 0.034)"
+st, gap = _seed_and_read(_KNOWN_SCORES, _KNOWN_WHY, "win")
+check(f"(A) local_game_state read the seeded result cleanly, got gap={gap!r}",
+      st is not None and gap is None)
+if st is not None:
+    check("(A) result_scores threaded VERBATIM from read_result",
+          st.get("result_scores") == _KNOWN_SCORES)
+    check(f"(A) result_source is 'template' (no CARD/OCR in the seeded why), got "
+          f"{st.get('result_source')!r}", st.get("result_source") == "template")
+    check("(A) result_frame_ns was stamped", isinstance(st.get("result_frame_ns"), int))
+    check("(A) _LAST_RESULT_FRAME was stashed with the MATCHING timestamp",
+          o._LAST_RESULT_FRAME is not None
+          and o._LAST_RESULT_FRAME[1] == st.get("result_frame_ns")
+          and o._LAST_RESULT_FRAME[0] is _DECISION_FRAME)
+
     with tempfile.TemporaryDirectory() as d:
-        os.environ[o.RESULT_FRAME_DIR_ENV] = d
         buf = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(buf):
-                final = Harness(["match_start_prompt"] + _PLAYED
-                                + [dict(RESULT_DRAW, result_outcome="draw")]
-                                ).run(target_wins=99)
-        finally:
-            os.environ.pop(o.RESULT_FRAME_DIR_ENV, None)
+        with contextlib.redirect_stdout(buf):
+            fname = o.record_result_frame("win", st, out_dir=d)
         out = buf.getvalue()
-        check("(B) the draw was still scored", final["draws"] == 1)
-        check("(B) the evidence line names the CARD reader's path",
-              "CARD" in out)
+        check(f"(A) record_result_frame wrote a file, got {fname!r}", fname is not None)
+        check("(A) the printed line carries the SEEDED scores verbatim",
+              str(_KNOWN_SCORES) in out)
+        check("(A) the printed line names the template path", "path='template'" in out)
+        check("(A) the printed line does NOT claim a re-derivation",
+              "path='re-derived'" not in out and "RE-DERIVED capture" not in out)
+        pngs = sorted(f for f in os.listdir(d) if f.endswith(".png"))
         whys = sorted(f for f in os.listdir(d) if f.endswith(".why.json"))
+        check(f"(A) exactly one frame was written, got {pngs}",
+              len(pngs) == 1 and pngs[0].startswith("win_"))
         if whys:
             with open(os.path.join(d, whys[0])) as fh:
-                why = json.load(fh)
-            check("(B) why.json's re-derived why names the CARD path",
-                  "CARD" in (why.get("re_derived_template_why") or ""))
-finally:
-    local_state.read_result = _real_read_result
+                why_doc = json.load(fh)
+            check("(A) why.json's scores match the seeded dict verbatim",
+                  why_doc.get("scores") == _KNOWN_SCORES)
+            check("(A) why.json names the decision frame, not a re-derivation",
+                  "DECISION frame" in (why_doc.get("frame_provenance") or ""))
+
+
+# --- B: a DRAW decided by the CARD reader names that path, word extracted --
+o._LAST_RESULT_FRAME = None
+_CARD_WHY = "result CARD read 'DRAW' -> draw (no arched banner; best template 0.500)"
+st, gap = _seed_and_read({"WINNER": 0.10, "LOSER": 0.15, "DRAW": 0.50}, _CARD_WHY, "draw")
+check(f"(B) local_game_state read the seeded card-path result, got gap={gap!r}",
+      st is not None and gap is None)
+if st is not None:
+    check(f"(B) result_source is 'card', got {st.get('result_source')!r}",
+          st.get("result_source") == "card")
+    check(f"(B) result_card_word extracted 'DRAW' from the why string, got "
+          f"{st.get('result_card_word')!r}", st.get("result_card_word") == "DRAW")
+    with tempfile.TemporaryDirectory() as d:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            o.record_result_frame("draw", st, out_dir=d)
+        out = buf.getvalue()
+        check("(B) the printed line names the CARD path", "path='card'" in out)
+        check("(B) the printed line carries the extracted card word",
+              "card_word='DRAW'" in out)
 
 
 # --- C: under BASEBALL_TEST_RUN, nothing is written (capture stubbed to work) -
@@ -154,6 +173,7 @@ _real_fast_grab_c = o._fast_grab
 _grab_calls = []
 o._fast_grab = lambda: (_grab_calls.append(1), Image.new("RGB", (1920, 1080)))[1]
 _real_dir_c = o.RESULT_FRAME_DIR
+o._LAST_RESULT_FRAME = None
 try:
     with tempfile.TemporaryDirectory() as watch:
         o.RESULT_FRAME_DIR = watch
@@ -174,6 +194,7 @@ finally:
 
 
 # --- D: a raising PIL save does not raise into run() ------------------------
+o._LAST_RESULT_FRAME = None
 _real_convert = Image.Image.convert
 Image.Image.convert = lambda self, *a, **k: (_ for _ in ()).throw(
     RuntimeError("boom: simulated PIL save failure"))
@@ -196,6 +217,7 @@ finally:
 # --- E: the cap refuses at 200, out loud, and does not prune ----------------
 _real_fast_grab_e = o._fast_grab
 o._fast_grab = lambda: Image.new("RGB", (1920, 1080))
+o._LAST_RESULT_FRAME = None
 try:
     with tempfile.TemporaryDirectory() as d:
         for i in range(o.RESULT_FRAME_MAX_FILES):
@@ -220,12 +242,57 @@ finally:
     o._fast_grab = _real_fast_grab_e
 
 
-print("OK: I-55 -- a result commit prints the evidence line (state_json threaded, "
-      "template scores and OCR re-derived and labelled as such), keeps the frame + "
-      "why.json it was decided near, names the CARD reader's path when that is what "
-      "answered, writes nothing under BASEBALL_TEST_RUN without its seam, a raising "
-      "save costs the frame but never the commit, and the 200-file cap refuses out "
-      "loud instead of pruning")
+# --- F: the kept PNG is BYTE-IDENTICAL to the frame the result branch read -
+# Seed local_game_state with _DECISION_FRAME, then -- BEFORE calling
+# record_result_frame -- swap the live capture over to a DIFFERENT frame, the
+# way a real screen would have moved on by commit time. A keeper that
+# re-captures instead of using the stashed decision frame will save
+# _FALLBACK_FRAME's bytes here, and this check will catch it.
+o._LAST_RESULT_FRAME = None
+st, gap = _seed_and_read(_KNOWN_SCORES, _KNOWN_WHY, "win", frame=_DECISION_FRAME)
+check(f"(F) local_game_state read the seeded result cleanly, got gap={gap!r}",
+      st is not None and gap is None)
+if st is not None:
+    _real_fast_grab_f = o._fast_grab
+    o._fast_grab = lambda: _FALLBACK_FRAME   # the screen has "moved on"
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            fname = o.record_result_frame("win", st, out_dir=d)
+            check(f"(F) record_result_frame wrote a file, got {fname!r}", fname is not None)
+            if fname:
+                kept = Image.open(os.path.join(d, fname)).convert("RGB")
+                check("(F) the kept PNG is byte-identical to the DECISION frame",
+                      kept.tobytes() == _DECISION_FRAME.convert("RGB").tobytes())
+                check("(F) the kept PNG is NOT the later fallback capture",
+                      kept.tobytes() != _FALLBACK_FRAME.convert("RGB").tobytes())
+    finally:
+        o._fast_grab = _real_fast_grab_f
+
+
+# --- A control kept from the first version: a WIN commit through run() ------
+# still scores and still calls the keeper -- confirms run()'s own call site
+# passes state_json through rather than something ad hoc.
+o._LAST_RESULT_FRAME = None
+with tempfile.TemporaryDirectory() as d:
+    os.environ[o.RESULT_FRAME_DIR_ENV] = d
+    try:
+        final = Harness(["match_start_prompt"] + _PLAYED + [RESULT_WIN]
+                        ).run(target_wins=99)
+    finally:
+        os.environ.pop(o.RESULT_FRAME_DIR_ENV, None)
+    check("(control) a WIN commit through run() still scores", final["wins"] == 1)
+    pngs = [f for f in os.listdir(d) if f.endswith(".png")]
+    check(f"(control) run()'s own commit site still calls the keeper, got {pngs}",
+          len(pngs) == 1)
+
+
+print("OK: I-55 -- local_game_state threads the template scores, source, card word, "
+      "OCR words and a matching frame timestamp verbatim; record_result_frame prefers "
+      "that exact decision frame over any later re-capture (byte-identical, case F), "
+      "names the CARD path when that is what answered, writes nothing under "
+      "BASEBALL_TEST_RUN without its seam, a raising save costs the frame but never "
+      "the commit, the 200-file cap refuses out loud instead of pruning, and run()'s "
+      "own commit site still wires the keeper in")
 
 if failures:
     for f in failures:

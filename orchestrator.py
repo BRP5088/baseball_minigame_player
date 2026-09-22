@@ -4313,6 +4313,21 @@ def begin_cycle_state():
 ROUNDS_PER_HALF = 5
 
 
+# I-55 FOLLOW-UP: the first version of record_result_frame RE-DERIVED its evidence from
+# a fresh capture taken at the commit site -- one or more polls after local_game_state
+# actually decided the outcome. A skeptic's own sample caught it: a WIN's kept frame
+# printed template scores of {'winner': 0.0, ...} because by commit time the result
+# screen had already moved on. The fix is to stash the FRAME local_game_state's "result"
+# branch actually read, paired with its own timestamp so a consumer can refuse a
+# mismatched pairing rather than trust a global that might belong to an earlier poll --
+# same shape as input_controller._LAST_PROBE_ATTEMPTS / _LAST_PLAY_DROPPED_TACTICS.
+# Set ONLY when the "result" branch below actually returns (never on a "turn"/"ban"/
+# etc. read), so a caller elsewhere in this module cannot overwrite it with an
+# unrelated screen. `state_json["result_frame_ns"]` from the SAME return carries the
+# matching timestamp.
+_LAST_RESULT_FRAME = None   # (PIL Image, ns) or None
+
+
 def local_game_state(turns_this_half=None):
     """The state, read entirely locally. (state, None) or (None, what is missing).
 
@@ -4328,6 +4343,7 @@ def local_game_state(turns_this_half=None):
     readable hand -- never a substitute for reading it. Callers with no notion of the
     match's progress (the frozen-stream probe) omit it and keep the old refusal.
     """
+    global _LAST_RESULT_FRAME
     try:
         import local_state
     except Exception as exc:
@@ -4385,10 +4401,37 @@ def local_game_state(turns_this_half=None):
         # see local_state.read_result). `result_outcome` carries the answer instead, and
         # run() prefers it over both.
         won = {"win": True, "loss": False, "draw": None}[res["outcome"]]
+        # I-55: THREAD THE EVIDENCE THIS BRANCH ALREADY COMPUTED, so a result commit can
+        # print it and keep the frame it came from instead of re-deriving both later on a
+        # frame the screen has moved past. `_why` already names which reader answered --
+        # OCR overrides templates outright (see above), a CARD read fires when the arched
+        # banner never scored (read_result's own fallback to read_result_card), and
+        # anything else is the ordinary template bank. Never touches how `res["outcome"]`
+        # itself was decided; this only labels the path already taken.
+        _why = res.get("why") or ""
+        if ocr_outcome is not None:
+            _source = "ocr"
+        elif "CARD" in _why:
+            _source = "card"
+        else:
+            _source = "template"
+        _card_word = None
+        if _source == "card":
+            # read_result_card's own `why` embeds the raw OCR text as a Python repr:
+            # "result CARD read 'DRAW' -> draw (...)". A normal vocab word never contains
+            # a quote, so this always matches; fall back to the whole `why` string rather
+            # than silently dropping the word if the format ever changes.
+            _m = re.search(r"CARD read '([^']*)' ->", _why)
+            _card_word = _m.group(1) if _m else _why
+        _frame_ns = time.time_ns()
+        _LAST_RESULT_FRAME = (full, _frame_ns)
         return {"screen": "result", "result_outcome": res["outcome"], "result_won": won,
                 "hand": [], "batters_used": None, "collection": [], "runners": None,
                 "discards_left": None, "phase": None,
-                "your_score": None, "opp_score": None}, None
+                "your_score": None, "opp_score": None,
+                "result_scores": res.get("scores"), "result_source": _source,
+                "result_card_word": _card_word, "result_ocr_words": ocr_detail,
+                "result_frame_ns": _frame_ns}, None
     if res.get("is_result") is None:
         return None, f"result reader could not run: {res.get('why')}"
 
@@ -4460,10 +4503,19 @@ def local_game_state(turns_this_half=None):
         if outcome is not None:
             print(f"  [state] the templates missed this banner; OCR read it: {detail!r}")
             won = {"win": True, "loss": False, "draw": None}[outcome]
+            # I-55: same threading as the main result branch above -- OCR is the only
+            # reader that answered here (the templates never scored `is_result` at all,
+            # which is why this path exists), so `result_scores` carries whatever partial
+            # scores `res` still holds and the source is unambiguously "ocr".
+            _frame_ns = time.time_ns()
+            _LAST_RESULT_FRAME = (full, _frame_ns)
             return {"screen": "result", "result_outcome": outcome, "result_won": won,
                     "hand": [], "batters_used": None, "collection": [], "runners": None,
                     "discards_left": None, "phase": None,
-                    "your_score": None, "opp_score": None}, None
+                    "your_score": None, "opp_score": None,
+                    "result_scores": res.get("scores"), "result_source": "ocr",
+                    "result_card_word": None, "result_ocr_words": detail,
+                    "result_frame_ns": _frame_ns}, None
         # I-35: TWO MORE NAMED SCREENS, tried only after result/ban/prompt/hand/OCR have
         # all declined -- a turn must still be named a turn first. Between a reveal
         # resolving and the next hand's fan appearing the game shows the settled
@@ -7520,18 +7572,21 @@ def record_refused_select(target, kind, attempt, out_dir=None, extra=None):
 # out_dir (or sets RESULT_FRAME_DIR_ENV), and REFUSES past the cap rather than
 # pruning.
 #
-# WHAT IS THREADED AND WHAT IS RE-DERIVED. `evidence` is exactly what run()
-# still has at the commit site -- your_score, opp_score, result_outcome,
-# result_won, straight off state_json, no re-read needed. The template scores
-# PER WORD and the OCR fallback's answer are NOT in that trip:
-# local_game_state computes them (local_state.read_result's `scores`/`why`,
-# result_ocr.read_banner's outcome/detail) and never returns them -- its
-# "result" branch (orchestrator.py ~4388, ~4463) hands back only
-# result_outcome/result_won/your_score/opp_score. So those two fields ARE gone
-# by the time run() prints "WIN #N logged", and this keeper re-derives them
-# from a FRESH capture taken here, before the screen is dismissed -- NOT the
-# original decision frame. Said explicitly in both the printed line and
-# why.json, so a re-derivation is never mistaken for the actual decision path.
+# FOLLOW-UP, SAME DAY: the first version of this keeper RE-DERIVED its evidence
+# from a fresh capture taken at the commit site -- one or more polls after
+# local_game_state actually decided the outcome. A skeptic caught it from its
+# own sample output: a WIN's kept frame printed template scores of
+# {'winner': 0.0, 'loser': 0.0, 'draw': 0.0}, because by the time this function
+# ran the result screen had already moved on. `local_game_state`'s "result"
+# branch (orchestrator.py, both return sites) now threads what it ALREADY
+# computed -- result_scores, result_source, result_card_word, result_ocr_words,
+# result_frame_ns -- through state_json, and stashes the exact frame it read in
+# `_LAST_RESULT_FRAME`, paired with that same timestamp. This keeper prefers
+# that pairing whenever it is present and MATCHES (never a global that might
+# belong to an earlier poll); it only falls back to a fresh re-derivation when
+# those fields are genuinely absent -- the paid path, or any caller that built
+# its own state dict by hand -- and says so, loudly, in both the printed line
+# and why.json.
 RESULT_FRAME_DIR_ENV = "BASEBALL_RESULT_FRAME_DIR"
 RESULT_FRAME_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "diagnostics", "result_frames")
@@ -7542,8 +7597,17 @@ def record_result_frame(outcome, evidence, row=None, out_dir=None):
     """Print the evidence line for a result commit and keep the frame it names.
 
     `outcome` is "win"/"loss"/"draw", the word run() just printed. `evidence`
-    is whatever run() already has from state_json (your_score, opp_score,
-    result_outcome, result_won) -- threaded straight through, never re-read.
+    is whatever run() already has from state_json: your_score, opp_score,
+    result_outcome, result_won -- and, when local_game_state supplied them,
+    result_scores/result_source/result_card_word/result_ocr_words/
+    result_frame_ns, all threaded straight through with no re-read.
+
+    When result_frame_ns is present AND matches `_LAST_RESULT_FRAME`'s own
+    timestamp, this keeps THAT frame -- the exact picture the decision was
+    made on -- and prints the threaded numbers verbatim. Otherwise it falls
+    back to a fresh capture and a fresh (weaker) re-derivation, and marks the
+    result as such rather than pretending it is the decision frame.
+
     `row`, if given, is stamped with the frame's path the way record_reveal_kind
     stamps matchup_info -- there is no per-match result row on disk today, so
     this is a forward-looking no-op until one exists.
@@ -7561,37 +7625,61 @@ def record_result_frame(outcome, evidence, row=None, out_dir=None):
             print(f"  [result] {d} already holds {RESULT_FRAME_MAX_FILES} frames -- "
                   f"NOT keeping this {outcome} one. Nothing is pruned here on purpose.")
             return None
-        full = _fast_grab()
-        if full is None:
-            return None
-        # RE-DERIVED, NOT THE DECISION FRAME -- see the module comment above.
-        # Both readers already degrade to (None, "why") on any failure (a
-        # missing paddle_venv, an unreadable frame), so the try/except here is
-        # only to keep a re-derivation failure from costing the frame itself.
-        try:
-            import local_state
-            fresh = local_state.read_result(full)
-        except Exception as exc:
-            fresh = {"scores": None, "why": f"re-derive failed: {exc}"}
-        try:
-            import result_ocr
-            ocr_outcome, ocr_detail = result_ocr.read_banner(full)
-        except Exception as exc:
-            ocr_outcome, ocr_detail = None, f"re-derive failed: {exc}"
+
+        wanted_ns = evidence.get("result_frame_ns")
+        stashed = _LAST_RESULT_FRAME
+        have_decision_frame = (wanted_ns is not None and stashed is not None
+                               and stashed[1] == wanted_ns)
+
+        if have_decision_frame:
+            # THE THREADED VALUES, VERBATIM. No second read of anything --
+            # local_game_state already did the work and this is it.
+            full = stashed[0]
+            scores = evidence.get("result_scores")
+            source = evidence.get("result_source")
+            card_word = evidence.get("result_card_word")
+            ocr_words = evidence.get("result_ocr_words")
+            provenance = ("the DECISION frame -- local_game_state's own 'result' "
+                         "branch read this exact picture and produced these exact "
+                         "numbers; nothing here was re-derived")
+        else:
+            # FALLBACK, clearly labelled. Both readers already degrade to
+            # (None, "why") on any failure, so the nested try/except below is
+            # only to keep a re-derivation failure from costing the frame.
+            full = _fast_grab()
+            if full is None:
+                return None
+            try:
+                import local_state
+                fresh = local_state.read_result(full)
+            except Exception as exc:
+                fresh = {"scores": None, "why": f"re-derive failed: {exc}"}
+            try:
+                import result_ocr
+                ocr_outcome, ocr_detail = result_ocr.read_banner(full)
+            except Exception as exc:
+                ocr_outcome, ocr_detail = None, f"re-derive failed: {exc}"
+            scores, source, card_word = fresh.get("scores"), "re-derived", None
+            ocr_words = ocr_detail if ocr_outcome is None else f"{ocr_detail} -> {ocr_outcome}"
+            why_missing = ("result_frame_ns was absent from state_json (a paid-path or "
+                          "hand-built state)" if wanted_ns is None else
+                          "result_frame_ns did not match the stashed frame")
+            provenance = (f"a RE-DERIVED capture taken at commit time, NOT the decision "
+                         f"frame -- {why_missing}, so local_state.read_result and "
+                         f"result_ocr.read_banner were asked again, on a screen that may "
+                         f"have already moved on ({fresh.get('why')})")
+
         stamp = time.time_ns()
         fname = f"{outcome}_{stamp}.png"
         full.convert("RGB").save(os.path.join(d, fname))
         why = {
             "outcome": outcome,
             "from_state_json": evidence,
-            "re_derived_template_scores": fresh.get("scores"),
-            "re_derived_template_why": fresh.get("why"),
-            "re_derived_ocr_outcome": ocr_outcome,
-            "re_derived_ocr_detail": ocr_detail,
-            "note": "the template/OCR fields are a FRESH read taken at commit "
-                    "time, not the frame the original decision was made on -- "
-                    "state_json does not carry local_game_state's scores/why/"
-                    "ocr fields through to run()",
+            "scores": scores,
+            "source": source,
+            "card_word": card_word,
+            "ocr_words": ocr_words,
+            "frame_provenance": provenance,
         }
         with open(os.path.join(d, f"{outcome}_{stamp}.why.json"), "w") as fh:
             json.dump(why, fh, indent=1, default=str)
@@ -7599,9 +7687,9 @@ def record_result_frame(outcome, evidence, row=None, out_dir=None):
               f"(your_score={evidence.get('your_score')}, "
               f"opp_score={evidence.get('opp_score')}, "
               f"result_outcome={evidence.get('result_outcome')!r}, "
-              f"result_won={evidence.get('result_won')!r}); re-derived template "
-              f"scores {fresh.get('scores')} ({fresh.get('why')}); re-derived "
-              f"OCR {ocr_outcome!r} ({ocr_detail}); frame -> {fname}")
+              f"result_won={evidence.get('result_won')!r}); path={source!r} "
+              f"scores={scores} card_word={card_word!r} ocr_words={ocr_words!r}; "
+              f"frame is {provenance}; kept -> {fname}")
         if row is not None:
             row["result_frame"] = os.path.relpath(
                 os.path.join(d, fname), os.path.dirname(os.path.abspath(__file__)))
@@ -9531,13 +9619,19 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                         print(f"Loss logged ({losses} total).")
                     # I-55: nothing survived a result commit -- three draws logged
                     # 2026-09-21 with no numbers behind them. record_result_frame
-                    # prints the evidence line and keeps the decision-adjacent
-                    # frame; see its docstring for what is threaded from
-                    # state_json versus re-derived.
+                    # prints the evidence line and keeps the frame local_game_state's
+                    # "result" branch actually read; the five result_* keys below
+                    # (when state_json carries them) are what let it do that instead
+                    # of re-deriving on a screen that has already moved on.
                     record_result_frame(outcome, {
                         "your_score": your_score, "opp_score": opp_score,
                         "result_outcome": local_outcome,
                         "result_won": state_json.get("result_won"),
+                        "result_scores": state_json.get("result_scores"),
+                        "result_source": state_json.get("result_source"),
+                        "result_card_word": state_json.get("result_card_word"),
+                        "result_ocr_words": state_json.get("result_ocr_words"),
+                        "result_frame_ns": state_json.get("result_frame_ns"),
                     }, row=state_json)
                     match_in_progress = False   # C5: the paid match is over
                     polls_without_progress = 0  # a scored result is progress

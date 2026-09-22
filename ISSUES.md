@@ -3836,4 +3836,121 @@ Run clean (`BASEBALL_TEST_RUN=1`, offline, single process): the new file, plus
 `tests/harness/test_no_undefined_names.py`, `test_no_shadowed_module_defs.py`,
 `tests/rig/test_no_real_input_under_test_run.py`.
 
-**Status.** fixed on branch, awaiting skeptic.
+**FOLLOW-UP, SAME DAY: THE FIRST FIX WAS RE-DERIVING, NOT RECORDING.** The evidence
+line above IS the tell, read correctly: template scores of
+`{'winner': 0.0, 'loser': 0.0, 'draw': 0.0}` on a screen that had just been scored a
+WIN. A skeptic caught it from that own sample -- `record_result_frame`'s first
+version called `_fast_grab()` fresh at the commit site, one or more polls AFTER
+`local_game_state` had already decided the outcome, so the "evidence" it printed and
+saved was a picture of whatever the result screen looked like a beat later (already
+fading, already dismissed, or simply re-photographed), never the frame the decision
+was actually made on. The fix was correctly scoped (no re-read unless the values are
+gone) but wrong about WHERE the values were gone from: they were gone from
+`state_json`, not from existence -- `local_game_state` had them the whole time and
+simply never returned them.
+
+**Root cause, precisely.** `local_game_state`'s "result" branch (orchestrator.py, both
+return sites) already computes `res["scores"]` (the template bank's per-word dict),
+`res["why"]` (which names the CARD path when the arched-banner templates missed) and
+the OCR outcome/detail from `result_ocr.read_banner`, and held `full` -- the exact
+frame it read them from -- in a local variable that went out of scope the moment the
+function returned. None of that survived into `state_json`.
+
+**Fix.** `local_game_state` now threads five new keys on every "result" return --
+`result_scores`, `result_source` ("template"|"card"|"ocr", derived from `why` and
+whether OCR overrode the templates -- no new reader call, just naming the path already
+taken), `result_card_word` (regex-extracted from `why`'s own `CARD read 'X' -> ...`
+text when the card path fired), `result_ocr_words` and `result_frame_ns` -- and stashes
+the frame itself in a new module-level `_LAST_RESULT_FRAME = (PIL Image, ns)`, set
+ONLY inside the "result" branch (never touched by a `"turn"`/`"ban_screen"`/etc read),
+paired with the same timestamp so a consumer can refuse a mismatched pairing rather
+than trust a global that might belong to an earlier poll -- same shape as
+`input_controller._LAST_PROBE_ATTEMPTS` / `_LAST_PLAY_DROPPED_TACTICS`. Neither reader
+was touched and the outcome decision is untouched; this only threads what was already
+computed.
+
+`record_result_frame` now prefers that exact pairing: when `evidence["result_frame_ns"]`
+matches `_LAST_RESULT_FRAME`'s own timestamp, it saves THAT frame and prints the
+threaded numbers verbatim -- no second call to either reader. It falls back to the old
+re-derive-and-say-so behaviour only when the fields are genuinely absent (the paid
+path, or a hand-built state dict), and the fallback is now unmistakably labelled
+`path='re-derived'` in both the print and `why.json`, rather than looking like ordinary
+evidence.
+
+**The evidence line, now on the decision frame** (captured verbatim,
+`tests/minigame/test_result_commit_evidence.py` case A, `local_state.read_result`
+seeded with a known dict so the assertion is exact, not eyeballed):
+
+    [result] win decided from state_json (your_score=None, opp_score=None,
+    result_outcome='win', result_won=True); path='template'
+    scores={'WINNER': 0.987, 'LOSER': 0.012, 'DRAW': 0.034} card_word=None
+    ocr_words='paddle venv missing at /nope'; frame is the DECISION frame --
+    local_game_state's own 'result' branch read this exact picture and produced
+    these exact numbers; nothing here was re-derived; kept -> win_<ns>.png
+
+The seeded `{'WINNER': 0.987, ...}` appears verbatim -- proof this is the threaded
+value, not a fresh read of a 1920x1080 solid-colour test frame (which would score
+near 0.000 on every word, exactly what the FIRST fix's sample showed).
+
+**Verify, updated.** `test_result_commit_evidence.py` cases A and B now call
+`orchestrator.local_game_state()` directly with `local_state.read_result` /
+`result_ocr.read_banner` / `_fast_grab` seeded to known values (a helper,
+`_seed_and_read`), so the threaded fields and the stashed frame are checked against
+exactly what was seeded, not against whatever a live screen happens to show. New
+**case F**: seeds `local_game_state` with one known frame (`_DECISION_FRAME`), then --
+before calling `record_result_frame` -- swaps the live capture over to a SECOND, 
+distinct known frame (`_FALLBACK_FRAME`, standing in for a screen that has "moved on"
+by commit time) and asserts the kept PNG's pixel bytes are byte-identical to
+`_DECISION_FRAME` and NOT `_FALLBACK_FRAME`. A trailing control keeps one full
+Harness-driven WIN commit through `run()`, confirming the commit site still wires
+`state_json` into the keeper rather than something ad hoc.
+
+**Mutants, 5 total now (all `__pycache__`-cleared, sha256-verified restore to
+`ec7dbf24d7972041df39fac3ae3a922c510f58c58b6c77d311970461d5de8acf` between each --
+note the first fix's sha `8cc8afe2...` above is now stale, superseded by this
+follow-up):**
+
+    drop the print call                                   -> FAILS 6 (A x2, B x2)
+    `why = {...}` -> `why = {"outcome": outcome}`          -> FAILS 2 (A's why.json checks)
+    remove record_result_frame's OWN test-run gate
+      (there are 4 near-identical gates in this file --
+      record_reveal_kind's, record_money_read_frame's,
+      record_refused_select's, and this one; a naive
+      `lines.index()` on the first match hit
+      record_reveal_kind's and produced a SILENT FALSE PASS,
+      caught only by re-running: exit 0, zero failures, on
+      a mutant that should have broken case C outright --
+      CLAUDE.md 10.10, "count the occurrences first")       -> FAILS 3 (all of C)
+    print the RE-DERIVED numbers instead of the threaded
+      ones (swap evidence.get(...) for a fresh
+      local_state.read_result(full) call even when the
+      decision frame is available)                          -> FAILS 6 (A x4, B x2)
+    keep a FRESH capture instead of the stashed decision
+      frame (`full = stashed[0]` -> `full = _fast_grab()`,
+      leaving the threaded scores/source/etc untouched)      -> FAILS 2 (both of F)
+
+The fourth mutant's near-miss is worth keeping: the first attempt at it targeted the
+wrong `if d is None and _running_under_test():` occurrence (this file has four) and
+the test suite reported clean on code that no longer guarded anything. Re-running the
+test after EVERY mutant, not just trusting the diff, is what caught it -- the same
+discipline CLAUDE.md 10.9 already asks for.
+
+Battery re-run clean against this follow-up (`BASEBALL_TEST_RUN=1`, offline, single
+process, 11 files): the new test, `test_run_debit_and_scoring.py`,
+`test_stale_flag_never_presses_unpaid.py`, `test_run_resume_and_persist.py`,
+`test_transition_screens_recognised.py`, `test_reveal_frame_kept.py`,
+`test_unscored_reveal_rows_kept.py`, `tests/harness/test_no_undefined_names.py`,
+`test_no_shadowed_module_defs.py`, `tests/rig/test_no_real_input_under_test_run.py`,
+`test_validate_game_state.py` -- all exit 0. `test_result_reader.py` exits 1 on ONE
+PRE-EXISTING, UNRELATED failure already documented under I-54 ("the dealer prompt
+classifies as match_start_prompt" -- `diagnostics/20260910_103221_5018/
+screen_at_stall.png` does not exist in this worktree), reproduced identically before
+and after every edit in this ticket; confirmed by reading the failure -- it dies
+inside `local_game_state`'s own `except Exception as exc: return None, f"could not
+capture ({exc})"` branch, before reaching any of the code this ticket touches. Also
+grepped `state_json\[` / `.get("result_` across the whole tree: the only other
+consumers are `validate_game_state` (paid-path only, never sees `local_game_state`'s
+output -- checked its one call site) and `tools/match_crawl.py` (reads a different,
+unrelated dict shape via plain `.get()`), neither affected by adding five new keys.
+
+**Status.** fixed on branch (follow-up), awaiting skeptic.
