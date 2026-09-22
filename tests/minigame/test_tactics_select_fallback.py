@@ -2047,6 +2047,232 @@ try:
     check("post-restore sanity: the Q17 case commits again",
           ok_bb1b is True and s.confirmed_sel == [0])
 
+    # =====================================================================
+    print("(DD1)/(DD2) I-56 SKEPTIC ROUND 3: `_new_blind` has THREE marking "
+          "sites, not two. (BB1)/mutant 22 above only exercises the "
+          "RE-LOOK path (the re-look SUCCEEDS at reading the fan and the "
+          "slot is still blind) -- this is the sibling CANNOT-READ-FAN "
+          "path, where the re-look itself fails to read the fan at all "
+          "('cannot read the fan on the re-look'). Same ledger gate, "
+          "different branch, never exercised until now.")
+    # =====================================================================
+    def _look_deadfan(new_blind_slot=2, want_slot=0):
+        # Call 1 (this function's own top-of-function look): the fan reads
+        # fine, but `new_blind_slot` is unexpectedly blind -- a slot outside
+        # `want`/`blind_before`. Every call after that (the re-look's own
+        # LOOK_RETRIES attempts inside _look_settled) finds the fan
+        # completely unreadable, which is the branch under test.
+        state = {"cur": want_slot, "calls": 0}
+
+        def _look():
+            state["calls"] += 1
+            if state["calls"] == 1:
+                ys = list(REST)
+                ys[new_blind_slot] = None
+                glow = [0.0] * N
+                glow[state["cur"]] = 30.0
+                return glow, ys, N, []
+            return [0.0] * N, [None] * N, 0, []
+
+        return _look
+
+    print("(DD1) an UNACCOUNTED press this operation sent marks the slot "
+          "when the re-look cannot read the fan at all")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ic._note_unaccounted_press()
+    ok_dd1 = ic._clear_strays({0}, _look_deadfan(), blind_before=set())
+    check("(DD1) refuses (the re-look never recovered a readable fan)",
+          ok_dd1 is False)
+    check("(DD1) marks slot 2 -- an unaccounted press could explain it",
+          2 in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    print("(DD2) the mirror: a CLEAN ledger still refuses but does NOT "
+          "mark -- the fan going unreadable on its own, with nothing this "
+          "operation pressed unaccounted for, is not proof of a lift")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ok_dd2 = ic._clear_strays({0}, _look_deadfan(), blind_before=set())
+    check("(DD2) refuses this attempt (still cautious)", ok_dd2 is False)
+    check("(DD2) but does NOT mark -- nothing this operation pressed (that "
+          "went unaccounted) could explain it", 2 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    # --- mutant 23 (I-56 skeptic round 3, M3d): the cannot-read-fan branch's
+    # own mark loses its ledger gate -- (DD2) must go from unmarked to marked
+    print("mutant 23: the CANNOT-READ-FAN branch's own "
+          "`if _UNACCOUNTED_SELECT_PRESS: _mark_maybe_lifted(_new_blind)` "
+          "loses its gate -- (DD2), a clean-ledger refusal, must start "
+          "marking a slot nothing this operation pressed can explain")
+    try:
+        _mutate(
+            IC_PATH,
+            "            # _note_unaccounted_press's callers).\n"
+            "            if _UNACCOUNTED_SELECT_PRESS:\n"
+            "                _mark_maybe_lifted(_new_blind)\n",
+            "            # _note_unaccounted_press's callers).\n"
+            "            _mark_maybe_lifted(_new_blind)"
+            "  # I-56 mutant: cannot-read-fan mark unconditional\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._reset_press_ledger()
+        ok23 = ic._clear_strays({0}, _look_deadfan(), blind_before=set())
+        check("mutant 23 caught: (DD2)'s clean ledger no longer stops the "
+              "cannot-read-fan branch from marking",
+              2 in ic._MAYBE_LIFTED)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- sanity: (DD1)/(DD2) still hold after mutant 23 ----------------------
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ok_dd2b = ic._clear_strays({0}, _look_deadfan(), blind_before=set())
+    check("post-restore sanity: (DD2) passes again",
+          ok_dd2b is False and 2 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    # =====================================================================
+    print("(EE1)/(EE2) I-56 SKEPTIC ROUND 3, MY-M3: a THIRD marking site, "
+          "distinct from both `_new_blind` branches above -- "
+          "`_clear_strays`' own after-clearing refusal ('after clearing, "
+          "the lifted set is still ... refusing to commit'), reached "
+          "through the `extra` walk-and-put-down loop rather than "
+          "`_new_blind`. A genuine stray (not the engine's target) is "
+          "lifted before this operation starts; `_walk_cursor_to` reaches "
+          "it, but by the time `_deselect_verified` takes its own look the "
+          "stray's disc has already gone unreadable ON ITS OWN (a chronic "
+          "wreath misread, I-36, arriving the instant we turn to look at "
+          "it) -- so `target not in sel` is already true and "
+          "`_deselect_verified` returns True WITHOUT EVER PRESSING "
+          "select_card. That is what makes this site's ledger state "
+          "genuinely free to set: unlike a real deselect (which "
+          "`_deselect_verified`'s own docstring says ALWAYS marks the "
+          "ledger unaccounted, even on success), nothing here presses "
+          "select_card at all -- confirmed by mutant-free replay, zero "
+          "select presses sent either way.")
+    # =====================================================================
+    def _stray_vanish_rig(stray=2, want_slot=0):
+        # Call 1 (this function's own top-of-function look): the stray is
+        # genuinely lifted, so `extra` is non-empty and the clearing loop
+        # runs. Every call after that -- inside `_walk_cursor_to`'s own
+        # navigation looks and `_deselect_verified`'s check -- finds the
+        # stray's disc unreadable and absent from `sel`, so `_deselect_
+        # verified` never actually presses select_card at all (its own
+        # `target not in sel` short-circuit fires first); the post-clear
+        # re-look (also a later call) sees the same thing. `press` still
+        # has to move the cursor -- `_walk_cursor_to` needs to land on the
+        # stray -- so this is a real press/look pair, not a no-op stub.
+        state = {"cur": want_slot, "calls": 0, "sent": []}
+
+        def _press(key, **kw):
+            state["sent"].append(key)
+            if key == "move_left":
+                state["cur"] = max(0, state["cur"] - 1)
+            elif key == "move_right":
+                state["cur"] = min(N - 1, state["cur"] + 1)
+
+        def _look():
+            state["calls"] += 1
+            ys = list(REST)
+            glow = [0.0] * N
+            glow[state["cur"]] = 30.0
+            if state["calls"] == 1:
+                return glow, ys, N, [stray]
+            ys[stray] = None
+            return glow, ys, N, []
+
+        return _press, _look, state
+
+    print("(EE1) an UNACCOUNTED press this operation sent (from elsewhere "
+          "in the operation, not from clearing this stray -- nothing here "
+          "ever presses select_card) marks the slot when the post-clear "
+          "read still shows it blind")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ic._note_unaccounted_press()
+    _press_ee1, _look_ee1, _state_ee1 = _stray_vanish_rig()
+    real_press = ic.press
+    ic.press = _press_ee1
+    try:
+        ok_ee1 = ic._clear_strays({0}, _look_ee1, blind_before=set())
+    finally:
+        ic.press = real_press
+    check("(EE1) refuses (the stray is neither selected nor readable after "
+          "the clearing walk)", ok_ee1 is False)
+    check("(EE1) marks slot 2 -- an unaccounted press could explain it",
+          2 in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    print("(EE2) the mirror: a CLEAN ledger still refuses but does NOT "
+          "mark -- the stray was never actually pressed (it read down on "
+          "its own before `_deselect_verified` ever reached it), so "
+          "nothing this operation did explains its blindness")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    _press_ee2, _look_ee2, _state_ee2 = _stray_vanish_rig()
+    ic.press = _press_ee2
+    try:
+        ok_ee2 = ic._clear_strays({0}, _look_ee2, blind_before=set())
+    finally:
+        ic.press = real_press
+    check("(EE2) refuses this attempt (still cautious)", ok_ee2 is False)
+    check("(EE2) but does NOT mark -- nothing this operation pressed (that "
+          "went unaccounted) could explain it", 2 not in ic._MAYBE_LIFTED)
+    check("(EE2) confirms the mechanism: select_card was never pressed at "
+          "all -- the stray read down on its own, never toggled",
+          "select_card" not in _state_ee2["sent"])
+    ic.clear_maybe_lifted()
+
+    # --- mutant 24 (I-56 skeptic round 3, MY-M3): the after-clearing
+    # refusal's own mark loses its ledger gate -- (EE2) must go from
+    # unmarked to marked
+    print("mutant 24: `_clear_strays`' own after-clearing "
+          "`_mark_candidates` computation loses its "
+          "`if _UNACCOUNTED_SELECT_PRESS:` gate on `_blind_now - want` -- "
+          "(EE2), a clean-ledger refusal, must start marking a slot "
+          "nothing this operation pressed can explain")
+    try:
+        _mutate(
+            IC_PATH,
+            "            _mark_candidates = lifted - want\n"
+            "            if _UNACCOUNTED_SELECT_PRESS:\n"
+            "                _mark_candidates = _mark_candidates | (_blind_now - set(want))\n"
+            "            _mark_maybe_lifted(_mark_candidates)\n",
+            "            _mark_candidates = (lifted - want) | (_blind_now - set(want))"
+            "  # I-56 mutant: after-clearing mark unconditional\n"
+            "            _mark_maybe_lifted(_mark_candidates)\n")
+        _reload_ic()
+        ic.clear_maybe_lifted()
+        ic._reset_press_ledger()
+        _press_m24, _look_m24, _state_m24 = _stray_vanish_rig()
+        real_press = ic.press
+        ic.press = _press_m24
+        try:
+            ok24 = ic._clear_strays({0}, _look_m24, blind_before=set())
+        finally:
+            ic.press = real_press
+        check("mutant 24 caught: (EE2)'s clean ledger no longer stops the "
+              "after-clearing branch from marking",
+              2 in ic._MAYBE_LIFTED)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+
+    # --- sanity: (EE1)/(EE2) still hold after mutant 24 -----------------------
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    _press_ee2b, _look_ee2b, _state_ee2b = _stray_vanish_rig()
+    ic.press = _press_ee2b
+    try:
+        ok_ee2b = ic._clear_strays({0}, _look_ee2b, blind_before=set())
+    finally:
+        ic.press = real_press
+    check("post-restore sanity: (EE2) passes again",
+          ok_ee2b is False and 2 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
     # --- sanity: P2/Q2/R2 all still hold after mutants 16-18 ----------------
     ic._reset_press_ledger()
     _s_p2 = BaselineSelectScreen(target=3, chronic_blind=False)

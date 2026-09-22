@@ -4578,7 +4578,110 @@ Final sha256 of `input_controller.py`:
 cond)`; 176 + 53 calls; zero `^ *(PASS|ok|FAIL) +(True|False)$` lines in either
 run.
 
-**Status.** Fixed on branch after the round-2 skeptic's confirmation-with-notes;
-the `gone` hole is closed, MY-M1/MY-M3/MY-M5 all have guards that bite, and the
-13-file battery is green. The 13/15-row "persistent across retries of the same
-hand" shape remains OPEN and out of scope, unchanged by either round.
+**Status (superseded by round 3 below).** Fixed on branch after the round-2
+skeptic's confirmation-with-notes; the `gone` hole is closed, MY-M1/MY-M3/MY-M5
+all have guards that bite, and the 13-file battery is green. The 13/15-row
+"persistent across retries of the same hand" shape remains OPEN and out of
+scope, unchanged by either round.
+
+---
+
+**ROUND 3 (2026-09-22): an independent Opus skeptic re-reviewed 5be4556.
+VERDICT: CONFIRMED WITH NOTES.** The `(d)` gone fix, (AA1), (CC1), Q17
+(commits `[0]`) and the cycle-18 discard (refuses, ledger clean) all
+re-verified correctly. One note required a fix: round 2's `_new_blind`
+narrowing has **THREE** marking sites, not two, and `_clear_strays`' own
+after-clearing refusal is a fourth, distinct site again -- BB1/mutant 22 (round
+2) is VALID and CAUGHT, but it mutates the adjacency resolver
+(`resolve_neighbour_occlusion`'s "still blind" branch) plus `_clear_strays`'
+`_untouched_blind & _MAYBE_LIFTED` intersection, and never touches either of
+the two sites the skeptic's own MY-M3/M3d name:
+
+    site                                          mutant   guarded by
+    `_new_blind`, RE-LOOK path (succeeds, still
+      blind)                                       M3c      (AA1), mutant 21
+    `_new_blind`, CANNOT-READ-FAN path (the
+      re-look itself can't read the fan)            M3d      was UNGUARDED
+    `_clear_strays`' `_mark_candidates`, after-
+      clearing refusal ("after clearing, the
+      lifted set is still ... refusing")           MY-M3    was UNGUARDED
+
+**Two new cases, two new mutants, both in
+`tests/minigame/test_tactics_select_fallback.py` (the coordinator's
+constraint -- no other site was genuinely unreachable, so nothing needed the
+"say so instead of forcing it" escape hatch).**
+
+- **(DD1)/(DD2), mutant 23 -- the CANNOT-READ-FAN path.** `_look_deadfan`: the
+  operation's own top-of-function look reads the fan fine with one slot
+  unexpectedly blind (`_new_blind` non-empty); every look after that (the
+  re-look's own `LOOK_RETRIES` attempts) finds the fan completely unreadable,
+  so `_look_settled` gives up at `n=0` -- "cannot read the fan on the
+  re-look — refusing." (DD1) an unaccounted press this operation sent marks
+  the slot; (DD2), the mirror, a clean ledger refuses but does NOT mark.
+  Mutant 23 drops the `if _UNACCOUNTED_SELECT_PRESS:` gate on this branch's
+  own `_mark_maybe_lifted(_new_blind)` -- (DD2) goes from unmarked to marked,
+  caught.
+- **(EE1)/(EE2), mutant 24 -- the after-clearing `_mark_candidates` path.**
+  `_stray_vanish_rig`: a genuine stray (not the engine's target) is lifted
+  before the operation starts, so `extra` is non-empty and the walk-and-put-
+  down loop runs; `_walk_cursor_to` reaches it, but by the time
+  `_deselect_verified` takes its own look the stray's disc has ALREADY gone
+  unreadable on its own (I-36's chronic-misread shape, arriving the instant
+  the walk turns to look) -- `target not in sel` is already true, so
+  `_deselect_verified` returns `True` WITHOUT EVER PRESSING `select_card`
+  (its own `if target not in sel: return True, sel` short-circuit fires
+  first). That is what makes the ledger genuinely free to set here: unlike a
+  REAL deselect (`_deselect_verified`'s own docstring: "every press here
+  counts as UNACCOUNTED... even on the paths that return success" --
+  confirmed separately, a scenario where the deselect press actually fires
+  marks the slot REGARDLESS of what the ledger held beforehand, so that shape
+  cannot supply the clean/unmarked half at all), this rig sends zero presses
+  either way -- (EE2) pins that directly (`"select_card" not in
+  _state_ee2["sent"]`). (EE1) an unaccounted press from elsewhere in the
+  operation marks the slot; (EE2), clean ledger, refuses but does not mark.
+  Mutant 24 drops the same gate on `_mark_candidates`' `_blind_now - want`
+  term -- (EE2) goes from unmarked to marked, caught.
+
+Both mutants verified independently before being written into the test file
+(scratchpad debug scripts, not kept): a naive single-line mutation was
+confirmed to actually flip the observable outcome for its exact scenario
+before being committed, the same discipline round 2's mutant 22 needed after
+a first guess measured nothing.
+
+**Mutants, this round (2 new, 27 total across the two files, all caught,
+sha256-restore-verified against
+`5cd6549ad6a8eea73746c0e2fb53bad840f5e3d56bd2c3a0021da4cb6f4afa46`, `__pycache__`
+cleared before every mutant):**
+
+    test_tactics_select_fallback.py   1-22 (unchanged from round 2)
+                                       23  M3d    cannot-read-fan mark
+                                                    unconditional -> (DD2) marks
+                                       24  MY-M3   after-clearing mark
+                                                    unconditional -> (EE2) marks
+    test_probe_select_budget.py       1-9 (unchanged)
+
+`input_controller.py` was NOT touched this round -- sha256 before, during (each
+mutant restored in a `finally`) and after the full battery is identical to the
+round-2 final sha above.
+
+`check()` audit: `test_tactics_select_fallback.py` is still name-first
+`def check(name, cond)`; 189 `check(` occurrences (incl. the `def`), zero
+`^ *(PASS|ok|FAIL) +(True|False)$` lines.
+
+Full 13-file battery re-run, serialised (no concurrent process touching
+`input_controller.py`, per the round-3 skeptic's own note about a race
+between a background battery run and an in-flight mutation driver), all
+exit 0: `test_tactics_select_fallback.py`, `test_discard_confirm_verified.py`,
+`test_refusal_unwinds.py`, `test_verified_selection.py`,
+`test_commit_refuses_unseen_strays.py`, `test_inference_needs_baseline_read.py`,
+`test_probe_select_budget.py`, `test_walk_crosses_occluded_slot.py`,
+`test_lifted_discard_row_rescued.py`, `tests/harness/test_no_undefined_names.py`,
+`tests/harness/test_no_shadowed_module_defs.py`,
+`tests/rig/test_no_real_input_under_test_run.py`,
+`tests/harness/test_claude_md_constants.py`.
+
+**Status.** Fixed on branch after the round-3 skeptic's confirmation-with-
+notes; all three `_new_blind`/`_mark_candidates` marking sites now have a
+mutant-caught guard, the 13-file battery is green, and `input_controller.py`
+is unchanged from round 2's sha. The 13/15-row "persistent across retries of
+the same hand" shape remains OPEN and out of scope, unaffected by any round.
