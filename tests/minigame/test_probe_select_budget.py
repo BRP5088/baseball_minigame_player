@@ -603,6 +603,9 @@ try:
         '        gone = [i for i in before if i not in sel]\n'
         '        if gone:\n'
         '            back = gone[0]\n'
+        '            # I-56 skeptic R1/R4: ACCOUNTED -- we directly observed `back`\n'
+        '            # go down, the whole effect of this press.\n'
+        '            _note_accounted_press(back)\n'
         '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
         '                  "selected before this probe) — the true cursor is there; "\n'
         '                  "re-selecting it rather than pressing blind again")\n'
@@ -706,6 +709,7 @@ try:
     _mutate(
         IC_PATH,
         '        if n != MAX_HAND_SIZE:\n'
+        '            _note_unaccounted_press()\n'
         '            print(f"  [cursor] cannot read the fan after the probe select (rows={n}) "\n'
         '                  "— refusing")\n'
         '            return False, None, sel\n'
@@ -715,6 +719,9 @@ try:
         '        gone = [i for i in before if i not in sel]\n'
         '        if gone:\n'
         '            back = gone[0]\n'
+        '            # I-56 skeptic R1/R4: ACCOUNTED -- we directly observed `back`\n'
+        '            # go down, the whole effect of this press.\n'
+        '            _note_accounted_press(back)\n'
         '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
         '                  "selected before this probe) — the true cursor is there; "\n'
         '                  "re-selecting it rather than pressing blind again")\n'
@@ -728,6 +735,7 @@ try:
         '        gone = [i for i in before if i not in sel]\n'
         '        if gone:\n'
         '            back = gone[0]\n'
+        '            _note_accounted_press(back)\n'
         '            print(f"  [cursor] probe-select made {back} disappear (it was already "\n'
         '                  "selected before this probe) — the true cursor is there; "\n'
         '                  "re-selecting it rather than pressing blind again")\n'
@@ -738,6 +746,7 @@ try:
         '                return False, None, sel2\n'
         '            return True, back, sel2\n'
         '        if n != MAX_HAND_SIZE:\n'
+        '            _note_unaccounted_press()\n'
         '            print(f"  [cursor] cannot read the fan after the probe select (rows={n}) "\n'
         '                  "— refusing")\n'
         '            return False, None, sel\n')

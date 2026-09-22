@@ -353,6 +353,33 @@ class NeighbourOcclusionPlayScreen(PlayScreen):
         return glow, ys, N, sel
 
 
+class InferredSelectPlayScreen(PlayScreen):
+    """I-48f (skeptic, live 2026-09-22): models I-21 literally, end to end
+    through `_verified_select_and_play_inner`, rather than driving
+    `_select_verified` directly (P2/Q2/R2's `BaselineSelectScreen`, which
+    carries a name-only baseline). Whatever slot this operation lifts reads
+    its OWN disc UNREADABLE (`ys[slot] is None`) and is ABSENT from `sel` for
+    as long as it stays up -- I-21's own mechanism ("selecting a card is what
+    blinds its own disc"), applied uniformly rather than to one hand-picked
+    slot, so EVERY successful selection through this fixture is necessarily
+    an INFERENCE, exactly like the live log the skeptic quoted
+    (`slot 3's disc is unreadable after the press and was readable before it
+    -- selected by inference`). The bug this reproduces is downstream of the
+    inference, not in it: the shared I-48b/e re-check's own fresh look never
+    sees an inferred target in `sel` either -- that is the SAME abstention,
+    not a new one -- and reading that as 'no longer lifted' sends the
+    manoeuvre back to re-select a card that never came down."""
+
+    def look(self):
+        if self.fan_gone:
+            return [0.0] * N, [None] * N, 0, []
+        glow = [0.0] * N
+        glow[self.cur] = 27.0
+        ys = [None if i in self.lifted else REST[i] for i in range(N)]
+        sel = []          # a lifted slot NEVER reads in sel -- I-21, always
+        return glow, ys, N, sel
+
+
 def _play(card_index, tactics_index):
     """Run one play through the REAL function, capturing stdout and every
     `_unwind_selection` call (target set only) without altering its behaviour."""
@@ -926,10 +953,12 @@ try:
             ic.press = real_press
         return ok, sel, buf.getvalue()
 
-    print("(P2) THE LIVE SHAPE: baseline readable and unselected -- one "
-          "press, the row recovers once lifted (a real rise, or the same "
-          "already-tested I-21/I-36 inference either way -- this ticket "
-          "only widens WHEN a press is allowed, not what counts as proof)")
+    ic._reset_press_ledger()
+    print("(P2) THE LIVE SHAPE: baseline readable and unselected, a CLEAN "
+          "ledger -- one press, the row recovers once lifted (a real rise, "
+          "or the same already-tested I-21/I-36 inference either way -- "
+          "this ticket only widens WHEN a press is allowed, not what "
+          "counts as proof)")
     s = BaselineSelectScreen(target=3, chronic_blind=False)
     ok, sel, out = _select_direct(3, s, ys0=list(REST), sel0=set())
     check("(P2) the target is verified selected", ok is True)
@@ -937,6 +966,7 @@ try:
     check("(P2) the baseline-trust line fired, not the ordinary refusal",
           "read it DOWN and readable" in out and "I-56" in out)
 
+    ic._reset_press_ledger()
     print("(Q2) the BASELINE read of slot 3 was ALSO blind -- refuse "
           "exactly as before, no blind toggle")
     s = BaselineSelectScreen(target=3, chronic_blind=True)
@@ -950,6 +980,7 @@ try:
           "refusing rather than pressing a TOGGLE blind" in out
           and "I-56" not in out)
 
+    ic._reset_press_ledger()
     print("(R2) slot 3 WAS already selected at baseline -- not pressed "
           "again, treated as already up")
     s = BaselineSelectScreen(target=3, chronic_blind=True)
@@ -958,6 +989,130 @@ try:
     check("(R2) NO press was sent -- it is already up", s.sent == [])
     check("(R2) the baseline-already-selected line fired",
           "already selected -- treating as already up, no press" in out)
+
+    # =====================================================================
+    print("(W1)/(W2)/(W3) I-56 SKEPTIC R1: an UNACCOUNTED press this "
+          "operation sent is the ONLY thing that may justify marking a "
+          "non-target slot's own mere blindness -- reproducing the "
+          "skeptic's OP1/OP2 wrong-commit shape and its mirror (no "
+          "unaccounted press -> refused, but not marked, the false-"
+          "positive shape 14 live firings were)")
+    # =====================================================================
+    def _look_stray(blind_slot=2, extra_sel=(0,)):
+        def _look():
+            ys = list(REST)
+            ys[blind_slot] = None
+            return [0.0] * N, ys, N, sorted(extra_sel)
+        return _look
+
+    print("(W1) OP1: engine chose [0]; an UNACCOUNTED select press this "
+          "operation sent could explain slot 2 going invisibly blind -- "
+          "refuses THIS attempt and, unlike a clean ledger, MARKS it")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ic._note_unaccounted_press()
+    ok_w1 = ic._clear_strays({0}, _look_stray(), blind_before=set())
+    check("(W1) OP1 refuses (slot 2 unexpectedly blind)", ok_w1 is False)
+    check("(W1) OP1 marks slot 2 -- an unaccounted press could explain it",
+          2 in ic._MAYBE_LIFTED)
+
+    print("(W2) OP2: a LATER, separate operation re-plays the SAME target "
+          "-- the mark from OP1 persists (cross-operation, by design) and "
+          "REFUSES rather than committing the stray alongside it (parent "
+          "commit a99bc6e's own behaviour, restored)")
+    ic._reset_press_ledger()
+    ok_w2 = ic._clear_strays({0}, _look_stray(), blind_before={2})
+    check("(W2) OP2 refuses -- nothing the engine chose is committed "
+          "alongside an unproven stray", ok_w2 is False)
+    ic.clear_maybe_lifted()
+
+    print("(W3) the mirror: a CLEAN ledger (no unaccounted press this "
+          "operation) still refuses THIS attempt, but does NOT mark -- "
+          "occlusion and a chronic wreath misread (I-36) are not proof of "
+          "a lift, and marking on them alone was the false-positive shape "
+          "(14 firings, 0 true positives)")
+    ic.clear_maybe_lifted()
+    ic._reset_press_ledger()
+    ok_w3 = ic._clear_strays({0}, _look_stray(), blind_before=set())
+    check("(W3) refuses this attempt (still cautious)", ok_w3 is False)
+    check("(W3) but does NOT mark -- nothing this operation pressed could "
+          "explain it", 2 not in ic._MAYBE_LIFTED)
+    ic.clear_maybe_lifted()
+
+    # =====================================================================
+    print("(X1) I-56 SKEPTIC R2: the I-02 probe's OWN select_card already "
+          "touched the target -- 'untouched since the baseline' is FALSE, "
+          "so the baseline-trust branch must not fire at all, even though "
+          "the probe's own press was fully ACCOUNTED")
+    # =====================================================================
+    ic._reset_press_ledger()
+    ic._note_accounted_press(4)   # the probe's own confirmed "4 lifted"
+    s_x1 = BaselineSelectScreen(target=4, chronic_blind=True)
+    ok_x1, _sel_x1, out_x1 = _select_direct(4, s_x1, ys0=list(REST), sel0=set())
+    check("(X1) refuses", ok_x1 is False)
+    check("(X1) NO press was sent -- the ledger shows slot 4 was already "
+          "touched, confirmed or not", s_x1.sent == [])
+    check("(X1) the ORIGINAL refusal fired, not the I-56 baseline bypass",
+          "refusing rather than pressing a TOGGLE blind" in out_x1
+          and "baseline-trust" not in out_x1)
+
+    # =====================================================================
+    print("(Y1) I-56 SKEPTIC R3: the diagonal fixture -- readable baseline, "
+          "a row that does NOT recover after the one press, for kinds "
+          "None/player/tactics -- exactly ONE press each time, never the "
+          "5 the shared retry loop would have sent, and the I-36 gate "
+          "still decides infer-vs-refuse exactly as it already does there")
+    # =====================================================================
+    class _KindBlindScreen:
+        def __init__(self, target, kinds):
+            self.target = target
+            self.kinds = kinds
+            self.sent = []
+
+        def press(self, key, **kw):
+            self.sent.append(key)   # never actually lifts -- chronic blind
+
+        def look(self):
+            ys = list(REST)
+            ys[self.target] = None
+            sel = orch._CursorSel([], list(self.kinds)) if self.kinds is not None else []
+            return [0.0] * N, ys, N, sel
+
+    for _label, _kinds in (("None", None), ("player", ["player"] * N),
+                            ("tactics", ["tactics"] * N)):
+        ic._reset_press_ledger()
+        s_y = _KindBlindScreen(target=3, kinds=_kinds)
+        ok_y, _sel_y, out_y = _select_direct(3, s_y, ys0=list(REST), sel0=set())
+        check(f"(Y1-{_label}) exactly one select_card press, never a retry "
+              "storm", s_y.sent == ["select_card"])
+        if _label == "tactics":
+            check(f"(Y1-{_label}) refuses -- the I-36 gate blocks the "
+                  "inference on a tactics baseline", ok_y is False)
+        else:
+            check(f"(Y1-{_label}) infers selected -- I-21's own signature "
+                  "on a non-tactics baseline, not retried", ok_y is True)
+
+    # =====================================================================
+    print("(Z1) I-48f (skeptic, live 2026-09-22): BOTH targets are selected "
+          "by INFERENCE (I-21 -- their own disc goes unreadable the instant "
+          "they lift, so they never appear in `sel` again). The shared "
+          "I-48b/e re-check's fresh look cannot see them either -- that is "
+          "the SAME abstention the inference already accounted for, not a "
+          "new one -- so it must NOT re-walk and re-select them: no extra "
+          "presses, no unwind, a clean commit with exactly the two original "
+          "select_card presses")
+    # =====================================================================
+    s = InferredSelectPlayScreen(cur=0)
+    ok_z1, out_z1, calls_z1 = _play(0, 1)
+    check("(Z1) play succeeds", ok_z1 is True)
+    check("(Z1) both slots committed", s.confirmed_sel == [0, 1])
+    check("(Z1) no unwind was triggered by the shared re-check",
+          calls_z1 == [])
+    check("(Z1) the exact press sequence: select 0 (no move needed), walk "
+          "to 1, select 1, confirm -- no re-check walk, no re-toggle",
+          s.sent == ["select_card", "move_right", "select_card", "confirm_play"])
+    check("(Z1) the re-check named both as inference-consistent rather than "
+          "missing", "no longer lifted" not in out_z1)
 
     # =====================================================================
     print()
@@ -1489,15 +1644,21 @@ try:
           ok_t is False and 1 not in ic._MAYBE_LIFTED)
     ic.clear_maybe_lifted()
 
-    # --- mutant 16 (I-56 part 3, case Q2): press when the baseline was blind
-    print("mutant 16: _select_verified presses even when the OPERATION's own "
-          "baseline was also blind -- case Q2 must send a press it has no "
-          "right to")
+    # --- mutant 16 (I-56 redo, R2/R3): press even when the OPERATION's own
+    # baseline was also blind -- case Q2 must send a press it has no right to
+    print("mutant 16: _select_verified's baseline-trust guard is forced True "
+          "unconditionally -- case Q2 (baseline ALSO blind) must send a "
+          "press it has no right to")
     try:
-        _mutate(IC_PATH,
-                "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n",
-                "        if False:  # I-56 mutant: baseline blindness ignored\n")
+        _mutate(
+            IC_PATH,
+            "        if (ys0 is not None and target < len(ys0) and ys0[target] is not None\n"
+            "                and _baseline_untouched(target)):\n",
+            "        if True:  # I-56 mutant: baseline blindness ignored\n")
         _reload_ic()
+        _ic_reset_ledger_16 = getattr(ic, "_reset_press_ledger", None)
+        if _ic_reset_ledger_16:
+            _ic_reset_ledger_16()
         _ys0_q2 = list(REST)
         _ys0_q2[3] = None
         _s16 = BaselineSelectScreen(target=3, chronic_blind=True)
@@ -1512,26 +1673,31 @@ try:
     finally:
         _restore_ic()
 
-    # --- mutant 17 (I-56 part 3, case Q2): skip the baseline check, infer anyway
-    print("mutant 17: _select_verified treats EVERY blind target as already "
-          "selected, without ever checking sel0 -- case Q2 must be waved "
-          "through with no evidence at all")
+    # --- mutant 17 (I-56 redo, R2 -- "the ledger ignored"): drop the
+    # _baseline_untouched clause so a slot this operation already touched
+    # (accounted or not) still earns the baseline-trust press
+    print("mutant 17: _select_verified's baseline-trust guard drops the "
+          "_baseline_untouched(target) check -- the probe-raised-then-blind "
+          "shape (X1) must press when the ledger says it must not")
     try:
-        _mutate(IC_PATH,
-                "        if sel0 is not None and target in sel0:\n",
-                "        if True:  # I-56 mutant: skip the baseline check\n")
+        _mutate(
+            IC_PATH,
+            "        if (ys0 is not None and target < len(ys0) and ys0[target] is not None\n"
+            "                and _baseline_untouched(target)):\n",
+            "        if (ys0 is not None and target < len(ys0) and ys0[target] is not None):"
+            "  # I-56 mutant: ledger ignored\n")
         _reload_ic()
-        _ys0_q2b = list(REST)
-        _ys0_q2b[3] = None
-        _s17 = BaselineSelectScreen(target=3, chronic_blind=True)
+        ic._reset_press_ledger()
+        ic._note_accounted_press(4)   # the I-02 probe's own confirmed touch
+        _s17 = BaselineSelectScreen(target=4, chronic_blind=True)
         real_press = ic.press
         ic.press = _s17.press
         try:
-            ok17, _sel17 = ic._select_verified(3, _s17.look, ys0=_ys0_q2b, sel0=set())
+            ok17, _sel17 = ic._select_verified(4, _s17.look, ys0=list(REST), sel0=set())
         finally:
             ic.press = real_press
-        check("mutant 17 caught: case Q2 is waved through with no evidence",
-              ok17 is not False or _s17.sent != [])
+        check("mutant 17 caught: a press landed on a slot the ledger says "
+              "was already touched this operation", _s17.sent != [])
     finally:
         _restore_ic()
 
@@ -1545,12 +1711,15 @@ try:
             "            _sel = _InferredSel(before)\n"
             "            _sel.inferred = frozenset({target})\n"
             "            return True, _sel\n"
-            "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n",
+            "        if (ys0 is not None and target < len(ys0) and ys0[target] is not None\n"
+            "                and _baseline_untouched(target)):\n",
             "            _sel = _InferredSel(before)\n"
             "            _sel.inferred = frozenset({target})\n"
             "            # I-56 mutant: no return -- falls through to a press\n"
-            "        if ys0 is None or target >= len(ys0) or ys0[target] is None:\n")
+            "        if (ys0 is not None and target < len(ys0) and ys0[target] is not None\n"
+            "                and _baseline_untouched(target)):\n")
         _reload_ic()
+        ic._reset_press_ledger()
         _s18 = BaselineSelectScreen(target=3, chronic_blind=True)
         real_press = ic.press
         ic.press = _s18.press
@@ -1563,7 +1732,99 @@ try:
     finally:
         _restore_ic()
 
+    # --- mutant 19 (I-56 redo, R1): delete the narrowed _clear_strays mark
+    # -- OP1/OP2 (the skeptic's stray shape) must go from refuse to WRONGLY
+    # COMMIT once the mark cannot land
+    print("mutant 19: _clear_strays' ledger-gated mark is deleted -- the "
+          "skeptic's OP1/OP2 stray shape must go from a refusal to a wrong "
+          "COMMIT of a card the engine never chose")
+    try:
+        _mutate(
+            IC_PATH,
+            "                  f\"would go in with the commit if we proceeded{_explain}.\")\n"
+            "            if _UNACCOUNTED_SELECT_PRESS:\n"
+            "                _mark_maybe_lifted(_new_blind)\n"
+            "            invalidate_cursor()\n"
+            "            return False\n"
+            "    _untouched_blind = _blind_now - set(want)\n",
+            "                  f\"would go in with the commit if we proceeded{_explain}.\")\n"
+            "            pass  # I-56 mutant: the narrowed mark is deleted\n"
+            "            invalidate_cursor()\n"
+            "            return False\n"
+            "    _untouched_blind = _blind_now - set(want)\n")
+        _reload_ic()
+
+        def _look_op_mut(blind_slot=2, extra_sel=(0,)):
+            def _look():
+                ys = list(REST)
+                ys[blind_slot] = None
+                return [0.0] * N, ys, N, sorted(extra_sel)
+            return _look
+
+        ic.clear_maybe_lifted()
+        ic._reset_press_ledger()
+        ic._note_unaccounted_press()
+        ic._clear_strays({0}, _look_op_mut(), blind_before=set())
+        ic._reset_press_ledger()
+        ok19 = ic._clear_strays({0}, _look_op_mut(), blind_before={2})
+        check("mutant 19 caught: OP2 commits a card the engine never chose "
+              "once the mark cannot land", ok19 is True)
+        ic.clear_maybe_lifted()
+    finally:
+        _restore_ic()
+        ic.clear_maybe_lifted()
+
+    # --- mutant 20 (I-48f, skeptic live 2026-09-22): a blind row is read as
+    # "not lifted" again -- case (Z1) must go back to sending the re-check's
+    # extra walk+select on an already-inference-selected target
+    print("mutant 20: the shared re-check's `_missing` computation goes back "
+          "to `want - set(sel1)`, with no inference exemption -- case (Z1) "
+          "must send extra presses re-selecting targets that were never "
+          "actually missing")
+    try:
+        _mutate(
+            IC_PATH,
+            "        if n1 == MAX_HAND_SIZE:\n"
+            "            # I-48f (skeptic): a target this operation selected by INFERENCE\n"
+            "            # (I-21 -- selecting a card blinds its OWN disc the instant it\n"
+            "            # lifts) can NEVER show up in `sel1`; that is the inference's\n"
+            "            # whole premise, not a defect in this look. So \"not in sel1\" is\n"
+            "            # not evidence a target came back down -- it is the expected,\n"
+            "            # permanent shape of a lifted-and-blind card. Only a target\n"
+            "            # whose disc is READABLE now and still absent from sel1 has\n"
+            "            # genuinely toggled back down; a target still blind is\n"
+            "            # consistent with staying exactly where the inference put it,\n"
+            "            # and re-selecting it is a blind TOGGLE that would put it back\n"
+            "            # down. `_inferred_targets` is the same real report\n"
+            "            # `_select_verified` already returns (I-44), not a re-derivation.\n"
+            "            _missing = {t for t in want\n"
+            "                        if t not in sel1\n"
+            "                        and not (t in _inferred_targets\n"
+            "                                 and (t >= len(_ys1) or _ys1[t] is None))}\n"
+            "        else:\n"
+            "            _missing = set()\n",
+            "        if n1 == MAX_HAND_SIZE:\n"
+            "            _missing = want - set(sel1)  # I-56 mutant: inference exemption dropped\n"
+            "        else:\n"
+            "            _missing = set()\n")
+        _reload_ic()
+        s = InferredSelectPlayScreen(cur=0)
+        ok20, out20, calls20 = _play(0, 1)
+        check("mutant 20 caught: the re-check sends extra presses (or "
+              "refuses outright) once the inference exemption is gone",
+              s.sent != ["select_card", "move_right", "select_card", "confirm_play"]
+              or ok20 is not True)
+    finally:
+        _restore_ic()
+
+    # --- sanity: (Z1) still holds after mutant 20 ----------------------------
+    s = InferredSelectPlayScreen(cur=0)
+    ok_z1b, _out_z1b, _calls_z1b = _play(0, 1)
+    check("post-restore sanity: case (Z1) passes again",
+          ok_z1b is True and s.confirmed_sel == [0, 1])
+
     # --- sanity: P2/Q2/R2 all still hold after mutants 16-18 ----------------
+    ic._reset_press_ledger()
     _s_p2 = BaselineSelectScreen(target=3, chronic_blind=False)
     real_press = ic.press
     ic.press = _s_p2.press
