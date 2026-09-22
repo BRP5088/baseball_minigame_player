@@ -3955,17 +3955,9 @@ now caught and converted to the safe UNVERIFIED outcome instead of propagating
 with no `_mark_maybe_lifted`/`invalidate_cursor` (`select_bans_verified` carries
 the identical lesson).
 
-**Status.** Fixed on branch (fourth pass, skeptic round 2 CONFIRMED WITH
-NOTES, all three notes addressed plus the M6 mutant closed). `resolve_
-neighbour_occlusion` is WIRED IN at `_clear_strays`'s I-43 refusal site
-(`input_controller.py:1970`), walks the cursor to `t_slot` before every
-toggle, requires M to read AT REST (not merely readable) before crediting
-occlusion, and clears the mark only after a landed re-raise — verified
-standalone (F1-F6) and end to end through the real
-`_verified_select_and_play_inner` (H/I), 16 mutants total. Rebased onto main
-(0b15578, I-48b merged) first, per the coordinator's lift of the `_clear_
-strays` prohibition; `_probe_select_blind_target` (owned by a different
-pending branch) is untouched. Awaiting skeptic.
+**Status.** merged 5d7dc88; Opus skeptic round 1 REFUTED (adjacency exemption
+widened I-48d), round 2 CONFIRMED WITH NOTES, N1/N2/N3 fixed 7a42d46, 16/16
+mutants; live: 2 discard-not-confirmed polls in cycle 9 are this fix's target.
 
 ### I-54  A truncated card name ('JOHNNY DRAW') passes the result-word OCR fallback: phantom draw #9 mid-match   P0  reader
 
