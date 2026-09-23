@@ -3985,14 +3985,26 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             good = good + 1 if readable else 0
             unread = _sig_unread_slots(sig)
             _bound_hit = time.time() - start >= READABLE_HAND_BOUND
-            if _bound_hit or (good >= READABLE_POLLS and not unread):
+            _stable_hit = good >= READABLE_POLLS and not unread
+            if _bound_hit or _stable_hit:
                 _held = ("" if probe_at is None
                          else f", hand first settled at {probe_at:.1f}s "
                               f"(floor held it {max(0.0, time.time() - start - probe_at):.1f}s)")
-                _reason = "stable_bound" if unread else "stable"
-                _why = (f"; released on the {READABLE_HAND_BOUND:g}s bound with slot(s) "
-                        f"{unread} still unread" if _reason == "stable_bound" else "")
-                print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
+                # reason reflects what actually fired the release, not just
+                # whether `unread` is empty -- `_stable_hit` can be false (a
+                # complete hand read once, not twice) on the same poll that
+                # `_bound_hit` goes true, and only the bound released it (I-65b).
+                _reason = "stable" if _stable_hit else "stable_bound"
+                if _reason == "stable_bound":
+                    _complete = ("complete but not confirmed twice" if not unread
+                                 else f"slot(s) {unread} still unread")
+                    _why = (f"; released on the {READABLE_HAND_BOUND:g}s bound "
+                            f"with the hand {_complete}")
+                else:
+                    _why = ""
+                _label = (f"STABLE {READABLE_POLLS}x" if _reason == "stable"
+                          else "STABLE-BOUND")
+                print(f"  [deal] hand {_label}; released "
                       f"{time.time() - start:.1f}s after the play "
                       f"(threshold {th:g}, biggest delta {biggest:.1f}{_held}{_why})")
                 _record_row("stable", reason=_reason)
