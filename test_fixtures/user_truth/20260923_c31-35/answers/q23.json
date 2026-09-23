@@ -1,0 +1,16 @@
+{
+  "bonus": 2,
+  "bonus_guess": false,
+  "card": "power_swing +2",
+  "frame": "dropped_1790184384917855000",
+  "note": "",
+  "power": "",
+  "power_guess": false,
+  "q": 23,
+  "sec": "",
+  "sec_guess": false,
+  "slot": 0,
+  "type": "power_swing",
+  "updatedAt": "2026-09-23T18:00:09.264Z",
+  "verdict": "readable"
+}
