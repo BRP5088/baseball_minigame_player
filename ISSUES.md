@@ -5522,3 +5522,7 @@ any round.
 
 **Status.** merged 22c4cb14d6e48cb48e4be98ec7cdf0d14948126c; Opus skeptic CONFIRMED WITH NOTES (6/14 user-labelled readable tactics recovered, 0/43 wrong on labelled slightly/covered/animating, 0 new wrong reads over 7,101 frames; read_hand p95 88->105 ms; 8/14 still missed: clipped-left banners q16/q18/q23, q53 at 0.840, q29/q56/q62/q75 template-bank mismatch 0.70-0.73).
 
+
+## I-65  hand read (and decided on) while cards were still dealing
+
+**Status.** merged d53d5e9; round 1 REFUTED (empty signature counted complete; new sites stalled 20 s), round 2 Opus skeptic CONFIRMED WITH NOTES (0/298 early releases on incomplete; already-dealt half change releases 0.6 s; covered card releases at 8.0 s; cost +4.6 s/match median, 21.6 max; READABLE_HAND_BOUND 8.0 PROVISIONAL - first live session must read first_complete_at).
