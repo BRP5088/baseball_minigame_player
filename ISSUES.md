@@ -5514,3 +5514,7 @@ exit 0: `test_tactics_select_fallback.py`, `test_discard_confirm_verified.py`,
 CONFIRMED WITH NOTES r3, notes closed). The 13/15-row "persistent across
 retries of the same hand" shape remains OPEN and out of scope, unaffected by
 any round.
+
+## I-63  stray re-look refused plays on a transient blind slot
+
+**Status.** merged ffd35baa793918efb88dcc6caedd30315b1d77f8; Opus skeptic CONFIRMED WITH NOTES (blindness time-varying 7/7; blind slot tactics in >=5/7; no test pins N=2).
