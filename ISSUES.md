@@ -5535,3 +5535,7 @@ I-65b merged f2effc4: release reason now 'stable_bound' when the 8 s bound force
 ## I-67  tactics template bank lacked slot x type coverage (clipped-left banners, speed/fielding cells)
 
 **Status.** merged ead1e1e; Opus skeptic CONFIRMED WITH NOTES (5/8 labelled recovered, 55 new reads 55/55 correct by eye, 0 wrong over 7,217 frames; held-out support carried by the q16 and q23 donors, q29 self-match only; npz rebuildable byte-equal; runtime unchanged).
+
+## I-70  slightly covered player power digits left unread (neighbour hides the disc's left edge)
+
+**Status.** merged e027daf; round 1 blocked on runtime (p95 122->156 ms) and mutant M2 (digit-is-None gate) surviving; round 2 Opus skeptic CONFIRMED WITH NOTES: 0 wrong / 0 false positives over 583 frames at both capture scales, 19/20 + 6/6 certain slightly-covered labels recovered, lost resolutions now unread (= main); read_hand median +8-9%, p95 in budget 3/4 runs, worst frame 241-245 ms in 2/4 runs under load (main max <=167); cross-frame check 0/8,605 consecutive-pair decision differences; surviving geometry mutants (fine window off-by-one, one-radius fine pass, coarse step 5->6) need more positive fixtures.
