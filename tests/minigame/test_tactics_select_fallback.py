@@ -2108,11 +2108,11 @@ try:
     try:
         _mutate(
             IC_PATH,
-            "            # _note_unaccounted_press's callers).\n"
-            "            if _UNACCOUNTED_SELECT_PRESS:\n"
-            "                _mark_maybe_lifted(_new_blind)\n",
-            "            # _note_unaccounted_press's callers).\n"
-            "            _mark_maybe_lifted(_new_blind)"
+            "                # _note_unaccounted_press's callers).\n"
+            "                if _UNACCOUNTED_SELECT_PRESS:\n"
+            "                    _mark_maybe_lifted(_new_blind)\n",
+            "                # _note_unaccounted_press's callers).\n"
+            "                _mark_maybe_lifted(_new_blind)"
             "  # I-56 mutant: cannot-read-fan mark unconditional\n")
         _reload_ic()
         ic.clear_maybe_lifted()

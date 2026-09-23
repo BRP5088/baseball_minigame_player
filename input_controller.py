@@ -827,6 +827,18 @@ SELECT_ATTEMPTS = 5            # 0.059% residual; covers the longest observed ru
 # and the loop refuses, so the cost is a wasted turn, never a wrong card committed.
 SELECT_RETRY_CONFIRM_SEC = 1.6
 
+# I-63: `_clear_strays`' stray-blindness refusal used to take exactly ONE re-look
+# (SELECT_RETRY_CONFIRM_SEC) before refusing. Measured against every overnight/
+# run_live_*.log (agent_progress/issues/I-63/measure.py): that single re-look
+# recovered only 5 of 12 events live, but the 22 refused_select_<ns> rescue
+# frames already on disk -- each a fresh grab taken moments later, right after
+# the refusal, with no deliberate extra wait of its own -- read the SAME slot
+# clean 22/22 times. The blindness was clearing, just not by 1.6s; nothing in
+# the data suggests it ever needed more than one more look at the same
+# interval, so this is +1 attempt, not an open-ended poll. LOOKING ONLY -- no
+# extra presses.
+_STRAY_RELOOK_MAX_ATTEMPTS = 2
+
 # A LOOK THAT LANDS MID-ANIMATION IS NOT A READING, AND read_hand SAYS SO ITSELF.
 # Reproduced at the user's insistence rather than retried past: sampling through a select
 # animation, 3 frames of 45 came back with SEVEN rows. While a card is in flight it sits
@@ -2490,56 +2502,66 @@ def _clear_strays(want, look, blind_before=frozenset(), ys0=None, kinds0=None,
         # reader can drop a slot from a real (if untrustworthy) position to
         # unreadable and back within a few frames of an UNCHANGED card
         # (CLAUDE.md 10.26: "a reader that looks stable on a still may not be").
-        # Give it one more look, after the same settle this file already waits
-        # out a swallowed press with, before treating that as something WE
-        # raised.
+        # Give it up to _STRAY_RELOOK_MAX_ATTEMPTS more looks, each after the
+        # same settle this file already waits out a swallowed press with,
+        # before treating that as something WE raised. Message text below is
+        # UNCHANGED on purpose -- tools/run_census.py matches
+        # "re-looking once before refusing" and "still unreadable after" as
+        # exact/prefix substrings (grep -n before editing either one).
         print(f"  [cursor] slot(s) {sorted(_new_blind)} read unreadable ({_ys}) — "
               "re-looking once before refusing")
-        time.sleep(SELECT_RETRY_CONFIRM_SEC)
-        _g, _ys, n, sel = _look_settled(look)
-        if n != MAX_HAND_SIZE:
-            print("  [cursor] cannot read the fan on the re-look — refusing. A "
-                  "commit whose lifted set was never seen is a blind commit.")
-            # I-56 SKEPTIC R1 (REFUTED, then narrowed): marking `_new_blind`
-            # unconditionally on mere blindness is a false-positive machine
-            # (occlusion and a chronic wreath misread, I-36, read identically
-            # to a real lift -- 14 firings, 0 true positives that day). But
-            # deleting the mark entirely is a WRONG-COMMIT machine: a select
-            # press this operation sent CAN land on an invisible non-target
-            # slot (I-21 blinds a lifted card's own disc the instant it
-            # rises, so `selected_cards` can never show it risen -- the one
-            # cross-operation memory of that IS this mark, and without it a
-            # later poll commits a card the engine never chose). Mark only
-            # when a press THIS operation sent could actually explain it:
-            # `_UNACCOUNTED_SELECT_PRESS` is true only after a select_card
-            # press whose landing no look positively placed (see
-            # _note_unaccounted_press's callers).
-            if _UNACCOUNTED_SELECT_PRESS:
-                _mark_maybe_lifted(_new_blind)
-            invalidate_cursor()
-            return False
-        _reconcile_maybe_lifted(_ys, sel)
-        _blind_now = {i for i, y in enumerate(_ys) if y is None}
-        _new_blind = _blind_now - set(blind_before) - set(want)
+        # I-63 (agent_progress/issues/I-63/measure.py): a SINGLE re-look here
+        # recovered only 5/12 live events; every refused case's own post-hoc
+        # rescue frame read clean moments later with no extra deliberate wait.
+        # LOOKING ONLY in this loop -- no press is ever sent.
+        for _relook in range(1, _STRAY_RELOOK_MAX_ATTEMPTS + 1):
+            time.sleep(SELECT_RETRY_CONFIRM_SEC)
+            _g, _ys, n, sel = _look_settled(look)
+            if n != MAX_HAND_SIZE:
+                print("  [cursor] cannot read the fan on the re-look — refusing. A "
+                      "commit whose lifted set was never seen is a blind commit.")
+                # I-56 SKEPTIC R1 (REFUTED, then narrowed): marking `_new_blind`
+                # unconditionally on mere blindness is a false-positive machine
+                # (occlusion and a chronic wreath misread, I-36, read identically
+                # to a real lift -- 14 firings, 0 true positives that day). But
+                # deleting the mark entirely is a WRONG-COMMIT machine: a select
+                # press this operation sent CAN land on an invisible non-target
+                # slot (I-21 blinds a lifted card's own disc the instant it
+                # rises, so `selected_cards` can never show it risen -- the one
+                # cross-operation memory of that IS this mark, and without it a
+                # later poll commits a card the engine never chose). Mark only
+                # when a press THIS operation sent could actually explain it:
+                # `_UNACCOUNTED_SELECT_PRESS` is true only after a select_card
+                # press whose landing no look positively placed (see
+                # _note_unaccounted_press's callers).
+                if _UNACCOUNTED_SELECT_PRESS:
+                    _mark_maybe_lifted(_new_blind)
+                invalidate_cursor()
+                return False
+            _reconcile_maybe_lifted(_ys, sel)
+            _blind_now = {i for i, y in enumerate(_ys) if y is None}
+            _new_blind = _blind_now - set(blind_before) - set(want)
+            if not _new_blind:
+                break
         # NO "AT REST" FALLBACK (I-26, skeptic-refuted). A slot WE genuinely
         # lift and then cannot read looks IDENTICAL to a flicker at this point:
         # a raised card's disc shrinks out of DISC_MIN_R, so its y goes None
         # too, and selected_cards SKIPS a None row -- so `set(sel) - want`
         # is empty for a lifted-and-blind stray exactly as it is for a
         # never-touched one. Scripted: baseline readable, our own press lifts
-        # it, None on the check-look AND the re-look -- the old fallback let
-        # `ok=True` through with the card still up. One re-look is the whole
-        # allowance; still unreadable after it is refused, full stop. The
-        # only slots this never refuses are ones proven untrustworthy at
-        # BASELINE (`blind_before`, case b above) or the engine's OWN targets
-        # (`want`, I-28) -- never a STRAY that turned blind during this
-        # operation.
+        # it, None on every look in the bounded window -- the old fallback let
+        # `ok=True` through with the card still up. _STRAY_RELOOK_MAX_ATTEMPTS
+        # re-looks are the whole allowance; still unreadable after all of them
+        # is refused, full stop. The only slots this never refuses are ones
+        # proven untrustworthy at BASELINE (`blind_before`, case b above) or
+        # the engine's OWN targets (`want`, I-28) -- never a STRAY that turned
+        # blind during this operation.
         if _new_blind:
             _explain = " (an unaccounted press this operation sent could be why)" \
                 if _UNACCOUNTED_SELECT_PRESS else \
                 " (nothing this operation pressed can explain it -- not marked)"
             print(f"  [cursor] slot(s) {sorted(_new_blind)} still unreadable after "
-                  f"the re-look ({_ys}) — refusing THIS attempt. They were "
+                  f"{_STRAY_RELOOK_MAX_ATTEMPTS} re-look(s) ({_ys}) — refusing THIS attempt. They were "
                   "measurable when this operation started, so a raised card "
                   f"would go in with the commit if we proceeded{_explain}.")
             if _UNACCOUNTED_SELECT_PRESS:

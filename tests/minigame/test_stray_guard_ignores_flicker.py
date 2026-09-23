@@ -198,28 +198,36 @@ try:
           f"still refuse; got {ok!r}")
 
     # =====================================================================
-    print("(d) our OWN press lifts a stray and it is None on the check-look "
-          "AND the re-look -- refused, exactly one extra look")
+    print("(d) our OWN press lifts a stray and it stays None through every "
+          "look in the bounded re-look window -- refused")
     # =====================================================================
     # THE SKEPTIC'S CASE. Baseline was readable (not in blind_before), a press
     # of ours raised slot 0, and the lift made its disc unreadable -- SAME
     # shape as the flicker in (a), but this time the card genuinely moved and
-    # stays unreadable both times it is checked. The old "at rest" fallback
+    # stays unreadable every time it is checked. The old "at rest" fallback
     # could not tell this from (a) and committed with the stray still up.
+    # I-63: the bound is now ic._STRAY_RELOOK_MAX_ATTEMPTS looks past the
+    # first (agent_progress/issues/I-63/measure.py), not a single re-look --
+    # ScriptedLook repeats its last entry past the end of the script, so a
+    # 2-entry script still exercises "stays blind for every attempt".
     _slept.clear()
     want = {2}
     look1 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
     look2 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
     scr = ScriptedLook([look1, look2])
     ok = ic._clear_strays(want, scr.look, blind_before=set())
-    check(ok is False, f"a slot that stays unreadable after the re-look must "
-          f"refuse, even though the rest of the fan looks unchanged -- our own "
-          f"press could be the reason it is still None; got {ok!r}")
-    check(scr.calls == 2, f"exactly one extra look past the first -- got "
-          f"{scr.calls} look() calls")
-    check(len(_slept) == 1 and abs(_slept[0] - ic.SELECT_RETRY_CONFIRM_SEC) < 1e-9,
-          f"the one sleep must be SELECT_RETRY_CONFIRM_SEC ({ic.SELECT_RETRY_CONFIRM_SEC}); "
-          f"got {_slept!r}")
+    check(ok is False, f"a slot that stays unreadable through the whole "
+          f"re-look window must refuse, even though the rest of the fan "
+          f"looks unchanged -- our own press could be the reason it is "
+          f"still None; got {ok!r}")
+    _expected_calls = 1 + ic._STRAY_RELOOK_MAX_ATTEMPTS
+    check(scr.calls == _expected_calls, f"the first look plus every bounded "
+          f"re-look, none of them recovering -- expected {_expected_calls}, "
+          f"got {scr.calls} look() calls")
+    check(len(_slept) == ic._STRAY_RELOOK_MAX_ATTEMPTS
+          and all(abs(s - ic.SELECT_RETRY_CONFIRM_SEC) < 1e-9 for s in _slept),
+          f"every sleep must be SELECT_RETRY_CONFIRM_SEC ({ic.SELECT_RETRY_CONFIRM_SEC}), "
+          f"{ic._STRAY_RELOOK_MAX_ATTEMPTS} of them; got {_slept!r}")
 
     # =====================================================================
     print("(e) a slot goes unreadable then the re-look finds it back at rest "
