@@ -2575,9 +2575,21 @@ Also run, all exit 0: `test_verified_selection.py`, `test_local_hand_reader.py`,
 and never touches. Confirmed passing against main's current `orchestrator.py`
 unmodified. Not this ticket's to fix.
 
-**Status.** fixed on branch `worktree-I62` @ c1fcebc, unmerged. `agent_progress/issues/I-62/`
-carries both census tables in full, the scripts that produced them, and the "out of
-scope" `BANNER_SEARCH` finding for a future ticket.
+**Status.** merged 427b528cf815c15deb2ef524a3a19a7738d4cc0c (from `worktree-I62` @
+c1fcebc). Opus skeptic verdict: CONFIRMED WITH NOTES (0 wrong new reads over 8,714
+frames, 2/2 correct recoveries; p95 `read_hand` 42->84 ms; notes in
+`.claude/worktrees/agent-I62/agent_progress/issues/I-62/skeptic.md`). Merge-agent
+re-check: `test_hand_memory_forgets.py` passes on main bc9de9c pre-merge, confirming
+the pre-existing-failure note above no longer applies (fixed on main independently);
+all 52 tests importing `local_hand`, the harness scans, and
+`tests/rig/test_no_real_input_under_test_run.py` pass post-merge (85/85, one
+`test_no_side_effects.py` flake traced to `__pycache__` contention under parallel
+execution, not the merge -- passes clean); a spot mutant disabling the new
+raised-digit-search gate in `local_hand.py` was killed by `test_lifted_disc_assigned.py`,
+then reverted with sha256 byte-identity confirmed
+(`4ba88e652c5427c78ebc0e3453d4856c017a2827e01d15024bdfbb6cda51aa17`).
+`agent_progress/issues/I-62/` carries both census tables in full, the scripts that
+produced them, and the "out of scope" `BANNER_SEARCH` finding for a future ticket.
 
 ### I-47  Two silent permissive defaults in offline tools (QA7)                     P2  evidence
 
