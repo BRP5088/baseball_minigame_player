@@ -219,13 +219,14 @@ def _raised_digit_search(img, anchor_x, anchor_y, s):
 # (_cheap_localize_score below, radius = RESTING_SEARCH_R, no DIGIT_RADII sweep -- about
 # 1/7 the cost of a real read_digit call), and only the small FINE box around the coarse
 # winner pays full read_digit price. Swept coarse/half combinations (both in ANCHOR_W
-# px) against the 40: coarse=8/half=3 is the cheapest that recovers all 40/40 (coarser
-# than coarse=6, but the localize pass's own single-radius score turns out to land
-# closer to the true position at step 8 than at step 6 for the one row that needs it --
-# measured, not intuitive: coarse=6/half=3 only reaches 39/40) at an effective cost of
-# ~52 full-read_digit-equivalent points, against ~81-98 for every all-radii alternative
-# measured. End-to-end this keeps the 60-frame harness within the +10%/170ms budget --
-# see agent_progress/issues/I-66/progress.md.
+# px) against the 40: coarse=8/half=3 recovers all 40/40 (coarser than coarse=6, but the
+# localize pass's own single-radius score turns out to land closer to the true position
+# at step 8 than at step 6 for the one row that needs it -- measured, not intuitive:
+# coarse=6/half=3 only reaches 39/40), but end-to-end this was measured OVER the
+# +10%/170ms budget. The shipped values are coarse=7/half=2, which recovers 37/40 at
+# an effective cost of ~27.6 full-read_digit-equivalent points, against ~81-98 for every
+# all-radii alternative measured -- median/p95 land within +10% of main. See
+# agent_progress/issues/I-66/progress.md.
 RESTING_SEARCH_DY = (-12, 9)    # anchor-relative y band to search, ANCHOR_W px
 RESTING_SEARCH_DX = (-24, 18)   # anchor-relative x band to search, ANCHOR_W px
 RESTING_SEARCH_COARSE_STEP = 7  # px, ANCHOR_W scale -- cheap single-radius localize pass

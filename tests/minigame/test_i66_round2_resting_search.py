@@ -21,7 +21,7 @@ pays the full, MIN_SCORE-gated read_digit price. Both the window size and the
 localize-then-refine shape were required to fit the runtime budget -- see
 agent_progress/issues/I-66/progress.md, round 2, for the measurements (a plain
 step-3 grid over the same window, all real read_digit calls, still cost +36%
-median; this shape costs ~52 full-read_digit-equivalent points and fits).
+median; this shape costs ~27.6 full-read_digit-equivalent points and fits).
 
 A resting hit must NOT be reported as a raised/selected card -- its y sits near
 the slot anchor (dy -12..+9), far under SELECTED_MIN_RISE (25). The row carries
