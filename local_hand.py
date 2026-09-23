@@ -349,8 +349,36 @@ def _raised_or_resting_search(img, anchor_x, anchor_y, s):
 # measured boundary only if a future label set shows keep=14 missing recoverable cards, or
 # costing a wrong read.
 LEFT_MASK_COLS = 14              # of SIDE (24) columns kept, left-aligned
-LEFT_MASK_STEP = 3               # anchor px grid step -- the exact step measured above;
-                                  # not I-66's RESTING_SEARCH_COARSE_STEP (7), untested here
+
+# I-70 round 2 (agent_progress/issues/I-70/r2/progress.md): round 1 shipped a single
+# step-3, all-DIGIT_RADII grid over the whole resting window (98 points x 7 radii).
+# Correctness was fine (0 wrong anywhere) but end-to-end runtime was not: branch p95
+# 156ms vs main 122ms (+28%, over both the ~150ms poll and the round-2 +10% budget),
+# with the search actually CALLED on 41/60 census frames -- not rare.
+#
+# Same fix I-66 round 2 already proved for the unmasked resting search (RESTING_SEARCH_*
+# above -- read that comment for the full reasoning): the cost is DIGIT_RADII, not the
+# grid. Only the WINNING point's radius sweep matters; every other point just needs to
+# be ranked against its neighbours. So a CHEAP single-radius COARSE pass over the whole
+# window locates roughly where the digit is, and only a small FINE box around that
+# point pays the full 7-radii masked read.
+#
+# MEASURED (agent_progress/issues/I-70/r2/progress.md): coarse/half swept 7/2 (I-66's own
+# values), 6/2, 5/2 against a 583-frame census (main vs branch, interleaved) and the label
+# sets. 7/2 loses the shipped positive fixture outright (misses the true position). 6/2 and
+# 5/2 both clear the runtime budget and keep 0 wrong reads anywhere; 5/2 recovers 2 more of
+# the 74 round-1 corpus resolutions and 1 more labelled "slightly" slot than 6/2, so 5/2
+# ships. End-to-end runtime (60 frames x3 reps, interleaved, warm, same harness round 1
+# used): main med 100 p95 117 max 129ms; branch med 109 p95 124 max 137ms -- median and p95
+# both inside main's +10% budget, max well under the 200ms cap. Corpus census (583 frames,
+# single pass, interleaved): 68/74 (91.9%) of round 1's corpus resolutions still resolve,
+# 95 total resolutions (up from round 1's 74), 0 digit_changed, 0 wrong anywhere. Labels:
+# 25/26 of round 1's recovered certain "slightly" labels still recover (the current, merged
+# label set -- see progress.md for why this is 26 now, not round 1's original 20), 6/6 on
+# the i70_checks confirmation set.
+LEFT_MASK_COARSE_STEP = 5        # anchor px, cheap single-radius localize pass
+LEFT_MASK_FINE_STEP = 1          # anchor px, full DIGIT_RADII refine pass
+LEFT_MASK_REFINE_HALF = 2        # anchor px, refine box half-width around the coarse winner
 
 _mask_cache = {}
 
@@ -385,25 +413,61 @@ def _masked_templates(keep_cols):
     return _mask_cache[keep_cols]
 
 
+def _left_masked_localize_score(img, cx, cy, r, keep_cols):
+    """(digit, score) at ONE radius on the LEFT-masked vector, no DIGIT_RADII sweep --
+    about 1/7 the cost of a full masked read. Mirrors _cheap_localize_score above;
+    only for RANKING coarse grid points against each other (_left_masked_digit_search
+    below), never returned as a final digit/score.
+    """
+    tvecs, tdigits = _masked_templates(keep_cols)
+    v = _masked_vector(img, (max(0, cx - r), max(0, cy - r),
+                              min(img.width, cx + r), min(img.height, cy + r)), keep_cols)
+    if v is None:
+        return None, 0.0
+    scores = tvecs @ v
+    k = int(scores.argmax())
+    return tdigits[k], float(scores[k])
+
+
 def _left_masked_digit_search(img, anchor_x, anchor_y, s, keep_cols=LEFT_MASK_COLS):
     """Best (digit, score, (x, y)) over the SAME resting-card window
     _resting_digit_search uses (I-70's covered discs sit at rest, just partly
     covered -- never raised), scored on the LEFT keep_cols columns only.
 
-    A single full grid over window x DIGIT_RADII, not the coarse/fine staging
-    _resting_digit_search uses -- this is the LAST of four fallback passes
-    (kind=='player' and every earlier pass, including the unmasked resting
-    search, already failed), so it is already rare. Stage it later if that
-    stops being true (I-66 round 2 has the pattern).
+    Coarse-then-fine, same shape and same "walk outward from its own centre" reasoning
+    as _resting_digit_search above (see that docstring for the grid-phase-bug note --
+    it applies here unchanged): a cheap single-radius COARSE grid over the whole window
+    ranks candidate positions, then a small FINE grid around the coarse winner pays the
+    real, MIN_SCORE-gated masked read. This is the LAST of four fallback passes
+    (kind=='player' and every earlier pass, including the unmasked resting search,
+    already failed).
     """
     tvecs, tdigits = _masked_templates(keep_cols)
     rad = int(round(RESTING_SEARCH_R * s))
-    y0, y1 = int(anchor_y + RESTING_SEARCH_DY[0] * s), int(anchor_y + RESTING_SEARCH_DY[1] * s)
-    x0, x1 = int(anchor_x + RESTING_SEARCH_DX[0] * s), int(anchor_x + RESTING_SEARCH_DX[1] * s)
-    step = max(1, int(round(LEFT_MASK_STEP * s)))
+    y_lo, y_hi = int(round(RESTING_SEARCH_DY[0] * s)), int(round(RESTING_SEARCH_DY[1] * s))
+    x_lo, x_hi = int(round(RESTING_SEARCH_DX[0] * s)), int(round(RESTING_SEARCH_DX[1] * s))
+
+    coarse = max(1, int(round(LEFT_MASK_COARSE_STEP * s)))
+    dys = list(range(0, y_hi + 1, coarse)) + list(range(-coarse, y_lo - 1, -coarse))
+    dxs = list(range(0, x_hi + 1, coarse)) + list(range(-coarse, x_lo - 1, -coarse))
+    best_localize_sc, best_dxdy = 0.0, (0, 0)
+    for dy in dys:
+        for dx in dxs:
+            cy, cx = int(anchor_y + dy), int(anchor_x + dx)
+            _, sc = _left_masked_localize_score(img, cx, cy, rad, keep_cols)
+            if sc > best_localize_sc:
+                best_localize_sc, best_dxdy = sc, (dx, dy)
+
+    fine = max(1, int(round(LEFT_MASK_FINE_STEP * s)))
+    half = int(round(LEFT_MASK_REFINE_HALF * s))
+    bdx, bdy = best_dxdy
     best_d, best_sc, best_xy = None, 0.0, None
-    for cy in range(y0, y1 + 1, step):
-        for cx in range(x0, x1 + 1, step):
+    for rdy in range(-half, half + 1, fine):
+        for rdx in range(-half, half + 1, fine):
+            dx, dy = bdx + rdx, bdy + rdy
+            if not (x_lo * s - 1 <= dx <= x_hi * s + 1 and y_lo * s - 1 <= dy <= y_hi * s + 1):
+                continue
+            cy, cx = int(anchor_y + dy), int(anchor_x + dx)
             for dr in DIGIT_RADII:
                 rr = int((rad + dr) * 1.05)
                 if rr < 4:
@@ -1302,24 +1366,6 @@ def _read_fan(img, strong):
                 row["secondary_score"] = ss
                 out.append(row)
                 continue
-            # I-70: NO CANDIDATE AT ALL is exactly what a covered disc's shape gives the
-            # finder on several of the 29 measured "slightly" slots (I-69's note: the
-            # shape detector locks onto the COVERING card's edge, not a candidate at this
-            # slot). Without this, those rows fell all the way through to "ask the paid
-            # model" and the left-masked pass below -- gated on kind=='player' like every
-            # pass before it -- never got a turn. Same measurement, same LEFT_MASK_COLS,
-            # same digit is None gate (there is no digit here to protect).
-            md, msc, mxy = _left_masked_digit_search(img, ax, ay, s)
-            if md is not None:
-                row = {"x": mxy[0], "kind": "player", "digit": md, "score": round(msc, 3),
-                       "y": mxy[1], "y_measured": True, "_slot_i": i, "y_from": "disc",
-                       "digit_from_left_masked_search": True}
-                row["secondary"], ss = read_shield(img, mxy[0], mxy[1])
-                row["secondary_score"] = ss
-                out.append(row)
-                continue
-            # A slot no candidate reached. It is emitted anyway -- when the fan fits the
-            # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
             # WHAT KIND IS A SLOT NOTHING REACHED? This branch used to answer
             # "tactics", unconditionally, and that is a fabricated reading rather than a
             # missing one: over the corpus it emits 17 rows and the paid model calls 10
@@ -1332,42 +1378,73 @@ def _read_fan(img, strong):
             # answer is UNKNOWN. On those 17 rows the two populations are far apart:
             # really-player scores top out at 0.560 while really-tactics bottom out at
             # 0.936 in sample, 0.595 across sessions.
+            #
+            # I-70 round 2: THE BANNER CHECK RUNS BEFORE THE MASKED SEARCH BELOW, not
+            # after (round 1's order). Round 1 never measured a real case where this
+            # mattered (0/74 resolutions sat on a slot whose banner cleared
+            # TACTICS_PRESENT_MIN -- r1/skeptic.md dir 4), but the ordering was still a
+            # live gap: a slot with no circle candidate at all can ALSO be a genuine
+            # tactics card (the banner is exactly how every other unreadable tactics
+            # slot below is told apart from a player one), and the masked search only
+            # ever looks for a PLAYER digit -- it has no way to say "this is tactics".
+            # Checking the banner first means a confidently-bannered tactics slot is
+            # classified as tactics before the player-only masked search ever gets a
+            # chance to mis-promote it to kind=player (see the tactics-banner-guard
+            # test in tests/minigame/test_i70_slightly_covered.py).
             t, ts = read_tactics_type(img, i)
-            if ts < TACTICS_PRESENT_MIN:
-                # No candidate AND no banner. Something is in this slot -- the fan only
-                # emits five rows when it fits -- but nothing here can say what, so the
-                # caller must ask the paid model rather than be handed a guess.
-                # y HERE IS A SLOT CONSTANT, NOT A MEASUREMENT. Nothing reached this
-                # slot, so there is no measured position to report -- and on slot 0 the
-                # constant equals the card's own resting position, so a LOST card read as
-                # a perfectly stable one. That is what hid a selected tactics card moving:
-                # The row fell through to here, so the lift check would have compared a
-                # constant with itself and could never fire (CLAUDE.md 10.1). Flagged so
-                # a caller that needs a real position can refuse instead of being handed
-                # furniture.
-                #
-                # THIS USED TO SAY "find_tactics stops matching a card once it is
-                # selected", and that claim was used on 2026-09-16 to explain a discard
-                # failure. It does not hold: a controlled test that same day pressed
-                # select_card once on a PITCH FOCUS and read it back as
-                # kind='tactics', type='pitch_boost', y measured, rise 43 px against a
-                # 25 px gate -- comfortably visible, not marginal. The discard failure
-                # was a DROPPED PRESS. The claim is removed rather than softened,
-                # because its only recorded use was to explain something it did not
-                # cause.
-                out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "unknown",
-                            "digit": None, "score": 0.0, "y_measured": False,
+            if ts >= TACTICS_PRESENT_MIN:
+                # AND THE BINARY, which this branch used to leave unset -- so a row whose
+                # TYPE was known still reported adds_power as "ask the paid model". It made
+                # the easier question abstain MORE often than the harder one (7.6% against
+                # 5.9% over the corpus), which is the wrong way round by construction.
+                ap, aps = reads_adds_power(img, i)
+                out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
+                            "score": 0.0, "type": t, "type_score": round(ts, 3),
+                            "adds_power": ap, "adds_power_score": round(aps, 3),
+                            "y_measured": False,      # see the note below: a slot constant
                             "y": int(SLOT_PLAYER[i][1] * s)})
                 continue
-            # AND THE BINARY, which this branch used to leave unset -- so a row whose
-            # TYPE was known still reported adds_power as "ask the paid model". It made
-            # the easier question abstain MORE often than the harder one (7.6% against
-            # 5.9% over the corpus), which is the wrong way round by construction.
-            ap, aps = reads_adds_power(img, i)
-            out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "tactics", "digit": None,
-                        "score": 0.0, "type": t, "type_score": round(ts, 3),
-                        "adds_power": ap, "adds_power_score": round(aps, 3),
-                        "y_measured": False,          # see the note above: a slot constant
+            # I-70: NO CANDIDATE AT ALL is exactly what a covered disc's shape gives the
+            # finder on several of the 29 measured "slightly" slots (I-69's note: the
+            # shape detector locks onto the COVERING card's edge, not a candidate at this
+            # slot). Without this, those rows fell all the way through to "ask the paid
+            # model" -- gated on kind=='player' like every pass before it -- never got a
+            # turn. Same measurement, same LEFT_MASK_COLS, same digit is None gate (there
+            # is no digit here to protect). Only reached once the banner above has
+            # already said "not confidently tactics".
+            md, msc, mxy = _left_masked_digit_search(img, ax, ay, s)
+            if md is not None:
+                row = {"x": mxy[0], "kind": "player", "digit": md, "score": round(msc, 3),
+                       "y": mxy[1], "y_measured": True, "_slot_i": i, "y_from": "disc",
+                       "digit_from_left_masked_search": True}
+                row["secondary"], ss = read_shield(img, mxy[0], mxy[1])
+                row["secondary_score"] = ss
+                out.append(row)
+                continue
+            # No candidate, no confident banner, and the masked search found nothing
+            # either. Something is in this slot -- the fan only emits five rows when it
+            # fits -- but nothing here can say what, so the caller must ask the paid
+            # model rather than be handed a guess.
+            # y HERE IS A SLOT CONSTANT, NOT A MEASUREMENT. Nothing reached this
+            # slot, so there is no measured position to report -- and on slot 0 the
+            # constant equals the card's own resting position, so a LOST card read as
+            # a perfectly stable one. That is what hid a selected tactics card moving:
+            # The row fell through to here, so the lift check would have compared a
+            # constant with itself and could never fire (CLAUDE.md 10.1). Flagged so
+            # a caller that needs a real position can refuse instead of being handed
+            # furniture.
+            #
+            # THIS USED TO SAY "find_tactics stops matching a card once it is
+            # selected", and that claim was used on 2026-09-16 to explain a discard
+            # failure. It does not hold: a controlled test that same day pressed
+            # select_card once on a PITCH FOCUS and read it back as
+            # kind='tactics', type='pitch_boost', y measured, rise 43 px against a
+            # 25 px gate -- comfortably visible, not marginal. The discard failure
+            # was a DROPPED PRESS. The claim is removed rather than softened,
+            # because its only recorded use was to explain something it did not
+            # cause.
+            out.append({"x": int(SLOT_PLAYER[i][0] * s), "kind": "unknown",
+                        "digit": None, "score": 0.0, "y_measured": False,
                         "y": int(SLOT_PLAYER[i][1] * s)})
             continue
         _, x, kind, circle, cy = best[i]

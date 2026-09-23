@@ -16,6 +16,15 @@ mutation table):
   3. Swapping local_hand._masked_templates' digit labels (e.g. reversing the
      `digits` list without reversing `grid`) -- a WRONG digit should come back
      confidently, and the safety check must fail.
+  4. (round 2, M2) Dropping the "digit is None" gate on the fourth pass' caller
+     loop (read_hand would then call the masked search for a PLAYER row that
+     already has a digit, and overwrite it) -- check 5 below catches this by
+     monkeypatching the search itself, so it does not depend on any particular
+     frame having an unread slot.
+  5. (round 2) Reordering the no-candidate branch back to round 1's shape
+     (masked search before the tactics-banner check) -- check 6 below catches
+     this by forcing every slot into "no candidate" and asserting a confidently
+     bannered tactics slot never becomes kind=player.
 """
 import os
 import sys
@@ -88,6 +97,81 @@ check("LEFT_MASK_COLS is 14 (agent_progress/issues/I-70/progress.md)",
       local_hand.LEFT_MASK_COLS == 14, str(local_hand.LEFT_MASK_COLS))
 check("LEFT_MASK_COLS is strictly less than SIDE (a real mask, not a no-op)",
       0 < local_hand.LEFT_MASK_COLS < local_hand.SIDE, str(local_hand.LEFT_MASK_COLS))
+
+# ---- 5. MUTANT M2 GUARD: a digit already read must never reach the masked search ----
+# round 1's check 3 above only pinned DETERMINISM, which a removed gate still satisfies
+# (the mutant is deterministic too) -- r1/skeptic.md confirmed M2 survives it. This
+# monkeypatches _left_masked_digit_search itself to return an obviously wrong,
+# high-confidence sentinel digit, so the check does not depend on any fixture having a
+# slot the gate would otherwise protect; it directly asks "is the search even callable
+# once a row already has a digit, from the FOURTH pass's own gate".
+#
+# Only slot 0 in this fixture goes through the no-candidate branch (which legitimately
+# calls this same search UNGATED by "digit is None" -- there is nothing to protect
+# there, see the comment above that call site); slots that already read a digit via an
+# ordinary earlier pass (digit_from_left_masked_search is NOT set) are the ones the
+# fourth pass's OWN gate must protect, so those are what this check watches.
+img = Image.open(os.path.join(FIX, "slightly_slot0_digit5.png")).convert("RGB")
+baseline_rows = local_hand.read_hand(img)
+baseline_digits = {r["_slot_i"]: r.get("digit") for r in baseline_rows
+                    if r.get("digit") is not None and not r.get("digit_from_left_masked_search")}
+check("sanity: the baseline frame has an already-read digit from an ORDINARY pass "
+      "(not from the no-candidate branch's own masked-search call)",
+      len(baseline_digits) > 0, str(baseline_digits))
+
+_orig_masked_search = local_hand._left_masked_digit_search
+
+
+def _sentinel_masked_search(img, ax, ay, s, keep_cols=local_hand.LEFT_MASK_COLS):
+    return "9", 0.999, (int(ax), int(ay))
+
+
+local_hand._left_masked_digit_search = _sentinel_masked_search
+try:
+    guarded_rows = local_hand.read_hand(img)
+finally:
+    local_hand._left_masked_digit_search = _orig_masked_search
+
+guarded_digits = {r["_slot_i"]: r.get("digit") for r in guarded_rows if r.get("_slot_i") is not None}
+check("a sentinel masked search never overwrites a digit read by an earlier pass",
+      all(guarded_digits.get(i) == d for i, d in baseline_digits.items()),
+      f"baseline={baseline_digits} guarded={guarded_digits}")
+
+# ---- 6. TACTICS-BANNER GUARD: the no-candidate branch must check the banner BEFORE --
+# trying the masked search, so a confidently-bannered tactics slot can never be
+# mis-promoted to kind=player by a search that only ever looks for a player digit.
+# Every disc-finding source is monkeypatched empty so EVERY slot hits the "no
+# candidate at all" branch regardless of the fixture's real content, then the raised/
+# resting search and the tactics banner are forced so the ordering is the only thing
+# under test.
+_orig_fan_present = local_hand._fan_looks_present
+_orig_strong = local_hand._strong_discs
+_orig_white = local_hand._white_discs
+_orig_find_tactics = local_hand.find_tactics
+_orig_raised_resting = local_hand._raised_or_resting_search
+_orig_tactics_type = local_hand.read_tactics_type
+
+local_hand._fan_looks_present = lambda *a, **k: True
+local_hand._strong_discs = lambda img: []
+local_hand._white_discs = lambda g: []
+local_hand.find_tactics = lambda img, dark_max=110: []
+local_hand._raised_or_resting_search = lambda *a, **k: (None, 0.0, None, False)
+local_hand.read_tactics_type = lambda img, i: ("pitch_boost", 0.9)  # >= TACTICS_PRESENT_MIN
+local_hand._left_masked_digit_search = _sentinel_masked_search  # confident PLAYER digit
+try:
+    forced_rows = local_hand.read_hand(img)
+finally:
+    local_hand._fan_looks_present = _orig_fan_present
+    local_hand._strong_discs = _orig_strong
+    local_hand._white_discs = _orig_white
+    local_hand.find_tactics = _orig_find_tactics
+    local_hand._raised_or_resting_search = _orig_raised_resting
+    local_hand.read_tactics_type = _orig_tactics_type
+    local_hand._left_masked_digit_search = _orig_masked_search
+
+check("every slot with a confident tactics banner and no other candidate stays kind=tactics",
+      len(forced_rows) == 5 and all(r.get("kind") == "tactics" for r in forced_rows),
+      str([(r.get("_slot_i"), r.get("kind"), r.get("digit")) for r in forced_rows]))
 
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)
