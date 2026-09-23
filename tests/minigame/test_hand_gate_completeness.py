@@ -107,7 +107,8 @@ def drive(seq, no_motion_needed=False, baseline_present=True, max_wait=None,
         o._fast_grab = lambda: object()
         o.reset_deal_frames = lambda: None
         o.keep_deal_frame = lambda *a: None
-        o.log_deal_timing = lambda row: None
+        drive.last_row = None
+        o.log_deal_timing = lambda row: setattr(drive, "last_row", dict(row))
         o.record_observation = lambda **k: None
 
         def advance(*_a, **_k):
@@ -191,6 +192,37 @@ released6, dt6, _ = drive([ANIMATING_1, ANIMATING_1, ANIMATING_2, ANIMATING_2,
 check("a hand that animates then completes releases once complete AND stable "
       "(not on the earlier animating-but-stable-twice reads)",
       released6 is True and dt6 < o.READABLE_HAND_BOUND, f"released at {dt6:.2f}s")
+
+# ---- (g) I-65b (QA6): the release reason must reflect what actually fired the
+#         release, not just whether `unread` is empty. A hand that first reads
+#         COMPLETE on the same poll the bound crosses never reaches good >=
+#         READABLE_POLLS (the mismatched read resets `good` to 0) -- only
+#         `_bound_hit` releases it, so the row must say "stable_bound" and the
+#         printed line must not claim "STABLE 2x". Repro shape from the finder:
+#         () for 7 polls, then a complete 5-row signature, poll_interval=1.0s
+#         (bound 8.0s) -- release around 8.0-9.0s with good=0.
+released7, dt7, out7 = drive([()] * 7 + [COMPLETE_SIG], no_motion_needed=True,
+                             motion_seen=False, poll_interval=1.0,
+                             max_wait=o.READABLE_HAND_BOUND + 5.0)
+row7 = getattr(drive, "last_row", None)
+check("released", released7 is True, f"released={released7}")
+check("a same-poll complete+bound release is recorded as stable_bound, not stable",
+      row7 is not None and row7.get("reason") == "stable_bound", f"row={row7}")
+check("...and the printed line does not falsely claim STABLE 2x",
+      "STABLE 2x" not in out7, repr(out7))
+check("...release timing is unchanged by the fix (bound-forced, within one "
+      "poll_interval of the bound)",
+      o.READABLE_HAND_BOUND <= dt7 <= o.READABLE_HAND_BOUND + 1.0 + 0.1,
+      f"released at {dt7:.2f}s (bound {o.READABLE_HAND_BOUND}s)")
+
+# Control: a GENUINE double-stable complete read (never near the bound) must still
+# say "stable" and print "STABLE 2x" -- the fix must not flip the healthy case too.
+released8, dt8, out8 = drive([COMPLETE_SIG], no_motion_needed=True, motion_seen=False,
+                             poll_interval=0.15, max_wait=3.0)
+row8 = getattr(drive, "last_row", None)
+check("a genuine stable-twice complete read still records reason=stable",
+      row8 is not None and row8.get("reason") == "stable", f"row={row8}")
+check("...and still prints STABLE 2x", "STABLE 2x" in out8, repr(out8))
 
 # ---- (f) structural: the half-change and match-start call sites exist -----------
 # CONTIGUOUS substrings, not "somewhere before" (an rfind-anywhere-before check
