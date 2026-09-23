@@ -164,6 +164,25 @@ RAISED_SEARCH_R = 18            # passed to read_digit, which searches DIGIT_RAD
 TACTICS_PROMOTE_MIN = 0.80     # above the 0.695 max seen on any PLAYER slot; see _read_fan
 
 
+def _raised_digit_search(img, anchor_x, anchor_y, s):
+    """Best (digit, score, (x, y)) in the raised-card window around one player
+    anchor, or (None, 0.0, None). Scans read_digit's own MIN_SCORE-gated match
+    over RAISED_SEARCH_DY/DX/STEP/R -- unchanged constants, shared by every
+    caller so a widened or narrowed window is felt everywhere at once (I-62).
+    """
+    y0, y1 = int(anchor_y + RAISED_SEARCH_DY[0] * s), int(anchor_y + RAISED_SEARCH_DY[1] * s)
+    x0, x1 = int(anchor_x - RAISED_SEARCH_DX * s), int(anchor_x + RAISED_SEARCH_DX * s)
+    step = max(1, int(round(RAISED_SEARCH_STEP * s)))
+    rad = int(round(RAISED_SEARCH_R * s))
+    best_d, best_sc, best_xy = None, 0.0, None
+    for cy in range(y0, y1 + 1, step):
+        for cx in range(x0, x1 + 1, step):
+            d, sc = read_digit(img, (cx, cy, rad))
+            if sc > best_sc:
+                best_d, best_sc, best_xy = d, sc, (cx, cy)
+    return best_d, best_sc, best_xy
+
+
 def find_tactics(img, dark_max=110):
     """Locate a TACTICS card's circle, which the player-card reader cannot see.
 
@@ -949,6 +968,46 @@ def _read_fan(img, strong):
     out = []
     for i in range(5):
         if best[i] is None:
+            # I-62: A CARD RAISED SO FAR THAT NO CANDIDATE EVER LANDED WITHIN SLOT_TOL
+            # skips every disc-finding pass above, and the THIRD RAISED-SEARCH PASS
+            # near the end of this function never reaches it either -- that pass only
+            # revisits a row already emitted with kind=="player", and a slot with no
+            # candidate at all is never emitted that way. Measured on the evidence
+            # this gap produces (agent_progress/issues/I-62/progress.md): a
+            # select-time refusal whose target card was raised ~43-54 anchor px and
+            # separately mislabelled kind="tactics" by a banner false-positive on a
+            # nearby wreath graphic (type_score 0.663, clearing TACTICS_PRESENT_MIN
+            # 0.58) never got a chance at ANY digit search, though its own digit
+            # reads at 0.882 once searched -- comfortably clear of MIN_SCORE, not a
+            # marginal case.
+            #
+            # So: try the SAME raised-digit search the third pass runs below, at the
+            # SAME constants (RAISED_SEARCH_DY/DX/STEP/R, unchanged), from THIS site
+            # too, before deciding kind from the banner. It can only ADD a reading,
+            # gated by read_digit's own MIN_SCORE -- the same guarantee every other
+            # raised-search call in this file already relies on -- never invent one:
+            # a slot with nothing findable here falls through to the banner exactly
+            # as before, unchanged, and a fully-settled hand never reaches this
+            # branch at all (best[i] is already found for every slot), so nothing
+            # already-correct is at risk.
+            #
+            # CENSUS (the i21-census 128 SLOT_TOL-fallback rows are a DIFFERENT
+            # population -- a candidate WAS found there, just with no circle to read
+            # -- and were checked separately: 0/69 player-kind and the tactics-kind
+            # "digit" field is not even what orchestrator drops on. See
+            # agent_progress/issues/I-62/progress.md). Over the 171 "no candidate at
+            # all" dropped_* rows THIS population covers, it recovers 1 (score
+            # 0.966); the refused_select evidence frame recovers at 0.882.
+            ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
+            rd, rsc, rxy = _raised_digit_search(img, ax, ay, s)
+            if rd is not None:
+                row = {"x": rxy[0], "kind": "player", "digit": rd, "score": round(rsc, 3),
+                       "y": rxy[1], "y_measured": True, "_slot_i": i, "y_from": "disc",
+                       "digit_from_raised_search": True}
+                row["secondary"], ss = read_shield(img, rxy[0], rxy[1])
+                row["secondary_score"] = ss
+                out.append(row)
+                continue
             # A slot no candidate reached. It is emitted anyway -- when the fan fits the
             # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
             # WHAT KIND IS A SLOT NOTHING REACHED? This branch used to answer
@@ -1140,16 +1199,7 @@ def _read_fan(img, strong):
         if i is None or not (0 <= i < len(SLOT_PLAYER)):
             continue
         ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
-        y0, y1 = int(ay + RAISED_SEARCH_DY[0] * s), int(ay + RAISED_SEARCH_DY[1] * s)
-        x0, x1 = int(ax - RAISED_SEARCH_DX * s), int(ax + RAISED_SEARCH_DX * s)
-        step = max(1, int(round(RAISED_SEARCH_STEP * s)))
-        rad = int(round(RAISED_SEARCH_R * s))
-        best_d, best_sc, best_xy = None, 0.0, None
-        for cy in range(y0, y1 + 1, step):
-            for cx in range(x0, x1 + 1, step):
-                d, sc2 = read_digit(img, (cx, cy, rad))
-                if sc2 > best_sc:
-                    best_d, best_sc, best_xy = d, sc2, (cx, cy)
+        best_d, best_sc, best_xy = _raised_digit_search(img, ax, ay, s)
         if best_d is not None:
             r["digit"], r["score"] = best_d, round(best_sc, 3)
             r["digit_from_raised_search"] = True
