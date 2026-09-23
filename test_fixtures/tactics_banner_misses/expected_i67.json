@@ -1,0 +1,16 @@
+{
+ "note": "I-67: after I-64's BANNER_SEARCH step fix, 8 of the user's 14 hand-labelled readable tactics slots (test_fixtures/user_truth/20260923_c20-26/labels.json) still missed MIN_TYPE_SCORE. A SLOT x TYPE census over 510 diagnostics/deal_frames/*/hand.png (agent_progress/issues/I-67/measure.py slot_census()) found real bank-coverage gaps at slot 1 speed_boost (95.8% rejected, n=24), slot 1 fielding_boost (88.9%, n=9), slot 3 fielding_boost (64.3%, n=14 -- the 12 existing donors never covered this card's x~644), slot 4 swing_boost (50.0%, n=8), and slot 2 speed_boost (45.0%, n=20). Fix: 4 new DONORS entries in tools/build_hand_tactics_templates.py, one per cell, cut from the confirmed frames at their found positions (same mechanism as the existing 12 fielding_boost + 1 pitch_boost donors, not a new code path). tactics_templates.npz grew 373 -> 377 templates. Recovers 5/8: q16, q23, q29, q56 (each IS its own donor) and q18 (fielding_boost slot 3, a DIFFERENT frame from the q16 donor -- 0.784 -> 0.989, proving the fix generalises rather than only matching itself, same shape as I-22's turn1/turn4 pair). NOT recovered, measured and left as-is: q53 (swing_boost slot4, best match against the new donor itself is only 0.715 -- these two cards are not similar enough for one donor to bridge), q62 (speed_boost slot0 -- that cell is not a census gap, 5.6% rejected n=18, so its miss is a one-off), q75 (speed_boost slot4, improved 0.699->0.752 via the slot-1 donor but still short). Also includes the 4 user-confirmed clipped PLAYER banners (q11/q39/q74 pitcher, q45 batter) as controls: the bank change must never make one read kind=='tactics'.",
+ "misses": [
+  {"file": "i67_donor_q16_fielding_slot3.png", "src": "dropped_1790055316657488000", "q": 16, "slot": 3, "expected_type": "fielding_boost", "expected_bonus": 1, "is_donor": true},
+  {"file": "i67_recovered_q18_fielding_slot3_heldout.png", "src": "dropped_1790055333901386000", "q": 18, "slot": 3, "expected_type": "fielding_boost", "expected_bonus": 1, "is_donor": false},
+  {"file": "i67_donor_q23_speed_slot2_clipped.png", "src": "dropped_1790055450533986000", "q": 23, "slot": 2, "expected_type": "speed_boost", "expected_bonus": 1, "is_donor": true},
+  {"file": "i67_donor_q29_swing_slot4.png", "src": "dropped_1790055807663332000", "q": 29, "slot": 4, "expected_type": "swing_boost", "expected_bonus": 1, "is_donor": true},
+  {"file": "i67_donor_q56_speed_slot1.png", "src": "dropped_1790058947359660000", "q": 56, "slot": 1, "expected_type": "speed_boost", "expected_bonus": 1, "is_donor": true}
+ ],
+ "players": [
+  {"file": "i67_player_q11_pitcher_clipped.png", "src": "dropped_1790054904389425000", "slot": 3, "note": "PITCHER shows as 'CHER'", "expected_kind_not_tactics": true},
+  {"file": "i67_player_q39_pitcher_clipped.png", "src": "dropped_1790056989087709000", "slot": 2, "note": "PITCHER shows as 'CHER'", "expected_kind_not_tactics": true},
+  {"file": "i67_player_q74_pitcher_clipped.png", "src": "dropped_1790060516961250000", "slot": 3, "note": "PITCHER shows as 'CHER'", "expected_kind_not_tactics": true},
+  {"file": "i67_player_q45_batter_clipped.png", "src": "dropped_1790057609024479000", "slot": 3, "note": "BATTER shows as 'ATTER'", "expected_kind_not_tactics": true}
+ ]
+}

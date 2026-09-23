@@ -94,18 +94,68 @@ DONORS = [
     ("overnight/local_hand/hand_1788938103188984000.png", 3, "fielding_boost"),
     ("overnight/local_hand/hand_1788938208525368000.png", 3, "fielding_boost"),
     ("overnight/local_hand/hand_1788938305027886000.png", 3, "fielding_boost"),
-    # I-22, same shape, a different type: a live PITCH FOCUS card sat unplayed in
-    # slot 3 for four consecutive turns and read type_score 0.755-0.764 every
-    # time -- MIN_TYPE_SCORE is 0.85. Its disc lands at x=642 in the 979-wide
-    # crop, well left of the ~661-664 cluster the bank's other pitch_boost
-    # examples were cut from (overnight/local_hand's slot-3 pitch_boost cards
-    # score 0.97 mean against the bank; this card's own crop correlates only
-    # 0.28 against one of those). Not occlusion -- the card is plainly legible
-    # and read_bonus already read it correctly (bonus=1, 0.92-0.94) on every
-    # poll -- and not a timing artefact -- the four polls span tens of seconds
-    # and agree to three decimal places. test_fixtures/hand_reads/README.md
-    # has the full trace. See test_fixtures/hand_reads/README.md; the second of
-    # the two frames it names is kept OUT of this list as an independent check.
+    # I-67, same shape again: the user hand-labelled 8 plainly visible TACTICS
+    # cards (test_fixtures/user_truth/20260923_c20-26/labels.json) that still
+    # missed MIN_TYPE_SCORE after I-64's BANNER_SEARCH step fix. A fresh SLOT x
+    # TYPE census over 510 diagnostics/deal_frames/*/hand.png (measured by
+    # agent_progress/issues/I-67/measure.py's slot_census(), same shape as the
+    # 2026-09-20 census above) found the gaps were never closed for these
+    # cells:
+    #
+    #     slot 1 speed_boost      n=24   95.8% rejected
+    #     slot 1 fielding_boost   n= 9   88.9% rejected
+    #     slot 3 fielding_boost   n=14   64.3% rejected   (the 12 donors above
+    #                                                       never covered x~644)
+    #     slot 4 swing_boost      n= 8   50.0% rejected
+    #
+    # Three donors, one per worst-hit cell reachable from the labelled set (slot
+    # 0 speed_boost/fielding_boost/swing_boost are already <6% rejected -- NOT a
+    # gap, so q62's individual miss there is left unfixed rather than papered
+    # over with an unjustified donor):
+    ("test_fixtures/hand_reads/i67_fielding_boost_slot3_q16.png", 3, "fielding_boost"),
+    ("test_fixtures/hand_reads/i67_swing_boost_slot4_q29.png", 4, "swing_boost"),
+    ("test_fixtures/hand_reads/i67_speed_boost_slot1_q56.png", 1, "speed_boost"),
+    # A fourth cell, added after the three above were built and MEASURED: slot 2
+    # speed_boost, 45.0% rejected (n=20) in the same census. This donor's own
+    # source frame is ALSO left-edge clipped by the neighbour ("SPEED BOOST" ->
+    # "PEED BOOST") -- the same shape as the slot-3 fielding_boost donor above,
+    # whose fix generalised cleanly to a DIFFERENT clipped frame at that slot
+    # (q18: 0.784 -> 0.989) rather than merely matching itself. No second
+    # clipped slot-2 speed_boost frame is available to hold out the same way;
+    # this one is n=1, stated rather than hidden (CLAUDE.md 10.4 / I-22 style).
+    ("test_fixtures/hand_reads/i67_speed_boost_slot2_q23_clipped.png", 2, "speed_boost"),
+    # Held out (NOT donors), to check the fix generalises rather than matching
+    # itself: q18 (fielding_boost, SAME slot 3, a different frame -- like I-22's
+    # turn1/turn4 pair; recovers 0.784 -> 0.989). NOT recovered by any donor
+    # above, measured and left as-is rather than forced: q53 (swing_boost, same
+    # slot 4 as the donor, a different frame -- best match against the new donor
+    # itself is only 0.715, lower than its existing best of 0.840; these two
+    # cards are not visually similar enough for one donor to bridge, and a
+    # second untested donor was not added rather than ship an unvalidated
+    # double-donor cell), q75 and q62 (speed_boost, slots 4 and 0 -- q62's cell,
+    # slot 0 speed_boost, is NOT a census gap at all, 5.6% rejected n=18, so its
+    # individual miss is a one-off left unfixed rather than papered over). See
+    # agent_progress/issues/I-67/progress.md for the full recovery table.
+    #
+    # I-22 MOVED HERE (was appended before the block above): a live PITCH FOCUS
+    # card sat unplayed in slot 3 for four consecutive turns and read
+    # type_score 0.755-0.764 every time -- MIN_TYPE_SCORE is 0.85. Its disc
+    # lands at x=642 in the 979-wide crop, well left of the ~661-664 cluster
+    # the bank's other pitch_boost examples were cut from (overnight/
+    # local_hand's slot-3 pitch_boost cards score 0.97 mean against the bank;
+    # this card's own crop correlates only 0.28 against one of those). Not
+    # occlusion -- the card is plainly legible and read_bonus already read it
+    # correctly (bonus=1, 0.92-0.94) on every poll -- and not a timing
+    # artefact -- the four polls span tens of seconds and agree to three
+    # decimal places. test_fixtures/hand_reads/README.md has the full trace;
+    # the second of the two frames it names is kept OUT of this list as an
+    # independent check.
+    #
+    # KEPT LAST, DELIBERATELY: tests/minigame/test_i22_pitch_boost_slot3.py's
+    # own mutation check strips `_type_templates()[-1]` and asserts that is
+    # the I-22 donor -- moved here (instead of appending the I-67 block after
+    # it) so that test needs no edit. A future ticket appending more donors
+    # should insert BEFORE this entry, or update that test's slice.
     ("test_fixtures/hand_reads/i22_pitch_boost_slot3_turn1.png", 3, "pitch_boost"),
 ]
 
