@@ -91,13 +91,18 @@ check("if POST_PLAY_WAIT_FOR_DEAL:\n" not in src, "the loop no longer reads the 
 def run(deltas, max_wait=35.0):
     calls = {"grab": 0, "delta": 0}
     it = iter(deltas)
-    # the gate now ALSO requires the hand SIGNATURE to repeat -- the deal has FINISHED,
-    # not merely begun. That half is owned by test_readable_hand_gate.py, which drives
-    # every branch of it. A constant signature satisfies it here so these checks still
-    # measure the EDGE timing they were written for.
+    # the gate now ALSO requires the hand SIGNATURE to repeat AND be COMPLETE
+    # (I-65 round 2) -- the deal has FINISHED, not merely begun. That half is owned
+    # by test_readable_hand_gate.py and test_hand_gate_completeness.py, which drive
+    # every branch of it. A constant, PRODUCTION-SHAPED complete signature satisfies
+    # it here so these checks still measure the EDGE timing they were written for --
+    # an unrecognised shape like the plain string this used to return is judged
+    # permanently INCOMPLETE and only releases at READABLE_HAND_BOUND, which would
+    # blow the "< 4.0s" bound below for the wrong reason.
     real = (_o._grab_settle_regions, _o._mean_abs_delta, _o.time,
             _o._hand_signature, _o.crop_gameplay_regions, _o._fast_grab)
-    _o._hand_signature = lambda img: "settled"
+    _COMPLETE_SIG = tuple(("player", 5, None, None) for _ in range(5))
+    _o._hand_signature = lambda img: _COMPLETE_SIG
     _o.crop_gameplay_regions = lambda img: [("hand", object())]
     _o._fast_grab = lambda: object()
     clock = [1000.0]

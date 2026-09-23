@@ -140,7 +140,11 @@ def _run_deal_gate(deltas, sig_fn, max_wait, poll_interval=0.05,
 
 
 # 1. NOTHING DEALT: the delta never crosses the threshold. seen stays False.
-_const_sig = lambda img: "SIG"  # noqa: E731
+# A real production-shaped, COMPLETE signature (I-65 round 2): scenario 1 never
+# reaches it (seen stays False), but scenario 3 (STABLE, below) needs a signature
+# `_sig_unread_slots` actually judges complete, or it would sit INCOMPLETE forever
+# and only release at READABLE_HAND_BOUND instead of the ordinary stable-twice point.
+_const_sig = lambda img: tuple(("player", 5, None, None) for _ in range(5))  # noqa: E731
 result1 = _run_deal_gate(deltas=[5.0], sig_fn=_const_sig, max_wait=0.4)
 row1 = _last_deal_row()
 check(result1 is False,

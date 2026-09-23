@@ -39,6 +39,16 @@ check("the gate is on", orchestrator.USE_READABLE_HAND_GATE is True)
 check("it needs TWO clean reads, not one", orchestrator.READABLE_POLLS == 2,
       str(orchestrator.READABLE_POLLS))
 
+# I-65 round 2: this file tests STABILITY, not completeness, but the release rule now
+# checks both off the SAME signature -- so the stand-in for "the hand has read" must be
+# a REAL production shape (5 rows of (kind, digit, secondary, type)) or the new
+# completeness check judges it permanently unread and every case below would wait out
+# READABLE_HAND_BOUND instead of releasing on the poll count these cases are pinning.
+# `()` stands in for "still animating" for the same reason: it is what
+# `local_hand._read_ungated` actually returns for an empty table, the dominant
+# mid-deal shape (I-65 round 1 skeptic, s3_shapes.py).
+COMPLETE_SIG = tuple(("player", 5, None, None) for _ in range(5))
+
 
 def drive(readable_from, floor=0.0, max_wait=6.0, predicted_bases=None):
     """Run the real gate with everything around it stubbed. `readable_from` is the poll
@@ -53,11 +63,11 @@ def drive(readable_from, floor=0.0, max_wait=6.0, predicted_bases=None):
         return 999.0                       # the edge is always seen, so only the new rule decides
 
     def fake_sig(img):
-        # THE GATE NOW ASKS FOR A SIGNATURE, not for a complete hand: it releases when the
-        # hand STOPS CHANGING. Requiring completeness cost 280 SECONDS of timeouts over one
-        # 46-play run, and the hand memory makes an incomplete hand usable anyway.
-        # Before `readable_from` the signature changes every poll; after it, it is steady.
-        return ("steady",) if calls["n"] >= readable_from else ("moving", calls["n"])
+        # THE GATE ASKS FOR A SIGNATURE THAT IS BOTH STABLE AND COMPLETE (I-65 round 2).
+        # Before `readable_from` the signature changes every poll (still animating,
+        # `()`-shaped like the real ungated path); after it, it is a real complete hand,
+        # steady.
+        return COMPLETE_SIG if calls["n"] >= readable_from else ()
 
     saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
              orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
@@ -109,7 +119,7 @@ try:
     _n = {"i": 0}
     def flicker_sig(img):
         _n["i"] += 1
-        return ("steady",) if _n["i"] in (2, 3) else ("moving", _n["i"])
+        return COMPLETE_SIG if _n["i"] in (2, 3) else ("moving", _n["i"])
     orchestrator._hand_signature = flicker_sig
     orchestrator._fast_grab = lambda: object()
     orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
@@ -143,7 +153,7 @@ try:
     _m = {"i": 0}
     def spaced_sig(img):
         _m["i"] += 1
-        return ("steady",) if _m["i"] in (2, 6) else ("moving", _m["i"])
+        return COMPLETE_SIG if _m["i"] in (2, 6) else ("moving", _m["i"])
     orchestrator._hand_signature = spaced_sig
     orchestrator._fast_grab = lambda: object()
     orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
