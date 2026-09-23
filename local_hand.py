@@ -316,6 +316,111 @@ def _raised_or_resting_search(img, anchor_x, anchor_y, s):
     return d, sc, xy, True
 
 
+# I-70: A DISC PARTLY COVERED BY THE NEXT CARD reads nothing, because the covering card's
+# edge sits inside read_digit's crop and drags every template's correlation down with it --
+# MEASURED (agent_progress/issues/I-70/progress.md) at 0.53-0.78 against MIN_SCORE's 0.80,
+# on 29 frames the USER could still read by eye ("slightly" covered). The next card overlaps
+# this slot's disc from the RIGHT (the disc sits top-right of the card, and the fan lays the
+# next card over that corner), so the LEFT part of the crop is still real digit ink even when
+# the right part is not.
+#
+# Dropping the right columns from BOTH the crop and the templates before correlating
+# recovers it. Swept keep_cols 24 (=off) down to 12 against the 29 labelled "slightly" slots
+# (27 with a certain, non-guessed power) and two FALSE populations -- 23 corpus frames the
+# ungated reader already abstains on (truth by same-hand grouping, every flagged case
+# re-verified by eye against the actual frame) and 200 ALREADY-CONFIDENT reads (a do-no-harm
+# resweep: does this ever propose a DIFFERENT digit at score>=MIN_SCORE for a slot the
+# ungated reader already answered correctly?):
+#
+#     keep_cols   recovered/27   wrong, "slightly" set   wrong, 23 corpus   flips/200
+#         18            9             0                        --              --
+#         16           14             0                    0 (1 flagged,        --
+#                                                            re-verified correct)
+#         14           20             0                    0 (ditto)             0
+#         12           24             1 (a 4 read as 1)        --              --
+#
+# 14 is shipped: the floor with zero measured wrong reads anywhere, not the ceiling of what
+# recovers -- 12 recovers one more but starts colliding 4/1, a real confusion once only the
+# left half survives.
+#
+# ponytail: a FIXED left-column crop, not a per-frame occlusion boundary measured from the
+# neighbour card's actual edge (the harder version of this idea, and the one first proposed).
+# Far less code, and it already clears the bar on every set measured so far -- revisit a
+# measured boundary only if a future label set shows keep=14 missing recoverable cards, or
+# costing a wrong read.
+LEFT_MASK_COLS = 14              # of SIDE (24) columns kept, left-aligned
+LEFT_MASK_STEP = 3               # anchor px grid step -- the exact step measured above;
+                                  # not I-66's RESTING_SEARCH_COARSE_STEP (7), untested here
+
+_mask_cache = {}
+
+
+def _masked_vector(img, box, keep_cols):
+    """Like _vector, but over only the LEFT keep_cols columns of the resized tile.
+    Mean and norm come from that sub-region alone, so a covered right half cannot
+    pull the query off-centre -- see LEFT_MASK_COLS above.
+    """
+    p = img.crop(box).convert("L").resize((SIDE, SIDE), Image.LANCZOS)
+    a = np.asarray(p, dtype=np.float32)[:, :keep_cols]
+    a = a - a.mean()
+    n = np.linalg.norm(a)
+    return None if n < 1e-6 else a.ravel() / n
+
+
+def _masked_templates(keep_cols):
+    """The digit bank's own vectors, cropped to the same LEFT keep_cols and
+    re-normalised, cached per keep_cols (production only ever asks for one,
+    LEFT_MASK_COLS). This slices the bank's already full-tile-normalised vectors
+    and re-norms them -- it does NOT re-derive a mean from just the sub-region,
+    unlike _masked_vector above. That asymmetry looks odd but is deliberate: it
+    is the exact transform the table in LEFT_MASK_COLS measured, because the
+    bank's source crops are not available to re-cut (see build_digit_templates.py).
+    """
+    if keep_cols not in _mask_cache:
+        vecs, digits = _templates()
+        grid = vecs.reshape(-1, SIDE, SIDE)[:, :, :keep_cols].reshape(len(digits), -1)
+        norm = np.linalg.norm(grid, axis=1, keepdims=True)
+        norm[norm < 1e-6] = 1.0
+        _mask_cache[keep_cols] = (grid / norm, digits)
+    return _mask_cache[keep_cols]
+
+
+def _left_masked_digit_search(img, anchor_x, anchor_y, s, keep_cols=LEFT_MASK_COLS):
+    """Best (digit, score, (x, y)) over the SAME resting-card window
+    _resting_digit_search uses (I-70's covered discs sit at rest, just partly
+    covered -- never raised), scored on the LEFT keep_cols columns only.
+
+    A single full grid over window x DIGIT_RADII, not the coarse/fine staging
+    _resting_digit_search uses -- this is the LAST of four fallback passes
+    (kind=='player' and every earlier pass, including the unmasked resting
+    search, already failed), so it is already rare. Stage it later if that
+    stops being true (I-66 round 2 has the pattern).
+    """
+    tvecs, tdigits = _masked_templates(keep_cols)
+    rad = int(round(RESTING_SEARCH_R * s))
+    y0, y1 = int(anchor_y + RESTING_SEARCH_DY[0] * s), int(anchor_y + RESTING_SEARCH_DY[1] * s)
+    x0, x1 = int(anchor_x + RESTING_SEARCH_DX[0] * s), int(anchor_x + RESTING_SEARCH_DX[1] * s)
+    step = max(1, int(round(LEFT_MASK_STEP * s)))
+    best_d, best_sc, best_xy = None, 0.0, None
+    for cy in range(y0, y1 + 1, step):
+        for cx in range(x0, x1 + 1, step):
+            for dr in DIGIT_RADII:
+                rr = int((rad + dr) * 1.05)
+                if rr < 4:
+                    continue
+                v = _masked_vector(img, (max(0, cx - rr), max(0, cy - rr),
+                                          min(img.width, cx + rr), min(img.height, cy + rr)),
+                                    keep_cols)
+                if v is None:
+                    continue
+                scores = tvecs @ v
+                k = int(scores.argmax())
+                sc = float(scores[k])
+                if sc > best_sc:
+                    best_d, best_sc, best_xy = tdigits[k], sc, (cx, cy)
+    return (best_d if best_sc >= MIN_SCORE else None), best_sc, best_xy
+
+
 def find_tactics(img, dark_max=110):
     """Locate a TACTICS card's circle, which the player-card reader cannot see.
 
@@ -1197,6 +1302,22 @@ def _read_fan(img, strong):
                 row["secondary_score"] = ss
                 out.append(row)
                 continue
+            # I-70: NO CANDIDATE AT ALL is exactly what a covered disc's shape gives the
+            # finder on several of the 29 measured "slightly" slots (I-69's note: the
+            # shape detector locks onto the COVERING card's edge, not a candidate at this
+            # slot). Without this, those rows fell all the way through to "ask the paid
+            # model" and the left-masked pass below -- gated on kind=='player' like every
+            # pass before it -- never got a turn. Same measurement, same LEFT_MASK_COLS,
+            # same digit is None gate (there is no digit here to protect).
+            md, msc, mxy = _left_masked_digit_search(img, ax, ay, s)
+            if md is not None:
+                row = {"x": mxy[0], "kind": "player", "digit": md, "score": round(msc, 3),
+                       "y": mxy[1], "y_measured": True, "_slot_i": i, "y_from": "disc",
+                       "digit_from_left_masked_search": True}
+                row["secondary"], ss = read_shield(img, mxy[0], mxy[1])
+                row["secondary_score"] = ss
+                out.append(row)
+                continue
             # A slot no candidate reached. It is emitted anyway -- when the fan fits the
             # hand HAS five cards -- with no digit, which the caller reads as "ask the API".
             # WHAT KIND IS A SLOT NOTHING REACHED? This branch used to answer
@@ -1409,6 +1530,25 @@ def _read_fan(img, strong):
             # x from whatever earlier pass produced it -- on 3 of 34 real hits that was
             # the decorative icon, 50-67px from the digit actually read, so (x, y) was
             # not one point.
+            r["x"], r["y"], r["y_from"] = best_xy[0], best_xy[1], "disc"
+
+    # I-70: a FOURTH and last pass, for a PLAYER slot every pass above still leaves
+    # unread. The disc sits at its usual resting spot (the raised/resting search above
+    # already covers a genuinely raised or displaced card) but the covering card next to
+    # it drags the ungated correlation below MIN_SCORE -- see LEFT_MASK_COLS above for the
+    # measurement. Same safety shape as every pass before it: gated on digit is None, so
+    # it can only ADD a reading and cannot change one already found.
+    for r in out:
+        if r.get("kind") != "player" or r.get("digit") is not None:
+            continue
+        i = r.get("_slot_i")
+        if i is None or not (0 <= i < len(SLOT_PLAYER)):
+            continue
+        ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
+        best_d, best_sc, best_xy = _left_masked_digit_search(img, ax, ay, s)
+        if best_d is not None:
+            r["digit"], r["score"] = best_d, round(best_sc, 3)
+            r["digit_from_left_masked_search"] = True
             r["x"], r["y"], r["y_from"] = best_xy[0], best_xy[1], "disc"
 
     return out
