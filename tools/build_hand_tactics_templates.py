@@ -137,6 +137,15 @@ DONORS = [
     # individual miss is a one-off left unfixed rather than papered over). See
     # agent_progress/issues/I-67/progress.md for the full recovery table.
     #
+    # Opus skeptic, leave-one-out: q16 (slot 3 fielding, clipped left) and q23
+    # (slot 2 speed, clipped left) carry the held-out evidence. q16 recovers
+    # 4/8 in its cell. q23 recovers 45 frames (6 episodes) across slots 1-3,
+    # because the bank is slot-agnostic. q18 is the SAME card as q16 on the
+    # next poll, 17 s later -- not independent evidence. q56 recovers 1 other
+    # frame. q29 has NO held-out support: 0/3 in its cell, a self-match only;
+    # revisit it if a new slot-4 swing miss appears. Across 7,217 frames there
+    # are 0 wrong reads; 55/55 new reads were checked by eye.
+    #
     # I-22 MOVED HERE (was appended before the block above): a live PITCH FOCUS
     # card sat unplayed in slot 3 for four consecutive turns and read
     # type_score 0.755-0.764 every time -- MIN_TYPE_SCORE is 0.85. Its disc
