@@ -131,9 +131,14 @@ try:
     check(len(_slept) == 0, f"no re-look means no sleep; got {_slept!r}")
 
     # =====================================================================
-    print("(b) CONTROL: a NON-want slot that stays blind through the re-look "
-          "is still refused -- the exemption is narrow, not blanket")
+    print("(b) CONTROL: a NON-want slot that stays blind through the whole "
+          "bounded re-look window is still refused -- the exemption is "
+          "narrow, not blanket")
     # =====================================================================
+    # I-63: the bound is now ic._STRAY_RELOOK_MAX_ATTEMPTS looks past the
+    # first (agent_progress/issues/I-63/measure.py), not a single re-look --
+    # ScriptedLook repeats its last entry past the end of the script, so a
+    # 2-entry script still exercises "stays blind for every attempt".
     _slept.clear()
     want = {2}
     # slot 2 (the target) is genuinely selected and readable throughout; slot 0
@@ -142,13 +147,16 @@ try:
     look2 = (_flat_glow({2}), [None, REST[1], REST[2] - 44, REST[3], REST[4]], N, [2])
     scr = ScriptedLook([look1, look2])
     ok = ic._clear_strays(want, scr.look, blind_before=set())
-    check(ok is False, f"a NON-want slot that stays blind after the re-look must "
-          f"still refuse; got {ok!r}")
-    check(scr.calls == 2, f"exactly one extra look past the first -- got "
-          f"{scr.calls} look() calls")
-    check(len(_slept) == 1 and abs(_slept[0] - ic.SELECT_RETRY_CONFIRM_SEC) < 1e-9,
-          f"the one sleep must be SELECT_RETRY_CONFIRM_SEC ({ic.SELECT_RETRY_CONFIRM_SEC}); "
-          f"got {_slept!r}")
+    check(ok is False, f"a NON-want slot that stays blind through the whole "
+          f"re-look window must still refuse; got {ok!r}")
+    _expected_calls = 1 + ic._STRAY_RELOOK_MAX_ATTEMPTS
+    check(scr.calls == _expected_calls, f"the first look plus every bounded "
+          f"re-look, none of them recovering -- expected {_expected_calls}, "
+          f"got {scr.calls} look() calls")
+    check(len(_slept) == ic._STRAY_RELOOK_MAX_ATTEMPTS
+          and all(abs(s - ic.SELECT_RETRY_CONFIRM_SEC) < 1e-9 for s in _slept),
+          f"every sleep must be SELECT_RETRY_CONFIRM_SEC ({ic.SELECT_RETRY_CONFIRM_SEC}), "
+          f"{ic._STRAY_RELOOK_MAX_ATTEMPTS} of them; got {_slept!r}")
 
     # =====================================================================
     print("(c) an inferred-selected target next to a genuinely lifted NON-want "
