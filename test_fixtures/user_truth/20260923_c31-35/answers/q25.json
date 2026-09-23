@@ -1,0 +1,16 @@
+{
+  "bonus": "",
+  "bonus_guess": false,
+  "card": "batter 8/1",
+  "frame": "dropped_1790185438007018000",
+  "note": "",
+  "power": 8,
+  "power_guess": false,
+  "q": 25,
+  "sec": 1,
+  "sec_guess": false,
+  "slot": 3,
+  "type": "batter",
+  "updatedAt": "2026-09-23T18:00:27.922Z",
+  "verdict": "animating"
+}

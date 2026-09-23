@@ -1,0 +1,8 @@
+{"_source": "user labels 2026-09-23 on I-70's 7 label requests (artifact 7PnTHz5Lb2dWTCQDvRnBnU); i70_read = the masked reader's digit",
+ "q01": {"frame": "dropped_1789966557033400000", "slot": 1, "verdict": "slightly", "type": "batter", "power": 4, "sec": 3, "i70_read": 4},
+ "q02": {"frame": "dropped_1789940127060180000", "slot": 1, "verdict": "slightly", "type": "batter", "power": 5, "sec": 3, "sec_guess": true, "i70_read": 5},
+ "q03": {"frame": "dropped_1789990042346853000", "slot": 2, "verdict": "slightly", "type": "batter", "power": 4, "sec": 3, "i70_read": 4},
+ "q04": {"frame": "dropped_1790060400615950000", "slot": 4, "verdict": "animating", "type": "batter", "power": 4, "sec": 3, "i70_read": 4},
+ "q05": {"frame": "dropped_1789966382612695000", "slot": 1, "verdict": "slightly", "type": "batter", "power": 4, "sec": 3, "i70_read": 4},
+ "q06": {"frame": "dropped_1789991445780539000", "slot": 0, "verdict": "slightly", "type": "batter", "power": 4, "sec": 3, "i70_read": 4},
+ "q07": {"frame": "refused_select_1790055477065916000", "slot": 0, "verdict": "slightly", "type": "batter", "power": 5, "sec": 3, "i70_read": 5}}
