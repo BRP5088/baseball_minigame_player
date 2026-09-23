@@ -58,10 +58,10 @@ check(names == {"follow"},
       "switch needs a live A/B first (GRAVEYARD.md: 13 navigation changes moved nothing)")
 
 # ...and the doc must agree with whichever it is.
-cm = open(os.path.join(_ROOT, "CLAUDE.md")).read()
+cm = open(os.path.join(_ROOT, "NAVIGATION.md")).read()
 check("does not run on the production path" in cm.lower()
       or "DOES NOT RUN ON THE PRODUCTION PATH" in cm,
-      "CLAUDE.md section 8(f) says plainly that failure_kind is harness-only")
+      "NAVIGATION.md section 8(f) says plainly that failure_kind is harness-only")
 
 print()
 if fails:

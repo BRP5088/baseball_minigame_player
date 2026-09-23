@@ -111,7 +111,12 @@ def _fmt(v):
 
 
 DEFINED = defined_constants()
-DOC = open(os.path.join(_ROOT, "CLAUDE.md")).read()
+# CLAUDE.md is the core; the record was split into these topic files (2026-09-22).
+# A new topic file must be added here or its constants go unchecked.
+CONTEXT_FILES = ["CLAUDE.md", "RIG.md", "READERS.md", "GAME.md", "INPUT.md",
+                 "NAVIGATION.md", "METHODOLOGY.md", "OPEN.md"]
+DOCS = {f: open(os.path.join(_ROOT, f)).read() for f in CONTEXT_FILES}
+DOC = "\n".join(DOCS.values())
 
 # --- controls, first: this test must not be able to pass by scanning nothing ---
 check(len(DEFINED) > 300,
@@ -131,12 +136,14 @@ check(len(stale_quotes(_excused, DEFINED)) == len(stale_quotes(DOC, DEFINED)),
       "CONTROL: prose recording a change (0.42 -> 0.99) is NOT flagged")
 
 # --- the check itself ---
-stale = stale_quotes(DOC, DEFINED)
-for line, name, claimed, defs in stale:
-    where = ", ".join(f"{f}={_fmt(v)}" for f, v in defs)
-    print(f"      CLAUDE.md:{line}  {name} quoted {_fmt(claimed)}  but source says {where}")
+stale = []
+for doc_name, doc in DOCS.items():
+    for line, name, claimed, defs in stale_quotes(doc, DEFINED):
+        where = ", ".join(f"{f}={_fmt(v)}" for f, v in defs)
+        print(f"      {doc_name}:{line}  {name} quoted {_fmt(claimed)}  but source says {where}")
+        stale.append(name)
 check(not stale,
-      f"every constant CLAUDE.md quotes matches its source ({len(stale)} stale)")
+      f"every constant CLAUDE.md and its topic files quote matches its source ({len(stale)} stale)")
 
 print()
 if fails:
