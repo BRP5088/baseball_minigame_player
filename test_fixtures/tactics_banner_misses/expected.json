@@ -1,0 +1,18 @@
+{
+ "note": "I-64: 19 of 70 UNKNOWN-slot census rows (agent_progress/unknown-slot-census/) were kind=='tactics' by POSITION (a wreath/disc candidate found geometrically, independent of the banner) whose TYPE banner scored 0.674-0.844, under MIN_TYPE_SCORE (0.85). Re-measured at each row's own found (x, y): the true peak sits at ox=+-2, which the shipped BANNER_SEARCH step (4 in x) never sampled. Ground truth is the user's hand labels (test_fixtures/user_truth/20260923_c20-26/labels.json): of 14 readable tactics slots, this fix recovers 6, all correct, 0 wrong (agent_progress/issues/I-64/measure_step1e_ground_truth.py). 5 of the 6 are fixtured here for TYPE diversity. A second cause (left-edge occlusion by the neighbouring card) was measured and NOT shipped -- see local_hand.py's comment above read_tactics_type.",
+ "misses": [
+  {"file": "miss_q8_pitch_stepfix.png", "src": "dropped_1790054602679500000", "q": 8, "slot": 2, "expected_type": "pitch_boost", "shipped_step_score": 0.804, "recovered_score": 0.905},
+  {"file": "miss_q28_pitch_stepfix.png", "src": "dropped_1790055543753872000", "q": 28, "slot": 3, "expected_type": "pitch_boost", "shipped_step_score": 0.816, "recovered_score": 0.918},
+  {"file": "miss_q48_swing_stepfix.png", "src": "dropped_1790057943563937000", "q": 48, "slot": 3, "expected_type": "swing_boost", "shipped_step_score": 0.844, "recovered_score": 0.885},
+  {"file": "miss_q52_fielding_stepfix.png", "src": "dropped_1790058534359331000", "q": 52, "slot": 2, "expected_type": "fielding_boost", "shipped_step_score": 0.840, "recovered_score": 0.939},
+  {"file": "miss_q58_pitch_stepfix.png", "src": "dropped_1790059070289830000", "q": 58, "slot": 3, "expected_type": "pitch_boost", "shipped_step_score": 0.807, "recovered_score": 0.930}
+ ],
+ "player": {
+  "file": "player_must_stay_player.png",
+  "src": "refused_select_1790046227383193000",
+  "slot": 3,
+  "note": "the highest fine-step tactics-banner score of any real PLAYER card over the 510-hand.png corpus (agent_progress/issues/I-64/step1c_results.json): 0.714, still 0.136 under MIN_TYPE_SCORE. Must stay kind=='player' with digit '8' and never acquire a tactics type.",
+  "expected_kind": "player",
+  "expected_digit": "8"
+ }
+}
