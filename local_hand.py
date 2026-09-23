@@ -483,7 +483,32 @@ BANNER_SIZE = (48, 20)
 # How far to slide the crop looking for its best fit. Measured: +-12 is enough, and
 # +-32 and +-48 buy nothing, because recentring on the found card has already done the
 # work -- a located tactics card sits within 30px of its slot anchor in x, 7px in y.
-BANNER_SEARCH = tuple((ox, oy) for ox in range(-12, 13, 4) for oy in range(-6, 7, 3))
+#
+# I-64: THE RANGE WAS FINE. THE X STEP WAS TOO COARSE AND STRADDLED THE PEAK.
+# 19 position-confirmed tactics cards scored 0.674-0.844 on the TYPE banner, under
+# MIN_TYPE_SCORE (0.85) -- close enough that "the window/range is too narrow" was the
+# obvious read. It was not: re-run at each miss's OWN found (x, y) with a wider +-32x/
+# +-16y grid recovers the SAME 10 of 19 as a grid that keeps the shipped +-12x/+-6y
+# RANGE but halves the X STEP from 4 to 2 (agent_progress/issues/I-64/step1a_results.json,
+# step1b). Every recovered offset sits at ox = +-2, which the step-4 grid (..., -4, 0, 4,
+# ...) never samples -- it straddles the peak on both sides and never lands on it.
+# oy is 0 at every recovered offset, so the y step (3) is untouched.
+#
+# THE FALSE COLUMN, same denser grid, over every hand.png in diagnostics/deal_frames
+# (510 frames, agent_progress/issues/I-64/step1c_results.json):
+#
+#     really PLAYER  (n=1613, own found position)   max 0.714   p99 0.635   p95 0.580
+#     really TACTICS (n=382, already read today)    min 0.870   p01 0.923   p05 0.941
+#
+# The player maximum (0.714) sits 0.136 under MIN_TYPE_SCORE (0.85) -- a threshold
+# between two measured populations, not inside one (METHODOLOGY.md 10.4). 0 of 1613
+# player rows cross MIN_TYPE_SCORE at this step; 0 new wrong TYPE reads over the corpus.
+#
+# The remaining 9 of 19 misses (0.699-0.816 even at the peak) are a different shape --
+# their true peak is not a sampling gap, it is genuinely lower -- and are NOT fixed by
+# this change. Not attempted: lowering MIN_TYPE_SCORE would cross into the player
+# population's tail (up to 0.714) at n as low as this, so it stays where it is measured.
+BANNER_SEARCH = tuple((ox, oy) for ox in range(-12, 13, 2) for oy in range(-6, 7, 3))
 
 _type_cache = None
 
@@ -573,6 +598,36 @@ def reads_adds_power(img, slot, cx=None, cy=None):
     if t is None or best < MIN_ADDS_POWER_SCORE:
         return None, best
     return (t in ADDS_POWER), best
+
+
+# I-64: LEFT-EDGE OCCLUSION WAS MEASURED AND ITS RESCUE IS NOT SHIPPED. The
+# neighbouring card in the fan clips the banner's leading letters -- "FIELDING PLAY"
+# -> "ELDING PLAY", "POWER SWING" -> "OWER SWING" -- confirmed by the user on 6 named
+# frames (test_fixtures/user_truth/20260923_c20-26/clipped_banners.json: 3 PITCHER,
+# 1 BATTER, 2 tactics). No BANNER_SEARCH offset fixes it -- nothing is misaligned,
+# letters are simply missing.
+#
+# A RIGHT-ONLY match (the banner's right ~60%, columns 19: of 48) rescues it cleanly
+# as a population: over the same 510-hand.png corpus, really-PLAYER right-only scores
+# max 0.833 (n=1613) against really-TACTICS right-only min 0.905 (n=411 already-read
+# today) -- 0.072 of daylight, comparable to the full-band gate's own margin. Used as
+# a fallback only when the full match misses MIN_TYPE_SCORE, it recovered 4 more of
+# the 14 hand-labelled readable misses (10/14 total, 0 wrong).
+#
+# NOT SHIPPED: it also recovers tests/minigame/test_i22_pitch_boost_slot3.py's
+# mutation check, and for the WRONG reason. That test proves the I-22 donor template
+# is load-bearing by stripping it and asserting the read disappears; with right-only
+# live, both fixtures still read pitch_boost (0.994-1.0) with the donor gone, because
+# matching only 60% of the crop is far less sensitive to the exact x-alignment I-22's
+# own docstring names as the cause ("this card's disc lands at x=642, well left of the
+# ~661-664 cluster the bank's other examples were cut from") -- SOME OTHER template
+# does the work once alignment stops mattering as much, exactly what that test exists
+# to catch. That is a real behaviour change (this reader would tolerate more bank-
+# coverage gaps generically, not just occlusion), not a false alarm, and deciding
+# whether that trade is wanted is not this ticket's call -- filed for I-64's follow-up
+# rather than silently overriding a mutation-tested guard on another ticket's fix.
+# The measurement (agent_progress/issues/I-64/step1f/g/h*.py, step2_run2.log) stands
+# and is reproducible; only the code change is withheld.
 
 
 def read_tactics_type(img, slot, cx=None, cy=None):
