@@ -5518,3 +5518,7 @@ any round.
 ## I-63  stray re-look refused plays on a transient blind slot
 
 **Status.** merged ffd35baa793918efb88dcc6caedd30315b1d77f8; Opus skeptic CONFIRMED WITH NOTES (blindness time-varying 7/7; blind slot tactics in >=5/7; no test pins N=2).
+## I-64  hand reader missed visible tactics cards: banner search stepped over the score peak
+
+**Status.** merged 22c4cb14d6e48cb48e4be98ec7cdf0d14948126c; Opus skeptic CONFIRMED WITH NOTES (6/14 user-labelled readable tactics recovered, 0/43 wrong on labelled slightly/covered/animating, 0 new wrong reads over 7,101 frames; read_hand p95 88->105 ms; 8/14 still missed: clipped-left banners q16/q18/q23, q53 at 0.840, q29/q56/q62/q75 template-bank mismatch 0.70-0.73).
+
