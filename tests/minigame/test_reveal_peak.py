@@ -157,9 +157,12 @@ class _C:
     def sleep(s, d): s.t += d
 try:
     _c = _C(); o.time = _c
-    # Same note as test_post_play_timing: satisfy the stable-hand half so these checks
-    # keep measuring the EDGE rule. test_readable_hand_gate.py owns the other half.
-    o._hand_signature = lambda img: "settled"
+    # Same note as test_post_play_timing: satisfy the stable-AND-COMPLETE half
+    # (I-65 round 2) so these checks keep measuring the EDGE rule, with a real
+    # production-shaped signature rather than a string that would otherwise sit
+    # permanently INCOMPLETE and only release at READABLE_HAND_BOUND.
+    # test_readable_hand_gate.py / test_hand_gate_completeness.py own that other half.
+    o._hand_signature = lambda img: tuple(("player", 5, None, None) for _ in range(5))
     o.crop_gameplay_regions = lambda img: [("hand", object())]
     o._fast_grab = lambda: object()
     calls = {"n": 0}

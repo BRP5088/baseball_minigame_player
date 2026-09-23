@@ -3400,6 +3400,31 @@ USE_READABLE_HAND_GATE = True
 # because each costs a poll interval and the reader is the expensive half of the poll.
 READABLE_POLLS = 2
 
+# PROVISIONAL (I-65 round 2). A ceiling on how long the gate will hold an INCOMPLETE
+# but STABLE hand (two identical reads, still missing a slot) before releasing anyway.
+# Not a measured p95 of true deal-completion time -- that population is unmeasurable
+# from anything on disk. The 298-sequence deal_frames corpus (diagnostics/deal_frames,
+# every one of which is a hard case: its FOLLOWING hand read still had an unreadable
+# slot) is CENSORED -- save_deal_frames stops recording the instant the OLD gate
+# released, so 294/298 sequences "never reach all-5-read" only because the recording
+# stopped, not because the deal was still running (I-65 round 1, step1_measure.py:
+# span tracks the old release instant to within 0.16s median across the corpus). The
+# hardest number that population DOES support is the old stable-twice rule's own MAX
+# on that same hard population: 7.21s. 8.0 is that plus headroom, still well inside
+# the pre-existing POST_PLAY_DEAL_MAX_WAIT (20.0s) ceiling.
+#
+# Two other, UNCENSORED sources were checked and neither separates a tighter number:
+# deal_timing.jsonl's own `settled_at` field (probe_at, "hand first settled at" in the
+# log) is real production data, but for the GENERAL population, not the hard-case one
+# this bound is for -- 1064/1081 rows, median 0.51s, max 2.24s
+# (`overnight/run_live_20260922f.log` alone: 280 rows, max 1.9s). Both are far below
+# 7.21s precisely because most deals are easy; they say nothing about the slow tail.
+#
+# `wait_for_hand_deal` logs `first_complete_at` (capped at this bound) on every call,
+# observe-only, so the first live session with this fix running can finally measure
+# the UNCENSORED population and this constant can stop being a guess.
+READABLE_HAND_BOUND = 8.0
+
 
 def hand_deal_threshold(env=None):
     raw = (os.environ if env is None else env).get(DEAL_THRESHOLD_ENV)
@@ -3707,12 +3732,27 @@ def pop_hand_baseline():
 
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                        poll_interval: float = 0.15, baseline=None,
-                       predicted_bases=None, margin=None) -> bool:
+                       predicted_bases=None, margin=None,
+                       no_motion_needed: bool = False) -> bool:
     """Block until the replacement card has visibly landed in the hand.
 
     Returns True if the deal was seen, False on timeout. Rising-edge trigger on
     the hand region, then hand off to the normal settle gate. Local only: one
     _grab_settle_regions(("hand",)) per poll, ~40 ms.
+
+    `no_motion_needed` (I-65 round 2) is for callers with no play to trigger an edge
+    against: the match's first hand (after bans) and a half-change re-read, where the
+    hand may already be sitting there, complete and unmoving, the whole time. Every
+    other caller passed a play's edge; these two pass nothing, and the OLD no-baseline
+    call sites (I-65 round 1) waited the full max_wait every time because nothing ever
+    set `seen` -- measured on the live log, all 30 recorded half-change re-reads found
+    the hand already dealt (skeptic, I-65 round 1 refutation, s4_stall.py). With this
+    flag, the completeness/stability check below runs from the first poll instead of
+    waiting on an edge, and the POST_PLAY_MIN_WAIT floor -- which exists to keep a
+    stray pre-play frame from being read as the new hand -- does not apply, because
+    there is no "before this play" frame to protect against. It does NOT skip
+    READABLE_HAND_BOUND: an incomplete hand still gets the same bounded wait as every
+    other caller.
     """
     start = time.time()
     # PREDICTED BASES, RECORDED BESIDE THE MEASURED WAIT, on its own line so it cannot be
@@ -3775,6 +3815,12 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     probe_good = 0
     probe_sig = None
     probe_at = None
+    # OBSERVE-ONLY (I-65 round 2). Time to the first fully-read 5-row signature, capped
+    # at READABLE_HAND_BOUND, on EVERY call -- not just the ones that end up releasing
+    # on it. Nothing reads this; it only feeds `_record_row` below, so the first live
+    # session with this gate running finally measures the uncensored population
+    # READABLE_HAND_BOUND's own comment says does not exist yet on disk.
+    first_complete_at = None
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
@@ -3806,6 +3852,12 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             predicted_bases=predicted_bases,
             waited=round(time.time() - start, 2),
             settled_at=None if probe_at is None else round(probe_at, 2),
+            # I-65 round 2, observe-only: capped at the bound either way -- a NEVER
+            # (None) is recorded as the bound itself, same as a first-complete-read
+            # that took longer than the bound would be, so a plot of this field never
+            # needs to special-case "didn't happen" against "happened right at the edge".
+            first_complete_at=round(min(first_complete_at, READABLE_HAND_BOUND), 2)
+            if first_complete_at is not None else READABLE_HAND_BOUND,
             floor=POST_PLAY_MIN_WAIT,
             threshold=th,
             biggest=round(biggest, 1),
@@ -3868,20 +3920,28 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             _hand_now = None
         keep_deal_frame(_hand_now, time.time() - start)
 
-        if USE_READABLE_HAND_GATE and probe_at is None:
+        if USE_READABLE_HAND_GATE and (probe_at is None or first_complete_at is None):
             try:
                 psig = _hand_signature(_hand_now)
+            except Exception:
+                psig = None
+            if probe_at is None:
                 probe_good = probe_good + 1 if (psig is not None and psig == probe_sig) else 0
                 probe_sig = psig
                 if probe_good >= READABLE_POLLS:
                     probe_at = time.time() - start
-            except Exception:
-                probe_good, probe_sig = 0, None
+            # OBSERVE-ONLY: no stability requirement, unlike probe_at above -- this is
+            # "has a complete hand ever been seen", not "has it stopped changing".
+            if first_complete_at is None and psig is not None and not _sig_unread_slots(psig):
+                first_complete_at = time.time() - start
 
         # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
         # measurement above, so keep polling; return on the first poll at or past
-        # the floor once an edge has been seen.
-        # THE RELEASE RULE: A COMPLETE HAND, TWICE RUNNING -- NOT A QUIET FRAME.
+        # the floor once an edge has been seen. `no_motion_needed` callers have no
+        # edge to wait for and no pre-play frame to protect against, so neither
+        # requirement applies to them (see the docstring).
+        # THE RELEASE RULE: A COMPLETE HAND, TWICE RUNNING, OR THE BOUND -- NOT A
+        # QUIET FRAME AND NOT "STABLE" ALONE.
         #
         # This used to release on the EDGE plus a hand-picked 6 s floor: motion having
         # BEGUN, not motion having ENDED. That is how a mid-deal screenshot gets taken,
@@ -3896,11 +3956,19 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         # "there are no cards" -- the two populations are the wrong way round and no
         # threshold on that quantity separates them (CLAUDE.md 10.4).
         #
-        # So ask the question we actually care about. local_hand_cards() returns a hand
-        # only when every card is fully read, and it is ~21 ms, which is 14% of a poll.
-        # Requiring it TWICE means a frame caught mid-animation cannot release the gate.
-        # No new threshold is invented anywhere in this rule.
-        if seen and time.time() - start >= POST_PLAY_MIN_WAIT:
+        # "STABLE" ALONE (I-65 round 1's rule, refuted) is not enough either: TWO
+        # IDENTICAL READS OF AN INCOMPLETE HAND ARE JUST AS STABLE AS TWO IDENTICAL
+        # READS OF A COMPLETE ONE, and the dominant mid-deal signature -- an empty
+        # table, `()` -- repeats itself constantly while cards are still landing. So
+        # this asks a second question, of the SAME signature the stability check
+        # already has: is every slot actually READ (`_sig_unread_slots`)? Only a
+        # signature that is BOTH stable AND complete releases on that combination;
+        # anything else waits out READABLE_HAND_BOUND, which nothing here can exceed
+        # by more than one poll_interval, whether or not stability was ever reached
+        # (a slot that never reads -- a covered card -- may never go "stable" either,
+        # if the misread jitters; the bound check does not require `good` to be met).
+        if ((seen or (no_motion_needed and USE_READABLE_HAND_GATE))
+                and time.time() - start >= (0.0 if no_motion_needed else POST_PLAY_MIN_WAIT)):
             if not USE_READABLE_HAND_GATE:
                 print(f"  [deal] replacement card seen; released "
                       f"{time.time() - start:.1f}s after the play "
@@ -3909,27 +3977,25 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 return True
             try:
                 hand_img = dict(crop_gameplay_regions(_fast_grab())).get("hand")
-                # STABLE, NOT COMPLETE. Requiring a COMPLETE hand made this gate wait out
-                # its whole budget whenever one card was unreadable: measured over a
-                # 46-play run, 14 timeouts and 280 SECONDS lost. Since the hand memory
-                # landed, an incomplete hand is perfectly usable -- the missing card is
-                # carried forward or dropped -- so completeness is the wrong question.
-                # What the gate is actually for is "has the deal FINISHED", and the
-                # answer to that is that the hand stops changing.
                 sig = _hand_signature(hand_img)
                 readable = sig is not None and sig == last_sig
                 last_sig = sig
             except Exception:
-                readable, last_sig = False, None   # never raise into the turn loop
+                sig, readable, last_sig = None, False, None   # never raise into the turn loop
             good = good + 1 if readable else 0
-            if good >= READABLE_POLLS:
+            unread = _sig_unread_slots(sig)
+            _bound_hit = time.time() - start >= READABLE_HAND_BOUND
+            if _bound_hit or (good >= READABLE_POLLS and not unread):
                 _held = ("" if probe_at is None
                          else f", hand first settled at {probe_at:.1f}s "
                               f"(floor held it {max(0.0, time.time() - start - probe_at):.1f}s)")
+                _reason = "stable_bound" if unread else "stable"
+                _why = (f"; released on the {READABLE_HAND_BOUND:g}s bound with slot(s) "
+                        f"{unread} still unread" if _reason == "stable_bound" else "")
                 print(f"  [deal] hand STABLE {READABLE_POLLS}x; released "
                       f"{time.time() - start:.1f}s after the play "
-                      f"(threshold {th:g}, biggest delta {biggest:.1f}{_held})")
-                _record_row("stable", reason="stable")
+                      f"(threshold {th:g}, biggest delta {biggest:.1f}{_held}{_why})")
+                _record_row("stable", reason=_reason)
                 return True
     # THREE OUTCOMES, NOT ONE MESSAGE (I-09). This used to print the same "gate is
     # too high" line whether biggest was 6.2 (nothing moved, edge_seen False) or
@@ -5176,6 +5242,52 @@ def _hand_signature(hand_img):
         return None
     return tuple((r.get("kind"), r.get("digit"), r.get("secondary"), r.get("type"))
                  for r in rows)
+
+
+def _sig_unread_slots(sig):
+    """Which of a `_hand_signature` tuple's 5 slots have not actually been READ.
+
+    I-65 round 1's version treated ANY shape other than a real 5-row signature as
+    "complete" -- meant as a backward-compat shim for tests stubbing `_hand_signature`
+    with unrelated placeholder tuples, but it also waved through `()`, which is what
+    `local_hand._read_ungated` returns for an empty table and is THE DOMINANT shape
+    the gate actually polls mid-deal: 5733 of 6591 recorded frames in the deal_frames
+    corpus (skeptic, I-65 round 1 refutation, s3_shapes.py). That let the gate release
+    on an animating hand at the same instant as before in 289/298 recorded sequences.
+    Refused. There is no shape this function calls "complete" except the real thing.
+
+    A real signature is a 5-tuple of (kind, digit, secondary, type) rows, from
+    `_hand_signature`'s fan path (`local_hand.read_hand`'s `_read_fan`). A row counts
+    as READ only when it says something a caller could act on:
+      - kind "player": needs a digit (power).
+      - kind "tactics": needs a type (bonus is not required to read the card).
+      - kind "unknown" (no candidate AND no banner -- `local_hand.py`'s own "the
+        honest answer is UNKNOWN" branch): never read, by construction.
+    Anything that is not that exact shape -- `()`, a short tuple from the ungated
+    path, `None`, or a test double standing in for a different concern -- is judged
+    FULLY unread. It is not this function's job to guess what an unrecognised shape
+    means; a caller that wants a non-production stub treated as done must say so
+    with a realistic signature, not rely on this returning [] by default.
+
+    Returns a list of unread slot indices (empty means every slot read).
+    """
+    if not isinstance(sig, tuple) or len(sig) != 5:
+        return list(range(5))
+    unread = []
+    for i, row in enumerate(sig):
+        if not (isinstance(row, tuple) and len(row) == 4):
+            unread.append(i)
+            continue
+        kind, digit, _secondary, kind_type = row
+        if kind == "player":
+            if digit is None:
+                unread.append(i)
+        elif kind == "tactics":
+            if kind_type is None:
+                unread.append(i)
+        else:
+            unread.append(i)   # "unknown" (or anything else) was never resolved
+    return unread
 
 
 HOMEPLATE_STRIP = (0.439, 0.490)   # of the hand crop's width: 430..480 at ANCHOR_W 979
@@ -10301,6 +10413,13 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                     continue
                 acted_screen = "ban_screen"
                 stuck_count = 0
+                # I-65 round 2: the match's FIRST hand read has no play to trigger an
+                # edge against -- census: 7/30 user-labelled "animating" decision frames
+                # were exactly this, with no [deal] line in the log at all, because
+                # nothing gated it. no_motion_needed=True: no edge required, no
+                # POST_PLAY_MIN_WAIT floor (there is no pre-play frame to protect
+                # against here), still bounded by READABLE_HAND_BOUND.
+                wait_for_hand_deal(no_motion_needed=True)
                 wait_for_screen_to_settle(max_wait=8.0, regions="ban")
                 continue
 
@@ -10392,6 +10511,16 @@ def run(target_wins: int, starting_balance: int = None, progress_file: str = PRO
                             # or an abstention here would wrongly fall back to "batting"
                             # on the first turn of a PITCHING half.
                             _hint = 0 if _new_phase == "batting" else ROUNDS_PER_HALF
+                            # I-65 round 2: this re-read has no play to trigger an edge
+                            # against either -- the skeptic's live-log census found all
+                            # 30 recorded half-change re-reads already showed a complete
+                            # hand, and the old no-baseline gate (round 1) would have
+                            # waited the full 20s max_wait on every one of them because
+                            # nothing ever set `seen`. no_motion_needed=True releases
+                            # within ~READABLE_POLLS polls when it is, still bounded by
+                            # READABLE_HAND_BOUND when the new half's hand is genuinely
+                            # still dealing (this half-boundary's own q60 census case).
+                            wait_for_hand_deal(no_motion_needed=True)
                             state_json = read_state_for_turn(turns_this_half=_hint)
                             print("  [hand] re-read the hand after the reset")
                         except Exception as _e:
