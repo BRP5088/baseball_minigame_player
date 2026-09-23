@@ -5527,3 +5527,7 @@ any round.
 
 **Status.** merged d53d5e9; round 1 REFUTED (empty signature counted complete; new sites stalled 20 s), round 2 Opus skeptic CONFIRMED WITH NOTES (0/298 early releases on incomplete; already-dealt half change releases 0.6 s; covered card releases at 8.0 s; cost +4.6 s/match median, 21.6 max; READABLE_HAND_BOUND 8.0 PROVISIONAL - first live session must read first_complete_at).
 I-65b merged f2effc4: release reason now 'stable_bound' when the 8 s bound forced the release (QA6 finding; was mislabelled 'stable'/'STABLE 2x'); Sonnet skeptic CONFIRMED.
+
+## I-67  tactics template bank lacked slot x type coverage (clipped-left banners, speed/fielding cells)
+
+**Status.** merged ead1e1e; Opus skeptic CONFIRMED WITH NOTES (5/8 labelled recovered, 55 new reads 55/55 correct by eye, 0 wrong over 7,217 frames; held-out support carried by the q16 and q23 donors, q29 self-match only; npz rebuildable byte-equal; runtime unchanged).
