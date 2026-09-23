@@ -183,6 +183,138 @@ def _raised_digit_search(img, anchor_x, anchor_y, s):
     return best_d, best_sc, best_xy
 
 
+# I-66 ROUND 2: a SEPARATE window for a slot AT REST, not raised.
+#
+# Round 1 tried widening RAISED_SEARCH_DY/DX to also cover the resting row and was
+# REFUTED on runtime: the window went from 12x14=168 grid points to 26x17=442, and
+# median read_hand() time nearly doubled (92 -> 168 ms) against a ~150 ms live poll
+# budget (agent_progress/issues/I-66/skeptic.md). I-46 rejected a wider window for the
+# same reason (see the runtime note below this function).
+#
+# The skeptic's own census (agent_progress/issues/I-66/skeptic/census.py, 7,688 frames,
+# compares every slot main vs branch) found the fix does not need a wider RAISED window
+# at all: all 40 correct new reads land within dx -24..+18 and dy -12..+9 of the slot
+# anchor -- a resting-height band, not a raised one. So this is a SECOND, SMALLER,
+# INDEPENDENT window/pass, run only when the (unchanged) raised search already found
+# nothing, rather than a widening of it: 7x14=98 grid points at worst, on top of
+# RAISED's own 168, and only for a slot that already failed both earlier passes.
+#
+# Step size measured (not guessed): a plain single-pass grid over this window swept at
+# step 3, 4, 5, ... 12 (ANCHOR_W px) against the skeptic's 40 winning positions. Step 3
+# recovers 40/40; step 4 already drops to 14/40 -- a cliff, not a slope, because
+# read_digit's own DIGIT_RADII scan only tolerates a few px of scale error, not position
+# error. So 3 is the finest-grained step the true position ever needs -- but a PLAIN
+# step-3 grid over this window (98 points, each a full read_digit call -- 7 DIGIT_RADII
+# correlations apiece) was measured end-to-end (labels_timing.py, same 60-frame
+# interleaved harness the skeptic used) at branch median 129.4ms against main 94.8ms --
+# +36%, over the +10% budget, because most of these 60 frames (chosen for having unread
+# player slots) pay for it on 1-2 slots each. A plain COARSE(6)-THEN-FINE(1, +-3px)
+# two-stage grid, still calling full read_digit at every point, only cut this to ~81
+# points/slot on average -- not enough (median still +37% over main, measured).
+#
+# The actual cost is DIGIT_RADII, not the grid: read_digit spends 7 full correlations
+# (crop + resize + template match) per point, but only the WINNING point's radius sweep
+# ever matters -- every other point just needs to be RANKED against its neighbours to
+# find where to spend that 7x cost. So COARSE localizes with ONE correlation per point
+# (_cheap_localize_score below, radius = RESTING_SEARCH_R, no DIGIT_RADII sweep -- about
+# 1/7 the cost of a real read_digit call), and only the small FINE box around the coarse
+# winner pays full read_digit price. Swept coarse/half combinations (both in ANCHOR_W
+# px) against the 40: coarse=8/half=3 is the cheapest that recovers all 40/40 (coarser
+# than coarse=6, but the localize pass's own single-radius score turns out to land
+# closer to the true position at step 8 than at step 6 for the one row that needs it --
+# measured, not intuitive: coarse=6/half=3 only reaches 39/40) at an effective cost of
+# ~52 full-read_digit-equivalent points, against ~81-98 for every all-radii alternative
+# measured. End-to-end this keeps the 60-frame harness within the +10%/170ms budget --
+# see agent_progress/issues/I-66/progress.md.
+RESTING_SEARCH_DY = (-12, 9)    # anchor-relative y band to search, ANCHOR_W px
+RESTING_SEARCH_DX = (-24, 18)   # anchor-relative x band to search, ANCHOR_W px
+RESTING_SEARCH_COARSE_STEP = 7  # px, ANCHOR_W scale -- cheap single-radius localize pass
+RESTING_SEARCH_FINE_STEP = 1    # px, ANCHOR_W scale -- full read_digit refine pass
+RESTING_SEARCH_REFINE_HALF = 2  # px, ANCHOR_W scale -- refine box half-width around it
+RESTING_SEARCH_R = 18           # passed to read_digit, which searches DIGIT_RADII around it
+
+
+def _cheap_localize_score(img, cx, cy, r):
+    """(digit, score) at ONE radius, no DIGIT_RADII sweep -- about 1/7 the cost of
+    read_digit. Only for RANKING coarse grid points against each other to pick
+    where to spend the real read_digit's full radius sweep (_resting_digit_search
+    below); never returned as a final digit/score, so it does not need read_digit's
+    own MIN_SCORE gate or radius robustness.
+    """
+    vecs, digits = _templates()
+    v = _vector(img, (max(0, cx - r), max(0, cy - r), min(img.width, cx + r), min(img.height, cy + r)))
+    if v is None:
+        return None, 0.0
+    scores = vecs @ v
+    k = int(scores.argmax())
+    return digits[k], float(scores[k])
+
+
+def _resting_digit_search(img, anchor_x, anchor_y, s):
+    """Best (digit, score, (x, y)) in the small resting-card window around one
+    player anchor, or (None, 0.0, None). Same shape as _raised_digit_search but
+    its own window/constants (RESTING_SEARCH_*, above) -- kept separate rather
+    than folded into the raised window, see the note above.
+
+    Two passes: a CHEAP single-radius COARSE grid over the whole window locates
+    roughly where the digit is (_cheap_localize_score, above), then a small FINE
+    grid around that point re-checks with the real, MIN_SCORE-gated read_digit --
+    the only call whose result this function trusts or returns. Each pass walks
+    OUTWARD FROM ITS OWN CENTRE (ranges starting at 0) rather than from an edge,
+    so widening either bound can only APPEND grid points and never shift the
+    sampled lattice's phase -- this is the exact bug I-66 round 1 hit when it
+    widened RAISED_SEARCH_DX (see that round's progress.md, "GRID-PHASE BUG");
+    building either pass edge-first would risk repeating it the moment these
+    constants next change.
+    """
+    rad = int(round(RESTING_SEARCH_R * s))
+    y_lo, y_hi = int(round(RESTING_SEARCH_DY[0] * s)), int(round(RESTING_SEARCH_DY[1] * s))
+    x_lo, x_hi = int(round(RESTING_SEARCH_DX[0] * s)), int(round(RESTING_SEARCH_DX[1] * s))
+
+    coarse = max(1, int(round(RESTING_SEARCH_COARSE_STEP * s)))
+    dys = list(range(0, y_hi + 1, coarse)) + list(range(-coarse, y_lo - 1, -coarse))
+    dxs = list(range(0, x_hi + 1, coarse)) + list(range(-coarse, x_lo - 1, -coarse))
+    best_localize_sc, best_dxdy = 0.0, (0, 0)
+    for dy in dys:
+        for dx in dxs:
+            cy, cx = int(anchor_y + dy), int(anchor_x + dx)
+            _, sc = _cheap_localize_score(img, cx, cy, rad)
+            if sc > best_localize_sc:
+                best_localize_sc, best_dxdy = sc, (dx, dy)
+
+    fine = max(1, int(round(RESTING_SEARCH_FINE_STEP * s)))
+    half = int(round(RESTING_SEARCH_REFINE_HALF * s))
+    bdx, bdy = best_dxdy
+    best_d, best_sc, best_xy = None, 0.0, None
+    for rdy in range(-half, half + 1, fine):
+        for rdx in range(-half, half + 1, fine):
+            dx, dy = bdx + rdx, bdy + rdy
+            if not (x_lo * s - 1 <= dx <= x_hi * s + 1 and y_lo * s - 1 <= dy <= y_hi * s + 1):
+                continue
+            cy, cx = int(anchor_y + dy), int(anchor_x + dx)
+            d, sc = read_digit(img, (cx, cy, rad))
+            if sc > best_sc:
+                best_d, best_sc, best_xy = d, sc, (cx, cy)
+    return best_d, best_sc, best_xy
+
+
+def _raised_or_resting_search(img, anchor_x, anchor_y, s):
+    """Try the RAISED window first (unchanged, I-46/I-62); only when it finds
+    nothing, fall back to the smaller RESTING window (I-66 round 2). Returns
+    (digit, score, (x, y), from_resting) -- from_resting tells the caller which
+    window produced the hit, because a resting hit's y is NOT a raised card's
+    (see the updated SKEPTIC NOTE in _read_fan) and must not be flagged as one.
+
+    Shared by every caller, same reasoning as _raised_digit_search's own
+    docstring: both windows are felt everywhere at once.
+    """
+    d, sc, xy = _raised_digit_search(img, anchor_x, anchor_y, s)
+    if d is not None:
+        return d, sc, xy, False
+    d, sc, xy = _resting_digit_search(img, anchor_x, anchor_y, s)
+    return d, sc, xy, True
+
+
 def find_tactics(img, dark_max=110):
     """Locate a TACTICS card's circle, which the player-card reader cannot see.
 
@@ -1054,11 +1186,12 @@ def _read_fan(img, strong):
             # all" dropped_* rows THIS population covers, it recovers 1 (score
             # 0.966); the refused_select evidence frame recovers at 0.882.
             ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
-            rd, rsc, rxy = _raised_digit_search(img, ax, ay, s)
+            rd, rsc, rxy, resting = _raised_or_resting_search(img, ax, ay, s)
             if rd is not None:
                 row = {"x": rxy[0], "kind": "player", "digit": rd, "score": round(rsc, 3),
                        "y": rxy[1], "y_measured": True, "_slot_i": i, "y_from": "disc",
-                       "digit_from_raised_search": True}
+                       "digit_from_raised_search": not resting,
+                       "digit_from_resting_search": resting}
                 row["secondary"], ss = read_shield(img, rxy[0], rxy[1])
                 row["secondary_score"] = ss
                 out.append(row)
@@ -1232,21 +1365,33 @@ def _read_fan(img, strong):
     # SCALE above. It runs ONLY where every candidate pass above still leaves a PLAYER
     # slot's digit unread, so it can add a reading and cannot change one.
     #
-    # SKEPTIC NOTE (agent_progress/issues/I-46/skeptic.md): RAISED_SEARCH_DY (-60,-25)
-    # sits ENTIRELY above SELECTED_MIN_RISE (25, see below), so every slot this pass
-    # reads is thereby reported SELECTED by `selected_cards` -- it cannot produce a
-    # read-but-not-raised answer. That is a fact of the window's geometry, not a
-    # measurement, and it is load-bearing: on the 34 real hits checked, every card was
-    # genuinely raised, and it corrects cases where the icon-derived `y` (from the pass
-    # above, or a fallback) had `selected_cards` missing a real selection.
+    # SKEPTIC NOTE (agent_progress/issues/I-46/skeptic.md), UPDATED BY I-66 ROUND 2:
+    # RAISED_SEARCH_DY (-60,-25) sits ENTIRELY above SELECTED_MIN_RISE (25, see below),
+    # so a hit from THAT window is thereby reported SELECTED by `selected_cards` -- it
+    # cannot produce a read-but-not-raised answer. That was true of every hit from this
+    # pass through I-46/I-62, when it only ran _raised_digit_search, and it is still
+    # true for any row with digit_from_raised_search=True today.
     #
-    # MEASURED RUNTIME (median of 10 read_hand() calls, same frame, nice -n 10):
-    # 0 firing slots ~36ms (no-op, same as before this pass existed), 1 firing slot
-    # ~77ms, 2 firing slots (worst observed) ~138ms -- against a 150ms poll. Over 2,500
-    # random run frames, 87.9% fire zero times, 11.9% fire once, 0.2% fire twice; 3+ was
-    # never observed. A wider window (tried and rejected) reaches 274ms/539ms and
-    # recovers only 5 more census frames (22/23 vs 17/23) at 0 additional accuracy cost
-    # measured offline -- narrow is kept for the runtime margin.
+    # It is NO LONGER true of every hit from this pass: I-66 round 2 added a SEPARATE,
+    # smaller RESTING window (RESTING_SEARCH_DY/DX, defined just above
+    # _raised_digit_search) that this pass also tries, via _raised_or_resting_search,
+    # once the raised window has already failed. A resting hit's y sits near the slot
+    # anchor (dy -12..+9, well under SELECTED_MIN_RISE) and is correctly reported NOT
+    # selected -- it is a card still in the fan, just one the circle-finder missed. The
+    # two cases are told apart on the row by digit_from_raised_search vs
+    # digit_from_resting_search (exactly one of the two is True whenever digit is set
+    # by this pass).
+    #
+    # MEASURED RUNTIME (median of 10 read_hand() calls, same frame, nice -n 10), FOR THE
+    # RAISED WINDOW ALONE, predating the I-66 round 2 addition below: 0 firing slots
+    # ~36ms (no-op, same as before this pass existed), 1 firing slot ~77ms, 2 firing
+    # slots (worst observed) ~138ms -- against a 150ms poll. Over 2,500 random run
+    # frames, 87.9% fire zero times, 11.9% fire once, 0.2% fire twice; 3+ was never
+    # observed. A wider RAISED window (tried and rejected, both here at I-46 and again
+    # at I-66 round 1) cost roughly 2x the runtime for the same slots each time -- see
+    # RESTING_SEARCH_* above for why a second, smaller, independent window was used
+    # instead. Current end-to-end timing (both windows, interleaved main-vs-branch) is
+    # in agent_progress/issues/I-66/progress.md, round 2.
     for r in out:
         if r.get("kind") != "player" or r.get("digit") is not None:
             continue
@@ -1254,10 +1399,11 @@ def _read_fan(img, strong):
         if i is None or not (0 <= i < len(SLOT_PLAYER)):
             continue
         ax, ay = SLOT_PLAYER[i][0] * s, SLOT_PLAYER[i][1] * s
-        best_d, best_sc, best_xy = _raised_digit_search(img, ax, ay, s)
+        best_d, best_sc, best_xy, resting = _raised_or_resting_search(img, ax, ay, s)
         if best_d is not None:
             r["digit"], r["score"] = best_d, round(best_sc, 3)
-            r["digit_from_raised_search"] = True
+            r["digit_from_raised_search"] = not resting
+            r["digit_from_resting_search"] = resting
             # D1 (skeptic finding): write x ALONGSIDE y. Without this the row kept the
             # x from whatever earlier pass produced it -- on 3 of 34 real hits that was
             # the decorative icon, 50-67px from the digit actually read, so (x, y) was
