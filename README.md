@@ -96,10 +96,11 @@ off — nothing it runs presses a key or writes to the FIFO. Anything that
 spawns test files of its own must pass that variable down, or it will send
 real input.
 
-Some tests depend on fixtures under `test_fixtures/` at the project root;
-these are checked in. A few tests exercise things that only make sense with
-local recordings or a local `.env`, and are noted as such where they live —
-the test suite itself is what to trust over a summary here.
+Most tests read fixtures from `test_fixtures/`, which is checked in. About a
+dozen files also need local data that is gitignored and so is not in this
+repo: `demos/` recordings, `screenshot_log/` frames, `overnight/` run logs,
+the `chiaki-ng-src/` checkout, and a compiled C++ test binary. In a fresh
+clone those files fail; the rest of the suite does not depend on them.
 
 A `.githooks/pre-commit` hook runs a fast subset of the suite (a handful of
 tests chosen because each one guards something that actually broke a live
