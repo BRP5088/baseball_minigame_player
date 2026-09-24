@@ -2417,8 +2417,8 @@ def _fast_grab():
 
     compass.fast_capture() locates the game window from OS geometry and returns
     its content, which is the thing every region here is meant to be a fraction
-    of. Falls back to the old behaviour if that is unavailable, so a broken
-    window lookup degrades rather than crashing the loop.
+    of. Returns None if that is unavailable -- never falls back to a
+    full-display grab (see the comment below).
     """
     import game_capture
     img = game_capture.grab(width=SETTLE_CALIBRATION_WIDTH)
@@ -3829,18 +3829,36 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # time this function began, and all eight of the timeouts were changes that finished
     # during the reveal read. None is a supported value -- every existing caller keeps
     # the old behaviour.
+    # _baseline_missed is a SEPARATE flag from "baseline is None": a caller
+    # may legitimately pass baseline=None as a plain value (see above), and
+    # that must keep diffing against None exactly as before (a test harness
+    # relies on this -- test_post_play_timing.py stubs _grab_settle_regions
+    # to hand back {"hand": None} on every call while _mean_abs_delta is
+    # stubbed to ignore its arguments; only a REAL capture failure here
+    # should switch to "adopt the next frame as the baseline" below).
+    _baseline_missed = False
     if baseline is None:
         try:
             baseline = _grab_settle_regions(("hand",))["hand"]
         except RuntimeError:
-            # No frame this poll -- baseline stays None, which is already a
-            # supported value (see above); the first poll below hits the
-            # same "could not read the hand" path a capture failure there
-            # already handles, rather than raising out of this function.
+            # No frame this poll -- baseline stays None. The loop below
+            # RETRIES this same grab on its first iteration and adopts
+            # whichever poll's frame arrives first as the baseline; it does
+            # not release early just because the baseline grab missed
+            # (found in review, r2).
             baseline = None
+            _baseline_missed = True
     seen = False
     good = 0
     last_sig = None
+    # Same shape as BAN_CURSOR_PROBE_TRIES (read_full_ban_collection): a
+    # SINGLE missed poll must retry within the wait budget, not give up
+    # (finding 4, r2) -- but a run of them means the capture is genuinely
+    # gone, and that must still be reported promptly as an "error" row
+    # rather than silently spun through to a "timeout" one (pinned by
+    # tests/minigame/test_readable_hand_gate.py's persistent-raise case).
+    _DEAL_CAPTURE_FAIL_TRIES = 3
+    _consecutive_capture_fail = 0
     # THE FLOOR PROBE. POST_PLAY_MIN_WAIT is 6.0 and the release rule below only RUNS once
     # the floor has passed, so every logged release sits at 6.30 or later -- exactly floor
     # plus the two polls the rule needs. The logs therefore CANNOT say whether the floor is
@@ -3924,13 +3942,41 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         # Demonstrated offline by raising from the third grab: 0 rows, run over.
         try:
             cur = _grab_settle_regions(("hand",))["hand"]
-            d = _mean_abs_delta(baseline, cur)
+            _consecutive_capture_fail = 0
+            if _baseline_missed and baseline is None:
+                # The baseline grab missed too (see above) -- there is
+                # nothing yet to diff against. Adopt this poll's frame as
+                # the (late) baseline rather than crashing on
+                # _mean_abs_delta(None, cur); a zero delta this poll just
+                # means no edge is seen YET, which is exactly what "keep
+                # waiting" already means below. This is a RETRY within the
+                # same max_wait budget, never an early release. Gated on
+                # _baseline_missed (not just `baseline is None`) so a caller
+                # that legitimately PASSES baseline=None as a plain value
+                # keeps diffing against None exactly as before.
+                baseline = cur
+                d = 0.0
+            else:
+                d = _mean_abs_delta(baseline, cur)
         except Exception as e:
+            # A SINGLE missed frame here must retry within max_wait, not
+            # release early: one missed grab used to end this wait after
+            # ~0.16s instead of its full budget (finding 4, r2). But a RUN
+            # of them (_DEAL_CAPTURE_FAIL_TRIES in a row, same shape as
+            # BAN_CURSOR_PROBE_TRIES) means the capture is genuinely gone,
+            # not just transiently missed -- give up and report it as an
+            # "error" row rather than silently spinning to a "timeout" one.
+            _consecutive_capture_fail += 1
+            if _consecutive_capture_fail >= _DEAL_CAPTURE_FAIL_TRIES:
+                print(f"  [deal] the deal gate could not read the hand "
+                      f"({type(e).__name__}: {e}) for "
+                      f"{_consecutive_capture_fail} polls in a row — giving "
+                      "up rather than spinning")
+                _record_row("error", reason="capture_error")
+                return False
             print(f"  [deal] the deal gate could not read the hand "
-                  f"({type(e).__name__}: {e}) — reading anyway; the retry path "
-                  "will catch a bad read")
-            _record_row("error", reason="capture_error")
-            return False
+                  f"({type(e).__name__}: {e}) — retrying within the wait budget")
+            continue
         biggest = max(biggest, d)
         # THE HEARTBEAT. A 35 s silence and a hung process read exactly alike --
         # the user watching the stream on 2026-09-08 could not tell them apart,
@@ -6877,11 +6923,16 @@ def _pause_menu_open():
     into an extra one that REOPENS it, because toggle_pause is a TOGGLE
     (CLAUDE.md sec3 pause book, sec5 OPTIONS-is-a-toggle).
 
-    Never returns None: `pause_menu.is_pause_screen` already answers on every
-    frame it is handed (a bool, not a three-valued read), so there is no blind
-    baseline to refuse here the way `_result_screen_up` refuses on a genuinely
-    unreadable frame. The failure mode this guards against is a spurious
-    RETRY, not a press into the dark.
+    Returns None on a missed grab (no frame this poll) -- this is the
+    `observe` callable input_controller.press_verified takes for
+    "toggle_pause" (see press_verified's own docstring: observe() returns
+    None when it cannot tell, and press_verified NEVER PRESSES WHILE BLIND).
+    Returning False here for a missed frame would report "closed" on no
+    evidence, which press_verified reads as a real baseline/state and presses
+    against -- one missed frame produced a spurious extra toggle that
+    REOPENED an already-closed menu (found in review, r2). `is_pause_screen`
+    itself is a normal two-valued read on any REAL frame; only the missing
+    frame is three-valued.
 
     Root cause this exists for (I-58, 2026-09-21): the close used to be ONE
     bare `press("toggle_pause")` with no verification anywhere on the path
@@ -6909,12 +6960,10 @@ def _pause_menu_open():
     wait_for_screen_to_settle(max_wait=6.0)
     img = _fast_grab()
     if img is None:
-        # No frame this poll. This function's own contract is "never returns
-        # None" (a three-valued read is not wanted here) -- and per its own
-        # docstring, the failure mode this guards against is a spurious
-        # RETRY, not a press into the dark, so False (not open) is the safe
-        # direction rather than crashing on is_pause_screen(None).
-        return False
+        # No frame this poll -- "cannot tell", not "closed". See the
+        # docstring above: press_verified's contract requires None here so
+        # it re-reads instead of pressing (or deciding) on a missing frame.
+        return None
     return _pm.is_pause_screen(img)
 
 
@@ -6947,7 +6996,11 @@ def _close_pause_menu_verified(log=print):
     ok, presses = input_controller.press_verified(
         "toggle_pause", _pause_menu_open, log=log)
     if ok:
-        ok = not _pause_menu_open()
+        _still_open = _pause_menu_open()
+        # A blind confirmation (_still_open is None) proves nothing -- never
+        # turn "cannot tell" into "closed". Only a confirmed-open frame
+        # should cancel the ok press_verified already proved.
+        ok = (_still_open is False)
     return ok, presses
 
 
@@ -6972,6 +7025,18 @@ def _match_start_screen():
     try:
         img = _fast_grab()
     except Exception:
+        return None
+    if img is None:
+        # No frame this poll -- "cannot see", not "other". Without this,
+        # read_ban_counter(None) returns None (guarded internally), which
+        # looked identical to "not a ban screen", and table_prompt.at_table
+        # (None) raises and gets swallowed below, so a missed frame fell all
+        # the way through to "other" -- and press_verified, told the screen
+        # was "other" (a real change from its "prompt" baseline), sent up to
+        # PRESS_VERIFY_TRIES Squares (start_match's key doubles as
+        # confirm_discard) into a match already debited $50 (found in
+        # review, r2). A missing frame must be "can't see", so every caller
+        # treats it as look again, pressing nothing.
         return None
     try:
         if read_ban_counter(img) is not None:
@@ -7350,6 +7415,12 @@ def read_full_ban_collection(max_presses: int = 40, use_cache: bool = True,
                 # missed frames, not one, means the sensor is genuinely gone.
                 _consecutive_no_frame += 1
                 if _consecutive_no_frame >= BAN_CURSOR_PROBE_TRIES:
+                    # A run of missed frames ends the scan before it could
+                    # prove it reached the bottom -- exactly the fragment this
+                    # function is designed never to cache (see _saw_desync's
+                    # docstring above). Mark it suspect like every other
+                    # early exit.
+                    _saw_desync = True
                     print(f"  [ban] no frame for {_consecutive_no_frame} polls "
                           "in a row — stopping the scan rather than spinning.")
                     break
@@ -7989,6 +8060,21 @@ def read_balance_from_pause_menu() -> int:
         press("toggle_pause")
         wait_for_screen_to_settle(max_wait=8.0)   # let the menu animate in
         _img = _fast_grab()
+        if _img is None:
+            # No frame this poll -- look again WITHOUT pressing. Pressing on
+            # a missed frame used to consume this attempt AND queue another
+            # toggle_pause next time around, either of which can double-toggle
+            # a menu that actually opened (found in review, r2). A few more
+            # looks cost nothing but time.
+            for _ in range(2):
+                wait_for_screen_to_settle(max_wait=4.0)
+                _img = _fast_grab()
+                if _img is not None:
+                    break
+            if _img is None:
+                print(f"  [balance] attempt {_attempt} of 3: no frame this "
+                      f"poll — retried the read (not the press) and still "
+                      f"nothing; moving to the next attempt.")
         if _img is not None and _pm.is_pause_screen(_img):
             # WHICH ATTEMPT LANDED IS THE SIGNAL. A silent retry loop reports
             # a clean read whether the toggle worked first time or third, so
@@ -7997,11 +8083,12 @@ def read_balance_from_pause_menu() -> int:
             print(f"  [balance] pause menu confirmed open on attempt "
                   f"{_attempt} of 3")
             break
-        print(f"  [balance] attempt {_attempt} of 3: toggle_pause did NOT "
-              f"leave a pause menu on screen — retrying. Do not read this as "
-              f"a slow menu; toggle_pause is a TOGGLE and may have closed one, "
-              f"and reading money off a WORLD frame is how the health coin got "
-              f"reported as the wallet ($246 -> $100).")
+        if _img is not None:
+            print(f"  [balance] attempt {_attempt} of 3: toggle_pause did NOT "
+                  f"leave a pause menu on screen — retrying. Do not read this as "
+                  f"a slow menu; toggle_pause is a TOGGLE and may have closed one, "
+                  f"and reading money off a WORLD frame is how the health coin got "
+                  f"reported as the wallet ($246 -> $100).")
     else:
         raise RuntimeError(
             "the pause menu would not open, so there is nowhere to read the "

@@ -482,9 +482,17 @@ check("grab() returns None when the game window is off-Space", got is None,
 check("...without ever grabbing the whole display",
       not _shots, "%d screenshot(s) of the primary display" % len(_shots))
 
-# THE CONTROL, and it is what keeps this from being a blanket deletion: the
-# fallback still exists for the failure it was written for -- a broken compass
-# import, a dead mss -- where nothing says the display is the wrong one.
+# FORMERLY THE CONTROL that kept this from being a blanket deletion: the
+# fallback used to survive for the failure it was written for -- a broken
+# compass import, a dead mss -- on the reasoning that nothing said the
+# display was the wrong one for THAT failure. A privacy skeptic (r2) found
+# that reasoning does not hold: a dead mss backend, a raising
+# game_window_rect, or a bad frame-dump read all mean the same thing this
+# module exists to prevent -- "we do not know what is on screen" -- and
+# there is no exception shape for which the PRIMARY DISPLAY (the user's own
+# desktop) is an acceptable answer. This site is exactly the one that fired
+# live (overnight/run_live_20260922b.log:780). The fallback is gone for
+# every exception now, this one included: no more blanket-deletion carve-out.
 def _other_failure():
     raise RuntimeError("mss is broken")
 
@@ -494,8 +502,10 @@ try:
     got = game_capture.grab()
 finally:
     compass.fast_capture = _real_fast_capture
-check("...but any OTHER failure still falls back, as it always did",
-      got is not None and len(_shots) == 1,
+check("...and any OTHER failure ALSO returns None now, never falling back "
+      "to the primary display (r2: this used to be the control that kept "
+      "the fallback alive)",
+      got is None and not _shots,
       "%r, %d screenshot(s)" % (type(got).__name__, len(_shots)))
 
 print("\nall green" if ok else "\nFAILED")

@@ -44,26 +44,21 @@ def grab(width=None):
     # has always promised. Every OTHER failure keeps the fallback, because a
     # broken compass import or a dead mss is the case it was written for and
     # nothing about it says the display is the wrong one.
-    missing_window = False
     try:
         import compass
         img = compass.fast_capture()
-    except Exception as exc:
-        # By NAME, not by isinstance: compass itself may be what failed to
-        # import, and then there is no class here to compare against.
-        missing_window = type(exc).__name__ == "NoGameWindow"
-        img = None
-    if img is None and missing_window:
+    except Exception:
+        # ANY capture failure means "no frame this poll" -- never a desktop
+        # screenshot. NoGameWindow used to be special-cased to return None
+        # while every other exception fell through to pyautogui.screenshot(),
+        # which grabs the PRIMARY DISPLAY (the user's own laptop desktop on
+        # this two-monitor rig). That fallback fired live
+        # (overnight/run_live_20260922b.log:780). There is no failure mode
+        # for which the wrong display is an acceptable answer, so every
+        # exception now returns None, full stop.
         return None
     if img is None:
-        # Last resort. This is the WRONG display on a multi-monitor setup, so it
-        # is a degraded fallback rather than an equivalent path — better than
-        # crashing the loop, but anything relying on exact crops will be wrong.
-        try:
-            import pyautogui
-            img = pyautogui.screenshot()
-        except Exception:
-            return None
+        return None
     img = img.convert("RGB")
     if width and img.width != width:
         ratio = width / img.width
