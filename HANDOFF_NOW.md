@@ -108,9 +108,13 @@ Streak under the user's rule (a retry counts against the streak only if the engi
 
 ## 6. LATER
 
-- **The I-65c last-play skip (~8.1 s/match).** Deferred by the user 09-24. Revisit only after the read_result false-positive investigation (§2a) is finished and merged. Designs and refutations: §2, r3-r7.
+**Top: GitHub push (the user's todos, 09-24). Each step waits for the user's explicit yes.**
 
-- **Before any first push:** rewrite the history off the work email `[work email removed]` (1,376 commits across all branches, 09-05..09-21) to `brp5088@gmail.com`. Do it in a copy with `git filter-repo`, since every cited sha changes, and only with the user's go-ahead (user, 09-24). The repo has no remote. Local `user.email` has been `brp5088@gmail.com` since 09-24.
+1. **Rewrite the history off the work email.** 1,376 commits across all branches (09-05..09-21) carry `[work email removed]`. Rewrite them to `brp5088@gmail.com` with `git filter-repo`, IN A COPY of the repo, since every sha changes and HANDOFF/ISSUES cite shas. Verify, then swap. Since 09-24 the local `user.email` is `brp5088@gmail.com`.
+2. **Create an empty PRIVATE repo on the personal GitHub account BRP5088.** The user does this in a browser, or with `gh` if it gets installed (it isn't now).
+3. **Add the remote and push:** `git remote add origin git@github-personal:BRP5088/<repo>.git`, then push. The SSH alias `github-personal` (key `~/.ssh/id_ed25519_personal`, `IdentitiesOnly yes`) was verified by the user on 09-24 and authenticates as BRP5088. Show the exact commands and wait for a yes before pushing. Never use the work account or key.
+
+- **The I-65c last-play skip (~8.1 s/match).** Deferred by the user 09-24. Revisit only after the read_result false-positive investigation (§2a) is finished and merged. Designs and refutations: §2, r3-r7.
 
 **Must: new this session (all CONFIRMED by reading or measuring; each goes through fixer→skeptic)**
 
