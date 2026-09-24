@@ -121,6 +121,13 @@ import glob
 import tempfile
 from PIL import Image
 
+# DEAL_FRAME_DIR anchors on orchestrator's __file__ and ignores
+# BASEBALL_DIAGNOSTICS_DIR, so the opt-in write below created diagnostics/deal_frames/
+# in the repo (test_no_side_effects caught it). _save_dropped_hand reads the global
+# at call time, so a temp root here catches both the control and the opt-in write.
+_real_deal_dir = o.DEAL_FRAME_DIR
+o.DEAL_FRAME_DIR = tempfile.mkdtemp(prefix="deal_frames_test_")
+
 # THE GUARD BLOCKS BY DEFAULT, and this is the control: without it the check
 # below would pass just as well with the guard missing entirely.
 _b0 = set(glob.glob(os.path.join(o.DEAL_FRAME_DIR, "dropped_*")))
@@ -145,11 +152,12 @@ if new:
           "...and the frame itself is in it")
     check(os.path.exists(os.path.join(d, "why.json")),
           "...beside a why.json naming the dropped slots")
-    import shutil
-    shutil.rmtree(d, ignore_errors=True)
 
 check(o._save_dropped_hand(None, "none", []) is None,
       "a None image is a no-op, never a raise into the turn loop")
+import shutil
+shutil.rmtree(o.DEAL_FRAME_DIR, ignore_errors=True)
+o.DEAL_FRAME_DIR = _real_deal_dir
 
 print()
 if fails:
