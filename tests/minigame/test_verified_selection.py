@@ -42,6 +42,14 @@ import input_controller as ic
 # sleep stub for their own reasons (asserting WHEN a sleep happens); this
 # blanket no-op just removes the wait for the sections that never did,
 # and those later stubs still save/restore over it exactly as before.
+#
+# SCOPED, NOT PERMANENT: this used to overwrite ic.time.sleep with no restore,
+# so anything importing input_controller after this file ran inherited a
+# sleep() that does nothing -- a real bug for whatever runs next in the same
+# process. The real function is saved here and put back at the very end of
+# the file (see the bottom), same save/restore shape as every later section's
+# own stub and as _run_harness.py's.
+_ORIG_IC_SLEEP = ic.time.sleep
 ic.time.sleep = lambda *a, **k: None
 
 FIX = os.path.join(_ROOT, "test_fixtures", "hand_cursor")
@@ -978,10 +986,127 @@ check(lh.TACTICS_PROMOTE_MIN > lh.TACTICS_PRESENT_MIN,
       f"asks whether a banner is there at all")
 
 
+# =========================================================================
+print("15. press_verified's OWN retry loop, pinned directly")
+# =========================================================================
+# EVERY CHECK ABOVE THAT ROUTES THROUGH press_verified (confirm_play at
+# input_controller.py:3113, confirm_discard at :3367) uses a FakeScreen whose
+# press() never drops those two actions -- so the loop at input_controller.py
+# ~4967 (`for attempt in range(1, tries + 1)`) always won on attempt 1, and a
+# mutant collapsing it to `range(1, 2)` (single attempt) changed NOTHING this
+# file could see: applied by hand, __pycache__/input_controller*.pyc deleted,
+# the whole suite still printed "all checks passed". The "after 2 press(es)"
+# line the merge agent pointed at is _walk_cursor_to's OWN separate retry
+# loop (input_controller.py:1414-1491, exercised by section 3/13 above) --
+# a different function that press_verified shares no code with. These checks
+# call press_verified itself and force drops, so a collapsed retry budget
+# fails here directly instead of hiding behind an untested path.
+class _DroppedNTimes:
+    """observe() reports a fixed value until `drop` presses have landed,
+    then flips -- so press_verified must retry exactly `drop` times before
+    the (drop + 1)th press is the one that lands."""
+
+    def __init__(self, drop):
+        self.drop = drop
+        self.sent = 0
+        self.state = 0
+
+    def press(self, action):
+        self.sent += 1
+        if self.sent > self.drop:
+            self.state = 1
+
+    def observe(self):
+        return self.state
+
+
+_old_press, _old_sleep = ic.press, ic.time.sleep
+ic.time.sleep = lambda *a, **k: None
+try:
+    # N < tries dropped presses: retried until the observer confirms, no more.
+    tgt = _DroppedNTimes(drop=ic.PRESS_VERIFY_TRIES - 1)
+    ic.press = tgt.press
+    ok, sent = ic.press_verified("select_card", tgt.observe)
+    check(ok is True and sent == ic.PRESS_VERIFY_TRIES,
+          f"{ic.PRESS_VERIFY_TRIES - 1} drops then a landed press -> ok={ok}, "
+          f"sent={sent} presses (want {ic.PRESS_VERIFY_TRIES}, one per drop plus "
+          f"the press that landed)")
+
+    # exactly ONE dropped press: retried, not given up on after the first try --
+    # this is precisely what `range(1, 2)` gets wrong.
+    tgt = _DroppedNTimes(drop=1)
+    ic.press = tgt.press
+    ok, sent = ic.press_verified("select_card", tgt.observe)
+    check(ok is True and sent == 2,
+          f"a single dropped press is retried (ok={ok}, sent={sent}, want 2) -- "
+          f"the single-attempt mutant reports ok=False, sent=1 here")
+
+    # dropped for the WHOLE budget: fails, and says so, having sent exactly
+    # `tries` presses -- never more (it must stop), never fewer (it must use
+    # the whole budget it was given).
+    tgt = _DroppedNTimes(drop=999)
+    ic.press = tgt.press
+    ok, sent = ic.press_verified("select_card", tgt.observe)
+    check(ok is False and sent == ic.PRESS_VERIFY_TRIES,
+          f"never confirmed -> ok={ok}, sent={sent} presses "
+          f"(want tries={ic.PRESS_VERIFY_TRIES})")
+
+    # the observer's verdict is what decides it, not the press count: an
+    # observer that reports EVERY press as landed (glow never distinguishing
+    # a drop from a hit) must return True after exactly ONE press, and one
+    # that never reports a change at all must exhaust the budget above.
+    class _AlwaysConfirms:
+        def __init__(self):
+            self.sent = 0
+
+        def press(self, action):
+            self.sent += 1
+
+        def observe(self):
+            return self.sent          # changes on every call, "confirmed" every time
+
+    ac = _AlwaysConfirms()
+    ic.press = ac.press
+    ok, sent = ic.press_verified("select_card", ac.observe)
+    check(ok is True and sent == 1,
+          f"an observer that never reports a miss confirms on press 1 "
+          f"(ok={ok}, sent={sent})")
+
+    class _NeverObserved:
+        """observe() is never called by anything BUT press_verified's own
+        _look -- if the observer is ignored, this can't distinguish that from
+        a working retry, so this checks the CALL COUNT, not just the outcome."""
+
+        def __init__(self):
+            self.sent = 0
+            self.observed = 0
+
+        def press(self, action):
+            self.sent += 1
+
+        def observe(self):
+            self.observed += 1
+            return self.sent if self.sent >= 3 else 0
+
+    no = _NeverObserved()
+    ic.press = no.press
+    ok, sent = ic.press_verified("select_card", no.observe)
+    check(ok is True and sent == 3,
+          f"confirms on the press that actually changed the state (ok={ok}, sent={sent})")
+    check(no.observed >= sent,
+          f"the observer was actually called at least once per attempt "
+          f"({no.observed} calls for {sent} presses) -- a mutant that ignores it "
+          f"or never calls it cannot produce this")
+finally:
+    ic.press, ic.time.sleep = _old_press, _old_sleep
+
+
 print()
 if _fails:
     print(f"FAILED {len(_fails)}")
     for f in _fails:
         print("   -", f)
+    ic.time.sleep = _ORIG_IC_SLEEP
     sys.exit(1)
 print("all checks passed")
+ic.time.sleep = _ORIG_IC_SLEEP
