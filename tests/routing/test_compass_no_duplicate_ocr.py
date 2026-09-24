@@ -48,6 +48,7 @@ _os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy")
 _os.environ["BASEBALL_TEST_RUN"] = "1"
 
 import glob                       # noqa: E402
+import shutil                     # noqa: E402
 import tempfile                   # noqa: E402
 
 from PIL import Image             # noqa: E402
@@ -98,7 +99,8 @@ def _read(path, recognise, tess):
     try:
         # Never touch the real cache file: this test is about OCR, and a stray
         # write would make it a second test of the thing it is not measuring.
-        compass._SCALE_CACHE_FILE = _os.path.join(tempfile.mkdtemp(), "s.json")
+        _cache_dir = tempfile.mkdtemp()
+        compass._SCALE_CACHE_FILE = _os.path.join(_cache_dir, "s.json")
         compass.pytesseract = tess
         ocr_glyphs.recognise = recognise
         return compass.read_bearing(img)
@@ -107,6 +109,7 @@ def _read(path, recognise, tess):
         compass._SCALE_CACHE_FILE = real_cache_file
         compass._SCALE_CACHE.clear()
         compass._SCALE_CACHE.update(cache)
+        shutil.rmtree(_cache_dir, ignore_errors=True)
 
 
 def _abstains(images, whitelist="NESW"):
@@ -157,7 +160,8 @@ try:
     # Redirect the cache file even here: read_bearing writes it when it meets a
     # geometry the file has not seen, and a test that leaves a file behind is a
     # side effect tests/harness/test_no_side_effects.py exists to catch.
-    compass._SCALE_CACHE_FILE = _os.path.join(tempfile.mkdtemp(), "s.json")
+    _cache_dir2 = tempfile.mkdtemp()
+    compass._SCALE_CACHE_FILE = _os.path.join(_cache_dir2, "s.json")
     for p in FRAMES:
         img = Image.open(p).convert("RGB")
         img.info["game_only"] = True
@@ -166,6 +170,7 @@ finally:
     compass._SCALE_CACHE_FILE = _real_file
     compass._SCALE_CACHE.clear()
     compass._SCALE_CACHE.update(_kept)
+    shutil.rmtree(_cache_dir2, ignore_errors=True)
 check("ANTI-VACUITY: the real reader still reads these frames "
       f"({sum(a is not None for a in real_answers)}/{len(FRAMES)})",
       sum(a is not None for a in real_answers) >= max(1, len(FRAMES) - 1))

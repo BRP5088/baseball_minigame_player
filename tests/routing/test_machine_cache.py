@@ -107,6 +107,8 @@ finally:
                 os.remove(p)
         else:
             open(p, "w").write(content)
+    import shutil as _shutil
+    _shutil.rmtree(_D, ignore_errors=True)
 
 if fails:
     for f in fails:
@@ -121,32 +123,35 @@ print("  geometry caches are per-machine: a second computer misses rather than "
 # mid-write, not just the one being saved. Proven by checking that no moment
 # exists where the file on disk is shorter than a complete document.
 def _atomic_write_check():
-    import compass, json, os, tempfile
+    import compass, json, os, shutil, tempfile
     d = tempfile.mkdtemp()
-    compass._SCALE_CACHE_FILE = os.path.join(d, "scale.json")
-    compass._SCALE_CACHE = {(1728, 1117): 0.148}
-    compass._save_scale_cache(force=True)
-    first = json.load(open(compass._SCALE_CACHE_FILE))
-
-    # simulate the mount dying partway through the NEXT save
-    real_dump = json.dump
-    def dying_dump(obj, fh, **kw):
-        fh.write('{"partial": ')          # a torn write
-        raise OSError("mount went away")
-    json.dump = dying_dump
     try:
-        compass._SCALE_CACHE = {(1728, 1117): 0.999}
-        compass._save_scale_cache(force=True)       # swallowed by the except: pass
-    finally:
-        json.dump = real_dump
+        compass._SCALE_CACHE_FILE = os.path.join(d, "scale.json")
+        compass._SCALE_CACHE = {(1728, 1117): 0.148}
+        compass._save_scale_cache(force=True)
+        first = json.load(open(compass._SCALE_CACHE_FILE))
 
-    survived = json.load(open(compass._SCALE_CACHE_FILE))
-    assert survived == first, (
-        "an interrupted save corrupted the cache — every machine's measured "
-        f"geometry is gone, not just this one's (on disk: {survived!r})")
-    leftovers = [f for f in os.listdir(d) if f.endswith(".tmp")]
-    print(f"  interrupted save left the good cache intact"
-          f"{' (stray .tmp remains, harmless)' if leftovers else ''}")
+        # simulate the mount dying partway through the NEXT save
+        real_dump = json.dump
+        def dying_dump(obj, fh, **kw):
+            fh.write('{"partial": ')          # a torn write
+            raise OSError("mount went away")
+        json.dump = dying_dump
+        try:
+            compass._SCALE_CACHE = {(1728, 1117): 0.999}
+            compass._save_scale_cache(force=True)       # swallowed by the except: pass
+        finally:
+            json.dump = real_dump
+
+        survived = json.load(open(compass._SCALE_CACHE_FILE))
+        assert survived == first, (
+            "an interrupted save corrupted the cache — every machine's measured "
+            f"geometry is gone, not just this one's (on disk: {survived!r})")
+        leftovers = [f for f in os.listdir(d) if f.endswith(".tmp")]
+        print(f"  interrupted save left the good cache intact"
+              f"{' (stray .tmp remains, harmless)' if leftovers else ''}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 _atomic_write_check()

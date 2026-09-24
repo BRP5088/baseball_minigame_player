@@ -8,8 +8,10 @@ is unfalsifiable until the arrivals are measured the same way.
 
 This guards the control group, not the navigation.
 """
+import atexit
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 import types
@@ -49,6 +51,7 @@ def run(arrives):
     """Walk a one-node route that either arrives or does not; return files."""
     saved = []
     shots = tempfile.mkdtemp(prefix="ctl_")
+    atexit.register(shutil.rmtree, shots, ignore_errors=True)
 
     old_go = gw.go_to_node_verified
     old_rec = gw.RECORD_RELIABILITY

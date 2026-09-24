@@ -78,8 +78,10 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
     _ROOT = _os.path.dirname(_ROOT)
 _sys.path.insert(0, _ROOT)
 
+import atexit
 import json
 import os
+import shutil
 import tempfile
 import time as _real_time
 
@@ -89,6 +91,7 @@ os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 # match log. Both go to a temp dir: a real stall alert buried under synthetic
 # ones is worthless, and a synthetic row in match_log.jsonl looks genuine.
 _TMP = tempfile.mkdtemp(prefix="baseball-early-result-")
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
 os.environ["BASEBALL_DIAGNOSTICS_DIR"] = _TMP
 os.environ["BASEBALL_MATCH_LOG"] = os.path.join(_TMP, "match_log.jsonl")
 
@@ -233,6 +236,15 @@ class Harness:
         _ic_press = _ic.press
         _ic.press = self._press
 
+        # press_verified sleeps for real through input_controller's OWN `time`
+        # (PRESS_VERIFY_SETTLE per retry, 0.15s per blind re-read) -- the
+        # `patches["time"]` above only swaps ORCHESTRATOR's `time` for the
+        # virtual clock. Every scenario in this file scripts the confirm-gate
+        # boundary, which retries close_result/start_match repeatedly, and
+        # that is where this file's runtime went.
+        _ic_sleep = _ic.time.sleep
+        _ic.time.sleep = lambda *a, **k: None
+
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         with open(path, "w") as f:
@@ -245,6 +257,7 @@ class Harness:
             for name, fn in saved.items():
                 setattr(o, name, fn)
             _ic.press = _ic_press
+            _ic.time.sleep = _ic_sleep
             os.unlink(path)
 
     def debits(self, start_balance=500):

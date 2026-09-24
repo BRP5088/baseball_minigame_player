@@ -10,6 +10,7 @@ a sample is only worth recording if it sits where the recorder thinks it does.
 import json
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 import types
@@ -89,6 +90,7 @@ try:
           e2.summary()["unmapped_rich_views"] == 0)
 finally:
     explore.time.sleep = real_sleep
+    shutil.rmtree(d, ignore_errors=True)
 
 # It must never write to the map or the places directory.
 src = open(os.path.join(_ROOT,

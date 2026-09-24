@@ -52,6 +52,7 @@ _os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy")
 _os.environ["BASEBALL_TEST_RUN"] = "1"
 
 import glob                       # noqa: E402
+import shutil                     # noqa: E402
 import tempfile                   # noqa: E402
 
 from PIL import Image             # noqa: E402
@@ -81,7 +82,8 @@ real_file = compass._SCALE_CACHE_FILE
 real_save = compass._save_scale_cache
 kept = dict(compass._SCALE_CACHE)
 try:
-    compass._SCALE_CACHE_FILE = _os.path.join(tempfile.mkdtemp(), "scale.json")
+    _cache_dir = tempfile.mkdtemp()
+    compass._SCALE_CACHE_FILE = _os.path.join(_cache_dir, "scale.json")
     compass._SCALE_CACHE.clear()
 
     def counted():
@@ -115,6 +117,7 @@ finally:
     compass._SCALE_CACHE_FILE = real_file
     compass._SCALE_CACHE.clear()
     compass._SCALE_CACHE.update(kept)
+    shutil.rmtree(_cache_dir, ignore_errors=True)
 
 # --- anti-vacuity: the frames must actually exercise the write path --------
 check(f"ANTI-VACUITY: the frames are readable ({read_ok}/{len(FRAMES)})",

@@ -227,11 +227,15 @@ print(f"OK: progress round-trip + atomic write + corrupt-refusal, "
 # makes it RECOVERABLE when prevention is forgotten. The two fail
 # independently, which is the whole point — a test that forgets the redirect
 # still produces removable rows instead of invisible ones.
+import atexit
+import shutil as _shutil
 import subprocess
 import sys as _sys
 import tempfile as _tf
 
-_synth = os.path.join(_tf.mkdtemp(), "m.jsonl")
+_synth_dir = _tf.mkdtemp()
+atexit.register(_shutil.rmtree, _synth_dir, ignore_errors=True)
+_synth = os.path.join(_synth_dir, "m.jsonl")
 _r = subprocess.run(
     [_sys.executable, "-c",
      "import orchestrator as o; o.log_matchup({'our_card_name': 'X', 'our_power': 5})"],

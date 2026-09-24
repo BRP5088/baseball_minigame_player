@@ -23,7 +23,9 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
 _sys.path.insert(0, _ROOT)
 _os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
+import atexit
 import os
+import shutil
 import tempfile
 
 import env_loader
@@ -33,6 +35,7 @@ fails = []
 
 def fresh(text, preset=None):
     d = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
     p = os.path.join(d, ".env")
     open(p, "w").write(text)
     for k in ("ZZ_A", "ZZ_B", "ZZ_QUOTED"):

@@ -13,7 +13,9 @@ WHAT IS ASSERTED HERE IS BEHAVIOUR, NOT SOURCE TEXT. A grep for "console_lock"
 in _harness.py would pass while the call sat behind an `if False`. These drive
 run_trial for real and check whether the child was executed.
 """
+import atexit
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +40,7 @@ def check(label, cond):
 
 
 tmp = tempfile.mkdtemp(prefix=f"conex_{os.getpid()}_")
+atexit.register(shutil.rmtree, tmp, ignore_errors=True)
 MARKER = os.path.join(tmp, "child_ran")
 CHILD = os.path.join(tmp, "child.py")
 with open(CHILD, "w") as fh:

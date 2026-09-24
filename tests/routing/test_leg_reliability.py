@@ -22,12 +22,14 @@ store visible, write goes only to the temp path, a dying write propagates and
 leaves the original intact). Nothing here contradicts it; it is the file to
 read for WHY the raise stays.
 """
+import atexit
 import contextlib
 import hashlib
 import io
 import json
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 
@@ -50,7 +52,9 @@ def check(name, cond):
 
 
 def fresh():
-    return os.path.join(tempfile.mkdtemp(), "rel.json")
+    d = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
+    return os.path.join(d, "rel.json")
 
 
 def load_or_none(path):
@@ -70,7 +74,9 @@ def digest(path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest()
 
 
-tmp = os.path.join(tempfile.mkdtemp(), "rel.json")
+_tmpdir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _tmpdir, ignore_errors=True)
+tmp = os.path.join(_tmpdir, "rel.json")
 
 # Unknown ground is slow. This is the default and the safe one.
 check("an unrecorded leg is NOT sped up",
@@ -132,6 +138,7 @@ check("a corrupt record degrades to slow rather than raising",
 real_store = lr.STORE
 real_store_before = digest(real_store)
 arm_dir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, arm_dir, ignore_errors=True)
 arm = os.path.join(arm_dir, "arm_A.json")
 written_to = []
 real_writer = lr._atomic_write_json

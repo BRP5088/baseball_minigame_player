@@ -1,4 +1,5 @@
 """tactics_effect must ABSTAIN rather than emit a p-value it cannot support."""
+import atexit
 import json
 import os
 import os as _os
@@ -30,6 +31,7 @@ def write_log(rows):
     for r in rows:
         fh.write(json.dumps(r) + "\n")
     fh.close()
+    atexit.register(os.unlink, fh.name)
     return fh.name
 
 

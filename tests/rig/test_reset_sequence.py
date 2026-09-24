@@ -55,7 +55,9 @@ _sys.path.insert(0, _ROOT)
 _os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
 
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 import types
@@ -352,6 +354,7 @@ def run(label, **kw):
     # the project tree (tests/harness/test_no_side_effects.py would catch it,
     # and a diagnostic that pollutes the repo is its own defect).
     game.frame_dir = tempfile.mkdtemp(prefix=f"resetprobe_{os.getpid()}_")
+    atexit.register(shutil.rmtree, game.frame_dir, ignore_errors=True)
     reset_env.PROBE_DIR = game.frame_dir
 
     sys.modules["input_controller"] = ic

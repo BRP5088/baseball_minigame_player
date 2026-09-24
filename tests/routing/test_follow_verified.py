@@ -5,8 +5,10 @@ Why the streak: the requirement is 25 CONSECUTIVE arrivals. A 90% success rate
 with an independent failure every tenth run never produces 25 in a row, and a
 mean would hide that entirely.
 """
+import atexit
 import os
 import os as _os
+import shutil
 import sys
 
 _ROOT = _os.path.dirname(_os.path.abspath(__file__))
@@ -181,6 +183,7 @@ try:
     check("but a clean run does save controls", len(controls()) > 0)
 finally:
     gw.go_to_node_verified = real3
+    shutil.rmtree(d, ignore_errors=True)
 
 # A run must report failures BY SIGNATURE, not just in total. Reporting only the
 # overall rate averages three different failures together, which is very likely
@@ -256,8 +259,10 @@ try:
 
     gw.go_to_node_verified = verified_publishing
     gw._LAST_LEG_END.clear()
+    _shots1 = _tf.mkdtemp()
+    atexit.register(shutil.rmtree, _shots1, ignore_errors=True)
     gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
-                       shots=_tf.mkdtemp())
+                       shots=_shots1)
     check("the leg's own end frame is the one saved as the FAILURE frame",
           tagged("fail_") == ["leg_end"])
     check("...and the start pose rides beside it, as start_<node>",
@@ -278,8 +283,10 @@ try:
 
     gw.go_to_node_verified = verified_silent
     gw._LAST_LEG_END.clear()
+    _shots2 = _tf.mkdtemp()
+    atexit.register(shutil.rmtree, _shots2, ignore_errors=True)
     gw.follow_verified(None, ROUTE, capture=capture, log=lambda *a: None,
-                       shots=_tf.mkdtemp())
+                       shots=_shots2)
     check("falls back to the PRE-recovery frame, never the post-recovery one",
           tagged("fail_") == ["before"])
     check("it is not the post-recovery view",

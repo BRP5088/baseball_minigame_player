@@ -6,9 +6,11 @@ and nothing did. But a place seeded from a BAD frame poisons the localiser
 permanently — a near-featureless door once matched the bar at 0.906, beating
 every genuine arrival — so the filter matters more than the collection.
 """
+import atexit
 import json
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 import types
@@ -47,6 +49,7 @@ def run(keypoints, room, score, margin=1.0):
     saved = sys.modules.get("places")
     sys.modules["places"] = fake
     d = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
     old = survey.SURVEY_DIR
     survey.SURVEY_DIR = d
     img = Img()
