@@ -35,6 +35,15 @@ from PIL import Image
 import local_hand as lh
 import input_controller as ic
 
+# select_and_play/select_and_discard retry-and-look through input_controller's
+# OWN `time` (LOOK_RETRY_SEC / SELECT_SETTLE_SEC / MOVE_SETTLE_SEC, the same
+# module press_verified sleeps through) -- unstubbed, every scripted drop
+# below spends that settle for real. Later sections install their own
+# sleep stub for their own reasons (asserting WHEN a sleep happens); this
+# blanket no-op just removes the wait for the sections that never did,
+# and those later stubs still save/restore over it exactly as before.
+ic.time.sleep = lambda *a, **k: None
+
 FIX = os.path.join(_ROOT, "test_fixtures", "hand_cursor")
 _fails = []
 

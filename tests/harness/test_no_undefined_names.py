@@ -204,8 +204,12 @@ check("no module references an undefined name", not problems)
 
 # POSITIVE CONTROL. Without this, a scanner that silently found nothing — a
 # broken walk, a bad skip list — would report success forever.
+import atexit
+import shutil
 import tempfile
-_tmp = os.path.join(tempfile.mkdtemp(), "canary.py")
+_tmpdir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _tmpdir, ignore_errors=True)
+_tmp = os.path.join(_tmpdir, "canary.py")
 with open(_tmp, "w") as fh:
     fh.write("def f():\n    return TOTALLY_UNDEFINED_NAME\n")
 check("the scanner CAN detect an undefined name",

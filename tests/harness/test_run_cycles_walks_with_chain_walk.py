@@ -148,8 +148,11 @@ SHIPPED_SHOTS = run_cycles.SHOTS_ROOT
 SHIPPED_JOURNALS = run_cycles.JOURNAL_ROOT
 SRC = open(run_cycles.__file__).read()
 
+import atexit
+import shutil
 import tempfile
 _TMP = tempfile.mkdtemp(prefix="run_cycles_test_")
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
 run_cycles.SHOTS_ROOT = os.path.join(_TMP, "frames")
 run_cycles.JOURNAL_ROOT = os.path.join(_TMP, "journals")
 # No sleeping, a controllable window probe, and a chain directory that exists

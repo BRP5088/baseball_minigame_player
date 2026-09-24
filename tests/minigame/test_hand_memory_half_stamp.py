@@ -19,6 +19,7 @@ then served on a pitching turn, for a slot the reader cannot see and so cannot a
 """
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -57,6 +58,7 @@ class Mem:
          o.MEMORY_IN_PROCESS_ONLY, mem, o._hand_memory_loaded) = self.saved
         o._hand_memory.clear()
         o._hand_memory.update(mem)
+        shutil.rmtree(self.d, ignore_errors=True)
 
     def on_disk(self):
         with open(o.HAND_MEMORY_FILE) as fh:

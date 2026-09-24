@@ -197,10 +197,14 @@ check("a failed escape reports all three crabs it actually tried",
 check("unstick still returns 0.0 when it fails", freed == 0.0)
 
 # --- run(): the re-aim after crabbing, whose result used to be discarded ---
+import atexit
 import json
+import shutil
 import tempfile
 
-_steps = os.path.join(tempfile.mkdtemp(), "steps.json")
+_steps_dir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _steps_dir, ignore_errors=True)
+_steps = os.path.join(_steps_dir, "steps.json")
 with open(_steps, "w") as fh:
     json.dump([{"bearing": 291.0, "dur": 0.2, "speed": 0.25}], fh)
 

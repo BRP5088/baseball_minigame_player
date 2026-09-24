@@ -18,12 +18,14 @@ The project had already solved this twice (input_controller._save_view_cache,
 compass._save_scale_cache, and orchestrator._atomic_write_json). This pins that
 leg_reliability now does the same.
 """
+import atexit
 import builtins
 import contextlib
 import io
 import json
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 
@@ -46,7 +48,9 @@ def check(name, cond):
 
 
 def fresh():
-    return os.path.join(tempfile.mkdtemp(), "rel.json")
+    d = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
+    return os.path.join(d, "rel.json")
 
 
 def load_or_none(path):

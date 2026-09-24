@@ -10,10 +10,12 @@ tests/harness/test_tools_spend_properly.py and test_every_test_sets_the_flag.py,
 the two closest relatives in this directory, both use check(ok, msg) -- this file
 matches them.
 """
+import atexit
 import contextlib
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -101,6 +103,7 @@ def _quiet(fn, *a, **kw):
 # ---- (a) --action look: reads, presses nothing ------------------------------
 with Stubs() as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "look"])
     check(code == 0, f"(a) --action look exits 0 (got {code}); output:\n{out}")
     check(os.path.exists(os.path.join(session, "001_before.png")),
@@ -123,6 +126,7 @@ with Stubs() as s:
 # ---- (b) --action d3 --dry: presses nothing, json says what it would send ---
 with Stubs() as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "d3", "--dry"])
     check(code == 0, f"(b) --action d3 --dry exits 0 (got {code}); output:\n{out}")
     check(not s.discard_calls,
@@ -139,6 +143,7 @@ with Stubs() as s:
 # ---- (c) --action d3: calls the stub with 3 exactly once, writes after + diff
 with Stubs() as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "d3"])
     check(s.discard_calls == [3],
          f"(c) select_and_discard(3) called exactly once (got {s.discard_calls}); "
@@ -157,6 +162,7 @@ with Stubs() as s:
 # ---- (c2) a REFUSED press (the stub declines) still writes json, no after ---
 with Stubs(discard_ok=False) as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "d2"])
     check(code == 2, f"(c2) a refused action exits 2 (got {code})")
     check(s.discard_calls == [2], f"(c2) the stub was still called once ({s.discard_calls})")
@@ -173,6 +179,7 @@ with Stubs(discard_ok=False) as s:
 # ---- money guard: k start_match is refused, --allow-pay does not change that
 with Stubs() as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "k start_match"])
     check(code == 2, f"(money) k start_match refuses (exit {code})")
     check(not s.press_calls, f"(money) start_match was never pressed ({s.press_calls})")
@@ -197,6 +204,7 @@ _saved_flag = mc.CRAWL_DRIVE_IN_TESTS
 mc.CRAWL_DRIVE_IN_TESTS = False              # the control: no opt-in this time
 try:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     code, out = _quiet(mc.cli_main, ["--session", session, "--action", "look"])
     check(code == 1, f"(d) refuses with exit 1 when nothing is stubbed (got {code})")
     check(_calls == [], f"(d) the sentinel capture was never reached (calls={_calls})")
@@ -209,6 +217,7 @@ finally:
 # ---- (e) --summary prints one line per recorded step -------------------------
 with Stubs() as s:
     session = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, session, ignore_errors=True)
     mc.cli_main(["--session", session, "--action", "look"])
     mc.cli_main(["--session", session, "--action", "s"])
     code, out = _quiet(mc.cli_main, ["--summary", session])

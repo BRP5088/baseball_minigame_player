@@ -69,8 +69,12 @@ else:
                      "reverse of the 45 walked out)")
 
 # --- a saved map reloads unchanged -----------------------------------------
+import atexit
+import shutil
 import tempfile
-p = os.path.join(tempfile.mkdtemp(), "m.json")
+_map_dir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _map_dir, ignore_errors=True)
+p = os.path.join(_map_dir, "m.json")
 m.save(p)
 back = worldmap.WorldMap.load(p)
 if back.here() != m.here() or back.landmarks != m.landmarks or back.level != m.level:

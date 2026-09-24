@@ -86,11 +86,12 @@ class _Explodes:
         raise RuntimeError("boom")
 
 
-try:
-    r = orchestrator.record_reveal_kind(_Explodes(), INFO, out_dir=tempfile.mkdtemp())
-    check(r is None, "a frame that raises on use returns None instead of propagating")
-except Exception as e:
-    check(False, f"it RAISED into the caller: {type(e).__name__}: {e}")
+with tempfile.TemporaryDirectory() as _explode_dir:
+    try:
+        r = orchestrator.record_reveal_kind(_Explodes(), INFO, out_dir=_explode_dir)
+        check(r is None, "a frame that raises on use returns None instead of propagating")
+    except Exception as e:
+        check(False, f"it RAISED into the caller: {type(e).__name__}: {e}")
 
 try:
     r = orchestrator.record_reveal_kind(_img(), INFO, out_dir="/nonexistent/\0bad")

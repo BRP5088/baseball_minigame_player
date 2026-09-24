@@ -45,8 +45,10 @@ while _ROOT != os.path.dirname(_ROOT) and not os.path.exists(
 sys.path.insert(0, _ROOT)
 os.environ["BASEBALL_TEST_RUN"] = "1"
 
+import atexit
 import io
 import json
+import shutil
 import tempfile
 
 import input_controller as ic
@@ -69,6 +71,7 @@ _saved = {k: getattr(ic, k) for k in
            "_screen_geometry", "subprocess", "game_window_rect")}
 
 _tmp = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _tmp, ignore_errors=True)
 _screen = {"now": DISPLAY_A}
 
 

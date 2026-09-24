@@ -1,5 +1,5 @@
 """patch64: the event log writes when enabled, never when disabled, and every hook is wired."""
-import os, sys, json, tempfile
+import atexit, os, shutil, sys, json, tempfile
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 os.environ.setdefault("BASEBALL_TEST_RUN", "1")
@@ -8,7 +8,7 @@ def check(c, m): (print("PASS", m) if c else (fails.append(m), print("FAIL", m))
 import event_log
 os.environ.pop("BASEBALL_EVENT_LOG", None)
 check(event_log.log_event("x", a=1) is False, "disabled: log_event returns False with the env unset")
-d = tempfile.mkdtemp(); p = os.path.join(d, "ev.jsonl")
+d = tempfile.mkdtemp(); atexit.register(shutil.rmtree, d, ignore_errors=True); p = os.path.join(d, "ev.jsonl")
 os.environ["BASEBALL_EVENT_LOG"] = p
 try:
     check(event_log.log_event("capture", where="t") is True, "enabled: a row is written")

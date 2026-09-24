@@ -45,9 +45,11 @@ subprocess.run(timeout=...), so a regression fails this file in seconds instead
 of hanging it — SIGALRM would not be trustworthy here, since the thing being
 bounded is a blocking open inside the interpreter's own syscall.
 """
+import atexit
 import errno
 import fcntl
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -109,6 +111,7 @@ MAX_GIVE_UP_SEC = 10.0
 CHILD_KILL_SEC = 45.0
 
 _tmp = tempfile.mkdtemp(prefix="baseball_fifo_bound_")
+atexit.register(shutil.rmtree, _tmp, ignore_errors=True)
 _fifo = os.path.join(_tmp, "chiaki_input")
 os.mkfifo(_fifo, 0o600)
 

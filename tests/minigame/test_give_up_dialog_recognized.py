@@ -32,13 +32,16 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
     _ROOT = _os.path.dirname(_ROOT)
 _sys.path.insert(0, _ROOT)
 
+import atexit
 import os
+import shutil
 import tempfile
 import time as _real_time
 
 os.environ["BASEBALL_TEST_RUN"] = "1"
 os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 _TMP = tempfile.mkdtemp(prefix="baseball-give-up-")
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
 os.environ["BASEBALL_DIAGNOSTICS_DIR"] = _TMP
 os.environ["BASEBALL_MATCH_LOG"] = os.path.join(_TMP, "match_log.jsonl")
 
@@ -183,6 +186,11 @@ class Harness:
         _ic_press = _ic.press
         _ic.press = _press_and_track
 
+        # press_verified sleeps for real through input_controller's OWN `time`;
+        # `patches["time"]` above only swaps ORCHESTRATOR's `time`.
+        _ic_sleep = _ic.time.sleep
+        _ic.time.sleep = lambda *a, **k: None
+
         saved_gud = reset_env.give_up_dialog
         reset_env.give_up_dialog = self._give_up_dialog
 
@@ -198,6 +206,7 @@ class Harness:
             for name, fn in saved.items():
                 setattr(o, name, fn)
             _ic.press = _ic_press
+            _ic.time.sleep = _ic_sleep
             reset_env.give_up_dialog = saved_gud
             os.unlink(path)
 

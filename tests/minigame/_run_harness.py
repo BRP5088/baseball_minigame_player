@@ -49,6 +49,7 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
 _sys.path.insert(0, _ROOT)
 
 
+import atexit
 import glob
 import json
 import os
@@ -62,6 +63,7 @@ os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 # burying one genuine stall under twenty synthetic ones defeats the point of
 # having the alert at all.
 _DIAGTMP = tempfile.mkdtemp(prefix="baseball-diag-test-")
+atexit.register(shutil.rmtree, _DIAGTMP, ignore_errors=True)
 os.environ["BASEBALL_DIAGNOSTICS_DIR"] = _DIAGTMP
 # Same reason: the misfire/reveal tests drive real plays, which append to the
 # match log. Without this they contaminate the dataset the project exists to
@@ -466,6 +468,17 @@ class Harness:
         _ic_press = _ic.press
         _ic.press = self._press
 
+        # press_verified (called for close_result/start_match/confirm_play, I-11)
+        # sleeps for real via input_controller's OWN `time` -- PRESS_VERIFY_SETTLE
+        # per retry plus 0.15s per blind re-read -- because `patches["time"]` above
+        # only swaps ORCHESTRATOR's `time` for the virtual clock. Unpatched, a
+        # scenario that drops a press a few times costs real seconds per call and
+        # multiplies across every test file this harness drives (measured: several
+        # of this suite's slowest files). Nothing here asserts on wall-clock time,
+        # so a no-op sleep changes no check, only the runtime.
+        _ic_sleep = _ic.time.sleep
+        _ic.time.sleep = lambda *a, **k: None
+
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         with open(path, "w") as f:
@@ -478,6 +491,7 @@ class Harness:
             for name, fn in saved.items():
                 setattr(o, name, fn)
             _ic.press = _ic_press
+            _ic.time.sleep = _ic_sleep
             os.unlink(path)
 
 

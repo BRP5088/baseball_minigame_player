@@ -33,9 +33,11 @@ while _ROOT != _os.path.dirname(_ROOT) and not _os.path.exists(
 _sys.path.insert(0, _ROOT)
 _os.environ["BASEBALL_TEST_RUN"] = "1"   # before any project import
 
+import atexit
 import os
 import sys
 import json
+import shutil
 import tempfile
 import types
 
@@ -47,6 +49,7 @@ os.environ.setdefault("PERSONAL_ANTHROPIC_API_KEY", "dummy-offline-test")
 # never captured in a default -- is the same trap the module-level default
 # already dodges; this is the caller-side half of it).
 _LOGTMP = tempfile.mkdtemp(prefix="i06_matchlog_")
+atexit.register(shutil.rmtree, _LOGTMP, ignore_errors=True)
 _MATCH_LOG = os.path.join(_LOGTMP, "match_log.jsonl")
 os.environ["BASEBALL_MATCH_LOG"] = _MATCH_LOG
 

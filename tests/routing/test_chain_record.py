@@ -22,6 +22,8 @@ import hashlib
 import json
 import os
 import sys
+import atexit
+import shutil
 import tempfile
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +35,9 @@ os.environ["BASEBALL_TEST_RUN"] = "1"
 
 # BEFORE any import that might reach analog_replay: its FIFO path is read at
 # import time, so pointing it somewhere harmless afterwards would prove nothing.
-_FIFO = os.path.join(tempfile.mkdtemp(), "fifo_that_must_stay_absent")
+_fifo_dir = tempfile.mkdtemp()
+atexit.register(shutil.rmtree, _fifo_dir, ignore_errors=True)
+_FIFO = os.path.join(_fifo_dir, "fifo_that_must_stay_absent")
 os.environ["CHIAKI_INJECT_INPUT"] = _FIFO
 
 import numpy as np
@@ -51,7 +55,9 @@ def check(name, cond):
 
 
 def fresh():
-    return os.path.join(tempfile.mkdtemp(), "chain")
+    d = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
+    return os.path.join(d, "chain")
 
 
 def lines(directory):

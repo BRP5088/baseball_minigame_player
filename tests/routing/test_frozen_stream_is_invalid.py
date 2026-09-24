@@ -30,8 +30,10 @@ The four measured classes themselves are pinned by tests/routing/
 test_failure_kind.py against the archived frames. This file must not restate
 them; it only asserts that liveness gates them.
 """
+import atexit
 import os
 import os as _os
+import shutil
 import sys
 import tempfile
 import types
@@ -242,6 +244,7 @@ try:
     # the path that reaches failure_kind.classify with a real frame in hand.
     resets["n"] = 0
     shots = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, shots, ignore_errors=True)
     lines = []
     # COUNT THE SEAM'S USE, don't just pass it. This whole file reached the LIVE COMPASS
     # for months: graph_walk's relocalise sweep and walk_steps.turn_to both ignored the
@@ -317,11 +320,13 @@ try:
         gw.go_to_node_verified = (
             lambda m, node, capture=None, read_heading=None, log=None,
             attempts=3, shots=None, **_kw: False)
+        _shots2 = tempfile.mkdtemp()
+        atexit.register(shutil.rmtree, _shots2, ignore_errors=True)
         r = gw.consecutive_arrivals(Map(), ROUTE, 1,
                                     capture=Rig(live_calls=10 ** 6),
                                     read_heading=lambda: 90.0,
                                     log=lambda *a: None,
-                                    shots=tempfile.mkdtemp())
+                                    shots=_shots2)
         check("a LIVE stream still records a real FAILURE", r["outcomes"] == [False])
         check("...counted as a valid trial", r["valid"] == 1 and r["invalid"] == 0)
         check("...and it still gets a real signature",
