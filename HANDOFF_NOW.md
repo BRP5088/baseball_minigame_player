@@ -48,10 +48,12 @@
 - r7's full-frame census flagged `local_state.read_result()` True at 0.97-0.98 on 5 "reveal" frames and at 0.806 on `negative_win_screen_no_banner_20260921`.
 - The peer session opened all 6. They are TRUE end-of-match result screens (medallion, WINNER/LOSER, CLOSE, all 5 round dots) sitting in reveal fixture folders. I checked `reveal_occlusion/reveal10_edge075` myself: LOSER, CLOSE, 0-3.
 - Main census: **0 of 344 mid-match frames classified as a result.** No code change is needed. r7 was told to relabel the 6 as positives.
-- **The peer's regression test is DONE, UNCOMMITTED:** `tests/minigame/test_read_result_end_screens.py` (121 lines) in worktree `.claude/worktrees/read-result-end-screens`, branch `test/read-result-end-screens` (still at `dd39842`).
-  - The peer left its mutant APPLIED in that worktree's `local_state.py` (`if _card is not None:` → `if True:` at ~:914). The manager restored it on 09-24 with `git checkout`, and its sha now matches main. Main's copy was never touched.
-  - On the restored code: rc=0 in 4.7 s, "read_result is False on all 134 mid-match frames". NOTE: 134, not the 305 asked for. Check which frames it pins, and why.
-  - Next: commit it on its branch (`--no-verify` rule), run an independent skeptic with 2+ of its own mutants (verifying the restore by sha256), then merge. That merge unblocks revisiting the last-play skip (LATER).
+- **The peer's regression test is COMMITTED, ready for a skeptic:** branch `test/read-result-end-screens` @ `1bb03df`, worktree `.claude/worktrees/read-result-end-screens`. It adds ONE file, `tests/minigame/test_read_result_end_screens.py` (121 lines), with no production changes (verified with `git show --stat`).
+  - What it pins: 7 end screens read True with the right outcome (the 6 misfiled frames plus `screens/result__0`), and 134 tracked mid-match frames read False. Each glob has a floor. It is 134 rather than 305 because `reveal_kind_truth/auto/` (200 frames) is `orchestrator.REVEAL_KIND_DIR`, which live runs write to, so it is deliberately not globbed. All 200 read False in the peer's census.
+  - Runtime: 4.7-4.9 s, using a spawn process pool.
+  - Peer's mutants: 6 of 6 killed by the new test (RESULT_MIN 0.99 and 0.70, drop LOSER, drop WINNER, loser-as-win, card-fallback-always).
+  - **Discrepancy the skeptic must resolve:** the peer says `local_state.py` was restored after its sweep, but the manager found it MUTATED (`if True:`, the M6 card-fallback-always mutant) in that worktree at ~00:58, and restored it with `git checkout` then. The manager's restore may have landed mid-sweep. It ran 4 mutants at a time, possibly in one worktree. Re-run the mutants independently; don't trust the table.
+  - Peer's LATER notes: `test_result_reader.py:175` reads a gitignored `diagnostics/...screen_at_stall.png`, so it fails in every worktree and its kill signal is unreadable there. The commit used `--no-verify` under the demos/ rule.
 
 ## 3. RESULTS (live, from 09-23; no live runs since)
 
