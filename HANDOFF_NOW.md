@@ -6,10 +6,10 @@
 - **No agents running from this session.** chiaki is not running. The console has not been touched this session.
 - The full suite has NOT been run on main since the I-70 merge. Run it before anything goes live.
 - A separate session (task_d648486a / [819d23], "Investigate local_state.read_result false positives") may still be running. See §2a.
-- **First actions, in order:** (1) get the user's I-65c answer (§2); (2) skeptic, then merge the peer's read_result regression test (§2a); (3) the PRIVACY capture-fallback fix (§6); (4) the test-speed ticket (§6); (5) run the full suite on main before anything goes live.
+- **First actions, in order:** (1) dispatch the reshaped I-65c fixer from the brief in §2 (the user decided 09-24); (2) skeptic, then merge the peer's read_result regression test (§2a); (3) the PRIVACY capture-fallback fix (§6); (4) the test-speed ticket (§6); (5) run the full suite on main before anything goes live.
 - Record is unchanged: **163W 20L 19D**. The paid model is OFF. Never save the game.
 
-## 2. I-65c — STOPPED after 7 rounds (third-refutation rule). DECISION NEEDED FROM THE USER.
+## 2. I-65c — STOPPED after 7 rounds; USER DECIDED 09-24: shrink to the core (see DECISION below)
 
 **Refutations, one line each**
 - r1: a has_fan/stillness race, and a weakened test.
@@ -24,7 +24,25 @@
 
 **The one question for the user:** keep chasing the last-play skip (~8.1 s/match saved), or shrink I-65c to its core? The core is to wait past 8 s on real deals (the motion-aware release, fixing the 19% of pitching deals read mid-animation) and keep main's fixed 8 s wait on the last play, with no counters and no detector.
 
-**Round-7 state (parked, uncommitted):** worktree `.claude/worktrees/agent-a3d05bc3677e260bf`, based on r6 `a9c0d0c`. Notes are in `agent_progress/issues/I-65c/r7/progress.md`, with `census_full.py`, `mutants_r7.py` and `mutants_r7_summary.txt` alongside. Its design gates the detector to run after `RESULT_DETECTOR_T=3.0` s with no fan. **Its `orchestrator.py` was killed MID-MUTANT:** sha256 is `55a577db…`, but r7's clean file is `965eb133…`. Recover it by reversing the one un-restored mutant (the next after R1 in `mutants_r7.py` order), then verify the sha before using anything from it. Earlier branches: r6 `a9c0d0c`, r5 `i65c-r5`/`922ae44`, r4 `adcf70f`, r3 `952dd0a`.
+**USER DECISION (2026-09-24): SHRINK I-65c TO THE CORE.**
+- Wait past 8 s on real deals so cards are not read mid-animation. That means the motion-aware release, up to the 20 s cap.
+- Keep main's fixed 8 s wait on the LAST play.
+- The gate gets NO play counters and NO result detector.
+- The last-play skip (~8 s/match) moves to the LATER list. Revisit it only after the read_result false-positive work (§2a) is finished AND merged.
+
+**Brief for the new fixer (fresh agent, own worktree, based on main):**
+- **Known traps, one per earlier round.** Each must be re-checked in the new round's tests:
+  1. r1: has_fan/stillness race; a test weakened to pass.
+  2. r2: the last play must release at 8 s, not the 20 s cap. Grab-count tests must go through the REAL grab path.
+  3. r3: nothing skips or counts plays. The `_DEAL_INPUTS` stash must be popped on every exit path; the leak test from r3/r4 applies.
+  4. r4: no 8 s cap on real deals, in either phase.
+  5. r5: without counters, the both-low and unpaid-restart failures cannot happen. Add a test that proves the last play costs the same 8 s as main in every phase-misread case.
+  6. r6: nothing expensive runs per poll. `test_deal_frames_kept.py` and `test_run_gates_on_liveness.py` must pass UNMODIFIED, within 15% of base runtime. Any evidence census must feed each reader the input it is built for (full frames stay full frames).
+- **Acceptance number:** the share of REAL deals read mid-animation. It is 19% on main (34/178 pitching deals still unread at 8 s). Measure it on the same live logs, `overnight/run_live_20260923{b,c,e}.log`, with the r4/r5 skeptics' census method (`census.py` in the r4 skeptic's notes). Report n per phase. Also report the cost per match vs main (median and max) and the last-play wait (must equal main's ~8 s).
+- **Useful parts from earlier rounds:** r3's motion-aware release and single-grab-per-poll (CONFIRMED by the r3 skeptic), from `952dd0a`, minus its last-play skip.
+- **Process:** parallel mutants per the rules in §8; full sibling sweeps; then an Opus skeptic. **Stop rule:** a third refutation of this reshaped issue goes back to the user.
+
+**Round-7 state (parked, uncommitted; superseded by the decision above, kept for reference):** worktree `.claude/worktrees/agent-a3d05bc3677e260bf`, based on r6 `a9c0d0c`. Notes are in `agent_progress/issues/I-65c/r7/progress.md`, with `census_full.py`, `mutants_r7.py` and `mutants_r7_summary.txt` alongside. Its design gates the detector to run after `RESULT_DETECTOR_T=3.0` s with no fan. **Its `orchestrator.py` was killed MID-MUTANT:** sha256 is `55a577db…`, but r7's clean file is `965eb133…`. Recover it by reversing the one un-restored mutant (the next after R1 in `mutants_r7.py` order), then verify the sha before using anything from it. Earlier branches: r6 `a9c0d0c`, r5 `i65c-r5`/`922ae44`, r4 `adcf70f`, r3 `952dd0a`.
 
 ### 2a. read_result "false positives": FALSE ALARM (session [819d23] / task_d648486a)
 - r7's full-frame census flagged `local_state.read_result()` True at 0.97-0.98 on 5 "reveal" frames and at 0.806 on `negative_win_screen_no_banner_20260921`.
@@ -78,12 +96,14 @@ Streak under the user's rule (a retry counts against the streak only if the engi
 
 ## 5. PARKED AND REFUTED WORK
 
-- **I-65c**: STOPPED, see §2. Decision needed.
+- **I-65c**: reshaped by the user's decision, see §2. The old last-play-skip branches are reference only.
 - **I-68**: PARKED after 3 refuted rounds, unchanged. Branches `278cc01` (r3), `8666168` (r2), `f570a6c` (r1).
 - **I-69**: null, and stale. I-70 replaced it and is merged.
 - I-60 (`worktree-I60` @ `2122c8f`) and I-61 (`worktree-I61` @ `eeb593a`): parked, unchanged.
 
 ## 6. LATER
+
+- **The I-65c last-play skip (~8.1 s/match).** Deferred by the user 09-24. Revisit only after the read_result false-positive investigation (§2a) is finished and merged. Designs and refutations: §2, r3-r7.
 
 **Must: new this session (all CONFIRMED by reading or measuring; each goes through fixer→skeptic)**
 
