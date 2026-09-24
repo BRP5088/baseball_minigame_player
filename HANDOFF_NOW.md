@@ -48,7 +48,10 @@
 - r7's full-frame census flagged `local_state.read_result()` True at 0.97-0.98 on 5 "reveal" frames and at 0.806 on `negative_win_screen_no_banner_20260921`.
 - The peer session opened all 6. They are TRUE end-of-match result screens (medallion, WINNER/LOSER, CLOSE, all 5 round dots) sitting in reveal fixture folders. I checked `reveal_occlusion/reveal10_edge075` myself: LOSER, CLOSE, 0-3.
 - Main census: **0 of 344 mid-match frames classified as a result.** No code change is needed. r7 was told to relabel the 6 as positives.
-- The peer is building a regression test (6 True, 305 reveal frames False, <10 s, one mutant) and will report a branch/sha. Skeptic and merge it from the manager.
+- **The peer's regression test is DONE, UNCOMMITTED:** `tests/minigame/test_read_result_end_screens.py` (121 lines) in worktree `.claude/worktrees/read-result-end-screens`, branch `test/read-result-end-screens` (still at `dd39842`).
+  - The peer left its mutant APPLIED in that worktree's `local_state.py` (`if _card is not None:` → `if True:` at ~:914). The manager restored it on 09-24 with `git checkout`, and its sha now matches main. Main's copy was never touched.
+  - On the restored code: rc=0 in 4.7 s, "read_result is False on all 134 mid-match frames". NOTE: 134, not the 305 asked for. Check which frames it pins, and why.
+  - Next: commit it on its branch (`--no-verify` rule), run an independent skeptic with 2+ of its own mutants (verifying the restore by sha256), then merge. That merge unblocks revisiting the last-play skip (LATER).
 
 ## 3. RESULTS (live, from 09-23; no live runs since)
 
