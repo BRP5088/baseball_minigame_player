@@ -105,6 +105,8 @@ Streak under the user's rule (a retry counts against the streak only if the engi
 
 - **The I-65c last-play skip (~8.1 s/match).** Deferred by the user 09-24. Revisit only after the read_result false-positive investigation (§2a) is finished and merged. Designs and refutations: §2, r3-r7.
 
+- **Before any first push:** rewrite the history off the work email `[work email removed]` (1,376 commits across all branches, 09-05..09-21) to `brp5088@gmail.com`. Do it in a copy with `git filter-repo`, since every cited sha changes, and only with the user's go-ahead (user, 09-24). The repo has no remote. Local `user.email` has been `brp5088@gmail.com` since 09-24.
+
 **Must: new this session (all CONFIRMED by reading or measuring; each goes through fixer→skeptic)**
 
 - **PRIVACY: the capture fallback grabs the laptop desktop.** `orchestrator.py` `_fast_grab` (~2396-2436), `capture_screenshot_image` (~1542) and `_screenshot_logger_loop` (~1656: `game_capture.grab() or pyautogui.screenshot()`) fall back to the primary display when `grab()` returns None. It fired once, at `overnight/run_live_20260922b.log:780`. Checked: all 9,729 `screenshot_log` frames are 1920x1080; the only 7 laptop-sized images in the project are game frames from Aug 27. No desktop capture is on disk. Fix: fail and return None, never fall back. **Do this first.**
