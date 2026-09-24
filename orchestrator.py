@@ -3961,21 +3961,19 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         except Exception as e:
             # A SINGLE missed frame here must retry within max_wait, not
             # release early: one missed grab used to end this wait after
-            # ~0.16s instead of its full budget (finding 4, r2). But a RUN
-            # of them (_DEAL_CAPTURE_FAIL_TRIES in a row, same shape as
-            # BAN_CURSOR_PROBE_TRIES) means the capture is genuinely gone,
-            # not just transiently missed -- give up and report it as an
-            # "error" row rather than silently spinning to a "timeout" one.
+            # ~0.16s instead of its full budget (finding 4, r2). A RUN of
+            # them used to give up the SAME way one level up (r3, skeptic
+            # finding 4): counting to _DEAL_CAPTURE_FAIL_TRIES POLLS and
+            # returning ended the wait at ~0.45s of a 3.0s budget regardless
+            # of how much budget was left. An outage now counts against the
+            # SAME time budget as everything else -- this keeps retrying
+            # until max_wait itself runs out; only the classification after
+            # the loop (below) tells "the capture was gone" from "nothing
+            # moved", and it costs nothing while frames are good.
             _consecutive_capture_fail += 1
-            if _consecutive_capture_fail >= _DEAL_CAPTURE_FAIL_TRIES:
-                print(f"  [deal] the deal gate could not read the hand "
-                      f"({type(e).__name__}: {e}) for "
-                      f"{_consecutive_capture_fail} polls in a row — giving "
-                      "up rather than spinning")
-                _record_row("error", reason="capture_error")
-                return False
             print(f"  [deal] the deal gate could not read the hand "
-                  f"({type(e).__name__}: {e}) — retrying within the wait budget")
+                  f"({type(e).__name__}: {e}) — retrying within the wait "
+                  f"budget ({_consecutive_capture_fail} in a row)")
             continue
         biggest = max(biggest, d)
         # THE HEARTBEAT. A 35 s silence and a hung process read exactly alike --
@@ -4091,6 +4089,20 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                       f"(threshold {th:g}, biggest delta {biggest:.1f}{_held}{_why})")
                 _record_row("stable", reason=_reason)
                 return True
+    # THE WAIT RAN ITS FULL BUDGET (r3) -- a captured outage no longer ends the
+    # loop early, so the classification of WHY it ended happens here instead of
+    # inside the except block above. A run of _DEAL_CAPTURE_FAIL_TRIES or more
+    # capture failures still in progress when max_wait ran out (same shape as
+    # BAN_CURSOR_PROBE_TRIES) means the sensor was genuinely gone rather than
+    # transiently missed; that is still worth reporting as "error", not
+    # "timeout", but only AFTER exhausting the same budget every other outcome
+    # does, not after a fixed poll count regardless of how much budget was left.
+    if _consecutive_capture_fail >= _DEAL_CAPTURE_FAIL_TRIES:
+        print(f"  [deal] the deal gate could not read the hand for "
+              f"{_consecutive_capture_fail} polls in a row through the end of "
+              f"the {max_wait:.0f}s wait — reporting the capture as gone")
+        _record_row("error", reason="capture_error")
+        return False
     # THREE OUTCOMES, NOT ONE MESSAGE (I-09). This used to print the same "gate is
     # too high" line whether biggest was 6.2 (nothing moved, edge_seen False) or
     # 83.1 (motion seen, the hand just never read stable twice -- I-01's shape,
@@ -7250,6 +7262,14 @@ def ban_x_cells():
     return {(lvl + r, c) for (r, c) in hits}
 
 
+# How many consecutive MISSING frames (capture_screenshot_image() is None)
+# _ban_scroll_to_top waits out before giving up rather than press blind. Same
+# shape as BAN_CURSOR_PROBE_TRIES: one missed grab is routine, a run of them
+# means the sensor is genuinely gone -- and "gone" must stop the function, not
+# turn into a blind press (r3, skeptic finding 1).
+BAN_SCROLL_BLIND_TRIES = 3
+
+
 def _ban_scroll_to_top(max_presses: int = 20):
     """Put the ban grid at scroll level 0. Returns (reached_top, level).
 
@@ -7273,11 +7293,36 @@ def _ban_scroll_to_top(max_presses: int = 20):
     20 because a dropped press costs a press, not a row -- the loop is checked
     against the SCROLLBAR every time, never against the count, for the same
     reason the scan is.
+
+    A MISSING FRAME IS NOT "NOT AT THE TOP" (r3, skeptic finding 1).
+    capture_screenshot_image() returning None used to go straight into
+    read_ban_scroll_level(None), which raised AttributeError on img.size,
+    was swallowed by a bare except, and produced lvl=None -- indistinguishable
+    from a genuine mid-scroll refusal, so this pressed move_up into a screen
+    it could not see: up to 20 times a call, 40 times a read_full_ban_collection
+    scan (start + finally), and one blind press per single missed grab. A
+    missing frame now presses NOTHING: it looks again, up to
+    BAN_SCROLL_BLIND_TRIES times in a row, and if the capture stays blind
+    that long this gives up and returns (False, None) -- "could not verify"
+    -- instead of spending the whole press budget on a screen it cannot see.
+    Every caller already treats reached_top=False as reason to distrust the
+    scan (read_full_ban_collection's _saw_desync), so a blind give-up is
+    handled exactly like any other fragment.
     """
     lvl = None
-    for _ in range(max_presses):
+    blind = 0
+    presses = 0
+    while presses < max_presses:
+        img = capture_screenshot_image()
+        if img is None:
+            blind += 1
+            if blind >= BAN_SCROLL_BLIND_TRIES:
+                return False, None   # could not verify -- stop, don't press
+            wait_for_screen_to_settle(max_wait=4.0, regions="ban")
+            continue              # no frame this poll: look again, no press
+        blind = 0
         try:
-            lvl, _thumb = read_ban_scroll_level(capture_screenshot_image())
+            lvl, _thumb = read_ban_scroll_level(img)
         except Exception:
             lvl = None
         if lvl == 0:
@@ -7285,9 +7330,13 @@ def _ban_scroll_to_top(max_presses: int = 20):
         # level=None means mid-animation, NOT "not at the top" -- keep pressing
         # and let the scrollbar, not this loop's patience, decide.
         press("move_up")
+        presses += 1
         wait_for_screen_to_settle(max_wait=4.0, regions="ban")
+    img = capture_screenshot_image()
+    if img is None:
+        return False, None
     try:
-        lvl, _thumb = read_ban_scroll_level(capture_screenshot_image())
+        lvl, _thumb = read_ban_scroll_level(img)
     except Exception:
         lvl = None
     return lvl == 0, lvl
@@ -8056,10 +8105,26 @@ def read_balance_from_pause_menu() -> int:
     # is also how the prompt describes MONEY, so nothing downstream could catch
     # it. The user has had to correct this reading three times.
     import pause_menu as _pm
+    # _confirmed_not_open gates every press AFTER the first: True only when a
+    # REAL frame showed the menu is not up, which is the one situation where
+    # pressing toggle_pause again is safe. Attempt 1 has no prior evidence at
+    # all, so it always presses (starts True). A SUSTAINED blind period (r3,
+    # skeptic finding 2) used to press again anyway on the next attempt with
+    # zero evidence -- toggle_pause is a TOGGLE, so a press whose result we
+    # never saw may have actually landed, and a blind repeat then closes the
+    # menu it just opened. Missing this attempt's whole read (including its
+    # own retries) now costs zero presses, not one.
+    _confirmed_not_open = True
     for _attempt in range(1, 4):
-        press("toggle_pause")
+        if _confirmed_not_open:
+            press("toggle_pause")
+        else:
+            print(f"  [balance] attempt {_attempt} of 3: still blind after "
+                  f"the last press — not pressing toggle_pause again with no "
+                  f"evidence it's needed. Looking again instead.")
         wait_for_screen_to_settle(max_wait=8.0)   # let the menu animate in
         _img = _fast_grab()
+        _confirmed_not_open = False
         if _img is None:
             # No frame this poll -- look again WITHOUT pressing. Pressing on
             # a missed frame used to consume this attempt AND queue another
@@ -8089,6 +8154,7 @@ def read_balance_from_pause_menu() -> int:
                   f"a slow menu; toggle_pause is a TOGGLE and may have closed one, "
                   f"and reading money off a WORLD frame is how the health coin got "
                   f"reported as the wallet ($246 -> $100).")
+            _confirmed_not_open = True
     else:
         raise RuntimeError(
             "the pause menu would not open, so there is nowhere to read the "

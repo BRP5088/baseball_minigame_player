@@ -41,9 +41,11 @@ def grab(width=None):
     # _screenshot_logger_loop (which does not focus, by its own comment).
     #
     # So a missing window returns None, which is what this function's docstring
-    # has always promised. Every OTHER failure keeps the fallback, because a
-    # broken compass import or a dead mss is the case it was written for and
-    # nothing about it says the display is the wrong one.
+    # has always promised. Every OTHER failure returns None too (see the except
+    # block below) -- there is no fallback left at all. This comment used to say
+    # "every OTHER failure keeps the fallback", which stopped being true the
+    # moment the pyautogui.screenshot() fallback below was removed; it just
+    # never got corrected (r3, skeptic finding 5).
     try:
         import compass
         img = compass.fast_capture()
