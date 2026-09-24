@@ -52,7 +52,7 @@
   - What it pins: 7 end screens read True with the right outcome (the 6 misfiled frames plus `screens/result__0`), and 134 tracked mid-match frames read False. Each glob has a floor. It is 134 rather than 305 because `reveal_kind_truth/auto/` (200 frames) is `orchestrator.REVEAL_KIND_DIR`, which live runs write to, so it is deliberately not globbed. All 200 read False in the peer's census.
   - Runtime: 4.7-4.9 s, using a spawn process pool.
   - Peer's mutants: 6 of 6 killed by the new test (RESULT_MIN 0.99 and 0.70, drop LOSER, drop WINNER, loser-as-win, card-fallback-always).
-  - **Discrepancy the skeptic must resolve:** the peer says `local_state.py` was restored after its sweep, but the manager found it MUTATED (`if True:`, the M6 card-fallback-always mutant) in that worktree at ~00:58, and restored it with `git checkout` then. The manager's restore may have landed mid-sweep. It ran 4 mutants at a time, possibly in one worktree. Re-run the mutants independently; don't trust the table.
+  - **Discrepancy, RESOLVED:** the manager's `git checkout` at about 00:58 landed while the peer's LAST mutant (M6) was in flight. That was the manager's error: it touched a worktree another session was actively using. M1-M5 are unaffected. The M6 kill by the new test stands, because the test passes on restored code. The M6 sibling-kill list is only a LOWER bound. The skeptic should still re-run the mutants independently.
   - Peer's LATER notes: `test_result_reader.py:175` reads a gitignored `diagnostics/...screen_at_stall.png`, so it fails in every worktree and its kill signal is unreadable there. The commit used `--no-verify` under the demos/ rule.
 
 ## 3. RESULTS (live, from 09-23; no live runs since)
