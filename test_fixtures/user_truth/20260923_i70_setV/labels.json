@@ -1,0 +1,255 @@
+{
+ "_source": "user labels 2026-09-23 on label set V (artifact KrjZ6LZzJ6sLzMQnEvoZJ4): I-70 r2 new reads (merged e027daf); q02/q03 duplicate q01's held hand; i70_read = the masked reader's digit, i70_score its score",
+ "q01": {
+  "frame": "dropped_1789964703698574000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "sec_guess": true,
+  "i70_read": 4,
+  "i70_score": 0.802
+ },
+ "q02": {
+  "frame": "dropped_1789964706811281000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "sec_guess": true,
+  "i70_read": 4,
+  "i70_score": 0.804
+ },
+ "q03": {
+  "frame": "dropped_1789964712834218000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "sec_guess": true,
+  "i70_read": 4,
+  "i70_score": 0.801
+ },
+ "q13": {
+  "frame": "dropped_1789969039358703000",
+  "slot": 2,
+  "verdict": "animating",
+  "i70_read": 5,
+  "i70_score": 0.808
+ },
+ "q14": {
+  "frame": "dropped_1790001894512937000",
+  "slot": 4,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.808
+ },
+ "q15": {
+  "frame": "dropped_1790025888954298000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": "?",
+  "i70_read": 4,
+  "i70_score": 0.805
+ },
+ "q16": {
+  "frame": "dropped_1790036274061514000",
+  "slot": 1,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.809
+ },
+ "q17": {
+  "frame": "dropped_1790055002041729000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.806
+ },
+ "q18": {
+  "frame": "refused_select_1790029233140573000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 7,
+  "sec": 1,
+  "sec_guess": true,
+  "i70_read": 7,
+  "i70_score": 0.803
+ },
+ "q21": {
+  "frame": "dropped_1789958720129726000",
+  "slot": 0,
+  "verdict": "readable",
+  "type": "batter",
+  "power": 7,
+  "sec": 1,
+  "i70_read": 7,
+  "i70_score": 0.85
+ },
+ "q22": {
+  "frame": "dropped_1789959127812982000",
+  "slot": 3,
+  "verdict": "readable",
+  "type": "pitcher",
+  "power": 7,
+  "sec": 0,
+  "i70_read": 7,
+  "i70_score": 0.87
+ },
+ "q23": {
+  "frame": "dropped_1789989844690877000",
+  "slot": 2,
+  "verdict": "readable",
+  "type": "pitcher",
+  "power": 5,
+  "sec": 1,
+  "i70_read": 5,
+  "i70_score": 0.811
+ },
+ "q24": {
+  "frame": "dropped_1789991563976395000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "pitcher",
+  "power": 8,
+  "sec": 0,
+  "i70_read": 8,
+  "i70_score": 0.836
+ },
+ "q25": {
+  "frame": "dropped_1789992234638800000",
+  "slot": 4,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.817
+ },
+ "q26": {
+  "frame": "dropped_1789992991243715000",
+  "slot": 2,
+  "verdict": "animating",
+  "type": "pitcher",
+  "power": 6,
+  "sec": 0,
+  "i70_read": 6,
+  "i70_score": 0.825
+ },
+ "q27": {
+  "frame": "dropped_1789994265629566000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 5,
+  "sec": 2,
+  "i70_read": 5,
+  "i70_score": 0.835
+ },
+ "q28": {
+  "frame": "dropped_1790013230994395000",
+  "slot": 3,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.859
+ },
+ "q29": {
+  "frame": "dropped_1790013838163358000",
+  "slot": 4,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 7,
+  "sec": 1,
+  "note": "This photo has a black vertical line in it that's about 10px wide. Slot 2 area",
+  "i70_read": 7,
+  "i70_score": 0.812
+ },
+ "q30": {
+  "frame": "dropped_1790014027804800000",
+  "slot": 2,
+  "verdict": "animating",
+  "type": "pitcher",
+  "power": 7,
+  "sec": 0,
+  "i70_read": 7,
+  "i70_score": 0.829
+ },
+ "q31": {
+  "frame": "dropped_1790025397581895000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.854
+ },
+ "q32": {
+  "frame": "dropped_1790029230537281000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 7,
+  "sec": 1,
+  "i70_read": 7,
+  "i70_score": 0.839
+ },
+ "q33": {
+  "frame": "dropped_1790039619990192000",
+  "slot": 0,
+  "verdict": "slightly",
+  "type": "pitcher",
+  "power": 5,
+  "sec": 1,
+  "i70_read": 5,
+  "i70_score": 0.938
+ },
+ "q34": {
+  "frame": "dropped_1790040918140424000",
+  "slot": 4,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 8,
+  "sec": 1,
+  "i70_read": 8,
+  "i70_score": 0.83
+ },
+ "q35": {
+  "frame": "dropped_1790045683568452000",
+  "slot": 1,
+  "verdict": "slightly",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.83
+ },
+ "q36": {
+  "frame": "dropped_1790059419932020000",
+  "slot": 4,
+  "verdict": "animating",
+  "type": "batter",
+  "power": 4,
+  "sec": 3,
+  "i70_read": 4,
+  "i70_score": 0.82
+ }
+}
