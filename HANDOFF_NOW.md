@@ -1,213 +1,132 @@
-# HANDOFF_NOW — manager restart, 2026-09-24 ~01:30
+# HANDOFF_NOW — manager session 2026-09-24 (01:06 → ~12:30)
 
 ## 1. STATE RIGHT NOW
 
-- main HEAD: the commit carrying this file (parent `dd39842`). Merged this session: **I-70** (`e027daf`), and label set V truth (`dd39842`).
-- **No agents running from this session.** chiaki is not running. The console has not been touched this session.
-- The full suite has NOT been run on main since the I-70 merge. Run it before anything goes live.
-- A separate session (task_d648486a / [819d23], "Investigate local_state.read_result false positives") may still be running. See §2a.
-- **First actions, in order:** (1) dispatch the reshaped I-65c fixer from the brief in §2 (the user decided 09-24); (2) skeptic, then merge the peer's read_result regression test (§2a); (3) the PRIVACY capture-fallback fix (§6); (4) the test-speed ticket (§6); (5) run the full suite on main before anything goes live.
-- Record is unchanged: **163W 20L 19D**. The paid model is OFF. Never save the game.
+- main HEAD: the commit carrying this file (parent `fa9e2ce`). **Full suite on `fa9e2ce`: 305/305 PASS, 791 s, JOBS=2** (`agent_progress/merge-privacy-r3/suite.log`).
+- No agents running from this session. chiaki is not running. The console was not touched this session. No live runs since 09-23.
+- Record unchanged: **163W 20L 19D**. The paid model is OFF. Never save the game.
+- **GitHub:** `https://github.com/BRP5088/baseball_minigame_player`, main = `880da35` (pushed by the user 09-24; a rewritten copy, see §5). Local main is AHEAD: the press_verified test, the README, the PRIVACY fix and this handoff are not pushed yet. Next push: §5.
+- **First actions for the next session, in order:** (1) the user runs the next GitHub push (§5); (2) the user decides the open questions in §7; (3) pick from §6 LATER. Live runs are allowed (the user said: after the merges + a clean suite, both now true); follow CLAUDE.md's rig rules.
 
-## 2. I-65c — STOPPED after 7 rounds; USER DECIDED 09-24: shrink to the core (see DECISION below)
+## 2. MERGED THIS SESSION
 
-**Refutations, one line each**
-- r1: a has_fan/stillness race, and a weakened test.
-- r2: the last play released at the 20 s cap instead of 8 s (+11.9 s/match), and the grab-count test mocked the real grab path away.
-- r3: 2 wrong skips (a "reveal never appeared" play still counted), 1 missed skip (a phase fallback reset the count, costing 20 s), and a `_DEAL_INPUTS` leak into the next match's row.
-- r4: an 8 s pitching cap brought back main's early release. 34/178 (19%) of real pitching deals still unread at 8 s.
-- r5: both counters one low leaves the result screen waiting 20 s. An unpaid-restart path skipped every gate in the next match (SK1 survived).
-- r6: `read_result` ran on every gate poll (90-140 ms), breaking `test_deal_frames_kept` and hanging `test_run_gates_on_liveness` (410 s against 147). Its false-positive census used hand crops, which a full-frame detector cannot read.
-- r7: PARKED mid mutation sweep (not refuted). See below.
-
-**What every brief assumed:** that the gate can safely tell "no deal is coming" on the last play, first from play counters and then from a result detector, and that this ~8 s/match saving is worth the extra machinery. Each round's fix for one failure mode opened another.
-
-**The one question for the user:** keep chasing the last-play skip (~8.1 s/match saved), or shrink I-65c to its core? The core is to wait past 8 s on real deals (the motion-aware release, fixing the 19% of pitching deals read mid-animation) and keep main's fixed 8 s wait on the last play, with no counters and no detector.
-
-**USER DECISION (2026-09-24): SHRINK I-65c TO THE CORE.**
-- Wait past 8 s on real deals so cards are not read mid-animation. That means the motion-aware release, up to the 20 s cap.
-- Keep main's fixed 8 s wait on the LAST play.
-- The gate gets NO play counters and NO result detector.
-- The last-play skip (~8 s/match) moves to the LATER list. Revisit it only after the read_result false-positive work (§2a) is finished AND merged.
-
-**Brief for the new fixer (fresh agent, own worktree, based on main):**
-- **Known traps, one per earlier round.** Each must be re-checked in the new round's tests:
-  1. r1: has_fan/stillness race; a test weakened to pass.
-  2. r2: the last play must release at 8 s, not the 20 s cap. Grab-count tests must go through the REAL grab path.
-  3. r3: nothing skips or counts plays. The `_DEAL_INPUTS` stash must be popped on every exit path; the leak test from r3/r4 applies.
-  4. r4: no 8 s cap on real deals, in either phase.
-  5. r5: without counters, the both-low and unpaid-restart failures cannot happen. Add a test that proves the last play costs the same 8 s as main in every phase-misread case.
-  6. r6: nothing expensive runs per poll. `test_deal_frames_kept.py` and `test_run_gates_on_liveness.py` must pass UNMODIFIED, within 15% of base runtime. Any evidence census must feed each reader the input it is built for (full frames stay full frames).
-- **Acceptance number:** the share of REAL deals read mid-animation. It is 19% on main (34/178 pitching deals still unread at 8 s). Measure it on the same live logs, `overnight/run_live_20260923{b,c,e}.log`, with the r4/r5 skeptics' census method (`census.py` in the r4 skeptic's notes). Report n per phase. Also report the cost per match vs main (median and max) and the last-play wait (must equal main's ~8 s).
-- **Useful parts from earlier rounds:** r3's motion-aware release and single-grab-per-poll (CONFIRMED by the r3 skeptic), from `952dd0a`, minus its last-play skip.
-- **Process:** parallel mutants per the rules in §8; full sibling sweeps; then an Opus skeptic. **Stop rule:** a third refutation of this reshaped issue goes back to the user.
-
-**Round-7 state (parked, uncommitted; superseded by the decision above, kept for reference):** worktree `.claude/worktrees/agent-a3d05bc3677e260bf`, based on r6 `a9c0d0c`. Notes are in `agent_progress/issues/I-65c/r7/progress.md`, with `census_full.py`, `mutants_r7.py` and `mutants_r7_summary.txt` alongside. Its design gates the detector to run after `RESULT_DETECTOR_T=3.0` s with no fan. **Its `orchestrator.py` was killed MID-MUTANT:** sha256 is `55a577db…`, but r7's clean file is `965eb133…`. Recover it by reversing the one un-restored mutant (the next after R1 in `mutants_r7.py` order), then verify the sha before using anything from it. Earlier branches: r6 `a9c0d0c`, r5 `i65c-r5`/`922ae44`, r4 `adcf70f`, r3 `952dd0a`.
-
-### 2a. read_result "false positives": FALSE ALARM (session [819d23] / task_d648486a)
-- r7's full-frame census flagged `local_state.read_result()` True at 0.97-0.98 on 5 "reveal" frames and at 0.806 on `negative_win_screen_no_banner_20260921`.
-- The peer session opened all 6. They are TRUE end-of-match result screens (medallion, WINNER/LOSER, CLOSE, all 5 round dots) sitting in reveal fixture folders. I checked `reveal_occlusion/reveal10_edge075` myself: LOSER, CLOSE, 0-3.
-- Main census: **0 of 344 mid-match frames classified as a result.** No code change is needed. r7 was told to relabel the 6 as positives.
-- **The peer's regression test is COMMITTED, ready for a skeptic:** branch `test/read-result-end-screens` @ `1bb03df`, worktree `.claude/worktrees/read-result-end-screens`. It adds ONE file, `tests/minigame/test_read_result_end_screens.py` (121 lines), with no production changes (verified with `git show --stat`).
-  - What it pins: 7 end screens read True with the right outcome (the 6 misfiled frames plus `screens/result__0`), and 134 tracked mid-match frames read False. Each glob has a floor. It is 134 rather than 305 because `reveal_kind_truth/auto/` (200 frames) is `orchestrator.REVEAL_KIND_DIR`, which live runs write to, so it is deliberately not globbed. All 200 read False in the peer's census.
-  - Runtime: 4.7-4.9 s, using a spawn process pool.
-  - Peer's mutants: 6 of 6 killed by the new test (RESULT_MIN 0.99 and 0.70, drop LOSER, drop WINNER, loser-as-win, card-fallback-always).
-  - **Discrepancy, RESOLVED:** the manager's `git checkout` at about 00:58 landed while the peer's LAST mutant (M6) was in flight. That was the manager's error: it touched a worktree another session was actively using. M1-M5 are unaffected. The M6 kill by the new test stands, because the test passes on restored code. The M6 sibling-kill list is only a LOWER bound. The skeptic should still re-run the mutants independently.
-  - Peer's LATER notes: `test_result_reader.py:175` reads a gitignored `diagnostics/...screen_at_stall.png`, so it fails in every worktree and its kill signal is unreadable there. The commit used `--no-verify` under the demos/ rule.
-
-## 3. RESULTS (live, from 09-23; no live runs since)
-
-Per-cycle table, cycles 27-37 (all today; builds noted where the HEAD changed):
-
-| Cycle | Build | Outcome | Flagged events | Unread-decisions | Gate bound/stable |
-| --- | --- | --- | --- | --- | --- |
-| 27 | c6446cf | W W W W | m3: 4x play REFUSED (slot 0 blind); m4: discard NOT CONFIRMED | 8 | 26/22 |
-| 28 | c6446cf | W W W W | none | 2 | 23/25 |
-| 29 | c6446cf | W W W W | none | 3 | 29/19 |
-| 30 | c6446cf | W D W W | m4: confirm_play FAILED 5/5, play REFUSED | — | — |
-| 31 | 10a66d6 | L(refusal) L W W | m1 refusal (I-68-shape) | — | — |
-| 32 | 10a66d6 | W W W W | none | — | — |
-| 33 | 10a66d6 | D W W D | none | — | — |
-| 34 | 3600252 | W W W W | none | 2 | 30/18 |
-| 35 | 3600252 | W W W W | none | 2 | 30/21 |
-| 36 | 3600252 | W W W W | none | — | — |
-| 37 | 3600252 | W D W D | none | — | — |
-
-Build `3600252` (I-66+I-67) went **14W 0L 2D over cycles 34-37 (16 matches), 0 monitor-flagged events.**
-
-Label-set progression (unread-card decisions per cycle → readable-miss rate per cycle):
-
-| Set | Cycles | Build | Decisions/cycle | Readable misses/cycle |
-| --- | --- | --- | --- | --- |
-| I | 20-26 | old (pre-session) | 10.9 (76/7) | 4.7 |
-| II | 27-30 | +I-62..65 | 7.0 (28/4) | 2.0 |
-| III-a | 31-33 | +I-67 | 5.7 (17/3) | 0 |
-| III-b | 34-35 | +I-66 | 4.0 (8/2) | 1.0 (both tactics) |
-
-Streak under the user's rule (a retry counts against the streak only if the engine lost something unrecoverable; 15/15 always counts): **19 consecutive monitor-clean matches** since c31m2 (c31m2-m4, c32 x4, c33 x4, c34 x4, c35 x4) — but UNKNOWN-slot ("costly") decisions still occur most cycles (c27 8, c28 2, c29 3, c34 2, c35 2), so the strict count toward the 163W/20L/19D goal-of-50-in-a-row is lower than 19. Remaining decision classes: "slightly covered" ~2/cycle (I-70's job), mid-animation ~2-3/cycle (I-65c's job).
-
-
-## 4. MERGED (09-23 and 09-24)
-
-| Issue | Merge sha | Skeptic verdict | Key number |
+| What | Merge sha | Skeptic | Key number |
 | --- | --- | --- | --- |
-| I-62 | `427b528` | Opus: CONFIRMED WITH NOTES | 8,714 frames compared, 0 wrong new reads, 2/2 recoveries; p95 `read_hand` 42→84 ms |
-| I-63 | `ffd35ba` | Opus: CONFIRMED WITH NOTES | 12 re-look events/37 logs, 5 recovered at 1.6 s; `_STRAY_RELOOK_MAX_ATTEMPTS=2` (T=3.2 s) |
-| I-64 | `22c4cb1` | Opus: CONFIRMED WITH NOTES | 6/14 readable tactics recovered, 0/43 wrong on labelled slightly/covered/animating; `BANNER_SEARCH` x-step 4→2 |
-| I-65 (+65b) | `d53d5e9` (+`f2effc4`) | Opus: CONFIRMED WITH NOTES (r2); Sonnet: CONFIRMED (65b) | 32/280 (11.4%) settled-but-incomplete reads held to bound; +4.6 s/match median (21.6 max); `READABLE_HAND_BOUND=8.0` PROVISIONAL |
-| I-67 | `ead1e1e` | Opus: CONFIRMED WITH NOTES | 5/8 held-out tactics misses recovered (4 new template donors), 0 new wrong over 7,217 frames, 55 new recoveries |
-| I-66 | `de70a27` | Opus: CONFIRMED (round 2, verified on merged code) | 37/40 round-2 recoveries, 0 wrong on 76 labels + 8,514-frame census; user-readable 8/19 |
-| I-70 | `e027daf` (+ISSUES `995359e`) | Opus: CONFIRMED WITH NOTES (r2) | 0 wrong / 0 FP over 583 frames at both scales; 19/20 + 6/6 certain labels; cross-frame 0/8,605 pairs differ; user label set V: 22/22 distinct cards match (`dd39842`) |
+| read_result end-screen regression test (peer session) | `bf9f697` | Sonnet: CONFIRMED | 7 end screens read True, 134 mid-match False; 6/6 own mutants killed |
+| Test speed: real sleeps stubbed, 30 test temp-dir leaks plugged | `81df31d` | Sonnet: CONFIRMED WITH NOTES | suite 937 → 867 s mean (n=2/arm, JOBS=2, under load); `test_verified_selection` 56 → 4 s |
+| `test_discard_watches_redeal.py` no longer leaves `diagnostics/deal_frames` (peer session) | `ae2627b` | Sonnet: works, 3/3 mutants | swap not in try/finally (LATER) |
+| `test_verified_selection.py` pins `press_verified`'s retry | `359fc99` | Sonnet: CONFIRMED | no production defect: the old test never exercised `press_verified`; 5+3 mutants killed |
+| README.md | `2ff220c` | manager review | 141 lines, every claim sourced |
+| **PRIVACY: never capture the desktop; a missed frame never presses or decides** | `fa9e2ce` | Opus r3: CONFIRMED (r1, r2 REFUTED) | 0 desktop captures and 0 blind presses under every stub (main: up to 244 captures, 20-80 blind presses); normal frames unchanged |
 
-## 5. PARKED AND REFUTED WORK
+PRIVACY detail: removed `pyautogui.screenshot()` fallbacks in `game_capture.grab()` (the real source; every path goes through it, including the 1 Hz logger) and 3 orchestrator sites. Missed frames now retry within bounds: `_ban_scroll_to_top` (`BAN_SCROLL_BLIND_TRIES=3`), the ban scan (not cached after misses), `_pause_menu_open`/`_close_pause_menu_verified`, `read_balance_from_pause_menu` (only the opener press when blind), `_match_start_screen` (None = can't see), `wait_for_hand_deal` (an outage counts against the same `max_wait`). Tests: `tests/rig/test_no_desktop_capture_fallback.py`, `test_capture_fallback_privacy_r2.py`, `test_capture_fallback_privacy_r3.py`. Skeptic notes: `.claude/worktrees/agent-a6497625697a3c3f9/agent_progress/skeptic-privacy-r3/progress.md`.
 
-- **I-65c**: reshaped by the user's decision, see §2. The old last-play-skip branches are reference only.
-- **I-68**: PARKED after 3 refuted rounds, unchanged. Branches `278cc01` (r3), `8666168` (r2), `f570a6c` (r1).
-- **I-69**: null, and stale. I-70 replaced it and is merged.
-- I-60 (`worktree-I60` @ `2122c8f`) and I-61 (`worktree-I61` @ `eeb593a`): parked, unchanged.
+## 3. PARKED / DECIDED
+
+- **I-65c (reshaped core): PARKED by the user, 09-24.** r1 `ef51e3b` REFUTED (removed the 3.0 s floor and the completeness rule unasked; 3 tests weakened). The skeptic's numbers made the change not worth it: of main's unread-at-8 s deals, pitching 18/34 and batting 134/154 had NO fan on screen at 8 s, so a motion-aware release could at best take pitching from 19.1% to 10.1%. The user chose to investigate why cards come late instead (§4). Skeptic notes: `.claude/worktrees/agent-a134f527e9d4a8f3d/agent_progress/skeptic-I-65c-core/`.
+- The I-65c last-play skip stays deferred (as 09-24 morning).
+- I-68 (3 refuted rounds), I-60, I-61: parked, unchanged. I-69: stale.
+
+## 4. WHY THE CARDS COME LATE (investigation, read-only; `agent_progress/late-deal-cards/` in the main checkout: `summary.md`, `deals.csv` 442 rows, `contact_sheet.png`)
+
+- **The more bases the runners travel, the later the hand appears** (n=269, `predicted_bases` from the reveal margin, `orchestrator.py:3443`): 0 bases → 24% not complete by 8 s (median 6.30 s); 1-2 → 65%; 3-4 → 95%; 5+ (n=18) → 100%. The code's own comment already notes "1.1 s after one play, 10.8 s after a home run".
+- Reader miss REFUTED for the main case: 6/6 no-fan-at-8 s frames opened by eye show an empty table.
+- 44 of the batting cases are the inning change (no deal coming), which is expected.
+- Batting has far more no-fan deals than pitching (51% vs 10%).
+- **The user's hypothesis ("runners moved differently than the engine expected") is UNTESTABLE on disk:** only the pre-play prediction is logged, not the actual bases moved. A proxy (occupied-base diff, n=215) is unreliable: no runner identity.
+- New lead, n=3 by eye, unverified: the rightmost fan slot sits at or over the edge of the fixed "hand" crop (`orchestrator.py:1770`, x ≤ 0.760).
+- **Not yet reproduced by a skeptic.**
+
+## 5. GITHUB PUBLISHING (the user's; each push waits for the user)
+
+- The repo is published as a REWRITTEN COPY. The local repo keeps its own history, so every sha in this file and in ISSUES/OPEN is a LOCAL sha. GitHub's shas differ.
+- The kit is in `agent_progress/github-publish/` (gitignored):
+  - `publish_copy.sh <new dir>`: a fresh clone of main, then one `git filter-repo` pass.
+  - `mailmap`: both old addresses → brp5088@gmail.com.
+  - `replacements`: scrubs both addresses from file text.
+  - `make_blanked.py`: blanks ONLY the macOS menu bar and Dock in the 47 full-desktop captures in history (9x 1400x904, 2x 1728x1117, 2x 1999x1292, 34x 2000x1292), measured per image, with a cache in `blanked/<orig blob id>`.
+- It is deterministic (two runs gave identical shas), so each push fast-forwards.
+- **Next push:**
+  1. `agent_progress/github-publish/publish_copy.sh <new empty dir>`
+  2. Check that `880da35` is an ancestor of the new HEAD.
+  3. Re-run the blue-pixel scan over all images (the game is black and white, so blue near the top or right edge means desktop UI).
+  4. The user runs, in the new dir: `git remote add origin git@github-personal:BRP5088/baseball_minigame_player.git` and `git push -u origin main`.
+- The auto-mode classifier refuses a push from Claude ([Sensitive-Source Provenance]), so the user runs the push.
+- Checked before the first push:
+  - No secrets in the files or the history. `.env.example` holds the placeholder `sk-ant-...`. The chiaki `regist_key`/`morning` hits are source identifiers.
+  - No private IPs in the text.
+  - 2 chiaki host-list PNGs show the console's LAN IP and part of its name. The user was told this and did not ask for a blank.
+- `gh` is not installed. git-filter-repo was installed with brew, with the user's approval.
 
 ## 6. LATER
 
-**Top: GitHub push (the user's todos, 09-24). Each step waits for the user's explicit yes.**
+**From this session: test speed** (profiler, read-only: `agent_progress/test-profile/{per_file.tsv,ranked_by_cpu.tsv,prof_test_*.txt}`. Total 856 s CPU. Longest-first scheduling is ALREADY live via `.test_durations`)
+1. `reset_env.py:135/170` `give_up_dialog`/`load_save_dialog` call pytesseract directly (~474 ms/call). Moving them to the warm `ocr_glyphs` handle saves ~150-160 s of suite time: `test_run_gates_on_liveness` 83 s, `test_early_result_double_debit` 74 s, and more across the 18 files that reach it. PRODUCTION reset/money path, so it needs an Opus skeptic.
+2. `test_graph_walk.py`: 138 s wall but 0.2 s CPU. It makes 265 real `time.sleep` calls in `graph_walk.walk_link`/`_slip_past`/`face_the_table`/`approach_goal`. `graph_walk.py` is OFF-LIMITS (§9 rule), so stub the sleep IN THE TEST only. Saves ~130 s, and this is the suite's longest file.
+3. `local_state.py:568` `base_badge`/`read_base`: 66,675 `cv2.matchTemplate` calls in `test_runner_speed` (85.7 s). Production live reader.
+4. `circle_finder.find_circles`/`reveal_cards.read_reveal` run repeatedly on the same frames: ~35-40 s over 3 files.
+5. The earlier per-file "top 10" list (from the timing agent) was wrong. Use `per_file.tsv`.
 
-1. **Rewrite the history off the work email.** 1,376 commits across all branches (09-05..09-21) carry `[work email removed]`. Rewrite them to `brp5088@gmail.com` with `git filter-repo`, IN A COPY of the repo, since every sha changes and HANDOFF/ISSUES cite shas. Verify, then swap. Since 09-24 the local `user.email` is `brp5088@gmail.com`.
-2. **Create an empty PRIVATE repo on the personal GitHub account BRP5088.** The user does this in a browser, or with `gh` if it gets installed (it isn't now).
-3. **Add the remote and push:** `git remote add origin git@github-personal:BRP5088/<repo>.git`, then push. The SSH alias `github-personal` (key `~/.ssh/id_ed25519_personal`, `IdentitiesOnly yes`) was verified by the user on 09-24 and authenticates as BRP5088. Show the exact commands and wait for a yes before pushing. Never use the work account or key.
+**From this session: the rest**
+- **Deal-wait bound by predicted bases** (§4): the candidate fix for late cards. It is on the live turn path, so it needs a live A/B (user rule 09-24).
+- Log the actual bases moved (or runner identity) per play, so the user's mismatch hypothesis can be tested.
+- Verify the hand-crop clipping lead (`orchestrator.py:1770`) and the has-fan gate flickering true on background texture.
+- Blind presses outside the PRIVACY diff (pre-existing):
+  - `run()` checks the ban cursor 3 times. After 3 missed frames it falls back to dead reckoning: `select_bans_and_start_full` presses move/select/confirm twice without looking. This was deliberate, since the $50 is already paid. **User decision.**
+  - A ban scan that was blind while homing reads a fragment (7 cards, not cached), and `run()` still chooses bans from it.
+- Test gaps:
+  - Mutant X5 (a missed deal poll counted twice) is caught only by a setup count, because the outage check reads the function's self-reported `waited`.
+  - `test_discard_watches_redeal.py` does its `DEAL_FRAME_DIR` swap without try/finally. The pattern to copy is `test_tactics_select_fallback.py` ~545.
+  - `test_verified_selection.py`'s outer sleep restore is manual, not try/finally.
+  - The `press_verified` single-attempt mutant is not caught by `test_give_up_dialog_recognized`/`test_early_result_double_debit`. `tests/rig/test_press_verified.py` does catch it.
+- Sweep tooling:
+  - Sweep scripts grep FAIL/TIMEOUT, but the runner logs a 300 s kill as HUNG. Add HUNG to every sweep grep.
+  - Copying the gitignored `demos/` into a worktree makes the pre-commit hook pass for real, so `--no-verify` is no longer needed. Put this in every brief.
+- Harness friction:
+  - The `rtk` PreToolUse hook refused plain `git` in 3 sub-agent worktrees. One agent used git plumbing; one used `/usr/bin/git`. Investigate before the next fan-out.
+  - The session scratchpad is SHARED by sub-agents, and a skeptic's `make_mutant.py` overwrote another's. Briefs must give a per-agent scratch path (§10.16b).
+- 13 suite files fail in any fresh worktree, because gitignored data is missing (`chiaki-ng-src/`, `demos/`, `screenshot_log/`, `overnight/*.log`, a C++ binary). Consider skip-with-reason.
 
-- **The I-65c last-play skip (~8.1 s/match).** Deferred by the user 09-24. Revisit only after the read_result false-positive investigation (§2a) is finished and merged. Designs and refutations: §2, r3-r7.
+**Carried (still open)**
+- Tests that rewrite production files in place: `test_tactics_select_fallback.py`, `test_refusal_unwinds.py` (a `_clear_pycache` race at :283), `test_probe_select_budget.py`.
+- ~2 s/match on the live turn path: `orchestrator.py:4409` `local_game_state()` runs `read_result`/`read_ban_counter`/`at_table` before `local_hand_cards`. Try the hand first. Needs a live A/B (user rule 09-24).
+- `compass.py:717` direct pytesseract fallback: 0 s in the suite, rare live. `landmarks.py:238,311` are dead scripts.
+- The home-plate blank (`_blank_homeplate_strip`, `orchestrator.py:5334`) may clip slot-2 tactics reads (38 frames).
+- Label-set builders must DEDUPE by hand+slot.
+- I-70 geometry mutants survive (fine window off-by-one, one-radius fine pass, coarse step 5→6). Needs more positive fixtures.
+- `ensure()`'s overlay-dismiss Escape can raise chiaki's Quit dialog on the host list (confirmed live twice 09-23).
+- Preflight must verify chiaki is the PATCHED binary (the FIFO has a reader) before a chain.
+- The `| tail`/`| cut` exit-code and buffering hazard in briefs and Monitors (§10.16c).
+- "REFUSED 3x ... excluding it" excludes the TARGET when the blocker is a stray.
+- The match-start gate may release at the 8 s bound without protection.
+- I-64/I-67's remaining tactics misses (q18, q53, q29/q56/q62/q75).
+- Nice: I-56 `_deselect_verified`; I-57 `_topup_budget`; `_close_pause_menu()` observer without try/except; 8 false phase flips mid-pitching; `test_deal_gate_arms` scenario 2 coverage; `test_hand_gate_completeness.py:187-199` source-text wiring checks; `_best_banner` caching; confirm-play 12% need 2+ confirms; record the blocker slot in `why.json`; cycle 4 "match never started"; 15/36 never-staged reveal misses; transition-timeout drop site (~`:9091`); I-35 branches never fired live; I-42 `FLICKER_WINDOW=10` unmeasured; full hand corpus re-check after I-46; exclude LOCKED cards from the simulator pool and `choose_bans`; I-55 `result_source='ocr'`; `reveal_kind_truth/auto/` hit its 200-frame cap; `REVEAL_SETTLE_MAX_SEC`; `questions_sheet.py` slot box asymmetric; `test_result_commit_evidence.py` flakes on Snoopy; 10 Windows-only footguns in `Snoopy_testing.md`.
+- **Pure code smells** (dead code, duplicates, style): per the user (09-24), LIST them for the user to pick; no deletions without their yes. No finder pass has been run yet.
 
-**Must: new this session (all CONFIRMED by reading or measuring; each goes through fixer→skeptic)**
+## 7. OPEN QUESTIONS (for the user)
 
-- **PRIVACY: the capture fallback grabs the laptop desktop.** `orchestrator.py` `_fast_grab` (~2396-2436), `capture_screenshot_image` (~1542) and `_screenshot_logger_loop` (~1656: `game_capture.grab() or pyautogui.screenshot()`) fall back to the primary display when `grab()` returns None. It fired once, at `overnight/run_live_20260922b.log:780`. Checked: all 9,729 `screenshot_log` frames are 1920x1080; the only 7 laptop-sized images in the project are game frames from Aug 27. No desktop capture is on disk. Fix: fail and return None, never fall back. **Do this first.**
-- **Test-speed ticket.** Sweeps ran ~10 min/mutant because one long-pole file bounds each mutant.
-  - (1) Move `reset_env.give_up_dialog`/`load_save_dialog` (`reset_env.py:135-189`) from direct `pytesseract` to the warm `ocr_glyphs` handle. Measured: 682 → 33 ms/call on a non-dialog frame. That call spawns a subprocess, then globs the temp dir, 55-59 s per slow test. Live cost is small: it is gated behind `looks_like_ui()`, ~0.35% of frames.
-  - (2) Stub `ic.time.sleep` in the 5 slow tests. `press_verified` sleeps 0.45 s x22 = 10 s.
-  - (3) Temp-dir leaks: `_run_harness.py:64`, `test_early_result_double_debit.py:91`, `test_give_up_dialog_recognized.py:41`, `test_reset_sequence.py:354`, `test_leg_reliability.py:53,73,134`, `test_crawl_one_step.py:103-211`, plus ~15 SUSPECTED of the same shape. 15,890 leaked dirs (45 GB) were moved to `~/.Trash/baseball-test-temp-20260924` on 09-24; the user empties the Trash.
-  - (4) Sweep scripts run SEVERAL MUTANTS AT ONCE, each in its own copied tree.
-  - Estimates: long pole 150 → ~85 s; sweep ~50 → ~10-15 min. Re-time after the change.
-- **Tests that rewrite production files in place:** `test_tactics_select_fallback.py` and `test_refusal_unwinds.py` (plus the known `test_probe_select_budget.py`). `test_refusal_unwinds.py:283` has a `_clear_pycache` race.
-- **~2 s/match on the live turn path:** `orchestrator.py:4409` `local_game_state()` runs `read_result` (100 ms), `read_ban_counter` (19 ms) and `at_table` (79 ms) BEFORE `local_hand_cards` (68 ms; 17 ms fail-fast) on every settled turn poll. Try the hand first. SUSPECTED: up to 4 grabs per poll (`:9216`, `:2803`/`:2556`, `~:4425`).
-- `compass.py:717`: a direct `pytesseract` fallback in `read_bearing` (walk path; rare, ~5 s when it fires). `landmarks.py:238,311` are pytesseract in dead scripts.
-- **The home-plate blank may cost slot-2 tactics reads.** `_blank_homeplate_strip` (`orchestrator.py:5334`, `HOMEPLATE_STRIP=(0.439,0.490)`) zeroes x 429-478 when a runner is stranded on home. 38 frames were found (7 bursts over 4 days), all with slot 2 unread, and the strip clips ~15 px of slot 2's tactics badge. The docstring only measured player digits (n=76). This is the "black line" the user saw in label set V q29.
-- Label-set builders must DEDUPE by hand+slot. Set V v1 showed 12 near-identical frames of one held hand. I-70's "27 new reads" were ~15 distinct cards.
-- I-70 geometry mutants survive: fine window off-by-one, one-radius fine pass, coarse step 5→6. It needs more positive fixtures. Branch worst-frame latency spikes of 241-245 ms under load, against a main max ≤167; record the frame id in timing.
-
-**Carried from 09-23**
-
-**Must**
-
-- **`ensure()`'s overlay-dismiss Escape raises chiaki's own Quit dialog** when it fires on the host list after a failed connect — confirmed live TWICE today (once fatally, once during a recovered attempt). One keystroke from killing the app mid-session. Should check a session exists before sending Escape.
-- **Preflight: verify chiaki is the patched binary** (inject FIFO has a reader) before launching a chain. Tonight's run-a was fully wasted (7 cycles, 0 matches, `OSError Errno 6` on the FIFO) because the user had started stock `/Applications/chiaki-ng.app`.
-- **The `| tail`/`| cut` exit-code and buffering hazard in briefs and Monitors.** Caused today's silent monitor (run-a) and is a repeat methodology note (§10.16c). Briefs should report capture exit status before piping; Monitors should use `tail -n +1` and `awk`-with-`fflush`, never `cut`.
-- **"REFUSED 3x running on hand_index 3 — excluding it" excludes the TARGET when the blocker is a stray**, not the target itself — the next target then gets refused for the same slot (c27 census). Same family as I-68's parked exclusion bug; needs its own fix now that I-68 is parked.
-- **The match-start gate may release at the 8 s bound without protection** (I-65 r2 skeptic: first reads ~16.7 s after the last pre-commit event, 7/10 still animating) — needs the live `first_complete_at` distribution I-65c/I-70 work is accumulating.
-- **I-64/I-67's remaining tactics misses**: q18 (held out, same card as recovered q16), q53 (0.840), q29/q56/q62/q75 (template-bank mismatch, cause unknown).
-
-**Nice**
-
-- I-56's `_deselect_verified` note (always dirties the ledger on a real press) — not currently causing a wrong commit.
-- I-60 (cursor eligibility keyed on the digit, not the disc) — PARKED, tool-facing only, branch `worktree-I60` @ `2122c8f`.
-- I-61 (raised-card detector independent of the disc) — PARKED, spike only, branch `worktree-I61` @ `eeb593a`; re-confirmed by I-68 r3 that slots 0-3 rest/lifted populations overlap 2-8 px (only slot 4 separates).
-- QA finder A: `I-57`'s `_topup_budget` check (`input_controller.py:1243-1250`) can't fire under current constants; `_close_pause_menu()`'s observer chain has no try/except around a raising grab.
-- QA finder B: `test_probe_select_budget.py` mutates production files in place; make it run from a scratch copy.
-- 8 false phase flips mid-pitching half (pre-existing, reconfirmed by I-65 r2 skeptic).
-- Reader misses now cost 8 s each under the current bound — digit/banner work pays twice.
-- `test_deal_gate_arms` scenario 2 lost its same-read-twice mutant coverage (readable_hand_gate itself still catches it).
-- `test_hand_gate_completeness.py:187-199`'s wiring checks read source text — the only guard on the two new gate call sites.
-- 3 tests reach real screen capture (`test_orchestrator_diagnostics`, `test_decisions`, `test_should_redraw_incomplete` via `_grab_settle_regions`) and fail when the Mac displays sleep overnight; stub `orch._fast_grab`/`_MSS`. Also: I-65c r2's own grab-count test mocked away the real grab path (invalid) — needs a real-grab test.
-- `_best_banner` caching — called up to 3x/slot over 65 positions.
-- `test_tactics_select_fallback`'s `_clear_pycache` races parallel jobs (JOBS=4); passes standalone.
-- Confirm-play: base rate 155/1277 plays needed 2+ confirms (12%), 2 hard-failed (0.16%), clustered drops — no fix proposed yet.
-- Record the blocker slot (not just the target) in `why.json` for refused frames, and have the questions-sheet tool box the blocker — a labeller question was mis-boxed on the target today.
-- Cycle 4's "match never started" abandonment — never separately tracked.
-- 15/36 never-staged reveal misses (I-49 only fixed the staged-then-dropped half).
-- The transition-timeout drop site (`orchestrator.py` ~`:9091`).
-- I-35's `new_inning`/`reveal_recap` branches have still never fired live.
-- I-42's `FLICKER_WINDOW=10` is unmeasured; 9/53 good labels wrongly rejected.
-- Full hand corpus re-check after I-46 (540-hand corpus, not just the 2,409 turn frames).
-- Exclude LOCKED cards from the simulator pool and `choose_bans` (RULES.md, user 2026-09-21).
-- I-55's `result_source='ocr'` reported on a frame where the template alone had already cleared 0.80.
-- `test_fixtures/reveal_kind_truth/auto/` hit its 200-frame cap.
-- `REVEAL_SETTLE_MAX_SEC` — class B/D reveal frames (29% of the orphan population) captured at 4.0-4.4 s, past the 2.5 s ceiling.
-- `questions_sheet.py`'s slot box is asymmetric (margins 49-71 px right; `SLOT_TOL` doesn't clip a legitimately off-anchor card).
-- `test_result_commit_evidence.py` flakes on Snoopy (timing) — Snoopy is off, low priority.
-- 10 Windows-only footguns, enumerated in `Snoopy_testing.md` — not actionable on the Mac.
-
-## 7. OPEN QUESTIONS
-
-- **What actually blinds a disc after a select press, live?** I-63's skeptic found it's time-varying, NOT selection occlusion (7/7 refused slots read clean on rescue with the target still lifted, nothing pressed in between) — blind slot is a tactics card in >=5/7 refusals, which links to the banner weakness I-64/I-67 have been closing. Mechanism itself still not identified.
-- **WHO DELETED `tools/questions_sheet.py` from the main working tree mid-session (prior session)?** Never established. Before dispatching anything that writes under `tools/`, check `agent_progress/*/progress.md` for an `rm`/`rmtree` on that path.
-- Does a speed boost PERSIST on base? Two live runners read +1 over their card; still needs one live at-bat to confirm.
-- Was draw #8 (session 1, cycle 6) or the evidence-less draw #9 (cycle 9) real? Unverifiable — no frame, no score. Stays unknown.
-- **Is `READABLE_HAND_BOUND=8.0` still the right fallback value?** c27 census: bound releases complete right at the wall (median 8.0 s vs 4.85 s for stable releases), suggesting it's too tight for a confirm pass; I-65c's motion-aware release now avoids the fixed bound for post-play/end-of-half cases, but the match-start path (§6 must-list) and the general fallback still use it. Collect more `first_complete_at` data before resetting it.
-- **Does `turns_this_half` correctly identify the last play in extra innings?** Open question for the I-65c round-3 skeptic restart (§2.1).
+- Should the deal wait scale with predicted bases (§4, §6)? It needs a live A/B.
+- Should the ban-cursor dead-reckoned fallback (§6) be kept, or should the bot refuse to press when it is blind?
+- Should the chiaki host-list PNGs (LAN IP, partial console name) be blanked in the published copy?
+- Carried: what blinds a disc after a select press, live? Who deleted `tools/questions_sheet.py` mid-session (a prior session)? Does a speed boost persist on base? Were draws #8/#9 real? Is `READABLE_HAND_BOUND=8.0` right? Does `turns_this_half` find the last play in extra innings?
 
 ## 8. RULES IN FORCE (user's words where quoted)
 
-- *"Any stalls, any issues count. Things need to be run perfectly like a nuclear power plant."* — the strict streak rule, §3.
-- A screen retry counts against the streak only if the engine lost something it could not get back (user rule, 09-23); 15/15 always counts.
-- *"Never halt for input"* — questions about unreadable/ambiguous cards get queued (`tools/questions_sheet.py`, I-59), never block a run.
-- Push a notification only for: run-stopping events, wrong-card commits, or the 50th clean match.
-- **Never save the game** — resets and `Load Last Save` only.
-- **Play the engine's pick, fix the engine** — never hand-override a card choice; check the reader first when a read looks wrong.
-- **Never `git stash` / `git checkout <sha> -- file` in the main checkout while it holds uncommitted live data** — bisect in a scratch copy or a detached worktree.
-- Navigation/routing code is left alone — no changes to `graph_walk.py` or the closed-loop chain logic; per CLAUDE.md §9, any such change needs a live A/B and a read of `GRAVEYARD.md` first.
-- **Snoopy: one job at a time, grunt-work/labelling only, text-only reads.** Snoopy is OFF (user turned it off 09-22, still off).
-- **Any NEW task or question found from here goes on the LATER list — do not dispatch it.**
-- **Sleep the console when not in live use** — let it auto-sleep, or follow `console_rest_mode_procedure.md` by hand. Never press `ps_button` just to find out whether it's already asleep.
-- **Disconnect the stream when idle** (new today) — `pkill -9 -x chiaki` after each chain; the user reports the stream looks laggy after ~4 h connected.
-- **Use labelling artifacts** — the user is willing to label more; the template now includes an "Unknown" chip and a per-field "Best guess" toggle on every number row (guessed values are truth for scoring, NOT template donors).
-- **"Slightly covered stays unread" is NOT acceptable** (user's ruling, 09-23) — read them or optimise the photo timing; this is why I-70 exists and I-69's non-read fallback is stale.
-- **Fielding is 0-3, never negative** (user correction, 09-23) — removed -2/-1 chips from the labeller.
-- **Manager delegates routine work** (merges, tests, doc edits, log reading) to Sonnet agents; Opus skeptics for anything on the money path.
-- **Merge via Haiku; on a conflict, abort and hand to Sonnet.**
-- **Refuted work goes to a fresh fixer**, not a patch on the refuted branch.
-- **Restart the manager after every 4th merged fix, or on the first compaction** (new rule, 09-23) — this restart is one.
-- **Label artifact URLs**: I (c20-26) `https://claude.ai/artifact/9MsSvsvvJcwsLgyb7sqDXG` · II (c27-30) `https://claude.ai/artifact/LV1ZvDaBr1aYaNQM3KKaQP` · III (c31-35) `https://claude.ai/artifact/KSgyELyD6UQS6Uuc8y2v9T` · IV (I-70 checks) `https://claude.ai/artifact/7PnTHz5Lb2dWTCQDvRnBnU` — all db collection "answers".
-- **CLAUDE.md is split into topic files**; cite sections (see the §-number map in CLAUDE.md).
-- **Sub-agent sweeps run in PARALLEL.** Use 2 jobs on weekdays 08-18 while the user works, 8-10 at night, all 12 when the user says they're off the Mac, and 1 while the console is live. Run several mutants at once in copied trees. Keep FULL per-mutant sibling sweeps; never fail-fast. `test_probe_select_budget.py` and `test_tactics_select_fallback.py` run alone. (memory: test-parallelism-schedule, full-mutant-sweeps-over-speed)
-- **The first slow sweep gets profiled before the next dispatch** (memory: profile-slow-sweeps-immediately). About 9 h were lost on 09-23 to serial sweeps.
-- **Worktree commits may use `--no-verify` ONLY when the sole hook failure is the missing gitignored `demos/`,** with the reason in the message (user, 09-23). The merge agent then runs the guards and the full suite in main.
-- **Manager restart after every 8th sub-agent report, and STOP after the 3rd refutation of the same issue** (skill update, 09-24). This restart is both.
-- Permanent deletion is not allowed for Claude. Move files to the Trash and let the user empty it.
-- Label set V (I-70 new reads): `https://claude.ai/artifact/KrjZ6LZzJ6sLzMQnEvoZJ4`. Truth is in `test_fixtures/user_truth/20260923_i70_setV/labels.json`.
+- *"Any stalls, any issues count. Things need to be run perfectly like a nuclear power plant."* A retry counts against the streak only if the engine lost something it could not get back; 15/15 always counts.
+- *"Never halt for input"*: questions about cards get queued (`tools/questions_sheet.py`), never block a run.
+- Push a notification only for run-stopping events, wrong-card commits, or the 50th clean match.
+- **Never save the game.** Play the engine's pick; fix the engine.
+- Never `git stash` / `git checkout <sha> -- file` in the main checkout while it holds uncommitted live data.
+- Navigation/routing code is left alone (`graph_walk.py`, the chain logic) without a live A/B and a read of `GRAVEYARD.md`.
+- **Snoopy is OFF** (the user offers to turn it on if it would help).
+- **New tasks and questions found mid-work go on the LATER list; do not dispatch them** (the user repeated this 09-24).
+- **Pure code smells: list them for the user; fix only what has a measurable cost** (time, flakes, wrong behaviour) (user, 09-24).
+- **Live-turn-path speed fixes need an interleaved live A/B (≥10 matches/arm) before merge** (user, 09-24).
+- Sleep the console and disconnect the stream when idle.
+- Manager delegates routine work. Opus skeptics on money paths. Merges on Haiku; conflicts go to Sonnet. Refuted work goes to a fresh fixer. STOP after the 3rd refutation of the same issue.
+- Restart the manager after every 4th merge, 8th sub-agent report, or the first compaction. (This session ran past that at the user's choice, overnight.)
+- **Parallel jobs:** 2 on weekdays 08-18, 8-10 at night, all 12 when the user frees the Mac; 1 while live. Never serial sweeps. Keep full sibling sweeps.
+- `--no-verify` is allowed only when the sole hook failure is the missing gitignored `demos/`. Better: copy `demos/` into the worktree.
+- Permanent deletion is not allowed for Claude: move files to the Trash.
+- **Publishing: the user approves every push, and runs it** (§5). Before any push, check for secrets and desktop captures.
+- Label artifact URLs: I `https://claude.ai/artifact/9MsSvsvvJcwsLgyb7sqDXG` · II `https://claude.ai/artifact/LV1ZvDaBr1aYaNQM3KKaQP` · III `https://claude.ai/artifact/KSgyELyD6UQS6Uuc8y2v9T` · IV `https://claude.ai/artifact/7PnTHz5Lb2dWTCQDvRnBnU` · V `https://claude.ai/artifact/KrjZ6LZzJ6sLzMQnEvoZJ4` (truth: `test_fixtures/user_truth/20260923_i70_setV/labels.json`).
