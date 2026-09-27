@@ -4499,6 +4499,25 @@ ROUNDS_PER_HALF = 5
 # matching timestamp.
 _LAST_RESULT_FRAME = None   # (PIL Image, ns) or None
 
+# THE FRAME EVERY LOCAL STATE GAP IS DIAGNOSED FROM. `local_game_state` grabs one
+# frame (`full`) per call and every one of its `(None, gap)` returns -- the result
+# reader down, the ban/prompt/hand readers all declining, "UNRECOGNISED SCREEN" --
+# is a verdict about THAT frame. Stashed here, unconditionally, right after the
+# grab succeeds, so `_save_state_gap` (below `read_state_for_turn`) can write it
+# out without a second capture. Not paired with a timestamp like
+# _LAST_RESULT_FRAME: nothing here claims "the same frame a *different* call
+# read", it is only ever read back inside the same read_state_for_turn() that
+# just produced it.
+_LAST_GAP_FRAME = None   # PIL Image or None
+
+# Whether `local_game_state` has run at least once in this process. Lets
+# `_save_state_gap` tell apart "a real call just ran and captured nothing"
+# (write a why.json with frame: null) from "no call has happened at all", the
+# synthetic case a couple of unit tests drive by poking `_LAST_GAP_FRAME`
+# directly without ever calling `local_game_state` -- that one stays the
+# plain no-op it always was.
+_LOCAL_GAME_STATE_CALLED = False
+
 
 def local_game_state(turns_this_half=None):
     """The state, read entirely locally. (state, None) or (None, what is missing).
@@ -4515,7 +4534,15 @@ def local_game_state(turns_this_half=None):
     readable hand -- never a substitute for reading it. Callers with no notion of the
     match's progress (the frozen-stream probe) omit it and keep the old refusal.
     """
-    global _LAST_RESULT_FRAME
+    global _LAST_RESULT_FRAME, _LAST_GAP_FRAME, _LOCAL_GAME_STATE_CALLED
+    # CLEAR FIRST, ALWAYS. Two of the (None, gap) returns below -- "local_state
+    # unavailable" and "could not capture" -- fire BEFORE a frame is ever grabbed.
+    # Leaving the previous call's `_LAST_GAP_FRAME` in place would let
+    # `_save_state_gap` write a frame from an EARLIER read under the CURRENT
+    # gap's name -- a stale frame labelled as evidence for a different failure.
+    # Clearing here means those two paths genuinely have no frame to save.
+    _LOCAL_GAME_STATE_CALLED = True
+    _LAST_GAP_FRAME = None
     try:
         import local_state
     except Exception as exc:
@@ -4525,6 +4552,10 @@ def local_game_state(turns_this_half=None):
         crops = dict(crop_gameplay_regions(full))
     except Exception as exc:
         return None, f"could not capture ({exc})"
+    # Every gap this function can still return below is a verdict about `full` --
+    # stash it now, once, so a caller that ends up raising over the gap can save
+    # the frame without grabbing a second one (see _LAST_GAP_FRAME above).
+    _LAST_GAP_FRAME = full
 
     # THE RESULT SCREEN FIRST. It is the one screen with no hand on it, so asking the hand
     # reader first would blame the hand for a match that is simply over.
@@ -5740,6 +5771,73 @@ def on_turn_screen(hand_img):
         return False
 
 
+# diagnostics/state_gaps/gap_<ns>/ -- one frame.png + why.json per LOCAL STATE GAP
+# (orchestrator.py's read_state_for_turn raising, below). Built like DEAL_FRAME_DIR:
+# anchored on __file__ so it always lands inside the repo regardless of cwd.
+STATE_GAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "diagnostics", "state_gaps")
+# Same opt-in shape as DEAL_FRAMES_IN_TESTS: a test that means to drive this path
+# sets the flag around the one call it makes and restores it; a test that forgets
+# writes nothing and its assertion fails, the safe direction to be wrong in.
+STATE_GAP_FRAMES_IN_TESTS = False
+# ~300 dirs, per the ticket. A live run sees 1-3 gaps a match (09-23: 49 gaps in 16
+# matches), so 300 is weeks of runs before this refuses anything. Past the cap this
+# REFUSES to keep writing rather than pruning -- same reasoning as
+# record_money_read_frame/record_result_frame: OPEN-24 is the record of a pruned
+# corpus losing the rows that needed it. Nothing here is ever deleted.
+STATE_GAP_MAX_DIRS = 300
+
+
+def _save_state_gap(gap, turns_this_half=None):
+    """Keep the frame a LOCAL STATE GAP was raised on, plus a why.json. Never raises.
+
+    Same shape as _save_dropped_hand: reads `_LAST_GAP_FRAME` -- the frame
+    local_game_state already grabbed for THIS read, no second capture -- and is a
+    no-op under BASEBALL_TEST_RUN unless STATE_GAP_FRAMES_IN_TESTS opts in (read at
+    call time, never captured in a default -- 10.18).
+
+    `_LAST_GAP_FRAME` is cleared at the START of every `local_game_state()` call
+    (see its docstring), so a gap raised there before a frame was ever grabbed --
+    "local_state unavailable", "could not capture" -- reaches here with
+    `_LAST_GAP_FRAME is None`. That is NOT the same as no call having happened at
+    all: `_LOCAL_GAME_STATE_CALLED` tells the two apart. A real call with nothing
+    to save still gets a why.json, with `"frame": null`, so the gap leaves SOME
+    trace instead of none; only the never-called case (a couple of unit tests
+    drive `_save_state_gap` directly) stays a total no-op.
+    """
+    if _running_under_test() and not STATE_GAP_FRAMES_IN_TESTS:
+        return None
+    try:
+        img = _LAST_GAP_FRAME
+        if img is None and not _LOCAL_GAME_STATE_CALLED:
+            return None
+        os.makedirs(STATE_GAP_DIR, exist_ok=True)
+        existing = [n for n in os.listdir(STATE_GAP_DIR) if n.startswith("gap_")]
+        if len(existing) >= STATE_GAP_MAX_DIRS:
+            print(f"  [state] {STATE_GAP_DIR} already holds {STATE_GAP_MAX_DIRS} gap "
+                  f"dirs -- NOT keeping this one. Nothing is deleted here on purpose.")
+            return None
+        out = os.path.join(STATE_GAP_DIR, f"gap_{time.time_ns()}")
+        os.makedirs(out, exist_ok=True)
+        if img is not None:
+            img.save(os.path.join(out, "frame.png"))
+        recent = [o.get("screen") for o in list(_OBSERVATIONS)[-5:]]
+        with open(os.path.join(out, "why.json"), "w") as fh:
+            json.dump({"gap": gap, "turns_this_half": turns_this_half,
+                       "t": time.strftime("%Y-%m-%d %H:%M:%S"),
+                       "recent_screens": recent,
+                       "frame": None if img is None else "frame.png"}, fh, indent=1)
+        if img is None:
+            print(f"  [state] no frame to keep for this gap (nothing was captured "
+                  f"before it fired) -> {out} (why.json only)")
+        else:
+            print(f"  [state] kept the frame this gap was raised on -> {out}")
+        return out
+    except Exception as exc:
+        print(f"  [state] could not save the gap frame ({exc}) -- continuing.")
+        return None
+
+
 def read_state_for_turn(turns_this_half=None):
     """The state the turn loop reads. PAID once per cycle, LOCAL every turn after.
 
@@ -5772,6 +5870,7 @@ def read_state_for_turn(turns_this_half=None):
     st, gap = local_game_state(turns_this_half=turns_this_half)
     if st is not None:
         return st
+    _save_state_gap(gap, turns_this_half=turns_this_half)
     raise ValueError(f"LOCAL STATE GAP: {gap} -- this is the next reader to build; "
                      f"no paid call was made")
 
