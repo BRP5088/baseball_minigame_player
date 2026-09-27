@@ -480,6 +480,28 @@ if row:
           "read (rows/slots=5, stable=False), not the frozen [5, 5, True] from t<3.0",
           bool(_late) and _late[0][2] == 5 and _late[0][3] is False, str(_late))
 
+# ---- R4 (round-3 skeptic, mutant R9): finding 4's own trace scenario re-run under
+# BASEBALL_DEAL_FLOOR=scaled with predicted_bases=4 (floor 9.0) instead of a numeric
+# floor. Every trace check above this line drives a NUMERIC floor, so a gate that only
+# recomputes _hand_signature past latch for floor_mode == "numeric" -- dropping
+# "scaled" from the ("scaled", "numeric") membership test -- passes every one of them
+# while going stale for every scaled-mode deal, which is most of them. Same shape as
+# finding 4: A5 complete until t=3.0, PART4 incomplete 3.0-5.0, B5 (complete, different)
+# from t=5.0; the floor (9.0) keeps the gate open well past 5.0s so the trace has time
+# to show the change.
+released, elapsed, row = drive_t(lambda t: A5 if t < 3.0 else (PART4 if t < 5.0 else B5),
+                                 "scaled", baseline=object(), predicted_bases=4)
+check("R4 setup: the gate releases (scaled, bases=4, floor 9.0)", released is True,
+      f"elapsed={elapsed}")
+if row:
+    polls = row["polls"]
+    _late = [p for p in polls if p[0] >= 5.0]
+    check("R4: in SCALED mode the first poll at/after 5.0s shows the trace is LIVE "
+          "(stable=False on B5's fresh, not-yet-stable read), not frozen at the "
+          "pre-latch [*, 5, 5, True] reading -- kills a gate that recomputes the trace "
+          "only for floor_mode='numeric', silently dropping 'scaled'",
+          bool(_late) and _late[0][3] is False, str(_late[:3]))
+
 # ---- finding 5: a floor >= READABLE_HAND_BOUND must not release on a single read
 # without the stable-twice check. scaled bases=3 -> floor 8.0, exactly
 # READABLE_HAND_BOUND; the hand changes just as the floor opens (7.95 -> the floor
