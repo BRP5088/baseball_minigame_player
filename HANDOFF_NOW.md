@@ -56,6 +56,7 @@ PRIVACY detail: removed `pyautogui.screenshot()` fallbacks in `game_capture.grab
   - No secrets in the files or the history. `.env.example` holds the placeholder `sk-ant-...`. The chiaki `regist_key`/`morning` hits are source identifiers.
   - No private IPs in the text.
   - 2 chiaki host-list PNGs show the console's LAN IP and part of its name. The user was told this and did not ask for a blank.
+- **Host-list redaction (user, 09-27):** `make_blanked.py` also covers the console LAN IP + name in `test_fixtures/not_streaming/hostlist_standby.png` and `overnight/crawl/20260910_131638/001.png` (REDACT, by blob id). Those were already in the pushed `880da35`, so the next push REWRITES GitHub history once: `git push --force-with-lease origin main`, user's yes. After that, pushes fast-forward again.
 - `gh` is not installed. git-filter-repo was installed with brew, with the user's approval.
 
 ## 6. LATER
@@ -105,12 +106,13 @@ PRIVACY detail: removed `pyautogui.screenshot()` fallbacks in `game_capture.grab
 
 ## 7. OPEN QUESTIONS (for the user)
 
-- Should the deal wait scale with predicted bases (§4, §6)? It needs a live A/B.
-- Should the ban-cursor dead-reckoned fallback (§6) be kept, or should the bot refuse to press when it is blind?
-- Should the chiaki host-list PNGs (LAN IP, partial console name) be blanked in the published copy?
+- Deal wait scaled by predicted bases (§4, §6): the user asked what it means (09-27); explained in chat, decision pending.
+- **Ban cursor (user, 09-27): "lets test it out and see how it works. I think its more important to figure out why the cursor can't be seen instead."** → NEXT ISSUE: investigate why `run()`'s 3 ban-cursor reads come back unseen (read-only first: frames + logs), before touching the dead-reckoned fallback.
 - Carried: what blinds a disc after a select press, live? Who deleted `tools/questions_sheet.py` mid-session (a prior session)? Does a speed boost persist on base? Were draws #8/#9 real? Is `READABLE_HAND_BOUND=8.0` right? Does `turns_this_half` find the last play in extra innings?
 
 ## 8. RULES IN FORCE (user's words where quoted)
+
+- **ONE ISSUE AT A TIME (user, 09-27):** *"focus on 1 issue and only 1 issue. that way all your energy is spent on fixing the issue faster and prevents high token usage."* Agents are dispatched for a single issue only; everything else goes to LATER.
 
 - *"Any stalls, any issues count. Things need to be run perfectly like a nuclear power plant."* A retry counts against the streak only if the engine lost something it could not get back; 15/15 always counts.
 - *"Never halt for input"*: questions about cards get queued (`tools/questions_sheet.py`), never block a run.
