@@ -3512,6 +3512,47 @@ def deal_floor(predicted_bases, env=None):
     return min(floor, POST_PLAY_DEAL_MAX_WAIT), mode
 
 
+# ONE warning per process (deal-floor fixer r2, finding 1): a live match replays this
+# call every turn, and a config typo should say so once, not spam the console for the
+# rest of the match.
+_DEAL_FLOOR_WARNED = False
+
+
+def _safe_deal_floor(predicted_bases, env=None):
+    """The gate's own call to deal_floor(): anything BASEBALL_DEAL_FLOOR is set to that
+    is not 'flat', 'scaled', or a finite number >= POST_PLAY_MIN_WAIT falls back to flat
+    POST_PLAY_MIN_WAIT instead of reaching the turn loop as-is. deal_floor() itself is
+    left alone -- its raw, unit-tested contract (raising ValueError on garbage, honouring
+    an explicit numeric 0) is exactly what test_deal_floor.py pins, and this wrapper is
+    what the live gate actually calls so a config typo can never crash a turn or ship a
+    weaker floor than today's:
+      - "abc" (unparseable): deal_floor() raises ValueError -- caught here.
+      - "-5", "0", "1.5", "-inf": deal_floor() returns a floor BELOW POST_PLAY_MIN_WAIT --
+        caught here (never worse than today's flat 3.0).
+      - "nan": deal_floor() returns a floor that is never >= anything, including itself
+        (nan != nan) -- so it can never pass the release check and the gate would spin
+        out the full 20s cap on a config typo. Caught here.
+    "inf"/"1e9"/"999" are left alone: deal_floor() already clamps those to
+    POST_PLAY_DEAL_MAX_WAIT, which is a valid (if extreme) floor, not a bad one.
+    """
+    global _DEAL_FLOOR_WARNED
+    bad = None
+    try:
+        floor, mode = deal_floor(predicted_bases, env=env)
+    except ValueError as e:
+        floor, mode, bad = POST_PLAY_MIN_WAIT, "flat", str(e)
+    else:
+        if not (floor == floor and floor >= POST_PLAY_MIN_WAIT):   # NaN or too low
+            bad = (f"{DEAL_FLOOR_ENV} floor {floor!r} (mode {mode!r}) is below "
+                   f"POST_PLAY_MIN_WAIT ({POST_PLAY_MIN_WAIT:g})")
+            floor, mode = POST_PLAY_MIN_WAIT, "flat"
+    if bad is not None and not _DEAL_FLOOR_WARNED:
+        _DEAL_FLOOR_WARNED = True
+        print(f"  [deal] {bad} -- falling back to flat {POST_PLAY_MIN_WAIT:g}s "
+              "for this and every later call this process")
+    return floor, mode
+
+
 def hand_deal_threshold(env=None):
     raw = (os.environ if env is None else env).get(DEAL_THRESHOLD_ENV)
     if raw is None:
@@ -3819,7 +3860,8 @@ def pop_hand_baseline():
 def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                        poll_interval: float = 0.15, baseline=None,
                        predicted_bases=None, margin=None,
-                       no_motion_needed: bool = False) -> bool:
+                       no_motion_needed: bool = False,
+                       discard_redeal: bool = False) -> bool:
     """Block until the replacement card has visibly landed in the hand.
 
     Returns True if the deal was seen, False on timeout. Rising-edge trigger on
@@ -3839,6 +3881,12 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     there is no "before this play" frame to protect against. It does NOT skip
     READABLE_HAND_BOUND: an incomplete hand still gets the same bounded wait as every
     other caller.
+
+    `discard_redeal` (deal-floor fixer r2, finding 2) is for the ONE caller that watches
+    a discard's own redeal, not a play's: no runner ever moves on a discard, so this
+    caller's floor stays flat POST_PLAY_MIN_WAIT in EVERY BASEBALL_DEAL_FLOOR mode,
+    never scaled or numeric -- those modes exist to cover runner-animation time a
+    discard redeal never has.
     """
     start = time.time()
     # PREDICTED BASES, RECORDED BESIDE THE MEASURED WAIT, on its own line so it cannot be
@@ -3883,7 +3931,19 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     _bases_lo, _bases_hi = deal_inputs_bounds(_dinputs)
     if _di:
         print(f"  [deal] at the play: {_di}")
-    _floor, _floor_mode = deal_floor(predicted_bases)
+    # THE FLOOR ITSELF (deal-floor fixer r2, findings 2 & 3):
+    #   no_motion_needed: no floor ever applies here (see the docstring) -- log that
+    #     honestly (floor=0, mode="none") instead of a number the release check never
+    #     actually used, which is what the row used to claim.
+    #   discard_redeal: a discard moves no runner, so this caller is flat
+    #     POST_PLAY_MIN_WAIT in every BASEBALL_DEAL_FLOOR mode, never scaled/numeric.
+    #   otherwise: the ordinary, safety-netted BASEBALL_DEAL_FLOOR read.
+    if no_motion_needed:
+        _floor, _floor_mode = 0.0, "none"
+    elif discard_redeal:
+        _floor, _floor_mode = POST_PLAY_MIN_WAIT, "flat"
+    else:
+        _floor, _floor_mode = _safe_deal_floor(predicted_bases)
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
     # compared against THIS, not against its predecessor, so a gradual deal accumulates
     # instead of being divided among the polls that carried it.
@@ -4080,7 +4140,18 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             _hand_now = None
         keep_deal_frame(_hand_now, time.time() - start)
 
-        if USE_READABLE_HAND_GATE and (probe_at is None or first_complete_at is None):
+        # RECOMPUTED EVERY POLL (deal-floor fixer r2, finding 4), not just while
+        # `probe_at`/`first_complete_at` are still unset. The old guard stopped calling
+        # _hand_signature at all once both had latched, which froze psig/_psig_stable at
+        # whatever they were the instant that happened -- so the per-poll trace a scaled
+        # or numeric floor exists to feed logged the SAME stale [t, 5, 5, True] row for
+        # every later poll, unable to show the hand changing again during the floor's
+        # extra wait, which is the one thing that wait is FOR. One extra
+        # _hand_signature() call per poll after latching buys that back. probe_at and
+        # first_complete_at themselves are untouched below -- both still latch on their
+        # FIRST qualifying poll and never move again; only probe_sig/_psig_stable (and
+        # therefore the trace) keep tracking the current poll forever.
+        if USE_READABLE_HAND_GATE:
             try:
                 psig = _hand_signature(_hand_now)
             except Exception:
@@ -4088,9 +4159,9 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             _psig_stable = psig is not None and psig == probe_sig
             if probe_at is None:
                 probe_good = probe_good + 1 if _psig_stable else 0
-                probe_sig = psig
                 if probe_good >= READABLE_POLLS:
                     probe_at = time.time() - start
+            probe_sig = psig
             # OBSERVE-ONLY: no stability requirement, unlike probe_at above -- this is
             # "has a complete hand ever been seen", not "has it stopped changing".
             if first_complete_at is None and psig is not None and not _sig_unread_slots(psig):
@@ -4151,7 +4222,17 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 sig, readable, last_sig = None, False, None   # never raise into the turn loop
             good = good + 1 if readable else 0
             unread = _sig_unread_slots(sig)
-            _bound_hit = time.time() - start >= READABLE_HAND_BOUND
+            # GUARDED BY `_floor < READABLE_HAND_BOUND` (deal-floor fixer r2, finding 5):
+            # without it, any floor >= READABLE_HAND_BOUND (scaled bases>=3, or a numeric
+            # BASEBALL_DEAL_FLOOR>=8) makes this bound true on the FIRST poll this block
+            # ever runs, since the block itself never runs before `_floor` -- releasing
+            # on a single, possibly just-changed read with no stable-twice confirmation
+            # at all, mislabelled "stable_bound" as if it had been confirmed. A floor
+            # that size gets no early bound release; it relies on the same stable-twice
+            # rule as every other floor, and the ordinary max_wait loop (the 20s cap,
+            # unchanged) is what still stops it from running forever on a hand that
+            # never settles.
+            _bound_hit = _floor < READABLE_HAND_BOUND and time.time() - start >= READABLE_HAND_BOUND
             _stable_hit = good >= READABLE_POLLS and not unread
             if _bound_hit or _stable_hit:
                 _held = ("" if probe_at is None
@@ -9109,7 +9190,11 @@ def play_one_turn(state_json: dict, batters_used: int):
         if _blind and _thrown is not False:
             print(f"  [deal] slot(s) {_blind} unreadable — watching the redeal this "
                   f"discard causes, which is the one moment they can be seen")
-            wait_for_hand_deal()
+            # discard_redeal=True (deal-floor fixer r2, finding 2): no runner moves on
+            # a discard, so this stays flat POST_PLAY_MIN_WAIT no matter what
+            # BASEBALL_DEAL_FLOOR is set to -- scaled/numeric floors exist for the
+            # post-play deal's runner animation, which a discard never has.
+            wait_for_hand_deal(discard_redeal=True)
         elif _blind:
             print(f"  [deal] slot(s) {_blind} unreadable, but the discard was REFUSED — "
                   "not watching, because there is no deal to watch and a phantom row "

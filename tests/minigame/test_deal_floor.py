@@ -278,5 +278,259 @@ if row:
           f"got {len(row['polls'])} entries over {elapsed:.1f}s")
 
 
+
+# ============================================================================
+# 5. ROUND 2 (deal-floor fixer r2) -- each check below FAILS on 1cfa1ab, the commit
+# the Opus skeptic refuted (see agent_progress/skeptic-deal-floor/progress.md). Section
+# 1-4 above are UNTOUCHED and still pin round 1's contract, including deal_floor()'s
+# own raw behaviour (raises on garbage, honours an explicit numeric 0) -- these fixes
+# live in a wrapper the gate calls, `_safe_deal_floor`, and in wait_for_hand_deal
+# itself, not in deal_floor().
+# ============================================================================
+
+# ---- finding 1: _safe_deal_floor is what the live gate actually calls. Anything that
+# is not 'flat', 'scaled', or a finite number >= POST_PLAY_MIN_WAIT must fall back to
+# flat POST_PLAY_MIN_WAIT -- never raise, never go below today's 3.0, never hand back a
+# floor (nan) that can never satisfy a >= comparison.
+for _raw in ("abc", "-5", "0", "1.5", "-inf", "nan"):
+    f, m = orchestrator._safe_deal_floor(None, env={"BASEBALL_DEAL_FLOOR": _raw})
+    check(f"_safe_deal_floor({_raw!r}) falls back to flat POST_PLAY_MIN_WAIT",
+          (f, m) == (orchestrator.POST_PLAY_MIN_WAIT, "flat"), f"got {(f, m)}")
+
+# valid values must pass through completely unharmed.
+f, m = orchestrator._safe_deal_floor(None, env={"BASEBALL_DEAL_FLOOR": "12"})
+check("_safe_deal_floor('12') is unaffected (a valid numeric floor)", (f, m) == (12.0, "numeric"))
+f, m = orchestrator._safe_deal_floor(3, env={"BASEBALL_DEAL_FLOOR": "scaled"})
+check("_safe_deal_floor(scaled, bases=3) is unaffected", (f, m) == (8.0, "scaled"))
+f, m = orchestrator._safe_deal_floor(None, env={"BASEBALL_DEAL_FLOOR": "inf"})
+check("_safe_deal_floor('inf') still clamps to the 20s cap rather than falling back",
+      (f, m) == (orchestrator.POST_PLAY_DEAL_MAX_WAIT, "numeric"), f"got {(f, m)}")
+
+# the gate itself: garbage must not raise out of wait_for_hand_deal (this crashed the
+# turn loop on 1cfa1ab -- a bare `orchestrator.deal_floor()` call at the site the gate
+# used to call directly).
+released, elapsed, row = drive(readable_from=1, max_wait=20.0, floor_env="abc")
+check("BASEBALL_DEAL_FLOOR=abc does not raise out of wait_for_hand_deal",
+      released is True, f"released={released}")
+check("...and falls back to flat POST_PLAY_MIN_WAIT rather than 0",
+      elapsed >= orchestrator.POST_PLAY_MIN_WAIT, f"elapsed={elapsed}")
+if row:
+    check("the row records floor_mode='flat' for a garbage value", row.get("floor_mode") == "flat",
+          str(row))
+
+# nan must not spin out the full 20s timeout either.
+released, elapsed, row = drive(readable_from=1, max_wait=20.0, floor_env="nan")
+check("BASEBALL_DEAL_FLOOR=nan releases promptly (falls back to flat), not a 20s timeout",
+      released is True and elapsed < 10.0, f"released={released} elapsed={elapsed}")
+
+
+# ---- a second driver, extending `drive()` above for round-2 findings: discard_redeal
+# and no_motion_needed passthrough. A separate function so section 1-4's `drive()` and
+# every check built on it is untouched.
+def drive2(readable_from, max_wait, poll_interval=0.01, predicted_bases=None,
+           floor_env=None, discard_redeal=False, no_motion_needed=False, margin=None):
+    calls = {"n": 0}
+    clock = [1000.0]
+
+    def fake_grab_settle(names):
+        calls["n"] += 1
+        return {n: object() for n in names}
+
+    def fake_sig(img):
+        return COMPLETE_SIG if calls["n"] >= readable_from else ()
+
+    saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+             orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+             orchestrator._fast_grab, orchestrator.time)
+    saved_env = os.environ.get("BASEBALL_DEAL_FLOOR")
+    try:
+        if floor_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = floor_env
+        orchestrator._grab_settle_regions = fake_grab_settle
+        orchestrator._mean_abs_delta = lambda a, b: 999.0
+        orchestrator._hand_signature = fake_sig
+        orchestrator._fast_grab = lambda: object()
+        orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
+        orchestrator.time = type("C", (), {
+            "sleep": staticmethod(lambda s: clock.__setitem__(0, clock[0] + s)),
+            "time": staticmethod(lambda: clock[0]),
+            "strftime": staticmethod(_t.strftime),
+        })()
+        orchestrator._OBSERVATIONS.clear()
+        out = orchestrator.wait_for_hand_deal(
+            max_wait=max_wait, poll_interval=poll_interval, baseline=object(),
+            predicted_bases=predicted_bases, margin=margin,
+            discard_redeal=discard_redeal, no_motion_needed=no_motion_needed)
+        rows = [o for o in orchestrator._OBSERVATIONS if o.get("event") == "deal_timing"]
+        return out, clock[0] - 1000.0, (rows[0] if rows else None)
+    finally:
+        (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+         orchestrator._fast_grab, orchestrator.time) = saved
+        if saved_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = saved_env
+        orchestrator._OBSERVATIONS.clear()
+
+
+# ---- finding 2: the discard redeal (discard_redeal=True) must stay flat
+# POST_PLAY_MIN_WAIT in EVERY BASEBALL_DEAL_FLOOR mode -- no runner moves on a discard,
+# so scaled/numeric must never apply to it.
+for _env in ("scaled", "12", None):
+    released, elapsed, row = drive2(readable_from=1, max_wait=20.0, floor_env=_env,
+                                    discard_redeal=True)
+    check(f"discard_redeal stays flat under BASEBALL_DEAL_FLOOR={_env!r}",
+          released is True and orchestrator.POST_PLAY_MIN_WAIT <= elapsed
+          < orchestrator.POST_PLAY_MIN_WAIT + 0.05, f"elapsed={elapsed}")
+    if row:
+        check(f"...and the row records floor_mode='flat' under {_env!r}",
+              row.get("floor_mode") == "flat", str(row))
+        check(f"...and floor={orchestrator.POST_PLAY_MIN_WAIT} under {_env!r}",
+              row.get("floor") == orchestrator.POST_PLAY_MIN_WAIT, str(row))
+
+# ---- finding 3: a no_motion_needed row must log floor=0 / floor_mode='none' -- no
+# floor ever gates this caller, so the row must not claim one (was 5.0/12.0 -- whatever
+# deal_floor() happened to compute -- even though the release check never used it).
+released, elapsed, row = drive2(readable_from=1, max_wait=20.0, floor_env="scaled",
+                                no_motion_needed=True, predicted_bases=4)
+check("no_motion_needed row logs floor=0.0, not the scaled value that never applied",
+      row is not None and row.get("floor") == 0.0, str(row))
+check("no_motion_needed row logs floor_mode='none'",
+      row is not None and row.get("floor_mode") == "none", str(row))
+released, elapsed, row = drive2(readable_from=1, max_wait=20.0, floor_env="12",
+                                no_motion_needed=True)
+check("no_motion_needed row logs floor=0.0 under a numeric BASEBALL_DEAL_FLOOR too",
+      row is not None and row.get("floor") == 0.0, str(row))
+
+
+# ---- a time-based driver (adapted from the skeptic's own probe.py,
+# agent_progress/skeptic-deal-floor/probe.py) for findings 4, 5 and 6: those need the
+# stubbed hand signature to depend on ELAPSED TIME (so it can change again AFTER first
+# reading complete/stable), not on a poll count.
+def drive_t(sigfn, floor_env, max_wait=20.0, poll=0.15, **kw):
+    calls = {"n": 0}
+    clock = [1000.0]
+
+    def grab(names):
+        calls["n"] += 1
+        return {n: object() for n in names}
+
+    def sig(img):
+        return sigfn(clock[0] - 1000.0)
+
+    saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+             orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+             orchestrator._fast_grab, orchestrator.time)
+    saved_env = os.environ.get("BASEBALL_DEAL_FLOOR")
+    try:
+        if floor_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = floor_env
+        orchestrator._grab_settle_regions = grab
+        orchestrator._mean_abs_delta = lambda a, b: 999.0
+        orchestrator._hand_signature = sig
+        orchestrator._fast_grab = lambda: object()
+        orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
+        orchestrator.time = type("C", (), {
+            "sleep": staticmethod(lambda s: clock.__setitem__(0, clock[0] + s)),
+            "time": staticmethod(lambda: clock[0]),
+            "strftime": staticmethod(_t.strftime),
+        })()
+        orchestrator._OBSERVATIONS.clear()
+        out = orchestrator.wait_for_hand_deal(max_wait=max_wait, poll_interval=poll, **kw)
+        rows = [r for r in orchestrator._OBSERVATIONS if r.get("event") == "deal_timing"]
+        return out, round(clock[0] - 1000.0, 2), (rows[0] if rows else None)
+    finally:
+        (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+         orchestrator._fast_grab, orchestrator.time) = saved
+        if saved_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = saved_env
+        orchestrator._OBSERVATIONS.clear()
+
+
+A5 = tuple(("player", 5, None, None) for _ in range(5))
+B5 = tuple(("player", 7, None, None) for _ in range(5))
+PART4 = tuple(("player", 5, None, None) for _ in range(4))
+
+# ---- finding 4: the per-poll trace must not go stale once probe_at/first_complete_at
+# have both latched (which happens almost immediately here, since A5 is complete and
+# stable from t=0). Hand A5 (complete) until t=3.0, PART4 (incomplete) 3.0-5.0, then B5
+# (complete, DIFFERENT from A5) from t=5.0; floor 12 so the gate keeps polling long
+# after both changes. On 1cfa1ab every poll from ~0.3s onward logs the SAME frozen
+# [t, 5, 5, True] row forever; fixed, later polls must show PART4's incompleteness and
+# then B5's fresh, not-yet-stable signature.
+released, elapsed, row = drive_t(lambda t: A5 if t < 3.0 else (PART4 if t < 5.0 else B5),
+                                 "12", baseline=object())
+check("finding 4 setup: the gate releases", released is True, f"elapsed={elapsed}")
+if row:
+    polls = row["polls"]
+    _mid = [p for p in polls if 3.05 <= p[0] <= 4.9]
+    check("polls during the PART4 window (3.0-5.0s) show the incomplete hand "
+          "(slots_read < 5), not a frozen complete reading from before t=3.0",
+          bool(_mid) and all(p[2] < 5 for p in _mid), str(_mid[:5]))
+    _late = [p for p in polls if 5.0 <= p[0] < 5.2]
+    check("the first poll after B5 lands (5.0-5.2s) shows a complete-but-not-yet-stable "
+          "read (rows/slots=5, stable=False), not the frozen [5, 5, True] from t<3.0",
+          bool(_late) and _late[0][2] == 5 and _late[0][3] is False, str(_late))
+
+# ---- finding 5: a floor >= READABLE_HAND_BOUND must not release on a single read
+# without the stable-twice check. scaled bases=3 -> floor 8.0, exactly
+# READABLE_HAND_BOUND; the hand changes just as the floor opens (7.95 -> the floor
+# first admits a poll at >=8.0). On 1cfa1ab this releases on that single, just-changed
+# read at ~8.1s with reason "stable_bound"; fixed, it must wait for two matching reads.
+released, elapsed, row = drive_t(lambda t: A5 if t < 7.95 else B5, "scaled",
+                                 baseline=object(), predicted_bases=3)
+check("finding 5: floor==8.0 (scaled, bases=3) does not release on the single "
+      "just-changed read", released is True and elapsed >= 8.25, f"elapsed={elapsed}")
+if row:
+    check("...and the release reason is genuine stable-twice, not stable_bound",
+          row.get("reason") == "stable", str(row))
+
+# a numeric floor above READABLE_HAND_BOUND (12) with the hand changing right at the
+# floor -- the skeptic's own probe case.
+released, elapsed, row = drive_t(lambda t: A5 if t < 12.05 else B5, "12", baseline=object())
+check("finding 5: numeric floor 12, hand changes at 12.05s -- waits for stable-twice, "
+      "not a single-read bound release", released is True and elapsed >= 12.3,
+      f"elapsed={elapsed}")
+if row:
+    check("...reason is 'stable', not 'stable_bound'", row.get("reason") == "stable", str(row))
+
+# a hand that never completes under a floor >= READABLE_HAND_BOUND must still be
+# bounded -- by the 20s cap (max_wait), the last resort -- not released early on a
+# single incomplete read either.
+released, elapsed, row = drive_t(lambda t: (), "12", baseline=object())
+check("finding 5: a hand that never completes under floor=12 times out at the 20s cap, "
+      "not an early single-read release", released is False and elapsed >= 20.0,
+      f"released={released} elapsed={elapsed}")
+
+# ---- finding 6 (kills mutant M1: floor computed before predicted_bases exists). Every
+# check above this point passes predicted_bases directly, which is why M1 survived --
+# this drives the MARGIN path instead (pop_deal_inputs + bases_to_travel), exactly like
+# the one real caller that ever supplies predicted_bases this way (:11296).
+_real_pop, _real_btt = orchestrator.pop_deal_inputs, orchestrator.bases_to_travel
+orchestrator.pop_deal_inputs = lambda: {"bases": [1, 0, 0], "batter_speed": 1,
+                                        "fielding": 0, "seq": 1}
+orchestrator.bases_to_travel = lambda *a, **kw: 3
+try:
+    released, elapsed, row = drive_t(lambda t: A5, "scaled", baseline=object(), margin=4)
+finally:
+    orchestrator.pop_deal_inputs, orchestrator.bases_to_travel = _real_pop, _real_btt
+check("finding 6 (M1): predicted_bases reaches the row via the margin path",
+      row is not None and row.get("predicted_bases") == 3, str(row))
+check("finding 6 (M1): the floor reflects THAT predicted_bases (scaled, bases=3 -> "
+      "8.0) -- 5.0 (DEAL_FLOOR_UNKNOWN) is what a floor computed before predicted_bases "
+      "exists would produce here",
+      row is not None and row.get("floor") == 8.0, str(row))
+check("...and the gate actually waited that long, not 5.0s", elapsed >= 8.0,
+      f"elapsed={elapsed}")
+
+
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)
