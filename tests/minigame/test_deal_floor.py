@@ -532,5 +532,183 @@ check("...and the gate actually waited that long, not 5.0s", elapsed >= 8.0,
       f"elapsed={elapsed}")
 
 
+# ============================================================================
+# 6. ROUND 3 (deal-floor fixer r3) -- each check below FAILS on 5b06900, the commit the
+# skeptic refuted (agent_progress/skeptic-deal-floor-r2/progress.md, findings 1, 2/Mh,
+# 3/Mi, and the covered-card observation).
+# ============================================================================
+
+# ---- finding 1: FLAT (the default) must cost exactly what main costs, not just
+# release at the same TIME. 5b06900 recomputes _hand_signature every poll, in every
+# mode, once probe_at/first_complete_at have latched -- a settled hand goes from main's
+# 6 calls to 17 (skeptic's realistic-cost probe: settle grab 40ms, fast grab 10ms,
+# _hand_signature 50.2ms). This drives the SAME 10 scenarios and cost model with the
+# REAL gate, in flat mode (BASEBALL_DEAL_FLOOR unset), and pins both the call count and
+# the release TIME against numbers measured fresh off orchestrator.py at main (5be77ed)
+# with agent_progress/deal-floor-r3/probe_r3.py.
+def _drive_real_cost(sigfn, floor_env=None, max_wait=20.0, poll=0.15, **kw):
+    """Same technique as probe_r3.py's drive(): every reader call ADVANCES the fake
+    clock by its measured real-world cost, so the release TIME (not just the call
+    count) is honestly measured, not just the logical release rule."""
+    _COST = {"settle": 0.040, "fast": 0.010, "sig": 0.0502}
+    clock = [1000.0]
+    n = {"sig": 0}
+
+    def grab(names):
+        clock[0] += _COST["settle"]
+        return {x: object() for x in names}
+
+    def fast():
+        clock[0] += _COST["fast"]
+        return object()
+
+    def sig(img):
+        n["sig"] += 1
+        v = sigfn(clock[0] - 1000.0)
+        clock[0] += _COST["sig"]
+        return v
+
+    saved = (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+             orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+             orchestrator._fast_grab, orchestrator.time)
+    saved_env = os.environ.get("BASEBALL_DEAL_FLOOR")
+    try:
+        if floor_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = floor_env
+        orchestrator._grab_settle_regions = grab
+        orchestrator._mean_abs_delta = lambda a, b: 999.0
+        orchestrator._hand_signature = sig
+        orchestrator._fast_grab = fast
+        orchestrator.crop_gameplay_regions = lambda img: [("hand", object())]
+        orchestrator.time = type("C", (), {
+            "sleep": staticmethod(lambda s: clock.__setitem__(0, clock[0] + s)),
+            "time": staticmethod(lambda: clock[0]),
+            "strftime": staticmethod(_t.strftime),
+        })()
+        orchestrator._OBSERVATIONS.clear()
+        out = orchestrator.wait_for_hand_deal(max_wait=max_wait, poll_interval=poll, **kw)
+        return out, round(clock[0] - 1000.0, 3), n["sig"]
+    finally:
+        (orchestrator._grab_settle_regions, orchestrator._mean_abs_delta,
+         orchestrator._hand_signature, orchestrator.crop_gameplay_regions,
+         orchestrator._fast_grab, orchestrator.time) = saved
+        if saved_env is None:
+            os.environ.pop("BASEBALL_DEAL_FLOOR", None)
+        else:
+            os.environ["BASEBALL_DEAL_FLOOR"] = saved_env
+        orchestrator._OBSERVATIONS.clear()
+
+
+_flick = lambda t: (A5 if int(t / 0.15) % 2 else B5) if t < 4.0 else A5
+
+# scenario -> (sigfn, extra kwargs, (release time, sig calls) measured against main 5be77ed)
+_R3_SCEN = {
+    "S1 A from 0":         (lambda t: A5, {}, (3.731, 6)),
+    "S2 empty<2 then A":   (lambda t: () if t < 2 else A5, {}, (3.632, 12)),
+    "S3 empty<3.5 then A": (lambda t: () if t < 3.5 else A5, {}, (4.204, 19)),
+    "S4 A<3.05 then B":    (lambda t: A5 if t < 3.05 else B5, {}, (3.731, 6)),
+    "S5 PART forever":     (lambda t: PART4, {}, (8.029, 45)),
+    "S6 empty<5,PART<6,A": (lambda t: () if t < 5 else (PART4 if t < 6 else A5), {}, (6.687, 35)),
+    "S7 flicker<4 then A": (_flick, {}, (4.152, 10)),
+    "S8 A<1,PART<3.3,A":   (lambda t: A5 if t < 1 else (PART4 if t < 3.3 else A5), {}, (3.991, 7)),
+    "S9 nomotion A":       (lambda t: A5, {"no_motion_needed": True}, (0.971, 6)),
+    "S10 nomotion PART":   (lambda t: PART4, {"no_motion_needed": True}, (8.11, 52)),
+}
+
+_max_abs_diff = 0.0
+for _name, (_fn, _kw, (_want_t, _want_sig)) in _R3_SCEN.items():
+    _kw = dict(_kw)
+    if not _kw.get("no_motion_needed"):
+        _kw["baseline"] = object()
+    _out, _t_got, _sig_got = _drive_real_cost(_fn, floor_env=None, **_kw)
+    _diff = abs(_t_got - _want_t)
+    _max_abs_diff = max(_max_abs_diff, _diff)
+    check(f"finding 1, flat mode, {_name}: release time matches main within 0.01s",
+          _diff <= 0.01, f"main={_want_t} got={_t_got} (diff {_diff:.3f})")
+    check(f"finding 1, flat mode, {_name}: _hand_signature call count matches main "
+          f"({_want_sig})", _sig_got == _want_sig, f"got {_sig_got}")
+print(f"  [deal-floor-r3] flat-mode timing vs main over 10 scenarios: "
+      f"max abs diff = {_max_abs_diff:.4f}s")
+
+# ---- finding 2 (kills mutant Mh): `probe_sig` must keep updating after `probe_at` has
+# latched, or the per-poll trace's `stable` column freezes at whatever it was the
+# instant the hand FIRST settled and never reports "stable" again even once the hand
+# settles a SECOND time on a different signature. Floor 12 (numeric, so finding 1's
+# gate keeps the probe block recomputing) so the gate stays open long enough to see the
+# second settle: A5 until t=3, B5 (different, real 5-row signature) from t=3 onward.
+released, elapsed, row = drive_t(lambda t: A5 if t < 3.0 else B5, "12", baseline=object())
+check("finding 2 setup: the gate releases", released is True, f"elapsed={elapsed}")
+if row:
+    _after_change = [p for p in row["polls"] if p[0] >= 3.3]
+    check("finding 2: the trace shows stable=True again once the hand settles a SECOND "
+          "time on B5 (not frozen False from the first settle on A5)",
+          bool(_after_change) and any(p[3] is True for p in _after_change),
+          str(_after_change[:6]))
+
+# ---- finding 3 (kills mutant Mi): the warning must print ONCE per process, not once
+# per call -- a live match calls _safe_deal_floor every turn, and a config typo should
+# not spam the console for the rest of the match.
+import contextlib as _cl
+import io as _io
+
+_saved_warned = orchestrator._DEAL_FLOOR_WARNED
+orchestrator._DEAL_FLOOR_WARNED = False
+try:
+    _buf = _io.StringIO()
+    with _cl.redirect_stdout(_buf):
+        for _ in range(3):
+            orchestrator._safe_deal_floor(None, env={"BASEBALL_DEAL_FLOOR": "abc"})
+    _warn_lines = [l for l in _buf.getvalue().splitlines() if "falling back to flat" in l]
+    check("3 bad-value calls produce exactly 1 warning line, not 3",
+          len(_warn_lines) == 1, f"got {len(_warn_lines)}: {_warn_lines}")
+finally:
+    orchestrator._DEAL_FLOOR_WARNED = _saved_warned
+
+# ---- finding 4: a STABLE BUT INCOMPLETE hand -- a REAL 5-row signature with one slot
+# genuinely unread, exactly what a card covered by design produces (`local_hand`'s own
+# "the honest answer is UNKNOWN" branch, not the `()` empty-table shape) -- under a
+# floor >= READABLE_HAND_BOUND must release at max(READABLE_HAND_BOUND, floor) once
+# stable TWICE, not run out the full 20s cap. Before this fix, `_stable_hit` could
+# never fire (unread never empties) and `_bound_hit` is guarded off for floor >=
+# READABLE_HAND_BOUND (finding 5, r2) -- so the gate ran to the 20s cap and logged a
+# "timeout"/"edge_no_stable" row for a hand that had genuinely stopped changing at t=4s.
+COVERED5 = tuple(("player", 5, None, None) for _ in range(4)) + (("player", None, None, None),)
+
+released, elapsed, row = drive_t(lambda t: () if t < 4.0 else COVERED5, "12", baseline=object())
+check("finding 4, floor=12: a stable-incomplete (covered-card) hand releases at ~12s "
+      "(the floor), not the 20s cap", released is True and 12.0 <= elapsed < 13.0,
+      f"elapsed={elapsed}")
+if row:
+    check("...with reason 'stable_bound' (incomplete, released on the bound)",
+          row.get("reason") == "stable_bound", str(row))
+
+released, elapsed, row = drive_t(lambda t: () if t < 4.0 else COVERED5, "scaled",
+                                 baseline=object(), predicted_bases=3)
+check("finding 4, scaled bases=3 (floor 8.0 == READABLE_HAND_BOUND): a stable-incomplete "
+      "(covered-card) hand releases at ~8s, not the 20s cap",
+      released is True and 8.0 <= elapsed < 9.0, f"elapsed={elapsed}")
+if row:
+    check("...with reason 'stable_bound'", row.get("reason") == "stable_bound", str(row))
+
+# it must NOT release on a single read either -- the hand turns covered right AT the
+# floor, so the first post-floor read cannot by itself confirm stability.
+released, elapsed, row = drive_t(lambda t: () if t < 11.95 else COVERED5, "12",
+                                 baseline=object())
+check("finding 4: a hand that turns stable-incomplete right AT the floor still needs "
+      "two matching reads, not a single-read release",
+      released is True and elapsed >= 12.3, f"elapsed={elapsed}")
+
+# ...and the PRE-EXISTING finding-5 (r2) case -- a hand that never reads anything at all
+# (`()` forever, not a real 5-row signature) -- must still be held to the 20s cap. Two
+# consecutive `()` reads are equal, which would otherwise look "stable" by coincidence;
+# `_incomplete_bound_hit` must not treat that the same as a genuine covered card.
+released, elapsed, row = drive_t(lambda t: (), "12", baseline=object())
+check("finding 4 must not weaken finding 5 (r2): a hand that never reads ANYTHING "
+      "(not a real 5-row signature) still times out at the 20s cap",
+      released is False and elapsed >= 20.0, f"released={released} elapsed={elapsed}")
+
+
 print(f"\n{'FAILED: ' + ', '.join(fails) if fails else 'all checks passed'}")
 sys.exit(1 if fails else 0)

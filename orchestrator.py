@@ -4004,11 +4004,15 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     last_beat = start
     # PER-POLL TRACE for a live BASEBALL_DEAL_FLOOR measurement (deal-floor fixer, 09-27):
     # [t_since_start, rows_read, slots_read, signature_stable], read off the SAME `psig`
-    # the probe block below already computes -- no extra reader call, so this cannot change
-    # the release timing test_readable_hand_gate.py's flicker/spaced cases pin by counting
-    # _hand_signature calls exactly. `psig`/`_psig_stable` start defined here so a poll
-    # logged before the probe block first runs (or with USE_READABLE_HAND_GATE off) has
-    # something to read instead of a NameError.
+    # the probe block below already computes. In FLAT/NONE mode (deal-floor fixer r3,
+    # finding 1) the probe block stops calling _hand_signature the moment probe_at and
+    # first_complete_at have both latched -- exactly main's own behaviour -- so this adds
+    # NO extra reader call there, and test_readable_hand_gate.py's flicker/spaced cases
+    # (which pin _hand_signature call counts) are unaffected. Only in SCALED/NUMERIC mode
+    # does the probe block keep recomputing past latch, which is what lets this trace stay
+    # live for the rest of a long floor -- see the guard below. `psig`/`_psig_stable` start
+    # defined here so a poll logged before the probe block first runs (or with
+    # USE_READABLE_HAND_GATE off) has something to read instead of a NameError.
     psig = None
     _psig_stable = False
     _poll_log = []
@@ -4140,18 +4144,22 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             _hand_now = None
         keep_deal_frame(_hand_now, time.time() - start)
 
-        # RECOMPUTED EVERY POLL (deal-floor fixer r2, finding 4), not just while
-        # `probe_at`/`first_complete_at` are still unset. The old guard stopped calling
-        # _hand_signature at all once both had latched, which froze psig/_psig_stable at
-        # whatever they were the instant that happened -- so the per-poll trace a scaled
-        # or numeric floor exists to feed logged the SAME stale [t, 5, 5, True] row for
-        # every later poll, unable to show the hand changing again during the floor's
-        # extra wait, which is the one thing that wait is FOR. One extra
-        # _hand_signature() call per poll after latching buys that back. probe_at and
-        # first_complete_at themselves are untouched below -- both still latch on their
-        # FIRST qualifying poll and never move again; only probe_sig/_psig_stable (and
-        # therefore the trace) keep tracking the current poll forever.
-        if USE_READABLE_HAND_GATE:
+        # RECOMPUTED EVERY POLL past latch ONLY IN SCALED/NUMERIC MODE (deal-floor fixer
+        # r3, finding 1). r2 recomputed unconditionally in EVERY mode, including flat --
+        # the mode nearly every deal actually runs in -- which took a settled hand from
+        # main's 6 _hand_signature calls to 17 (skeptic-deal-floor-r2's realistic-cost
+        # probe: ~0.55s of extra main-thread OCR per deal, release times moved by up to
+        # +0.263s, and a 0.15s flicker scenario released 0.469s EARLIER while the hand
+        # was still flickering -- none of that is acceptable for the default mode). Flat
+        # and "none" (no_motion_needed) now stop calling _hand_signature here the instant
+        # both probe_at and first_complete_at have latched, exactly like main -- froze
+        # psig/_psig_stable at whatever they were, which is fine there because a flat or
+        # no-floor release happens within a poll or two of latching anyway. Only scaled
+        # and numeric floors -- which can hold the gate open for many seconds past latch,
+        # which is the whole point of measuring them -- keep recomputing so the per-poll
+        # trace does not go stale (r2 finding 4's fix, preserved, now flat-mode-free).
+        if USE_READABLE_HAND_GATE and (_floor_mode in ("scaled", "numeric")
+                                        or probe_at is None or first_complete_at is None):
             try:
                 psig = _hand_signature(_hand_now)
             except Exception:
@@ -4228,13 +4236,32 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             # ever runs, since the block itself never runs before `_floor` -- releasing
             # on a single, possibly just-changed read with no stable-twice confirmation
             # at all, mislabelled "stable_bound" as if it had been confirmed. A floor
-            # that size gets no early bound release; it relies on the same stable-twice
-            # rule as every other floor, and the ordinary max_wait loop (the 20s cap,
-            # unchanged) is what still stops it from running forever on a hand that
-            # never settles.
+            # that size gets no early bound release on a SINGLE read; it relies on the
+            # same stable-twice rule as every other floor.
             _bound_hit = _floor < READABLE_HAND_BOUND and time.time() - start >= READABLE_HAND_BOUND
             _stable_hit = good >= READABLE_POLLS and not unread
-            if _bound_hit or _stable_hit:
+            # A STABLE BUT INCOMPLETE HAND UNDER A FLOOR >= READABLE_HAND_BOUND (deal-floor
+            # fixer r3, finding 4). A card covered by design (`covered-cards-are-not-a-bug`)
+            # still reads as a REAL 5-row signature -- 4 rows with a digit, one with
+            # kind="player", digit=None for the covered slot -- so `unread` never empties
+            # and `_stable_hit` above can never fire; before this, such a hand ran out the
+            # full 20s cap and logged as a "timeout"/"edge_no_stable" row instead of
+            # releasing at the bound, the way main does for a floor under the bound. This
+            # asks the SAME two-matching-polls question `_stable_hit` does (good >=
+            # READABLE_POLLS), just without requiring completeness, and only once
+            # `max(READABLE_HAND_BOUND, _floor)` has passed -- so it still cannot fire on a
+            # single, possibly just-changed read. GUARDED by `len(sig) == 5`: a wrong-shape
+            # or empty signature (`()`, the dominant mid-deal shape, or anything
+            # `_sig_unread_slots` cannot even parse) is judged fully unread the same way a
+            # genuine covered card is, but it is NOT a real hand -- it is "nothing has been
+            # read at all", which is exactly the case just above (finding 5, r2) that must
+            # still run out to the 20s cap rather than release early on a coincidental
+            # `() == ()` match.
+            _floor_bound = max(READABLE_HAND_BOUND, _floor)
+            _incomplete_bound_hit = (_floor >= READABLE_HAND_BOUND and good >= READABLE_POLLS
+                                      and isinstance(sig, tuple) and len(sig) == 5 and unread
+                                      and time.time() - start >= _floor_bound)
+            if _bound_hit or _stable_hit or _incomplete_bound_hit:
                 _held = ("" if probe_at is None
                          else f", hand first settled at {probe_at:.1f}s "
                               f"(floor held it {max(0.0, time.time() - start - probe_at):.1f}s)")
@@ -4246,7 +4273,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 if _reason == "stable_bound":
                     _complete = ("complete but not confirmed twice" if not unread
                                  else f"slot(s) {unread} still unread")
-                    _why = (f"; released on the {READABLE_HAND_BOUND:g}s bound "
+                    _why = (f"; released on the {_floor_bound:g}s bound "
                             f"with the hand {_complete}")
                 else:
                     _why = ""
