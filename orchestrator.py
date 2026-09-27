@@ -3454,6 +3454,63 @@ READABLE_POLLS = 2
 # the UNCENSORED population and this constant can stop being a guess.
 READABLE_HAND_BOUND = 8.0
 
+# BASEBALL_DEAL_FLOOR (deal-floor fixer, 09-27) selects the post-play FLOOR used by the
+# release rule below, so the flat 3.0s POST_PLAY_MIN_WAIT can be measured against a
+# scaled one without a code edit. Evidence: agent_progress/animating-reads/progress.md --
+# 27/29 user-labelled mid-animation misreads were released by the "stable twice" rule at
+# ~3.4s, the earliest instant the flat floor allows, not anywhere near READABLE_HAND_BOUND;
+# 16/19 of those with a known prediction had >=1 base to travel. A flat floor is too short
+# whenever a runner moves; the stillness check cannot rescue it because two polls can match
+# by coincidence during the animation's slow tail (same doc, part (c)).
+#   unset or "flat":  POST_PLAY_MIN_WAIT exactly -- today's behaviour, the default, UNCHANGED.
+#   "scaled":         DEAL_FLOOR_BY_BASES, keyed by predicted_bases.
+#   a number:         a fixed floor, for a live A/B (e.g. BASEBALL_DEAL_FLOOR=12 -- nothing
+#                      the 09-27 evidence saw is still animating at 12s, so this gives the
+#                      first live, uncensored measurement of when a hand really settles).
+# Read at CALL TIME (10.18), never at import -- test_deal_floor.py checks this the same way
+# test_no_import_time_test_run_flag.py checks BASEBALL_TEST_RUN.
+DEAL_FLOOR_ENV = "BASEBALL_DEAL_FLOOR"
+
+# PROVISIONAL (deal-floor fixer, 09-27) -- placeholders pending the live
+# BASEBALL_DEAL_FLOOR=12 measurement this change exists to collect. 4+ bases collapses to
+# one bucket because deal_inputs_bounds is a BOUND, not an exact count, and the evidence
+# sample never separated 4 from higher (one row read 9). Never invent past this table --
+# unknown bases get DEAL_FLOOR_UNKNOWN, not an extrapolation.
+DEAL_FLOOR_BY_BASES = {0: 3.0, 1: 5.0, 2: 6.5, 3: 8.0}
+DEAL_FLOOR_BY_BASES_DEFAULT = 9.0   # 4+ bases
+DEAL_FLOOR_UNKNOWN = 5.0            # predicted_bases is None
+
+# How many [t_since_start, rows_read, slots_read, signature_stable] entries
+# wait_for_hand_deal keeps per call -- a scaled or numeric floor can hold the gate open
+# for up to POST_PLAY_DEAL_MAX_WAIT at a 0.15s poll (~133 polls); 150 covers that with
+# margin without letting a stuck floor grow deal_timing.jsonl's rows without bound.
+DEAL_POLL_TRACE_CAP = 150
+
+
+def deal_floor(predicted_bases, env=None):
+    """The post-play floor for THIS call, and the BASEBALL_DEAL_FLOOR mode that produced
+    it, from ONE read of the env (so the mode and the value it yields can never disagree).
+    Read at call time, never at import: the mode can change between runs, which is the
+    whole point of a live A/B. Never exceeds POST_PLAY_DEAL_MAX_WAIT -- a floor is a
+    MINIMUM wait, and the cap that already bounds the whole gate must still win.
+    """
+    raw = (os.environ if env is None else env).get(DEAL_FLOOR_ENV)
+    mode = "flat" if raw is None else raw.strip().lower()
+    if mode in ("", "flat"):
+        mode, floor = "flat", POST_PLAY_MIN_WAIT
+    elif mode == "scaled":
+        if predicted_bases is None:
+            floor = DEAL_FLOOR_UNKNOWN
+        else:
+            floor = DEAL_FLOOR_BY_BASES.get(predicted_bases, DEAL_FLOOR_BY_BASES_DEFAULT)
+    else:
+        try:
+            floor = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{DEAL_FLOOR_ENV}={raw!r} is not 'flat', 'scaled', or a number")
+        mode = "numeric"
+    return min(floor, POST_PLAY_DEAL_MAX_WAIT), mode
+
 
 def hand_deal_threshold(env=None):
     raw = (os.environ if env is None else env).get(DEAL_THRESHOLD_ENV)
@@ -3792,8 +3849,6 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     # 3.6), and no [deal] line on disk carries runner state to join against. So this logs
     # the PAIR and invents nothing; a few matches of it is what makes the model fittable.
     # An invented seconds-per-base would be the same bug wearing a fix's clothes.
-    if predicted_bases is not None:
-        print(f"  [deal] predicted {predicted_bases} base(s) to animate")
     reset_deal_frames()
     _dinputs = pop_deal_inputs()
     # PREDICTED BASES, AT LAST. bases_to_travel has existed and been tested all along --
@@ -3816,10 +3871,19 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 margin, _dinputs.get("fielding", 0))
         except Exception:
             predicted_bases = None
+    # MOVED AFTER predicted_bases IS KNOWN (deal-floor fixer, 09-27): this used to sit
+    # before the `bases_to_travel` call above and only fire when a caller passed
+    # predicted_bases directly, which no real caller does -- the common path computes it
+    # from the reveal margin just above, AFTER the old print already ran, so the value
+    # reached deal_timing.jsonl but never stdout (0 hits for "predicted" in any
+    # overnight/*.log). Same guard, same text; only the position moved.
+    if predicted_bases is not None:
+        print(f"  [deal] predicted {predicted_bases} base(s) to animate")
     _di = deal_inputs_summary(_dinputs)
     _bases_lo, _bases_hi = deal_inputs_bounds(_dinputs)
     if _di:
         print(f"  [deal] at the play: {_di}")
+    _floor, _floor_mode = deal_floor(predicted_bases)
     # THE BASELINE: the hand as it was when this gate started. Every later frame is
     # compared against THIS, not against its predecessor, so a gradual deal accumulates
     # instead of being divided among the polls that carried it.
@@ -3878,6 +3942,16 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
     th = hand_deal_threshold()
     biggest = 0.0
     last_beat = start
+    # PER-POLL TRACE for a live BASEBALL_DEAL_FLOOR measurement (deal-floor fixer, 09-27):
+    # [t_since_start, rows_read, slots_read, signature_stable], read off the SAME `psig`
+    # the probe block below already computes -- no extra reader call, so this cannot change
+    # the release timing test_readable_hand_gate.py's flicker/spaced cases pin by counting
+    # _hand_signature calls exactly. `psig`/`_psig_stable` start defined here so a poll
+    # logged before the probe block first runs (or with USE_READABLE_HAND_GATE off) has
+    # something to read instead of a NameError.
+    psig = None
+    _psig_stable = False
+    _poll_log = []
 
     def _record_row(outcome, reason=None):
         """One machine-readable row per deal. THIS IS THE WHOLE EXPERIMENT.
@@ -3912,14 +3986,20 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             # needs to special-case "didn't happen" against "happened right at the edge".
             first_complete_at=round(min(first_complete_at, READABLE_HAND_BOUND), 2)
             if first_complete_at is not None else READABLE_HAND_BOUND,
-            floor=POST_PLAY_MIN_WAIT,
+            floor=_floor,
+            floor_mode=_floor_mode,
             threshold=th,
             biggest=round(biggest, 1),
             edge_seen=seen,
             bases_lo=_bases_lo,
             bases_hi=_bases_hi,
             play_seq=(_dinputs or {}).get("seq"),
-            at_the_play=_di or None)
+            at_the_play=_di or None,
+            # PER-POLL TRACE (deal-floor fixer, 09-27), capped at DEAL_POLL_TRACE_CAP --
+            # what a live BASEBALL_DEAL_FLOOR=12 run needs to find the uncensored moment
+            # each hand actually became complete and stable, not just this row's own
+            # (floor-censored) settled_at/waited summary.
+            polls=_poll_log)
         # BOTH sinks, deliberately. The deque is what a stall bundle carries; the file is
         # what survives a HEALTHY run, and a healthy run is the only kind that produces a
         # clean timing row. Either alone loses exactly the case the other covers.
@@ -4005,8 +4085,9 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
                 psig = _hand_signature(_hand_now)
             except Exception:
                 psig = None
+            _psig_stable = psig is not None and psig == probe_sig
             if probe_at is None:
-                probe_good = probe_good + 1 if (psig is not None and psig == probe_sig) else 0
+                probe_good = probe_good + 1 if _psig_stable else 0
                 probe_sig = psig
                 if probe_good >= READABLE_POLLS:
                     probe_at = time.time() - start
@@ -4014,6 +4095,12 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
             # "has a complete hand ever been seen", not "has it stopped changing".
             if first_complete_at is None and psig is not None and not _sig_unread_slots(psig):
                 first_complete_at = time.time() - start
+
+        if len(_poll_log) < DEAL_POLL_TRACE_CAP:
+            _rows_read = len(psig) if isinstance(psig, tuple) else 0
+            _slots_read = (5 - len(_sig_unread_slots(psig))) if isinstance(psig, tuple) else 0
+            _poll_log.append([round(time.time() - start, 3), _rows_read, _slots_read,
+                               _psig_stable])
 
         # The floor: an edge before POST_PLAY_MIN_WAIT is dead-window noise by the
         # measurement above, so keep polling; return on the first poll at or past
@@ -4048,7 +4135,7 @@ def wait_for_hand_deal(max_wait: float = POST_PLAY_DEAL_MAX_WAIT,
         # (a slot that never reads -- a covered card -- may never go "stable" either,
         # if the misread jitters; the bound check does not require `good` to be met).
         if ((seen or (no_motion_needed and USE_READABLE_HAND_GATE))
-                and time.time() - start >= (0.0 if no_motion_needed else POST_PLAY_MIN_WAIT)):
+                and time.time() - start >= (0.0 if no_motion_needed else _floor)):
             if not USE_READABLE_HAND_GATE:
                 print(f"  [deal] replacement card seen; released "
                       f"{time.time() - start:.1f}s after the play "
