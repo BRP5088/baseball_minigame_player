@@ -4510,6 +4510,14 @@ _LAST_RESULT_FRAME = None   # (PIL Image, ns) or None
 # just produced it.
 _LAST_GAP_FRAME = None   # PIL Image or None
 
+# Whether `local_game_state` has run at least once in this process. Lets
+# `_save_state_gap` tell apart "a real call just ran and captured nothing"
+# (write a why.json with frame: null) from "no call has happened at all", the
+# synthetic case a couple of unit tests drive by poking `_LAST_GAP_FRAME`
+# directly without ever calling `local_game_state` -- that one stays the
+# plain no-op it always was.
+_LOCAL_GAME_STATE_CALLED = False
+
 
 def local_game_state(turns_this_half=None):
     """The state, read entirely locally. (state, None) or (None, what is missing).
@@ -4526,7 +4534,15 @@ def local_game_state(turns_this_half=None):
     readable hand -- never a substitute for reading it. Callers with no notion of the
     match's progress (the frozen-stream probe) omit it and keep the old refusal.
     """
-    global _LAST_RESULT_FRAME, _LAST_GAP_FRAME
+    global _LAST_RESULT_FRAME, _LAST_GAP_FRAME, _LOCAL_GAME_STATE_CALLED
+    # CLEAR FIRST, ALWAYS. Two of the (None, gap) returns below -- "local_state
+    # unavailable" and "could not capture" -- fire BEFORE a frame is ever grabbed.
+    # Leaving the previous call's `_LAST_GAP_FRAME` in place would let
+    # `_save_state_gap` write a frame from an EARLIER read under the CURRENT
+    # gap's name -- a stale frame labelled as evidence for a different failure.
+    # Clearing here means those two paths genuinely have no frame to save.
+    _LOCAL_GAME_STATE_CALLED = True
+    _LAST_GAP_FRAME = None
     try:
         import local_state
     except Exception as exc:
@@ -5779,12 +5795,21 @@ def _save_state_gap(gap, turns_this_half=None):
     local_game_state already grabbed for THIS read, no second capture -- and is a
     no-op under BASEBALL_TEST_RUN unless STATE_GAP_FRAMES_IN_TESTS opts in (read at
     call time, never captured in a default -- 10.18).
+
+    `_LAST_GAP_FRAME` is cleared at the START of every `local_game_state()` call
+    (see its docstring), so a gap raised there before a frame was ever grabbed --
+    "local_state unavailable", "could not capture" -- reaches here with
+    `_LAST_GAP_FRAME is None`. That is NOT the same as no call having happened at
+    all: `_LOCAL_GAME_STATE_CALLED` tells the two apart. A real call with nothing
+    to save still gets a why.json, with `"frame": null`, so the gap leaves SOME
+    trace instead of none; only the never-called case (a couple of unit tests
+    drive `_save_state_gap` directly) stays a total no-op.
     """
     if _running_under_test() and not STATE_GAP_FRAMES_IN_TESTS:
         return None
     try:
         img = _LAST_GAP_FRAME
-        if img is None:
+        if img is None and not _LOCAL_GAME_STATE_CALLED:
             return None
         os.makedirs(STATE_GAP_DIR, exist_ok=True)
         existing = [n for n in os.listdir(STATE_GAP_DIR) if n.startswith("gap_")]
@@ -5794,13 +5819,19 @@ def _save_state_gap(gap, turns_this_half=None):
             return None
         out = os.path.join(STATE_GAP_DIR, f"gap_{time.time_ns()}")
         os.makedirs(out, exist_ok=True)
-        img.save(os.path.join(out, "frame.png"))
+        if img is not None:
+            img.save(os.path.join(out, "frame.png"))
         recent = [o.get("screen") for o in list(_OBSERVATIONS)[-5:]]
         with open(os.path.join(out, "why.json"), "w") as fh:
             json.dump({"gap": gap, "turns_this_half": turns_this_half,
                        "t": time.strftime("%Y-%m-%d %H:%M:%S"),
-                       "recent_screens": recent}, fh, indent=1)
-        print(f"  [state] kept the frame this gap was raised on -> {out}")
+                       "recent_screens": recent,
+                       "frame": None if img is None else "frame.png"}, fh, indent=1)
+        if img is None:
+            print(f"  [state] no frame to keep for this gap (nothing was captured "
+                  f"before it fired) -> {out} (why.json only)")
+        else:
+            print(f"  [state] kept the frame this gap was raised on -> {out}")
         return out
     except Exception as exc:
         print(f"  [state] could not save the gap frame ({exc}) -- continuing.")
